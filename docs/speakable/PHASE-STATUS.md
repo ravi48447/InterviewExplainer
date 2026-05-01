@@ -1,40 +1,44 @@
 # Speakable run — live status
 
-Last update: 2026-05-01T22:55:00Z
-Phase: complete
-Run mode: Phase 0 only — halted at Phase 0 completion (as planned)
-Time elapsed: ~02:25
+Last update: 2026-05-02T02:50:00Z
+Phase: 1
+Run mode: Phase 1 only — will halt at Phase 1 completion (per Phase 1 prompt §22)
+Time elapsed (this phase): 00:15
 
-## Deliverables
-- [x] 0.6 word-ceilings.md            — committed (`7aa697d`)
-- [x] 0.7 depth-markers.md            — committed (`ea12db8`)
-- [x] 0.4 lint-rules.md               — committed (`6a3152b`)
-- [x] 0.1 archetypes.md               — committed (`411ead4`)
-- [x] 0.2 pillar-register.md          — committed (`1576b06`)
-- [x] 0.3 schema (TS + JSON)          — committed (`f515b8d`)
-- [x] 0.5 codex (4 files)             — committed (`935e81f`)
-- [x] 0.8 visual-style-guide.md       — committed (`4aae7ca`)
+## Phase 0 summary (carried over)
+8 deliverables done — see `PHASE-0-REPORT.md`. Locked artefacts:
+- `frontend/lib/speakable/schema.ts` + `scripts/speakable_schema.json` (schema)
+- `codex/banned.json` + `codex/phrasings.json` + `codex/examples.json` + `docs/speakable/familiarity-codex.md`
+- `docs/speakable/lint-rules.md`, `archetypes.md`, `pillar-register.md`, `word-ceilings.md`, `depth-markers.md`, `visual-style-guide.md`
 
-## Reports & supporting docs
-- docs/speakable/PHASE-0-REPORT.md     — committed alongside this status update
-- docs/speakable/HUMAN-REVIEW-QUEUE.md — 6 items queued for human resolution
-- docs/speakable/PHASE-STATUS.md       — this file
+## Phase 1 deliverables
+- [x] Preflight: §16-1 plan-fix commit (`ea8eacd`)
+- [x] Preflight: human-review-queue update (`f384ee7`)
+- [x] Preflight: `scripts/data/word-ceilings.json` + `scripts/data/depth-markers.json` (`9969b6b`)
+- [ ] 1.1 `scripts/audit_speakable.py` — lint script
+- [ ] 1.2 `frontend/components/speakable/primitives/*` — 7 layout primitives
+- [ ] 1.7 `frontend/app/dev/speakable-primitives/page.tsx` — visual story page
+- [ ] 1.3 `frontend/components/speakable/layouts/*` — 7 per-archetype layouts
+- [ ] 1.4 `frontend/components/speakable/Speakable.tsx` + `Legacy.tsx` — wrapper + fallback
+- [ ] 1.5 `frontend/lib/speakable/toSpeech.ts` — TTS-clean serializer
+- [ ] 1.6 `frontend/components/speakable/ReadAloudButton.tsx` + audio-page wiring
+- [ ] 1.8 admin/speakable-review page + API route
+- [ ] 1.9 renderer integration — `QuestionPageLayout.tsx` + `PreviewArticle.tsx`, remove OOP-hardcoded CSS
+- [ ] 1.10 health dashboard initial run + commit `speakable_health.md`
 
-## Codex coverage stats (deliverable 0.5)
-- Topics in phrasings.json: 101 (target ≥ 60)
-- Topics in examples.json: 101 (1:1 with phrasings)
-- Pillars represented in codex: 12 / 12
-- Lowest per-pillar topic count: 5 (P08, P09, P10, P12) — meets ≥ 5 floor
-- All entries tagged `source: agent-seeded`
+## Open items routed to human
+See `HUMAN-REVIEW-QUEUE.md` — 8 items total (6 carried from Phase 0, 2 new in Phase 1: §3-vs-§16, §16-MISSING-FIELDS, AUTH-1 will be added when 1.8 lands).
 
-## Open questions for human
-See HUMAN-REVIEW-QUEUE.md (count: 6)
+## Hard boundaries reasserted (per Phase 1 prompt §4)
+- No `git push`. Local commits only.
+- Zero modifications to `content/`, `content-md/`, schema files, or codex JSON.
+- Stage explicitly — `git add <paths>` only.
+- Renderer integration (1.9) must produce visually-identical legacy output for every existing question.
 
-## Stop condition (per brief §14)
-1. ✅ All 8 deliverables exist at their specified paths.
-2. ✅ All 8 are committed (git log shows 8 `feat(speakable): Phase 0.x` commits).
-3. ✅ PHASE-0-REPORT.md and PHASE-STATUS.md are written and committed.
-4. ✅ HUMAN-REVIEW-QUEUE.md exists (6 items).
-5. ✅ No file under `content/`, `content-md/`, `frontend/components/preview/`, or `frontend/components/question/` modified or deleted.
-
-Phase 0 complete. Awaiting human review before Phase 1.
+## Stop condition (per Phase 1 prompt §22)
+1. All 10 functional deliverables exist + preflight committed. (in progress)
+2. All commits local. (clean)
+3. Lint script passes on §16 fixture, score ≥ 90.
+4. Existing legacy questions render visually unchanged (3-question manual check).
+5. PHASE-1-REPORT.md and PHASE-STATUS.md written and committed.
+6. `git diff` against locked paths returns empty.
