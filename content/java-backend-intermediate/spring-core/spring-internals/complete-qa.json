@@ -1,0 +1,288 @@
+{
+  "topic": "Spring Internals",
+  "topicSlug": "spring-internals",
+  "questions": [
+    {
+      "id": "beanpostprocessor",
+      "slug": "beanpostprocessor-spring",
+      "question": "What is BeanPostProcessor and how does Spring use it internally?",
+      "title": "BeanPostProcessor — How Spring Modifies Beans Before Use",
+      "direct_answer": "A **`BeanPostProcessor`** is a Spring extension point with two hooks — **`postProcessBeforeInitialization`** and **`postProcessAfterInitialization`** — that the container calls on **every bean** during creation, right around the `@PostConstruct` / `afterPropertiesSet` boundary. The `Before` hook runs on the raw bean before init callbacks; the `After` hook runs after init callbacks and is the hook that **powers AOP proxying** — this is where `@Transactional`, `@Async`, `@Cacheable`, and custom aspects are applied. Spring Boot's auto-configuration uses dozens of built-in `BeanPostProcessor`s (`AutowiredAnnotationBeanPostProcessor` wires `@Autowired`, `CommonAnnotationBeanPostProcessor` wires `@PostConstruct`/`@Resource`, `AnnotationAwareAspectJAutoProxyCreator` creates AOP proxies). **Order matters**: register via `@Order` or implement `Ordered`; BPPs are instantiated very early, so they cannot depend on other `@Bean`s that haven't been created yet.",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "advanced",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand BeanPostProcessor is the extension point behind AOP and that it runs on every bean, not just specific ones",
+        "common_mistake": "Confusing BeanPostProcessor (modifies beans) with BeanFactoryPostProcessor (modifies bean definitions); thinking it's only called on beans you annotate",
+        "to_stand_out": "Explain that postProcessAfterInitialization is where AOP proxies are created (return a proxy wrapping the bean); mention the ordering problem when a BPP depends on regular @Bean definitions"
+      },
+      "company_tags": [
+        "Amazon",
+        "Pivotal",
+        "Netflix",
+        "Red Hat",
+        "Atlassian",
+        "Microsoft"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Extension Point That Powers Every Annotation You Use",
+            "content": "**`BeanPostProcessor`** is the most important internal interface in Spring — and the one that developers least understand. Every major annotation-driven feature is implemented as a `BeanPostProcessor`: `@Autowired` is handled by `AutowiredAnnotationBeanPostProcessor`, `@Transactional` creates proxies via `InfrastructureAdvisorAutoProxyCreator`, `@Async` is processed by `AsyncAnnotationBeanPostProcessor`, `@Scheduled` by `ScheduledAnnotationBeanPostProcessor`.\n\nA `BeanPostProcessor` intercepts every bean during creation, right between dependency injection and the bean being ready.\n- It has two hooks: **`postProcessBeforeInitialization()`** runs before `@PostConstruct`, and **`postProcessAfterInitialization()`** runs after.\n- The `after` hook is particularly powerful because it can **replace the bean instance** — this is how Spring creates proxies for `@Transactional` and AOP.\n\nUnderstanding this mechanism explains several behaviors.\n- Why does `this.method()` bypass `@Transactional`?\n- Because `@Transactional` works through a proxy wrapping the bean — `this` refers to the original instance, not the proxy.\n- Why does `@Autowired` injection happen before `@PostConstruct`?\n- Because `AutowiredAnnotationBeanPostProcessor` runs in the `before` hook, and `@PostConstruct` is the initialization callback that follows."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "The BeanPostProcessor Sequence — How a Bean Becomes a Proxy",
+            "content": "The diagram shows the full interaction between Spring's `BeanFactory`, the registered `BeanPostProcessor` chain, and the bean being created. Two facts become visible: every BPP sees every bean, and the `after` hook is where the bean can be replaced by a proxy that other beans then inject.\n\n```mermaid\nsequenceDiagram\n    participant Factory as BeanFactory\n    participant Bean as RawBean\n    participant Bpp1 as AutowiredBPP\n    participant Bpp2 as CommonAnnBPP\n    participant Bpp3 as AutoProxyCreator\n    participant Container as SingletonRegistry\n\n    Factory->>Bean: 1. instantiate (constructor)\n    Factory->>Bpp1: 2. postProcessProperties (resolve @Autowired)\n    Bpp1->>Bean: inject dependencies via reflection\n    Factory->>Bpp1: 3. postProcessBeforeInitialization\n    Factory->>Bpp2: 3. postProcessBeforeInitialization\n    Bpp2->>Bean: register @PostConstruct method\n    Factory->>Bean: 4. invoke @PostConstruct + afterPropertiesSet\n    Factory->>Bpp1: 5. postProcessAfterInitialization\n    Factory->>Bpp2: 5. postProcessAfterInitialization\n    Factory->>Bpp3: 5. postProcessAfterInitialization\n    Bpp3-->>Factory: returns CGLIB proxy wrapping bean\n    Factory->>Container: register proxy (not original) as singleton\n    Note over Container: All injections receive the proxy\n```\n\nThe `AutoProxyCreator` returning a proxy in step 5 is the key moment. From this point on, every `@Autowired` injection of this bean type receives the proxy. A `this.method()` call from inside the original bean bypasses the proxy entirely — that's why `@Transactional` self-invocation does not start a new transaction."
+          },
+          {
+            "type": "phase",
+            "title": "The Two Hooks — Before and After Initialization",
+            "content": "The two methods in `BeanPostProcessor` run at different points in the bean lifecycle, and the distinction determines which features each hook can implement.\n\n**`postProcessBeforeInitialization(Object bean, String beanName)`**\n- Runs after dependency injection but before `@PostConstruct`\n- Where Spring processes annotations that configure the bean — `@Autowired`, `@Value`, `@Resource`\n- The bean has its dependencies but has not yet executed its initialization logic\n\n**`postProcessAfterInitialization(Object bean, String beanName)`**\n- Runs after `@PostConstruct` and all initialization callbacks\n- Where Spring creates **proxies** — the method can return a different object than the one it received\n- That replacement becomes the bean other components inject\n- `@Transactional`, `@Async`, `@Cacheable`, and AOP aspects all create proxies in this hook\n\n```java\n@Component\npublic class TimingBeanPostProcessor implements BeanPostProcessor {\n    @Override\n    public Object postProcessBeforeInitialization(Object bean, String beanName) {\n        return bean;\n    }\n\n    @Override\n    public Object postProcessAfterInitialization(Object bean, String beanName) {\n        if (bean.getClass().isAnnotationPresent(Timed.class)) {\n            return createTimingProxy(bean);\n        }\n        return bean;\n    }\n}\n```\n\n**Why returning a different object matters**\n- The original `OrderService` instance is created, initialized, then replaced by a proxy that adds transactional behavior around each method call\n- Every other bean that injects `OrderService` gets the proxy, not the original\n- This is the fundamental mechanism behind every annotation-driven aspect in Spring"
+          },
+          {
+            "type": "phase",
+            "title": "Registration Timing — Why BeanPostProcessors Must Be Registered Early",
+            "content": "`BeanPostProcessor` instances must be registered **before** the beans they need to process. Spring detects `BeanPostProcessor` beans during context refresh and registers them before creating any normal beans.\n\n**The bootstrapping constraint**\n- A `BeanPostProcessor` cannot depend on beans that it's supposed to process — circular dependency at the registration phase\n- The processor itself must be created before any normal bean exists\n- Avoid `@Autowired` dependencies on application-defined services in a custom `BeanPostProcessor`\n\n**`BeanPostProcessor` vs `BeanFactoryPostProcessor` — fundamentally different**\n- `BeanPostProcessor` modifies bean **instances** after creation\n- `BeanFactoryPostProcessor` modifies bean **definitions** before any bean is created\n- BFPP can change scope, add property values, register new bean definitions entirely\n- `PropertySourcesPlaceholderConfigurer` (resolves `${...}` placeholders) is a `BeanFactoryPostProcessor`\n\n**The blueprint vs product distinction**\n- BFPP modifies the blueprint (bean definitions)\n- BPP modifies the product (bean instances)\n- Different lifecycle phase, different powers, different constraints\n\n**`static @Bean` for `BeanFactoryPostProcessor` declarations**\n- `@Configuration` classes that declare `BeanFactoryPostProcessor` beans should use `static @Bean` methods\n- Non-static methods require the `@Configuration` class to be instantiated first\n- Forces early initialization of the configuration class and all its dependencies\n- Potentially skips other post-processors that haven't been registered yet — `static` avoids this ordering problem"
+          },
+          {
+            "type": "code_example",
+            "title": "Building a Custom Annotation Processor with BeanPostProcessor",
+            "content": "The most practical way to understand `BeanPostProcessor` is to build one. The example creates a custom `@Timed` annotation that automatically logs how long each method takes — similar to Micrometer or Spring AOP, but implemented from scratch to show the mechanism.\n\nThe processor scans every bean for methods annotated with `@Timed`. When it finds one, it wraps the original bean in a CGLIB proxy that intercepts method calls and measures execution time. This is the same pattern Spring uses internally for `@Transactional` and `@Cacheable`.\n\n```java\n@Retention(RetentionPolicy.RUNTIME)\n@Target(ElementType.METHOD)\npublic @interface Timed {}\n\n@Component\npublic class TimingPostProcessor implements BeanPostProcessor {\n    @Override\n    public Object postProcessAfterInitialization(Object bean, String name) {\n        boolean hasTimed = Arrays.stream(bean.getClass().getMethods())\n            .anyMatch(m -> m.isAnnotationPresent(Timed.class));\n        if (!hasTimed) return bean;\n\n        return Enhancer.create(bean.getClass(), (MethodInterceptor) (obj, method, args, proxy) -> {\n            if (!method.isAnnotationPresent(Timed.class))\n                return proxy.invokeSuper(obj, args);\n            long start = System.nanoTime();\n            Object result = proxy.invokeSuper(obj, args);\n            log.info(\"{}.{} took {}ms\", name, method.getName(),\n                (System.nanoTime() - start) / 1_000_000);\n            return result;\n        });\n    }\n}\n```\n\nThe key insight is the **return value**. The `postProcessAfterInitialization` method returns either the original bean (no processing needed) or a new object (the proxy). Spring replaces the bean in the container with whatever this method returns. This is why `@Transactional` works — the bean registered in the container is a proxy, not the original class.\n\n**Practical performance note**\n- Proxy creation happens once at startup for singleton beans — no per-call cost\n- CGLIB proxies add roughly 1-2 microseconds per method call — negligible for most applications\n- For post-processors that wrap thousands of beans, the startup time impact can be measurable; profile before optimizing"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`BeanPostProcessor` powers every annotation-driven Spring feature** — `@Autowired` uses `AutowiredAnnotationBeanPostProcessor`, `@Transactional` uses `AbstractAutoProxyCreator`, `@Async` uses `AsyncAnnotationBeanPostProcessor`.\n- **`postProcessAfterInitialization` can replace the bean with a proxy** — return a different object and Spring registers the proxy; all other beans inject the proxy, not the original — this is how `@Transactional` works.\n- **`BeanPostProcessor` vs `BeanFactoryPostProcessor`** — BPP modifies bean instances after creation; BFPP modifies bean definitions before any bean is created; `PropertySourcesPlaceholderConfigurer` is a BFPP.\n- **BPP beans must be registered before normal beans** — Spring auto-detects BPP implementations early; a BPP cannot depend on beans it is supposed to process (circular dependency at the registration phase).\n- **`static @Bean` for `BeanFactoryPostProcessor` declarations** — non-static `@Bean` methods force the `@Configuration` class to instantiate early, potentially skipping other post-processors; `static` avoids this.\n- **Self-invocation bypasses the proxy** — calls to `this.method()` from inside the bean hit the original object directly, not the proxy; this is why `@Transactional` self-calls do not start new transactions.\n- **`@Order` or `Ordered` controls BPP execution sequence** — when multiple BPPs exist, ordering matters for proxies-around-proxies scenarios."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`BeanPostProcessor` is the most powerful internal interface in Spring — every annotation-driven feature you use daily is implemented as one.\n\n**What it is**\n- An interface with two methods: `postProcessBeforeInitialization` (before `@PostConstruct`) and `postProcessAfterInitialization` (after)\n- Every annotation-driven Spring feature is a BPP: `@Autowired` injection, `@Transactional` proxying, `@Async` wrapping, `@Scheduled` registration\n\n**The proxy trick in `postProcessAfterInitialization`**\n- This method can return a completely different object — typically a CGLIB proxy wrapping the original bean\n- Spring registers whatever this method returns in the container; all other beans inject the proxy, not the original\n- This is why `@Transactional` works — and why calling a `@Transactional` method via `this` bypasses it: `this` is the original, not the proxy\n\n**BPP vs `BeanFactoryPostProcessor`**\n- `BeanPostProcessor` modifies bean instances after they are created\n- `BeanFactoryPostProcessor` modifies bean definitions before any bean is created — `PropertySourcesPlaceholderConfigurer` (which resolves `${...}` placeholders) is a `BeanFactoryPostProcessor`\n\nKnowing that proxy creation happens in `postProcessAfterInitialization` explains most of the why does my annotation not work debugging sessions — from `@Transactional` self-invocation to `@Async` on the same class."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does BeanPostProcessor differ from BeanFactoryPostProcessor?",
+        "Why does @Transactional on a self-invoked method not work?",
+        "What ordering problem arises when a BeanPostProcessor depends on an @Autowired bean?",
+        "How does AnnotationAwareAspectJAutoProxyCreator decide which beans to proxy?"
+      ],
+      "seo": {
+        "metaTitle": "BeanPostProcessor in Spring — AOP Proxies and Bean Modification",
+        "metaDescription": "BeanPostProcessor hooks run before/after bean init. The mechanism behind @Transactional, @Async, @Cacheable, and AOP proxies in Spring."
+      },
+      "speakable_status": "priority_handcraft"
+    },
+    {
+      "id": "sc-004",
+      "slug": "beanfactory-vs-applicationcontext",
+      "question": "What is the difference between BeanFactory and ApplicationContext in Spring?",
+      "title": "Spring IoC Container: BeanFactory vs ApplicationContext",
+      "direct_answer": "**`BeanFactory`** is Spring's root IoC interface providing basic dependency injection, while **`ApplicationContext`** extends it with enterprise features: **event publishing**, **internationalization**, **AOP auto-proxying**, and **eager singleton initialization**. The practical difference is initialization strategy — `BeanFactory` initializes beans lazily on first `getBean()` call; `ApplicationContext` eagerly creates all singletons at startup, which catches configuration errors immediately. `ApplicationContext` also auto-detects `BeanPostProcessor` beans, which is what makes `@Autowired`, `@Transactional`, and every annotation-driven feature work. In modern Spring, you never instantiate `BeanFactory` yourself — `SpringApplication.run()` creates an `AnnotationConfigApplicationContext`. `BeanFactory` exists for the framework-extension API.",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of the Spring container hierarchy and why ApplicationContext is the default choice.",
+        "common_mistake": "Thinking they are interchangeable drop-in replacements, or not knowing that BeanFactory initializes beans lazily by default while ApplicationContext initializes singletons eagerly on startup.",
+        "to_stand_out": "Mention that ApplicationContext implements several sub-interfaces (MessageSource, ApplicationEventPublisher, ResourceLoader) which gives it the extra capabilities, and name concrete implementations like ClassPathXmlApplicationContext or AnnotationConfigApplicationContext."
+      },
+      "company_tags": [
+        "Oracle",
+        "IBM",
+        "Capgemini",
+        "ThoughtWorks",
+        "Pivotal",
+        "Microsoft"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why BeanFactory Still Exists When Everyone Uses ApplicationContext",
+            "content": "Every Spring application uses `ApplicationContext` — it's what `SpringApplication.run()` creates, what `@SpringBootTest` loads, and what you interact with when you call `context.getBean()`. So why does `BeanFactory` still exist?\n\n**`BeanFactory` is the root interface.**\n- Defines the core contract for any Spring container: register beans, resolve dependencies, manage lifecycle.\n- Lazy by design — beans are instantiated only on first `getBean()` call.\n\n**`ApplicationContext` extends `BeanFactory`** and adds:\n- Event publishing (`ApplicationEventPublisher`).\n- Internationalization (`MessageSource`).\n- Environment abstraction (`Environment`, profiles, property sources).\n- Resource loading (`ResourceLoader`).\n- AOP auto-proxying via `BeanPostProcessor`.\n\n**Initialization strategy is the practical difference.**\n- `BeanFactory` initializes beans lazily — created only when first requested.\n- `ApplicationContext` eagerly creates all singleton beans at startup.\n- **Eager initialization catches configuration errors immediately** instead of failing on the first request in production.\n\n**When you'd touch `BeanFactory` directly** (rare):\n- Writing custom `BeanPostProcessor` / `BeanFactoryPostProcessor` implementations that need the lower-level API.\n- Memory-constrained environments where lazy initialization is required to reduce startup footprint.\n- Otherwise: `ApplicationContext` is a `BeanFactory` with infrastructure services layered on top — always the right default."
+          },
+          {
+            "type": "comparison_table",
+            "title": "BeanFactory vs ApplicationContext: What Each Layer Adds",
+            "content": "The table shows that `ApplicationContext` is a **superset** — everything `BeanFactory` does, plus infrastructure that modern applications depend on. The initialization row matters most in practice — it explains why `ApplicationContext` is safer for production: misconfigurations fail at startup, not on the first request.\n\n| Feature | BeanFactory | ApplicationContext |\n|---|---|---|\n| Bean instantiation | Lazy (on first getBean) | Eager (singletons at startup) |\n| Dependency injection | Yes | Yes |\n| BeanPostProcessor auto-detection | No (manual registration) | Yes (automatic) |\n| ApplicationEvent publishing | No | Yes |\n| MessageSource (i18n) | No | Yes |\n| AOP auto-proxy support | Limited | Full |\n| @Autowired / annotations | No (manual setup) | Yes |\n| ResourceLoader abstraction | No | Yes |\n| Spring Boot default container | No | AnnotationConfigApplicationContext |\n| Use case | Constrained environments | All standard applications |"
+          },
+          {
+            "type": "step",
+            "title": "When You Actually Touch BeanFactory Directly — and Why It's Rare",
+            "content": "In modern Spring Boot applications, you **never instantiate `BeanFactory` yourself**. `SpringApplication.run()` creates an `AnnotationConfigApplicationContext` (or its reactive variant) which implements both `ApplicationContext` and `BeanFactory`. The factory is always there — you just access it through the higher-level context.\n\n**Where `BeanFactory` actually matters**\n- Writing a `BeanFactoryPostProcessor` — you receive the raw `BeanFactory` to modify bean definitions before any beans are created\n- `PropertySourcesPlaceholderConfigurer` (resolves `${property}` placeholders) is a `BeanFactoryPostProcessor` working at this level\n- Writing a `BeanPostProcessor` that implements `BeanFactoryAware` — needed when a BPP must look up other beans during post-processing\n- `AutowiredAnnotationBeanPostProcessor` uses this pattern to resolve `@Autowired` dependencies\n\n**The interview takeaway**\n- Use `ApplicationContext` everywhere unless writing a Spring extension\n- `BeanFactory` is the contract that makes the container work; application code should never depend on it directly\n\n**`ConfigurableApplicationContext` — the lifecycle API**\n- Adds `refresh()` and `close()` methods\n- `SpringApplication.run()` calls `refresh()` to trigger the full bean creation process\n- Registers a JVM shutdown hook that calls `close()`\n- When writing tests that create `ApplicationContext` manually, always close it in a `finally` block or use `@SpringBootTest` which handles lifecycle automatically — leaked contexts hold database connections open and cause port conflicts in test suites"
+          },
+          {
+            "type": "step",
+            "title": "What ApplicationContext Provides That BeanFactory Cannot",
+            "content": "The gap between `BeanFactory` and `ApplicationContext` is not academic. The features that `ApplicationContext` adds are the ones Spring Boot's autoconfiguration, Actuator, and test infrastructure rely on.\n\n**`BeanPostProcessor` detection**\n- `ApplicationContext` automatically detects and registers beans implementing `BeanPostProcessor`\n- The mechanism that enables `@Autowired`, `@Transactional`, `@Cacheable`, and `@Async`\n- With plain `BeanFactory`, you must manually register each post-processor — none of Spring's annotation-based features work\n\n**`MessageSource` for i18n**\n- `ApplicationContext` provides message bundle resolution for internationalization\n- `context.getMessage(\"user.notfound\", new Object[]{id}, Locale.ENGLISH)` resolves locale-specific messages from `messages.properties`\n- `BeanFactory` has no concept of message sources\n\n**`ApplicationEvent` publishing**\n- `ApplicationContext` is an `ApplicationEventPublisher`\n- Beans can publish events: `context.publishEvent(new UserRegisteredEvent(this, user))`\n- Listen with `@EventListener`\n- The infrastructure behind Spring Boot's startup events (`ApplicationStartingEvent`, `ApplicationReadyEvent`) and decoupled component communication\n- `BeanFactory` cannot publish or receive events\n\n**Resource loading**\n- `ApplicationContext` extends `ResourceLoader` — unified classpath, file system, and URL resource loading API\n- `ClassPathXmlApplicationContext`, `FileSystemXmlApplicationContext`, and `AnnotationConfigApplicationContext` are all implementations optimized for different configuration sources\n- None of this is available in `BeanFactory`\n\n**Eager singleton initialization — the production implication**\n- With `BeanFactory`, configuration errors surface only when the affected bean is first accessed\n- A broken application could start successfully and only fail when the first user triggers the broken code path\n- `ApplicationContext` forces all singleton beans to initialize at startup — runtime failures become startup failures\n- In Kubernetes: the pod fails its readiness probe and never receives traffic; the deployment fails cleanly instead of serving errors to users"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`BeanFactory` initializes beans lazily; `ApplicationContext` initializes singletons eagerly** — eager initialization catches configuration errors at startup instead of on the first request in production.\n- **`ApplicationContext` auto-detects `BeanPostProcessor` beans** — with plain `BeanFactory`, you must manually register each BPP; without auto-detection, `@Autowired`, `@Transactional`, and all annotation-driven features stop working.\n- **You never instantiate `BeanFactory` directly in modern Spring** — `SpringApplication.run()` creates `AnnotationConfigApplicationContext` which implements both; `BeanFactory` is the contract, `ApplicationContext` is what you use.\n- **`ApplicationContext` is a superset** — it implements `MessageSource` (i18n), `ApplicationEventPublisher` (events), and `ResourceLoader` on top of `BeanFactory`.\n- **`ConfigurableApplicationContext.refresh()` starts the container; `close()` shuts it down** — `SpringApplication` calls `refresh()` automatically and registers a JVM shutdown hook for `close()`.\n- **Production safety: eager initialization fails the deployment, not the user** — in Kubernetes, the pod fails its readiness probe and never receives traffic; lazy initialization would serve errors to users on the first request."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`BeanFactory` is Spring's root IoC interface — the contract that every container must implement. `ApplicationContext` extends it and adds everything a production application needs. In practice you never use `BeanFactory` directly.\n\n**The key difference: initialization strategy**\n- `BeanFactory` initializes beans lazily — created only when first requested via `getBean()`\n- `ApplicationContext` creates all singleton beans eagerly at startup — configuration errors, missing dependencies, and broken `@PostConstruct` methods fail immediately instead of on the first user request\n- In Kubernetes: eager initialization means a broken pod fails its readiness probe and never receives traffic; lazy initialization means the pod starts successfully and serves errors on the first request\n\n**What `ApplicationContext` adds over `BeanFactory`**\n- Auto-detection and registration of `BeanPostProcessor` beans — without this, `@Autowired`, `@Transactional`, `@Async`, and every annotation-driven feature stops working\n- `ApplicationEventPublisher` — the infrastructure for Spring's event system and Spring Boot's startup events\n- `MessageSource` — internationalization and message bundle resolution\n- `ResourceLoader` — unified classpath, file system, and URL resource loading\n\n**When you touch `BeanFactory` directly**\n- Writing `BeanFactoryPostProcessor` implementations that modify bean definitions before beans are created\n- Writing `BeanPostProcessor` implementations that use `BeanFactoryAware` to look up other beans during post-processing\n\nApplication code should always depend on `ApplicationContext`. `BeanFactory` is the framework-extension API."
+          },
+          {
+            "type": "code_example",
+            "title": "BeanFactory vs ApplicationContext in Action",
+            "content": "Running both container types side-by-side makes the differences concrete. `BeanFactory` does lazy, on-demand instantiation; `ApplicationContext` eagerly pre-instantiates singletons and publishes lifecycle events.\n\n```java\npublic class ContainerComparison {\n\n    public static void main(String[] args) {\n        System.out.println(\"--- BeanFactory (lazy) ---\");\n        DefaultListableBeanFactory bf = new DefaultListableBeanFactory();\n        new XmlBeanDefinitionReader(bf).loadBeanDefinitions(\n            new ClassPathResource(\"beans.xml\"));\n        // Singletons NOT yet instantiated — constructors haven't run.\n        UserService svc1 = bf.getBean(UserService.class);   // constructor runs HERE\n        UserService svc2 = bf.getBean(UserService.class);   // same instance cached\n\n        System.out.println(\"--- ApplicationContext (eager + events) ---\");\n        ApplicationContext ctx = new AnnotationConfigApplicationContext(AppConfig.class);\n        // All singletons already constructed, @PostConstruct already executed,\n        // ContextRefreshedEvent already published BEFORE this line.\n        UserService svc3 = ctx.getBean(UserService.class);\n    }\n}\n\n@Configuration\n@ComponentScan(\"com.example\")\nclass AppConfig {}\n\n@Component\nclass UserService {\n    @PostConstruct\n    void init() { System.out.println(\"UserService initialized\"); }\n    @EventListener\n    public void onReady(ContextRefreshedEvent e) { /* only ApplicationContext fires this */ }\n}\n```\n\n- With `BeanFactory`, the constructor of `UserService` does not run until `getBean()` is called.\n- With `ApplicationContext`, all singleton constructors, `@PostConstruct` callbacks, and `BeanPostProcessor` hooks run during `new AnnotationConfigApplicationContext(...)` — fail-fast on misconfiguration.\n- `@EventListener` only works with `ApplicationContext`, which is why Spring Boot always uses it.\n- Use `BeanFactory` only for memory-constrained tools where startup time beats safety; use `ApplicationContext` for every real application."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What concrete implementations of ApplicationContext would you use for a Spring Boot app versus a standalone unit test?",
+        "Why does eager singleton initialization in ApplicationContext help catch bugs earlier?",
+        "What is a BeanFactoryPostProcessor and how does it differ from a BeanPostProcessor?",
+        "How does ApplicationEventPublisher work and what events does Spring Boot publish during startup?"
+      ],
+      "seo": {
+        "metaTitle": "BeanFactory vs ApplicationContext in Spring | IoC Container Comparison",
+        "metaDescription": "Understand the differences between Spring's BeanFactory and ApplicationContext — lazy vs eager initialization, annotation support, event publishing, and when to use each."
+      }
+    },
+    {
+      "id": "sc-010",
+      "slug": "conditional-and-custom-conditions",
+      "question": "What is @Conditional in Spring and how do you implement a custom condition?",
+      "title": "@Conditional and Custom Conditions",
+      "direct_answer": "**`@Conditional`** tells the container to register a bean only when a given **`Condition`** implementation returns `true`. Spring Boot's auto-configuration is built almost entirely on `@Conditional` variants like **`@ConditionalOnClass`**, **`@ConditionalOnMissingBean`**, and **`@ConditionalOnProperty`**. The `Condition` interface has one method — `matches(ConditionContext, AnnotatedTypeMetadata)` — that returns a boolean. Evaluation happens at **bean definition time**, before any bean is instantiated, making it the earliest decision point in the Spring lifecycle. `@ConditionalOnMissingBean` is the mechanism that makes Spring Boot auto-configuration override-friendly: user-defined beans are processed first, so they win over auto-configured defaults.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of Spring's conditional bean registration model, which is the foundation of Spring Boot auto-configuration.",
+        "common_mistake": "Not knowing the difference between @Profile (environment-based) and @Conditional (arbitrary logic), or not realizing that @ConditionalOnMissingBean is how Spring Boot lets you override auto-configured beans.",
+        "to_stand_out": "Explain the Condition interface's ConditionContext, show how to write a condition that checks an environment property, and describe the ordering issue: conditions are evaluated during the BeanDefinitionRegistry phase, before any beans are created."
+      },
+      "company_tags": [
+        "Pivotal",
+        "VMware",
+        "Atlassian",
+        "Twilio",
+        "Stripe",
+        "Microsoft"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why @Conditional Is the Engine Behind Every Spring Boot Auto-Configuration",
+            "content": "Every time Spring Boot magically configures a `DataSource` because H2 is on the classpath, or sets up a `JdbcTemplate` because `spring-boot-starter-jdbc` is present, the mechanism is `@Conditional`. Spring Boot's auto-configuration classes are annotated with **`@ConditionalOnClass`**, **`@ConditionalOnMissingBean`**, **`@ConditionalOnProperty`** — all specialized forms of `@Conditional`.\n\nThe core interface is simple: `Condition` has a single method, `matches(ConditionContext, AnnotatedTypeMetadata)`, that returns `true` or `false`. If `true`, the annotated `@Bean` or `@Configuration` class is registered. If `false`, Spring skips it entirely — no bean definition, no instantiation, no error.\n\nThis is fundamentally different from `@Profile`, which is just `@Conditional` with a built-in condition that checks `spring.profiles.active`.\n- **Custom `@Conditional` can check anything**: classpath contents, system properties, environment variables, database availability, feature flags from a remote service.\n- The evaluation happens at **bean definition time** — before any bean is instantiated — making it the earliest decision point in the Spring lifecycle."
+          },
+          {
+            "type": "step",
+            "title": "Building a Custom Condition — Feature Flags Without External Libraries",
+            "content": "Writing a custom `Condition` is straightforward — implement the interface, check whatever you need from the `ConditionContext`, and return a boolean.\n\n**What `ConditionContext` exposes**\n- `Environment` — properties from any source\n- `BeanDefinitionRegistry` — existing bean definitions (not live beans)\n- `ClassLoader` — for classpath checks\n- `ResourceLoader` — for file existence checks\n\n**Practical use case: feature flags**\n- Instead of cluttering code with `if (featureEnabled)` checks, conditionally register the entire bean graph for a feature based on a property\n- The condition evaluates at bean definition time — before any bean is instantiated — so disabled features have **zero runtime cost**\n\n```java\npublic class FeatureEnabledCondition implements Condition {\n    @Override\n    public boolean matches(ConditionContext context,\n                           AnnotatedTypeMetadata metadata) {\n        Map<String, Object> attrs = metadata\n            .getAnnotationAttributes(ConditionalOnFeature.class.getName());\n        String feature = (String) attrs.get(\"value\");\n        return \"true\".equals(\n            context.getEnvironment().getProperty(\"feature.\" + feature + \".enabled\"));\n    }\n}\n\n@Target({ElementType.TYPE, ElementType.METHOD})\n@Retention(RetentionPolicy.RUNTIME)\n@Conditional(FeatureEnabledCondition.class)\npublic @interface ConditionalOnFeature {\n    String value();\n}\n\n@Configuration\n@ConditionalOnFeature(\"dark-mode\")\npublic class DarkModeConfig {\n    @Bean public ThemeService themeService() { return new DarkThemeService(); }\n}\n```\n\n**What happens when feature is disabled**\n- When `feature.dark-mode.enabled` is absent or `false`, the entire `DarkModeConfig` class is skipped\n- No `ThemeService` bean exists in the context\n- Cleaner than wrapping business logic in conditionals — the bean graph itself reflects active features\n\n**Spring Boot's built-in condition mechanisms**\n- `@ConditionalOnClass` checks the classloader\n- `@ConditionalOnMissingBean` checks the registry\n- `@ConditionalOnProperty` checks the environment"
+          },
+          {
+            "type": "step",
+            "title": "How @ConditionalOnMissingBean Enables Override-Friendly Defaults",
+            "content": "The most important built-in condition is **`@ConditionalOnMissingBean`** — registers a bean only if no bean of that type already exists.\n\n**The override mechanism**\n- When Spring Boot auto-configures a `DataSource`, the `@Bean` method is annotated with `@ConditionalOnMissingBean(DataSource.class)`\n- If you define your own `DataSource` bean in a `@Configuration` class, your bean is registered first\n- The auto-configured one is silently skipped — your custom bean wins\n\n**Why evaluation order works**\n- User-defined `@Configuration` classes are always processed before `AutoConfiguration` classes\n- `AutoConfiguration` classes live in `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`\n- By the time auto-configuration runs, your custom beans are already in the registry\n- `@ConditionalOnMissingBean` detects them and skips the auto-configured fallback\n\n**The convention-over-configuration foundation**\n- This pattern enables Spring Boot's central design promise: sensible defaults that you can override without telling the framework anything\n- Define a `RestTemplate` bean and Spring Boot's auto-configured one disappears\n- No `application.properties` setting required, no exclusion list to maintain\n\n**Other useful built-in conditions**\n- `@ConditionalOnClass` — checks if a class is on the classpath; how Spring Boot knows to configure JPA only when Hibernate is present\n- `@ConditionalOnProperty` — checks a property value\n- `@ConditionalOnWebApplication` — only in servlet or reactive web contexts\n- `@ConditionalOnBean` — only when another bean exists\n- `@ConditionalOnExpression` — evaluates a SpEL expression\n\nTogether, these conditions form the **decision tree** that makes Spring Boot applications auto-configure correctly without manual setup."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Conditional` is the engine behind every Spring Boot auto-configuration** — `@ConditionalOnClass`, `@ConditionalOnMissingBean`, `@ConditionalOnProperty` are all specialized `@Conditional` annotations.\n- **Conditions are evaluated at bean definition time** — before any bean is created; a condition checking for the existence of another bean uses the `BeanDefinitionRegistry`, not the live container.\n- **`@ConditionalOnMissingBean` makes auto-config override-friendly** — user-defined beans are registered before auto-configurations; the condition finds your bean already in the registry and skips the auto-configured one.\n- **`@Profile` is just `@Conditional` with a built-in condition** — it checks `spring.profiles.active`; any logic you would put in a custom `Condition.matches()` can also drive bean registration.\n- **Never call `context.getBean()` inside `Condition.matches()`** — beans may not be created yet at evaluation time; use the `BeanDefinitionRegistry` to check if a bean definition exists.\n- **Disabled features have zero runtime cost** — when a `@Conditional` returns false, no bean definition is registered; the feature's classes are never instantiated, never wrapped by AOP, never proxied.\n- **`ConditionContext` exposes Environment, ClassLoader, BeanDefinitionRegistry, ResourceLoader** — these four sources cover almost every conditional scenario you encounter in production."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Every time Spring Boot automatically sets up a `DataSource` because H2 is on the classpath, or skips configuring `JdbcTemplate` because you already defined one, the mechanism is `@Conditional`. It is the decision engine behind all of Spring Boot's auto-configuration.\n\n**The core interface**\n- `Condition` has one method: `matches(ConditionContext, AnnotatedTypeMetadata)` returns `true` or `false`\n- If `false`, Spring skips the annotated `@Bean` or `@Configuration` entirely — no bean definition, no instantiation, no error\n- Evaluation happens at bean definition time, before any bean is created — not at runtime\n\n**The built-in conditions**\n- `@ConditionalOnClass` — checks if a class is on the classpath; how Spring Boot knows to configure JPA only when Hibernate is present\n- `@ConditionalOnMissingBean` — registers a bean only if no bean of that type already exists; user configurations are processed before auto-configurations, so your custom bean wins\n- `@ConditionalOnProperty` — evaluates a property value at startup\n\n**Custom conditions**\n- Implement `Condition`, use `ConditionContext` to check the `Environment`, `ClassLoader`, `BeanDefinitionRegistry`, or `ResourceLoader`\n- Compose into a custom annotation: `@ConditionalOnFeature(\"dark-mode\")` backed by a condition that reads `feature.dark-mode.enabled`\n\n`@Profile` is just `@Conditional` with a built-in condition that checks active profiles. Anything you want to conditionally enable — a feature flag, an environment-specific service, a paid-tier bean graph — can be driven by a custom `@Conditional`."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does @ConditionalOnMissingBean let you override Spring Boot auto-configuration?",
+        "What is the difference between @Conditional and @Profile?",
+        "Why can't you call context.getBean() inside a Condition.matches() implementation?",
+        "How would you write a custom @ConditionalOnFeature annotation for feature flags?"
+      ],
+      "seo": {
+        "metaTitle": "@Conditional in Spring: Custom Conditions and Spring Boot Auto-Config | Java Guide",
+        "metaDescription": "Learn how @Conditional works in Spring — implementing a custom Condition, Spring Boot's @ConditionalOnClass/@ConditionalOnMissingBean, and the bean-definition evaluation phase."
+      }
+    },
+    {
+      "id": "sc-spel",
+      "slug": "spring-expression-language-spel",
+      "question": "What is Spring Expression Language (SpEL) and when should you use it?",
+      "title": "Spring Expression Language (SpEL) — Dynamic Values in Configuration",
+      "direct_answer": "**Spring Expression Language (SpEL)** is a runtime expression engine integrated into Spring — it evaluates expressions embedded in `@Value`, `@ConditionalOnExpression`, `@Cacheable` keys, security rules, and `@PreAuthorize`. Syntax: **`#{...}`** for expressions (compile-time/context-aware) and **`${...}`** for property placeholders — they're often combined as `#{${app.some.prop} + 1}`. SpEL can access beans (`@beanName.method()`), system properties (`systemProperties['user.home']`), environment variables, call static methods (`T(java.lang.Math).random()`), navigate objects, and perform arithmetic and logical operations. It's powerful but **evaluated at runtime**, so errors surface late. Use SpEL deliberately for cases where static configuration isn't enough — overuse turns configuration into an unreadable scripting language.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you know the `#{...}` vs `${...}` distinction and can cite realistic use cases beyond simple property injection",
+        "common_mistake": "Confusing `#{...}` (SpEL) with `${...}` (property placeholder); using SpEL where a simple @Value or @Bean method would do",
+        "to_stand_out": "Cite realistic use cases like @Cacheable(key=\"#user.id\") and @PreAuthorize(\"hasRole('ADMIN') and #request.owner == authentication.name\"); mention SpEL compilation mode for performance"
+      },
+      "company_tags": [
+        "Amazon",
+        "Pivotal",
+        "Atlassian",
+        "Oracle",
+        "Google",
+        "Microsoft"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why SpEL Exists When Property Placeholders Already Work",
+            "content": "Property placeholders (`${key}`) do simple lookups — they find a value by name and inject it. But what if you need to **compute** a value? Split a comma-separated string into a list, call a method on another bean, evaluate a conditional expression, or access system properties?\n\n**Spring Expression Language (SpEL)** fills this gap.\n- The `#{expression}` syntax evaluates arbitrary expressions at bean creation time — method calls, arithmetic, ternary operators, collection projections, and references to other beans in the container.\n- It's a mini programming language embedded in annotations.\n\nThe practical trade-off is **readability**.\n- SpEL expressions can do almost anything, but complex expressions in annotations become opaque and hard to debug.\n- When a `SpelEvaluationException` fires at startup, the stack trace points to the annotation, not to a line of Java code you can step through.\n- The rule of thumb: use SpEL for simple transformations (splitting strings, defaulting values, referencing beans) and move complex logic to `@PostConstruct` methods where you get proper IDE support and debuggability."
+          },
+          {
+            "type": "step",
+            "title": "The Three SpEL Patterns You'll Actually Use in Production",
+            "content": "While SpEL supports a rich expression language, production codebases typically use only a few patterns. The three most common are **bean references**, **property transformations**, and **conditional defaults**.\n\n**1. Reference another bean's property**\n```java\n@Value(\"#{configService.getMaxRetries()}\")\nprivate int maxRetries;\n```\n\n**2. Transform a property — split CSV into a List**\n```java\n@Value(\"#{'${allowed.origins}'.split(',')}\")\nprivate List<String> allowedOrigins;\n```\n\n**3. Conditional default — environment-aware logic**\n```java\n@Value(\"#{systemProperties['os.name'].contains('Windows') ? 'C:/tmp' : '/tmp'}\")\nprivate String tempDir;\n```\n\n**The nesting order matters**\n- In pattern 2: `${}` resolves the property first, then `#{}` applies SpEL to the result\n- `${}` is always inside `#{}`, never the reverse\n- Standard pattern for converting comma-separated properties into Java collections\n\n**Static methods and constants**\n- `#{T(java.lang.Math).PI}` returns 3.14159\n- `#{T(java.util.UUID).randomUUID().toString()}` generates a UUID\n- The `T()` operator provides access to any class on the classpath"
+          },
+          {
+            "type": "step",
+            "title": "When SpEL Becomes a Maintenance Problem — The Complexity Threshold",
+            "content": "SpEL's power becomes a liability when expressions get complex. An expression like `#{@beanA.method() != null ? @beanA.method().transform(@beanB.config) : 'fallback'}` does work — but it's untestable, undebuggable, and invisible to IDE refactoring tools.\n\n**The complexity threshold**\n- One level of nesting is fine: a simple `split()`, a bean reference, a ternary with literal values\n- Anything that chains method calls, references multiple beans, or includes business logic belongs in a `@PostConstruct` method or a dedicated `@Configuration` class\n- IDE refactoring (rename method, change signature) does not touch SpEL strings — silent breakage\n\n**Security with user input — Remote Code Execution risk**\n- SpEL expressions that include user-provided values can be exploited\n- The `T(Runtime).exec()` operator can execute arbitrary system commands\n- Never construct SpEL expressions from user input\n- Spring Security's `@PreAuthorize(\"hasRole('ADMIN')\")` is safe because the expression is a compile-time constant\n\n**`@Value` evaluates once at bean creation**\n- The value is injected and cached — no live re-evaluation if the underlying property changes\n- For dynamic values that need to change at runtime, use `Environment.getProperty()` directly\n- Or Spring Cloud's `@RefreshScope` for live property updates"
+          },
+          {
+            "type": "step",
+            "title": "SpEL Beyond Configuration — Security, Caching, Spring Data",
+            "content": "SpEL appears in three contexts beyond `@Value`: Spring Security's method-level authorization, Spring Data's `@Query` annotations, and Spring Cache's condition expressions.\n\n**Spring Security method expressions**\n- `@PreAuthorize(\"#orderId == authentication.principal.userId or hasRole('ADMIN')\")` evaluates complex authorization logic\n- `#orderId` binds to the method parameter by name (requires `-parameters` compiler flag or `@P` annotation)\n- `authentication.principal` accesses the authenticated user object\n- These expressions run on every method invocation, evaluated by Spring's `MethodSecurityExpressionHandler`\n\n**Spring Data `@Query` with SpEL**\n- `@Query(\"SELECT e FROM #{#entityName} WHERE e.status = :status\")` where `#{#entityName}` resolves to the entity class name at runtime\n- Enables generic repository queries in base repository classes\n- Useful for cross-cutting query logic\n\n**Cache condition expressions**\n```java\n@Cacheable(value = \"orders\",\n           condition = \"#id > 100\",\n           unless = \"#result == null\")\npublic Order find(Long id) { ... }\n```\n- `condition` — evaluated before method execution; prevents caching when expression is false\n- `unless` — evaluated after execution, with access to `#result`; prevents caching when expression is true\n- Both prevent the cache from filling with garbage like null lookups or test IDs\n\n**`@ConditionalOnExpression`**\n- `@ConditionalOnExpression(\"${feature.enabled:false} and '${env}' == 'prod'\")` combines property lookup with logical evaluation\n- Enables conditional bean creation that depends on multiple properties\n\n**Test-only patterns**\n- `@Value(\"#{T(java.lang.Math).PI}\")` injects mathematical constants\n- `@Value(\"#{systemProperties['java.home']}\")` injects JVM properties\n- Test-only — production code should use property sources, not hardcoded values"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`${}` is property lookup; `#{}` is SpEL expression** — they are different syntaxes; `${}` always resolves first, `#{}` evaluates the result; nesting order is always `${}` inside `#{}`.\n- **SpEL is evaluated once at bean creation, not at call time** — the value is injected and cached; live re-evaluation requires `@RefreshScope` or calling `Environment.getProperty()` directly.\n- **SpEL plus user input equals Remote Code Execution risk** — `T(Runtime).exec()` can run arbitrary system commands; never construct SpEL expressions from user-provided values.\n- **Complex SpEL in annotations is opaque and hard to debug** — `SpelEvaluationException` points to the annotation, not a line of Java; move logic exceeding one level of nesting to `@PostConstruct` or a `@Configuration` method.\n- **SpEL powers Spring Security method expressions** — `@PreAuthorize(\"#orderId == authentication.principal.userId\")` evaluates SpEL with security-specific root objects on every protected method call.\n- **`condition` and `unless` in `@Cacheable` use SpEL** — `condition` evaluated before execution, `unless` after with access to `#result`; both prevent garbage from filling the cache."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Property placeholders (`${key}`) do simple lookups. Spring Expression Language (`#{}`) evaluates arbitrary expressions — method calls, ternary operators, bean references, arithmetic. The syntax difference matters: `${}` resolves a value by name; `#{}` computes one.\n\n**The `${}` placeholder**\n- Resolves against Spring's `Environment` — `application.properties`, environment variables, system properties\n- Missing key without a default throws `IllegalArgumentException` at startup\n- Colon syntax for defaults: `${key:fallback}` — no space after the colon\n\n**The `#{}` SpEL syntax**\n- Evaluates expressions at bean creation time: method calls, ternary operators, bean property access, static method invocation with `T(ClassName)`\n- Most common production pattern: `#{'${csv}'.split(',')}` — `${}` resolves the property, SpEL transforms it into a `List`; always `${}` inside `#{}`, never reversed\n- If the expression fails at startup: `SpelEvaluationException` pointing to the annotation, not to debuggable code\n\n**Where SpEL appears beyond `@Value`**\n- Spring Security: `@PreAuthorize(\"hasRole('ADMIN') or #userId == authentication.principal.id\")` — evaluated with security-specific root objects on every call\n- `@Cacheable(condition = \"#id > 100\", unless = \"#result == null\")` — `condition` evaluated before execution, `unless` after with access to `#result`\n\nKeep SpEL expressions simple — one transformation, one method call. Anything more complex belongs in a `@PostConstruct` method where you have IDE support, proper error handling, and a debugger."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between `#{...}` and `${...}` in Spring?",
+        "How do you use SpEL in @Cacheable to build dynamic cache keys?",
+        "What is SpEL compilation mode and when should you enable it?",
+        "How would you reference another bean from a SpEL expression?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Expression Language (SpEL) — Dynamic Values in Configuration",
+        "metaDescription": "SpEL in Spring: `#{...}` expressions vs `${...}` placeholders, realistic use cases (caching, security, bean references), and compilation mode."
+      }
+    }
+  ]
+}
