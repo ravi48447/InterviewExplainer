@@ -1475,6 +1475,19 @@ def result_to_dict(r: LintResult) -> Dict[str, Any]:
         "failed_rules": r.failed_rules,
         "warned_rules": r.warned_rules,
         "notes": r.notes,
+        # Per-violation detail (rule, severity, weight, message, beat_kind)
+        # surfaced for the Phase 1.8 admin review UI which displays
+        # each violation inline next to the side-by-side renderer.
+        "violations": [
+            {
+                "rule": v.rule,
+                "severity": v.severity,
+                "weight": v.weight,
+                "message": v.message,
+                "beat_kind": v.beat_kind,
+            }
+            for v in r.violations
+        ],
     }
 
 
