@@ -12,4 +12,5 @@
 export { Speakable, type SpeakableProps } from "./Speakable";
 export { Legacy, type LegacyProps, type LegacyVariant } from "./Legacy";
 export { LayoutFor, type LayoutKey, BeatDispatch, SpeakableShell } from "./layouts";
+export { ReadAloudButton, type ReadAloudButtonProps } from "./ReadAloudButton";
 export * from "./primitives";
