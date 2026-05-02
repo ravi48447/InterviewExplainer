@@ -1,0 +1,209 @@
+{
+  "topic": "Url Shortener",
+  "topicSlug": "url-shortener",
+  "questions": [
+    {
+      "id": "sd-002",
+      "slug": "design-url-shortener",
+      "question": "Design a URL shortener service like bit.ly.",
+      "title": "Design a URL Shortener (bit.ly)",
+      "direct_answer": "Generate a unique short code per URL by **base62-encoding a distributed ID** (Snowflake or DB sequence). Store the mapping in a **relational database** sharded by short code, with **Redis cache-aside** for hot reads. Redirect path is read-only and CDN-cacheable; the write path validates and persists. Expect a **100:1 read-to-write ratio**, sub-**10 ms p99 redirect**, and design for hot-key bursts on viral links.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 14,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Distributed ID generation, read-heavy caching strategy, sub-10ms redirect latency, hot-key handling, and analytics decoupling.",
+        "common_mistake": "Using random short codes without collision detection, or storing analytics inline with the redirect (which kills latency).",
+        "to_stand_out": "Justify base62 over hash truncation, explain Snowflake vs DB-counter trade-offs, decouple click analytics through Kafka, and call out hot-key amplification with a local cache layer."
+      },
+      "company_tags": [
+        "Bitly",
+        "Twitter",
+        "LinkedIn",
+        "Google",
+        "Cloudflare"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Framing the Problem and What Makes This Hard",
+            "content": "A URL shortener looks deceptively simple — \"hash a URL, store it, redirect.\" The hard parts only show up under load:\n\n- **Read-to-write ratio is roughly 100:1** — every shortened URL is clicked many times. The system is dominated by the redirect path, not the write path.\n- **Sub-10 ms p99 latency on the redirect** — a slow redirect compounds into every product that uses your service. Caching and CDN strategy matter more than the database.\n- **Hot keys** — a viral link can hit hundreds of thousands of QPS on a single short code. A single Redis key can melt under that.\n- **Short-code collisions and uniqueness** — random hashes collide; a bad scheme either rejects writes or hands out the same code twice.\n- **Analytics without slowing the redirect** — every click should be counted, but counting can't be on the critical path.\n\nThe central design choice is: **how do we generate unique short codes at high write throughput without coordinating across nodes**, and **how do we serve reads at near-CDN latency** without making the database the bottleneck."
+          },
+          {
+            "type": "step",
+            "title": "Clarifying Questions I'd Ask First",
+            "content": "Before designing, I'd confirm:\n\n**Functional**\n- **Custom aliases** — do users get to pick their own short code (`bit.ly/myparty`)?\n- **Expiration** — do links expire (TTL)? Default never, or some configurable max?\n- **Analytics** — click counts, geo, referrer, user agent, time bucket?\n- **Authentication** — anonymous shortening allowed, or accounts required?\n- **Link preview / safety** — do we screen URLs against malware/phishing lists?\n\n**Non-functional**\n- **Daily writes vs reads** — the read:write ratio drives the architecture.\n- **Latency budget** — redirect SLO?\n- **Code length** — 7 characters of base62 give us ~3.5 trillion codes; is that enough horizon?\n- **Geographic distribution** — single region or multi-region?\n- **Data retention** — keep deleted links in a tombstone table or hard-delete?"
+          },
+          {
+            "type": "step",
+            "title": "Assumptions I'm Locking In",
+            "content": "For this design I'll assume:\n\n- **100M new URLs/month** → ~40 writes/sec average, peak ~400/sec.\n- **10B redirects/month** (100:1 read:write ratio) → ~4,000 reads/sec average, peak ~40,000/sec.\n- **5-year horizon** → 6B total URLs, ~3 TB primary storage at ~500 bytes/row.\n- **7-character base62 short codes** → 62^7 = 3.5 trillion code space, room for 500× growth.\n- **Custom aliases supported** but rare (< 5% of writes).\n- **Click analytics** — record every click, but asynchronously through Kafka, not inline.\n- **Sub-10 ms p99** for the GET redirect; sub-100 ms p99 for the POST shorten.\n- **Single primary region with read replicas + CDN edge caches** for global reads."
+          },
+          {
+            "type": "step",
+            "title": "Back-of-Envelope Capacity Estimate",
+            "content": "**Throughput**\n\n- Write QPS: 100M/month ÷ (30 × 86,400) ≈ **40/sec average, ~400/sec peak**.\n- Read QPS: 10B/month ≈ **4,000/sec average, ~40,000/sec peak**.\n- The system is **read-dominated by ~100×** — architectural bias goes to the read path.\n\n**Storage**\n\n- Per row: short_code (8 bytes) + long_url (~400 bytes) + user_id (8) + created_at (8) + click_count (8) + flags ≈ **~500 bytes/row**.\n- 5 years × 100M/month ≈ **6B rows ≈ 3 TB** primary storage. Well within a single sharded DB cluster.\n- Analytics events: 10B clicks/month, much wider rows (~1 KB) → ~120 TB/year → needs columnar store (ClickHouse/BigQuery), not the OLTP DB.\n\n**Cache memory**\n\n- 80/20 rule: 20% of links serve 80% of clicks → cache the **top ~10M short codes** → ~5 GB Redis (compact format), trivially fits.\n\n**Bandwidth**\n\n- 4,000 reads/sec × ~600 byte response ≈ **~2.4 MB/sec egress**, ~20 MB/sec at peak. Negligible.\n\n**Conclusion:** read path needs a Redis cache + CDN; write path is small enough for a single primary with replicas. Real complexity is in the analytics pipeline."
+          },
+          {
+            "type": "step",
+            "title": "API Contract",
+            "content": "Three endpoints carry the entire product:\n\n```http\nPOST /api/v1/urls\nAuthorization: Bearer {token}\nContent-Type: application/json\n\n{\n  \"long_url\": \"https://example.com/very/long/article?utm=...\",\n  \"custom_alias\": \"myparty\",\n  \"expires_at\": \"2026-12-31T23:59:59Z\"\n}\n\n201 Created\n{\n  \"short_url\": \"https://sho.rt/xK9p2L\",\n  \"short_code\": \"xK9p2L\",\n  \"long_url\": \"https://example.com/...\",\n  \"created_at\": \"2026-04-21T10:00:00Z\",\n  \"expires_at\": \"2026-12-31T23:59:59Z\"\n}\n```\n\nRedirect (the hot path):\n\n```http\nGET /:short_code\n\n302 Found\nLocation: https://example.com/very/long/article?utm=...\nCache-Control: public, max-age=86400\n```\n\nAnalytics lookup:\n\n```http\nGET /api/v1/urls/:short_code/stats\n\n200 OK\n{\n  \"total_clicks\": 14528,\n  \"clicks_24h\": 312,\n  \"top_countries\": [{\"country\": \"US\", \"clicks\": 8421}, ...],\n  \"top_referrers\": [{\"referrer\": \"twitter.com\", \"clicks\": 4102}, ...]\n}\n```\n\nDelete and a few admin endpoints round it out (`DELETE /api/v1/urls/:short_code`, `PATCH` for renaming aliases on owned links)."
+          },
+          {
+            "type": "step",
+            "title": "Data Model",
+            "content": "Two stores, two responsibilities:\n\n**Primary OLTP table** (PostgreSQL or MySQL, sharded by `short_code` hash):\n\n| Column | Type | Notes |\n|---|---|---|\n| `short_code` | VARCHAR(10) PRIMARY KEY | base62, 7 chars typical |\n| `long_url` | TEXT NOT NULL | original URL |\n| `user_id` | BIGINT | owner; nullable for anonymous |\n| `created_at` | TIMESTAMPTZ | for retention/ordering |\n| `expires_at` | TIMESTAMPTZ | nullable; partial index where not null |\n| `click_count` | BIGINT DEFAULT 0 | denormalized counter; eventual consistency |\n| `is_custom` | BOOLEAN DEFAULT false | distinguishes alias vs generated |\n| `is_deleted` | BOOLEAN DEFAULT false | soft delete |\n\nIndexes: PK on `short_code`, secondary on `(user_id, created_at)` for the user dashboard, partial index on `expires_at WHERE expires_at IS NOT NULL` for the expiration sweeper.\n\n**Analytics events** (ClickHouse / BigQuery / S3 + Athena):\n\n| Column | Type |\n|---|---|\n| `event_id` | UUID |\n| `short_code` | VARCHAR(10) |\n| `clicked_at` | TIMESTAMPTZ |\n| `ip_country` | VARCHAR(2) |\n| `referrer` | TEXT |\n| `user_agent` | TEXT |\n| `device_type` | VARCHAR(16) |\n\nWritten asynchronously from a Kafka topic. The OLTP table never sees individual click events.\n\nRelationships:\n\n```mermaid\nerDiagram\n    USERS ||--o{ URLS : owns\n    URLS ||--o{ CLICK_EVENTS : generates\n    URLS {\n        string short_code PK\n        string long_url\n        bigint user_id FK\n        timestamp created_at\n        timestamp expires_at\n        bigint click_count\n    }\n    USERS {\n        bigint user_id PK\n        string email\n        timestamp created_at\n    }\n    CLICK_EVENTS {\n        uuid event_id PK\n        string short_code FK\n        timestamp clicked_at\n        string ip_country\n        string referrer\n    }\n```"
+          },
+          {
+            "type": "step",
+            "title": "High-Level Architecture",
+            "content": "The write and read paths are very different shapes. Read path is fronted by a CDN; write path goes through validation and ID generation.\n\n```mermaid\nflowchart TB\n    User([User Browser])\n    CDN[CDN<br/>edge cache]\n    LB[Load Balancer]\n    Redirect[Redirect Service<br/>read-heavy]\n    Shorten[Shorten Service<br/>write path]\n    IDGen[ID Generator<br/>Snowflake]\n    Cache[(Redis<br/>cache-aside)]\n    DB[(PostgreSQL<br/>sharded primary)]\n    Replica[(Read Replicas)]\n    Kafka{{Kafka<br/>click events}}\n    Analytics[(ClickHouse<br/>analytics)]\n\n    User -->|GET /:code| CDN\n    CDN -.miss.-> LB\n    LB --> Redirect\n    Redirect --> Cache\n    Cache -.miss.-> Replica\n    Redirect -->|fire & forget| Kafka\n    Kafka --> Analytics\n\n    User -->|POST /urls| LB\n    LB --> Shorten\n    Shorten --> IDGen\n    Shorten --> DB\n    DB -.replicate.-> Replica\n    Shorten -->|warm| Cache\n\n    classDef hot fill:#dbeafe,stroke:#3b82f6\n    classDef store fill:#fee2e2,stroke:#ef4444\n    classDef stream fill:#fef3c7,stroke:#f59e0b\n    class Redirect,Shorten,IDGen hot\n    class Cache,DB,Replica,Analytics store\n    class Kafka stream\n```\n\n**Read path (hot):** browser → CDN edge → (on miss) LB → Redirect Service → Redis → (on miss) read replica → 302 back. Click event fired async to Kafka.\n\n**Write path:** browser → LB → Shorten Service → ID Generator → primary DB → warm cache → 201 back."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Short-Code Generation — Algorithm Choice",
+            "content": "Three approaches come up. The decision depends on whether collisions are tolerable and how much you want to depend on a central counter.\n\n| Approach | How It Works | Collision Risk | Coordination | Verdict |\n|---|---|---|---|---|\n| **Random base62** | Generate 7 random chars, check uniqueness | Low but nonzero — birthday-paradox grows over time | None | OK for small scale, breaks at ours |\n| **Hash truncation** (MD5 of long URL → first 7 chars) | Deterministic; same URL → same code | Very real at billions of rows | None | Don't use — same URL submitted twice gives same code, no analytics separation |\n| **Distributed ID + base62** | Snowflake ID → base62 encode | Zero by construction | Each ID generator is sequential within its node | Industry standard — Twitter, Discord, Bitly |\n\n**Snowflake ID structure** (64-bit):\n\n- 41 bits timestamp (millis since epoch) — lets us sort by creation time\n- 10 bits machine ID (1024 possible nodes)\n- 12 bits sequence (4096 IDs per node per ms)\n\nA Snowflake ID is monotonically increasing within a node, globally unique without coordination, and base62-encodes to ~11 characters — we truncate the leading bits to land at 7 characters by combining with a per-node prefix or using a smaller bit allocation."
+          },
+          {
+            "type": "phase",
+            "title": "Why Base62 and the Encoding Detail",
+            "content": "Base62 uses `[A-Za-z0-9]` — 62 symbols, all URL-safe without escaping, all human-typeable. Compare:\n\n- **Base16** (hex) — only 16 symbols → codes are 1.7× longer.\n- **Base64** (URL-safe) — 64 symbols but includes `-` and `_`, which look like punctuation in URLs and confuse users.\n- **Base62** — sweet spot. 7 chars = 3.5 trillion codes.\n\nThe encode loop is trivial:\n\n```java\nprivate static final String ALPHABET =\n    \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789\";\n\npublic static String encodeBase62(long id) {\n    if (id == 0) return \"A\";\n    StringBuilder sb = new StringBuilder();\n    while (id > 0) {\n        sb.append(ALPHABET.charAt((int) (id % 62)));\n        id /= 62;\n    }\n    return sb.reverse().toString();\n}\n```\n\nAt our scale, the 41-bit timestamp portion of a Snowflake ID dominates the encoded length. After ~5 years, codes hit 8 characters; we either accept that or reset the epoch."
+          },
+          {
+            "type": "step",
+            "title": "LLD — Class Design of the Shorten and Redirect Paths",
+            "content": "Layered, with each role behind an interface so we can swap implementations.\n\n```mermaid\nclassDiagram\n    class ShortenController {\n        +POST createShortUrl(req)\n        +GET getStats(code)\n    }\n    class RedirectController {\n        +GET resolve(code)\n    }\n    class ShortenService {\n        +shorten(longUrl, alias) Url\n    }\n    class RedirectService {\n        +resolve(code) String\n    }\n    class IdGenerator {\n        <<interface>>\n        +nextId() long\n    }\n    class SnowflakeIdGenerator {\n        +nextId() long\n    }\n    class UrlRepository {\n        <<interface>>\n        +save(url) Url\n        +findByCode(code) Optional~Url~\n    }\n    class JdbcUrlRepository\n    class UrlCache {\n        +get(code) Optional~String~\n        +put(code, longUrl, ttl)\n    }\n    class ClickEventPublisher {\n        +publish(event)\n    }\n\n    ShortenController --> ShortenService\n    RedirectController --> RedirectService\n    ShortenService --> IdGenerator\n    ShortenService --> UrlRepository\n    ShortenService --> UrlCache\n    RedirectService --> UrlCache\n    RedirectService --> UrlRepository\n    RedirectService --> ClickEventPublisher\n    IdGenerator <|.. SnowflakeIdGenerator\n    UrlRepository <|.. JdbcUrlRepository\n```\n\nKey method shapes (only the interesting bodies):\n\n```java\npublic class ShortenService {\n    public Url shorten(String longUrl, @Nullable String customAlias, @Nullable Instant expiresAt) {\n        validateUrl(longUrl);                                 // scheme, length, blocklist\n\n        String code = (customAlias != null)\n            ? reserveAlias(customAlias)                       // INSERT ON CONFLICT DO NOTHING\n            : Base62.encode(idGenerator.nextId());\n\n        Url url = new Url(code, longUrl, currentUserId(), expiresAt);\n        repo.save(url);                                       // primary DB write\n        cache.put(code, longUrl, Duration.ofHours(24));       // warm hot path\n        return url;\n    }\n}\n\npublic class RedirectService {\n    public String resolve(String code) {\n        Optional<String> cached = cache.get(code);\n        if (cached.isPresent()) {\n            publisher.publish(new ClickEvent(code, Instant.now()));   // async\n            return cached.get();\n        }\n        Url url = repo.findByCode(code).orElseThrow(NotFoundException::new);\n        if (url.isExpired()) throw new GoneException();\n        cache.put(code, url.longUrl(), Duration.ofHours(24));\n        publisher.publish(new ClickEvent(code, Instant.now()));\n        return url.longUrl();\n    }\n}\n```\n\nWhy this shape:\n\n- **`IdGenerator` is an interface** — in tests we use a deterministic counter; in prod, Snowflake.\n- **`UrlRepository` is interface-first** — swap JDBC for DynamoDB without touching the service.\n- **`ClickEventPublisher` is fire-and-forget** — the redirect never blocks on Kafka; the publisher buffers and flushes.\n- **Cache write on shorten** warms the hot path before any user clicks the link, eliminating cold-start misses for popular launches."
+          },
+          {
+            "type": "step",
+            "title": "Storage Choice and Sharding Strategy",
+            "content": "**Why a relational DB for the primary store**\n\n- The data model is tiny and well-shaped (one wide row per code).\n- ACID guarantees keep custom-alias reservation race-free (`INSERT ... ON CONFLICT DO NOTHING` in PostgreSQL).\n- Read replicas scale read throughput linearly.\n- Sharding by `short_code` hash is straightforward.\n\n**Sharding scheme**\n\n- **Hash by `short_code`** — distributes hot keys across shards (assuming generated codes are uniformly distributed, which Snowflake-derived codes are).\n- **N=16 shards initially** — each shard ~200 GB; can split to 32/64 later via consistent hashing.\n- **All writes go to one primary per shard, reads go to in-region replicas** — fanout is at the application level.\n\n**Why not DynamoDB?** It would work — KV is the access pattern. But: cost grows with read units even for cached traffic, and we already need a relational store for user accounts and ownership. One DB to operate is cheaper than two.\n\n**Why not store URLs in cache only?** Cache is volatile. A cold start (Redis restart) without a durable backing store would 404 every link. Cache must be cache, not source of truth."
+          },
+          {
+            "type": "step",
+            "title": "Caching Strategy and Hot-Key Handling",
+            "content": "**Cache-aside pattern** with Redis:\n\n- On read: check Redis → on miss, query DB → populate Redis with TTL of 24 hours.\n- On write: write DB, then write Redis (warm).\n- On delete: write DB tombstone, then `DEL` from Redis.\n\n**Why not write-through?** Write traffic is 100× smaller than read traffic; write-through wastes Redis writes for codes that may never be clicked.\n\n**Hot-key amplification** — a viral link creates a single Redis key receiving 100,000 QPS. A single Redis node handles ~50,000 QPS for simple GETs, so this melts Redis.\n\nMitigation, in order of complexity:\n\n- **Local in-process cache** (Caffeine, 1–5 second TTL) on each Redirect Service instance — absorbs the bulk of repeat hits in-process, never reaches Redis. Eventual consistency window: a deletion takes up to 5 seconds to propagate.\n- **Read-through CDN** with `Cache-Control: public, max-age=86400` on the 302 response — the browser and intermediate caches cache the redirect itself, never even hitting our origin.\n- **Hot-key sharding** — if a single key still gets too much traffic, partition the value across multiple Redis keys (`code:0`, `code:1`, ...) and pick randomly on read.\n\n**Negative caching** — cache 404s briefly (60 sec) so a typo on a viral non-existent code doesn't hammer the DB."
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes and Graceful Degradation",
+            "content": "**Redis unavailable**\n\n- Redirect service falls back to read replica directly.\n- Latency increases from ~2 ms to ~10 ms but the system stays up.\n- Per-instance Caffeine cache absorbs the bulk of the load.\n\n**Primary DB unavailable**\n\n- Reads continue from replicas (slightly stale is acceptable).\n- Writes fail — return 503 from POST endpoint with `Retry-After`.\n- Writes pile up in a Kafka retry topic for replay after recovery.\n\n**ID generator (Snowflake) unavailable**\n\n- Local fallback generator using machine ID + nano-time + sequence.\n- Brief uniqueness risk if clocks skew — NTP synchronization mitigates.\n\n**Kafka unavailable (analytics broken)**\n\n- Click events buffer locally on the Redirect Service in a bounded queue.\n- On overflow, drop with a metric — analytics is lossy by design at the edges.\n- The redirect itself **never fails because of analytics**.\n\n**Cold cache after Redis restart**\n\n- First few minutes of traffic hits the DB hard; we pre-warm the top 100K codes from a daily snapshot job.\n- DB connection pool is sized for the cold-start spike, not steady state."
+          },
+          {
+            "type": "step",
+            "title": "Observability and Security",
+            "content": "**Metrics**\n\n- `redirect.latency` (histogram, alert on p99 > 10 ms)\n- `redirect.cache.hit_ratio` (alert on drop below 90%)\n- `redirect.requests.total{outcome=\"hit|miss|404\"}`\n- `shorten.requests.total{result=\"created|alias_taken|invalid\"}`\n- `db.replication_lag_seconds` (alert on > 5 s)\n- `kafka.publish.errors` (alert on sustained errors)\n\n**Logging** — structured JSON; never log full long URLs (PII risk for user-tracking links).\n\n**Security**\n\n- **URL safety scan** — check long URL against a blocklist (Google Safe Browsing API) at write time; cache results for 24 hours.\n- **Rate limit by IP** at the shorten endpoint to prevent spam (50/min per IP).\n- **Authentication for analytics** and delete — only the owner can see stats or delete.\n- **HTTPS only** for the redirect domain — critical because the redirect URL itself can be abused for phishing if served over HTTP.\n- **Strip tracking parameters** from the long URL on display (UI shows the canonical destination)."
+          },
+          {
+            "type": "step",
+            "title": "Trade-offs and What I'd Change at 10× Scale",
+            "content": "**At 10× traffic (1 trillion redirects/year):**\n\n- **Multi-region active-active** with regional primary DBs and a Kafka-based replication stream for cross-region URL synchronization.\n- **Replace Redis with embedded RocksDB on each Redirect Service** for codes hotter than 1,000 QPS — eliminates the network hop entirely.\n- **CDN partnership** (Cloudflare Workers / Fastly Compute) to serve the 302 redirect at the edge with no origin hit for cached codes.\n- **Sharded ID generator** with one Snowflake node per region to avoid cross-region coordination.\n\n**What I'd reconsider:**\n\n- **Snowflake vs DB sequence with batching** — each app instance reserves a block of 1,000 IDs at startup, refills when low. Simpler operational model than running Snowflake nodes; works as long as ordering across nodes doesn't matter.\n- **Hash-based sharding vs range-based** — hash spreads load uniformly but loses range scan ability; for an analytics-heavy product, range sharding by created-at can be valuable.\n\n**What I rejected and why:**\n\n- **MD5 truncation for codes** — deterministic, so the same long URL always shortens to the same code. Breaks analytics (can't tell two campaigns apart) and creates a key-collision attack vector.\n- **Storing analytics inline** — every click incrementing a row in OLTP creates contention on viral links. Decoupling through Kafka was non-negotiable.\n- **Globally unique short codes via central counter** — one counter is a SPOF and a bottleneck. Snowflake's per-node sequencing solves the same problem without coordination."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **100:1 read-to-write ratio drives the architecture** — the system is fundamentally a CDN-friendly read layer over a small write store.\n- **Snowflake + base62** for short-code generation — zero coordination, no collisions, monotonically increasing.\n- **Cache-aside Redis with 24h TTL + local Caffeine for hot keys** — the layered cache absorbs viral traffic without melting Redis.\n- **Click analytics decoupled through Kafka** — the redirect never blocks on analytics; pipeline writes to ClickHouse asynchronously.\n- **Sharded primary DB by short_code hash** — distributes hot keys; reads fan out to in-region replicas.\n- **CDN with `Cache-Control: max-age=86400` on the 302 response** — most clicks never even reach origin."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Clarifying questions I'd ask first**\n\n- Custom aliases — do users get to pick their own short code?\n- Expiration — do links expire?\n- What level of analytics — just clicks or geo/referrer/device?\n- Authentication — anonymous shortening allowed?\n- How long should the short code be — 7 characters of base62 give us about three and a half trillion codes\n\n**Assumptions for this design**\n\nI'll assume 100 million new URLs per month, 10 billion redirects per month — so a 100-to-1 read-to-write ratio — a 5-year horizon, 7-character short codes, and a sub-10-millisecond p99 on the redirect.\n\n**Quick capacity check**\n\n- Writes: about 40 per second average, 400 peak\n- Reads: about 4,000 per second average, 40,000 peak\n- Storage: 6 billion rows over 5 years at ~500 bytes each is roughly 3 terabytes — fits a sharded relational cluster easily\n- The system is read-dominated by 100×, so the architecture biases toward the read path\n\n**High-level shape**\n\n- Write path: client → load balancer → Shorten Service → ID Generator (Snowflake) → primary DB → warm Redis\n- Read path: client → CDN edge cache → (on miss) Redirect Service → Redis → (on miss) read replica → 302 response\n- Click events: Redirect Service publishes to Kafka fire-and-forget; downstream consumer writes to ClickHouse for analytics\n- The redirect path never blocks on the database in steady state because Redis absorbs the traffic\n\n**Short-code generation — base62 of a Snowflake ID**\n\n- Snowflake gives us a 64-bit ID combining timestamp, machine ID, and a sequence number — unique without coordination\n- Base62-encoding gives URL-safe, human-typeable codes\n- I rejected hash truncation because the same URL would always produce the same code — breaks analytics and creates collision attacks\n- I rejected random codes because at billions of rows the birthday-paradox collision rate becomes unacceptable\n\n**Data model — two stores, two responsibilities**\n\n- OLTP (PostgreSQL or MySQL): short_code, long_url, owner, expiry, click counter — sharded by short_code hash\n- Analytics store (ClickHouse): one row per click event — written from Kafka consumer, never from the redirect path\n- Custom aliases use `INSERT ... ON CONFLICT DO NOTHING` so two simultaneous reservations don't both succeed\n\n**LLD — keep responsibilities clean**\n\n- `IdGenerator` interface (Snowflake in prod, deterministic counter in tests)\n- `UrlRepository` interface (JDBC in prod, can swap for DynamoDB)\n- `UrlCache` for Redis access\n- `ClickEventPublisher` for fire-and-forget Kafka writes\n- `ShortenService` and `RedirectService` orchestrate — controllers stay thin\n\n**Caching — layered, with hot-key protection**\n\n- Cache-aside Redis with 24-hour TTL\n- Local Caffeine cache (1–5 second TTL) on each Redirect Service instance absorbs viral hot keys without hitting Redis\n- CDN with `Cache-Control: public, max-age=86400` on the 302 response means most clicks never reach origin\n- Negative caching for 404s (60 seconds) prevents typos on viral non-existent codes from hammering the DB\n\n**Failure handling**\n\n- Redis down: fall back to read replica; latency increases but service stays up\n- Primary DB down: reads continue from replicas; writes fail with 503 + Retry-After\n- Kafka down: click events buffer locally and drop on overflow — redirect never fails because of analytics\n- Cold cache after Redis restart: pre-warm top 100K codes from a daily snapshot\n\n**Production extras**\n\n- URL safety scanning at write time against Google Safe Browsing\n- Rate limit by IP on the shorten endpoint to prevent spam\n- HTTPS-only redirect domain to prevent phishing abuse\n- Owner-only access to analytics and delete\n\n**At 10× scale**\n\n- Multi-region active-active with regional primary DBs and Kafka cross-region replication\n- Embedded RocksDB on each Redirect Service for the hottest codes — eliminates the Redis network hop\n- CDN edge compute (Cloudflare Workers) to serve cached 302s without origin hit\n\n**Recommendation**\n\n**Snowflake-derived base62 short codes, sharded PostgreSQL primary, layered Redis + Caffeine + CDN cache, Kafka-decoupled click analytics into ClickHouse, and HTTPS-only redirects with safety scanning** — essentially the architecture Bitly and TinyURL run today."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you handle a viral link receiving 1 million QPS on a single short code — walk through the cache layers and where they would melt.",
+        "Compare Snowflake IDs vs a centralised database sequence for short-code generation — when would each be the right choice?",
+        "How would you implement custom aliases without a race when two users reserve the same alias simultaneously?",
+        "What changes if the requirement adds full per-user analytics on each click (clicker's country, device, referrer) at the same QPS?"
+      ],
+      "seo": {
+        "metaTitle": "Design a URL Shortener (bit.ly) — System Design Interview",
+        "metaDescription": "Complete walkthrough of designing a URL shortener: requirements, capacity estimation, Snowflake + base62 ID generation, sharded PostgreSQL, layered Redis caching, hot-key handling, and Kafka-decoupled analytics."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P06",
+        "audience_assumption": "familiar",
+        "voice": "neutral",
+        "speakable_status": "approved",
+        "familiarity_anchors": [
+          "base-62 short keys",
+          "Redis or in-memory cache fronting the store",
+          "30 to 50 to 1 read-to-write ratio is typical"
+        ],
+        "standard_example": "POST /shorten with a base-62 7-char key, GET /{key} returns 301",
+        "hook": "I'd anchor on numbers first — capacity decides almost every design choice that follows.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "grouped_paragraphs",
+            "groups": [
+              {
+                "heading": "Functional",
+                "text": "Shorten long URLs to 7-character base-62 short keys. Redirect on GET. Custom alias and click analytics are optional."
+              },
+              {
+                "heading": "Non-functional",
+                "text": "Sub-50 ms p99 redirect. Three nines availability. Links live at least one year. Each link is unguessable from another."
+              }
+            ]
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "10 million new URLs per day means about 115 writes per second average and around 600 at peak. Reads are 50 to 1, so 30 K reads per second. Each row is roughly 500 bytes, so 1.8 GB per day raw and around 650 GB over a year."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "POST /shorten — body carries the long URL and optional alias. Returns the short key.",
+              "GET /{key} — 301 redirect to the long URL.",
+              "GET /{key}/stats — click count and per-day breakdown."
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "One main table keyed by short key — long URL plus owner. Audit columns hold created-at and expires-at. A separate counter table or Redis HINCRBY for click counts avoids contention on the main row."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Edge load balancer fronts a stateless redirect service. The redirect service reads from a Redis cache. On miss, it falls back to the primary store. Writes go through a separate write API that checks alias availability and persists."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "The bottleneck is the read path under hot keys. With 30 K reads per second, a 95% cache hit ratio still leaves 1500 reads per second hitting the database. I'd shard the cache by key prefix and keep the store partitioned the same way so a hot prefix doesn't burn one node."
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Sequential keys reuse a counter and save a round-trip but make every link guessable from the last. Base-62 random keys cost an extra uniqueness check but stay unguessable. I'd take the random keys."
+          }
+        ],
+        "cap": "Numbers picked the design — caches, sharding, and a key strategy that holds at the year-mark.",
+        "followup_handoff": [
+          "How would you handle a viral link that breaks the cache shard?",
+          "What changes if links expire after 24 hours instead of a year?",
+          "Where would you decouple analytics so they don't add latency to the redirect path?",
+          "How do you size the cache memory footprint for the working set?"
+        ],
+        "tts_overrides": {
+          "HINCRBY": "h incr by",
+          "/shorten": "slash shorten",
+          "/{key}": "slash key",
+          "/{key}/stats": "slash key slash stats",
+          "p99": "p ninety-nine",
+          "301": "three oh one",
+          "GB": "gigabytes",
+          "ms": "milliseconds"
+        }
+      }
+    }
+  ]
+}
