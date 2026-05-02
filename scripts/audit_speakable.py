@@ -298,7 +298,15 @@ def resolve_topic_id(question_slug: str, codex: CodexBundle) -> Optional[str]:
 
     Phase 0 codex uses topic ids like `oop-four-pillars`; question slugs are
     like `oop-four-pillars-java`. Try (1) exact, (2) slug-startswith-topic,
-    (3) topic-startswith-slug, (4) shared keyword overlap.
+    (3) topic-startswith-slug, (4) shared keyword overlap with Jaccard
+    tiebreaker.
+
+    The Jaccard tiebreaker is the Phase 2 preflight 6.4c fix: without it,
+    `difference-between-equals-and-double-equals-java` ties at 2 shared
+    tokens between `equals-vs-double-equals` (correct, 3-token topic) and
+    `equals-and-hashcode-contract` (wrong, 4-token topic) and codex
+    iteration order picks the wrong one. Jaccard prefers the more specific
+    match (smaller union ⇒ more of the topic's identity is covered).
     """
     slug = (question_slug or "").lower().strip()
     if not slug:
@@ -310,12 +318,18 @@ def resolve_topic_id(question_slug: str, codex: CodexBundle) -> Optional[str]:
         if slug.startswith(k) or k.startswith(slug):
             return k
     slug_tokens = set(re.split(r"[-_]+", slug))
-    best, best_score = None, 0
+    best: Optional[str] = None
+    best_score = 0
+    best_jaccard = 0.0
     for k in keys:
         k_tokens = set(re.split(r"[-_]+", k))
         score = len(slug_tokens & k_tokens)
-        if score > best_score and score >= 2:
-            best, best_score = k, score
+        if score < 2:
+            continue
+        union = len(slug_tokens | k_tokens) or 1
+        jaccard = score / union
+        if score > best_score or (score == best_score and jaccard > best_jaccard):
+            best, best_score, best_jaccard = k, score, jaccard
     return best
 
 
