@@ -101,7 +101,11 @@ ARCHETYPE_BEATS = {
 }
 
 REQUIRED_BEATS = {
-    "A": ["definition", "why_exists", "parts_or_states", "how_to_use", "example", "pitfalls"],
+    # Archetype A: `how_to_use` is **recommended, not required** (Phase 2
+    # preflight 6.1 — see HUMAN-REVIEW-QUEUE §3-vs-§16). Most A-shaped
+    # questions don't need a how-to-use beat separate from `example`; the
+    # canonical §16 worked example deliberately omits it.
+    "A": ["definition", "why_exists", "parts_or_states", "example", "pitfalls"],
     "B": ["what_each_is", "differences", "when_to_pick", "tiny_example"],
     "C": ["mental_model", "mechanism", "edge_cases", "failure_mode"],
     "D": ["clarify", "hypothesis", "step_by_step", "tools", "tradeoff"],
@@ -110,12 +114,13 @@ REQUIRED_BEATS = {
     "G": ["situation", "task", "action", "result", "reflection"],
 }
 
-# Soft-required beats — counted toward score (-10 each) but NOT a hard structural
-# fail. Resolves the §3-vs-§16 inconsistency: plan §3 marks `how_to_use`
-# required for A while §16 worked example omits it. See HUMAN-REVIEW-QUEUE.md.
-SOFT_REQUIRED_BEATS = {
-    "A": ["how_to_use"],
-}
+# Soft-required beats — historically deducted score (-4 warn) for archetype A's
+# `how_to_use`. Phase 2 preflight 6.1 resolved §3-vs-§16: `how_to_use` is
+# **recommended, not required** for archetype A. "Recommended" here means
+# zero penalty for absence — the §16 worked example, which is THE canonical
+# bar, omits it deliberately. The dict is kept (intentionally empty) so the
+# architecture supports future soft-required beats without a refactor.
+SOFT_REQUIRED_BEATS: Dict[str, List[str]] = {}
 HARD_REQUIRED_BEATS = {
     arch: [b for b in REQUIRED_BEATS[arch] if b not in SOFT_REQUIRED_BEATS.get(arch, [])]
     for arch in ARCHETYPE_LETTERS
@@ -1451,7 +1456,13 @@ def render_text_result(r: LintResult, quiet: bool = False) -> str:
         if bd:
             lines.append(f"  breakdown: {bd}")
     if r.failed_rules and not quiet:
-        lines.append(f"  fails ({len(r.failed_rules)}):")
+        # Renamed `fails` → `violations` per Phase 2 preflight 6.4b: the
+        # array contains both zero-tolerance fails (which produce overall
+        # FAIL) and non-zero-tolerance violations (which only deduct
+        # score and may still PASS). The JSON output keeps the
+        # `failed_rules` key for backward compatibility (see lint-rules.md
+        # §7.8.6).
+        lines.append(f"  violations ({len(r.failed_rules)}):")
         for f in r.failed_rules:
             lines.append(f"    - {f}")
     if r.warned_rules and not quiet:
@@ -1599,6 +1610,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         path = Path(args.check)
         if not path.is_absolute():
             path = (REPO_ROOT / path).resolve()
+        # Phase 2 preflight 6.4a: wrong-shape file (no top-level
+        # `questions` array) should error and exit 2 rather than fall
+        # through to an empty summary that looks like a clean pass.
+        try:
+            data = _load_json(path)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: {path}: failed to read JSON: {exc}", file=sys.stderr)
+            return 2
+        if not isinstance(data, dict) or not isinstance(data.get("questions"), list):
+            print(
+                f"error: {path} does not look like a complete-qa.json "
+                "(no top-level \"questions\" array)",
+                file=sys.stderr,
+            )
+            return 2
         results = lint_complete_qa(path, cfg)
     elif args.check_fixture:
         ref = args.check_fixture

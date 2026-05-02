@@ -14,7 +14,7 @@ Each rule below has a **pass criterion** (single line, mechanically checkable) a
 |---|---|---|
 | 7.1.1 | `archetype` is one of `A B C D E F G`. | `archetype: conceptual_lite` → fail. |
 | 7.1.2 | `pillar` is one of `P01`–`P12`. | `pillar: P13` → fail. |
-| 7.1.3 | All beats listed as **required** for this archetype are present (see `archetypes.md` per-archetype table). | Archetype B missing `differences` beat → fail. |
+| 7.1.3 | All beats listed as **required** for this archetype are present (see `archetypes.md` per-archetype table). **Recommended beats** (currently archetype A's `how_to_use`) carry zero score penalty for absence — they are quality signals the agent should consider when the topic warrants but never gate-blocking. (Resolution of HUMAN-REVIEW-QUEUE §3-vs-§16 — Phase 2 preflight: `how_to_use` is recommended for archetype A, not required.) The `SOFT_REQUIRED_BEATS` dict in `audit_speakable.py` is intentionally empty post-Phase-2; future soft-required beats (warn-level penalty) can land there without a refactor. | Archetype B missing `differences` beat → fail. Archetype A missing `how_to_use` → no penalty (it is recommended, not required). |
 | 7.1.4 | No beat listed as **forbidden** for this archetype is present. | Archetype B carrying a `parts_or_states` beat → fail. |
 | 7.1.5 | `hook` is non-empty and within the hook word cap (35 hard, see `word-ceilings.md`). | Empty hook, or 60-word hook → fail. |
 | 7.1.6 | `cap` is non-empty and within the cap word cap (35 hard). | Empty cap → fail. |
@@ -129,7 +129,8 @@ The script's output and aggregation contract.
 | 7.8.3 | **Score floor: any v2 with score < 80 absolute is rejected** (per §15.12). The legacy score is **not** the comparison point — there is no "≥ legacy" rule. | Score 78 → fail. |
 | 7.8.4 | Aggregate report at `content/_audits/speakable_health.md` shows: % passing per pillar (P01–P12), % passing per archetype (A–G), and the drift since the previous run committed to git. | Health report missing pillar-level breakdown → script bug. |
 | 7.8.5 | CI mode (`--fail-on warn`) treats warnings as failures; default mode treats only `fail` as failures. | CI mode silently passing on warnings → script bug. |
-| 7.8.6 | Per-question output records: `question_path`, `archetype`, `pillar`, `score`, `score_breakdown`, `failed_rules[]`, `warned_rules[]`, `iteration_count` (when produced by an agent loop), `final_status`. | Output without `failed_rules[]` array → script bug. |
+| 7.8.6 | Per-question output records: `question_path`, `archetype`, `pillar`, `score`, `score_breakdown`, `failed_rules[]`, `warned_rules[]`, `iteration_count` (when produced by an agent loop), `final_status`. The JSON keeps the `failed_rules[]` name for backward compatibility; the human-text rendering labels this list as `violations (N)` (Phase 2 preflight 6.4b) because the array contains both zero-tolerance violations (which produce overall FAIL) and non-zero-tolerance ones (which only deduct score and may still PASS). | Output without `failed_rules[]` array → script bug. |
+| 7.8.7 | When invoked with `--check <path>` against a file that is not a `complete-qa.json` (no top-level `questions` array, or unreadable JSON), the script prints `error: <path> does not look like a complete-qa.json (no top-level "questions" array)` to stderr and exits with code 2 — not the empty summary that would otherwise look like a clean pass. (Phase 2 preflight 6.4a.) | A blob with a top-level `question` (singular) returns exit 2 and a clear error message. |
 
 ---
 

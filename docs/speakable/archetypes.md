@@ -10,7 +10,7 @@ Every question in the catalogue maps to **exactly one** archetype. The archetype
 
 | Code | Name | Required beats (in instinct order) | Expected total (soft) | Depth marker |
 |---|---|---|---:|---|
-| **A** | Conceptual | hook → definition → why_exists → parts_or_states → how_to_use → example → pitfalls → cap | ~470 | Non-obvious sub-topic the concept implies |
+| **A** | Conceptual | hook → definition → why_exists → parts_or_states → *(how_to_use — recommended)* → example → pitfalls → cap | ~470 | Non-obvious sub-topic the concept implies |
 | **B** | Comparison | hook → what_each_is → differences → when_to_pick → tiny_example → cap | ~290 | The gotcha most candidates miss |
 | **C** | Internals | hook → mental_model → mechanism → edge_cases → failure_mode → cap | ~350 | Production failure mode (in `failure_mode`) |
 | **D** | Scenario | hook → clarify → hypothesis → step_by_step → tools → tradeoff → cap | ~365 | Real evidence / tooling (in `tools`) |
@@ -25,8 +25,9 @@ Every question in the catalogue maps to **exactly one** archetype. The archetype
 > *"What is X?"* — the answer walks through the natural mental sequence: name it, justify it, decompose it, show it, warn about the trap.
 
 - **Definition:** A question that asks the speaker to introduce a concept from scratch, define it, and unpack it enough to demonstrate command. The speaker is not making a choice or comparing alternatives — they are mapping the territory.
-- **Instinct skeleton:** `hook → definition → why_exists → parts_or_states → how_to_use → example → pitfalls → cap`
-- **Required beats:** all eight above (`hook`, `definition`, `why_exists`, `parts_or_states`, `how_to_use`, `example`, `pitfalls`, `cap`).
+- **Instinct skeleton:** `hook → definition → why_exists → parts_or_states → (how_to_use) → example → pitfalls → cap`
+- **Required beats:** `hook`, `definition`, `why_exists`, `parts_or_states`, `example`, `pitfalls`, `cap`.
+- **Recommended beats:** `how_to_use` — include it when the concept has a concrete usage angle separate from `example` (e.g. "what is a Stream API"). Many A questions don't need it (e.g. "what are threads" — the example beat already shows usage). The lint treats `how_to_use` as soft-required: missing it deducts 4 from the score (warn) but does not trigger a structural fail. (Resolution of HUMAN-REVIEW-QUEUE §3-vs-§16 — Phase 2 preflight.)
 - **Forbidden beats:** none. (A may borrow no beats from B/C/D/E/F/G — but no beat is explicitly banned.)
 - **Per-beat ceilings:** see `word-ceilings.md` § Archetype A.
 - **Depth marker:** see `depth-markers.md` § A. Lives in `parts_or_states`, `pitfalls`, or `example`.

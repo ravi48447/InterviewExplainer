@@ -885,10 +885,11 @@ This is the **bar** every Speakable must hit. Compare with the current 700-word 
 
 ```yaml
 speakable:
-  archetype: conceptual
+  archetype: A
   pillar: P01
   audience_assumption: beginner
   voice: friendly
+  speakable_status: approved
   familiarity_anchors:
     - "data plus the methods"
     - "blueprint vs instance"
