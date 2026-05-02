@@ -1,0 +1,276 @@
+{
+  "topic": "Structured Logging",
+  "topicSlug": "structured-logging",
+  "questions": [
+    {
+      "id": "lm-001",
+      "slug": "slf4j-logback-structured-logging-spring-boot",
+      "question": "How do you set up structured logging with SLF4J and Logback in Spring Boot?",
+      "title": "Structured Logging with SLF4J and Logback in Spring Boot",
+      "direct_answer": "Spring Boot includes SLF4J and Logback by default. Configure Logback in logback-spring.xml using structured JSON appenders for production and human-readable patterns for development. Use LoggerFactory.getLogger() in code and configure log levels per package in application.properties.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether you set up production-grade logging beyond basic System.out.println",
+        "common_mistake": "Using System.out.println or creating Logger inside methods instead of as static final fields",
+        "to_stand_out": "Mention structured JSON logging for log aggregation systems like ELK or Splunk"
+      },
+      "company_tags": [
+        "Zalando",
+        "N26",
+        "Delivery Hero",
+        "HelloFresh"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Gap Between println and Production: Why Format Matters More Than Framework",
+            "content": "The gap between `System.out.println` and production-grade logging is not about code quality preferences — it is about whether you can diagnose a 3 AM outage without SSH-ing into every server. `System.out.println` writes to stdout with no timestamp, no severity, no thread identity, and no structured fields. When your service runs across ten pods behind a load balancer, those unstructured lines mix together into noise that no aggregation tool can parse.\n\nSpring Boot closes this gap by auto-configuring **SLF4J** as the logging facade and **Logback** as the backend. SLF4J provides the `Logger` API your code calls; Logback handles formatting, filtering, and routing under the hood. The key decision is output format: human-readable patterns for local development and **structured JSON** for production. JSON log lines map directly to searchable fields in Elasticsearch or Splunk without any parsing configuration — no fragile regex, no brittle Grok patterns.\n\nProfile-based configuration in `logback-spring.xml` lets you run both formats from the same application, switching automatically based on the active Spring profile. The pipeline has two sides: the application side (SLF4J API calls + Logback formatting) and the infrastructure side (Filebeat shipping + Elasticsearch indexing). Adding `spring-boot-starter-web` already includes both SLF4J and Logback — no additional dependency is needed for the facade and backend themselves."
+          },
+          {
+            "type": "step",
+            "title": "The Logger Declaration Every Reviewer Expects — And Why It Matters",
+            "content": "The standard pattern in Spring Boot services is to declare a `Logger` as a `private static final` field at the top of each class. This is not just convention — it has a performance reason. Creating a logger inside a method allocates a new object on every invocation, and on hot paths handling thousands of requests per second, that object churn adds up. The static declaration creates the logger once when the class loads and reuses it for the lifetime of the JVM.\n\n```java\n@Service\npublic class OrderService {\n    private static final Logger log = LoggerFactory.getLogger(OrderService.class);\n\n    public Order createOrder(OrderRequest req) {\n        log.info(\"order.creating customer={} amount={}\", req.getCustomerId(), req.getAmount());\n        Order order = processOrder(req);\n        log.info(\"order.created orderId={} status={}\", order.getId(), order.getStatus());\n        return order;\n    }\n}\n```\n\nNotice the **parameterized logging** pattern: `log.info(\"customer={}\", id)` instead of `log.info(\"customer=\" + id)`. The difference matters under load. String concatenation builds the string even when INFO is disabled on that package. Parameterized logging skips the allocation entirely — the arguments are only resolved if the level is enabled. On a high-throughput service with DEBUG disabled, this saves thousands of unnecessary string concatenations per second."
+          },
+          {
+            "type": "step",
+            "title": "Profile-Based Configuration: Readable Locally, Machine-Parseable in Production",
+            "content": "The critical production decision is log format. Human-readable output like `10:30:00 [main] INFO c.e.OrderService - order.created orderId=123` is perfect for scrolling through locally, but it forces downstream tools to parse fields with fragile regex patterns. A single format change breaks every Kibana saved search.\n\nStructured JSON eliminates this problem. Each log event becomes a JSON object where every field is immediately indexable. Spring Boot's `logback-spring.xml` supports `<springProfile>` blocks that switch format based on the active profile — dev gets readable console output, prod gets JSON automatically.\n\n```xml\n<configuration>\n  <springProfile name=\"!prod\">\n    <appender name=\"CONSOLE\" class=\"ch.qos.logback.core.ConsoleAppender\">\n      <encoder>\n        <pattern>%d{HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>\n      </encoder>\n    </appender>\n  </springProfile>\n  <springProfile name=\"prod\">\n    <appender name=\"JSON\" class=\"ch.qos.logback.core.ConsoleAppender\">\n      <encoder class=\"net.logstash.logback.encoder.LogstashEncoder\">\n        <includeMdc>true</includeMdc>  <!-- traceId, correlationId -->\n      </encoder>\n    </appender>\n  </springProfile>\n  <root level=\"INFO\">\n    <appender-ref ref=\"CONSOLE\" />\n    <appender-ref ref=\"JSON\" />\n  </root>\n</configuration>\n```\n\nThe `LogstashEncoder` from `logstash-logback-encoder` transforms each log call into a JSON line. Every field — timestamp, level, logger name, MDC entries like `traceId` — becomes a top-level JSON key that Elasticsearch indexes automatically. Add the library as a dependency and this configuration is all you need to go from unstructured text to fully searchable structured logs."
+          },
+          {
+            "type": "step",
+            "title": "Per-Package Log Levels: The Tuning Knob That Keeps Production Quiet",
+            "content": "Spring Boot lets you control log verbosity per Java package in `application.properties`. This is how you keep production logs useful without drowning in framework noise.\n\n```properties\nlogging.level.root=WARN\nlogging.level.com.mycompany=INFO\nlogging.level.com.mycompany.payments=DEBUG\nlogging.level.org.springframework.security=DEBUG\n```\n\nThe root logger stays at WARN so third-party libraries only surface problems. Your application packages run at INFO for the business event trail. During an active incident, you can temporarily raise a specific package to DEBUG without redeploying — Spring Boot Actuator's `/actuator/loggers` endpoint lets you change log levels at runtime via a POST request.\n\nThe production trap is leaving DEBUG on globally. Framework libraries like Hibernate and Spring Security emit enormous volumes at DEBUG. A single Spring Security authentication flow can generate 50+ DEBUG log lines. In a service handling thousands of requests per second, that volume overwhelms your log pipeline and obscures the business events that actually matter. My rule is to always include business context in log messages — `orderId`, `customerId`, `amount` — not just 'request processed.' Those fields become searchable columns in Kibana when you need to debug an incident at 3 AM."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **SLF4J facade decouples logging API from implementation** — code calls `logger.info()` via SLF4J; switch from Logback to Log4j2 by swapping a dependency; no code changes\n- **`logback-spring.xml` enables `<springProfile>` for environment-specific config** — `logback.xml` is processed before Spring; `logback-spring.xml` allows profile-specific appender and level configuration\n- **`logstash-logback-encoder` outputs JSON** — each log line is a JSON object; field-level filtering in Elasticsearch and CloudWatch Logs Insights; structured logging is required for production log aggregation at scale\n- **MDC propagates context to all log lines in a request** — `MDC.put(\"userId\", userId)` at the start of a request; every subsequent log entry in that thread includes `userId` without explicit passing; clear MDC after the request\n- **Sleuth/Micrometer Tracing auto-populates `traceId` and `spanId` in MDC** — log entries include trace correlation without manual MDC.put() calls; paste the trace ID from a log into Jaeger to see the full trace"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Boot auto-configures SLF4J and Logback, so the logging framework is available from the first line of your application without any setup. The meaningful decisions are about log format, configuration, and what to log.\n\n**SLF4J as the facade**\n- SLF4J is the logging facade — your code calls `LoggerFactory.getLogger(MyClass.class)` and uses `logger.info()`, `logger.error()`, etc.; the actual implementation (Logback, Log4j2) is a dependency on the classpath\n- Which means you can switch from Logback to Log4j2 by swapping a dependency without touching a single logging call in your application code\n\n**Logback configuration**\n- Spring Boot looks for `logback-spring.xml` in the classpath — using `logback-spring.xml` instead of `logback.xml` enables Spring Boot's `<springProfile>` elements for environment-specific configuration\n- Configure the root log level with `logging.level.root=WARN` in `application.properties` and override for specific packages: `logging.level.com.myapp=DEBUG` — which means third-party library noise is suppressed while your application logs at DEBUG\n\n**Structured logging — JSON output**\n- Add `logstash-logback-encoder` and configure a JSON encoder in `logback-spring.xml` — each log entry becomes a JSON object with standard fields (`timestamp`, `level`, `logger`, `message`) plus any MDC values\n- Which means Elasticsearch, CloudWatch Logs Insights, and GCP Logging can filter by field: `level = \"ERROR\"` or `userId = \"123\"` without parsing plain-text log lines\n\n**Log correlation with MDC**\n- MDC (Mapped Diagnostic Context) is a thread-local map — `MDC.put(\"traceId\", traceId)` makes the value available in all subsequent log entries from that thread without passing it explicitly\n- Spring Cloud Sleuth automatically populates `traceId` and `spanId` in MDC — which means every log line from a request includes the trace ID, enabling correlation between logs and traces in Jaeger"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you prevent sensitive data like passwords from appearing in logs?",
+        "How does Logback's AsyncAppender improve performance?",
+        "What is the difference between Logback and Log4j2?"
+      ],
+      "seo": {
+        "metaTitle": "SLF4J Logback Structured Logging Spring Boot | Java Interview",
+        "metaDescription": "Learn how to configure SLF4J and Logback for structured JSON logging in Spring Boot, including log levels, profile-based configuration, and ELK integration."
+      }
+    },
+    {
+      "id": "lm-002",
+      "slug": "log-levels-when-to-use-each",
+      "question": "What are the log levels and when should you use each one?",
+      "title": "Log Levels: TRACE, DEBUG, INFO, WARN, ERROR",
+      "direct_answer": "Log levels from least to most severe: TRACE (execution flow detail), DEBUG (diagnostic information), INFO (business events), WARN (recoverable problems), ERROR (failures requiring attention). INFO and above should be useful in production; DEBUG and TRACE are for development troubleshooting.",
+      "layout_type": "reference-cards",
+      "interviewer_intent": {
+        "testing": "Logging discipline and understanding of what makes logs useful in production",
+        "common_mistake": "Logging at INFO or ERROR for everything, creating noise that obscures real problems",
+        "to_stand_out": "Explain the performance cost of low-level logs and how to use parameterized logging safely"
+      },
+      "company_tags": [
+        "Booking.com",
+        "Expedia",
+        "TripAdvisor",
+        "Klarna"
+      ],
+      "reading_time_minutes": 3,
+      "last_updated": "2025-01-15",
+      "difficulty": "easy",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Real Question: What Level of Noise Can On-Call Tolerate?",
+            "content": "The real question behind log levels is not 'what does each level mean' — it is 'what level of noise can your on-call team tolerate before they start ignoring alerts?' When every transient blip is logged as ERROR, paging fatigue sets in and the real outage at 3 AM gets dismissed as another false alarm. When business events are logged at DEBUG, they vanish from production logs entirely because DEBUG is typically disabled in production environments.\n\nLog levels create a **contract with operations**. ERROR means a human should investigate now. WARN means something unexpected happened but the system handled it. INFO tells the business story — order created, payment captured, shipment dispatched. DEBUG and TRACE provide diagnostic detail that is too verbose for production but essential during active troubleshooting.\n\nThe discipline is not in knowing what the levels mean — every developer knows that. The discipline is in choosing the right level for each log statement so that production logs stay useful and actionable. A `404 User Not Found` logged at ERROR trains the team to ignore errors. A payment failure logged at WARN fails to page the engineer who should be investigating it."
+          },
+          {
+            "type": "comparison_table",
+            "title": "When Each Level Earns Its Place",
+            "content": "Each level serves a specific audience and triggers a specific response. The table maps levels to their production role and the mistake that happens when you choose wrong.\n\n| Level | When to Use | Production Role | Common Misuse |\n|---|---|---|---|\n| **TRACE** | Method entry/exit, loop iterations | Never enabled in production | Leaving it on, flooding the pipeline |\n| **DEBUG** | Variable values, decision branches, query params | Enabled per-package during incidents | Global DEBUG in prod — drowns signal |\n| **INFO** | Business milestones: order created, payment processed | The audit trail operators follow | Logging every HTTP request body at INFO |\n| **WARN** | Retries, fallbacks, deprecated API calls | Drift signals to fix proactively | Using WARN for expected client errors |\n| **ERROR** | Unhandled exceptions, service unavailable, data corruption | Pages the on-call engineer | Logging 404s as ERROR — alert fatigue |\n\nThe performance implication often surprises people. String concatenation like `log.debug(\"rows=\" + count)` builds the string even when DEBUG is disabled for that package. Parameterized messages — `log.debug(\"rows={}\", count)` — skip the allocation entirely. In tight loops on hot paths, this difference is measurable.\n\nThe other production consideration is package-level tuning. Spring Boot allows `logging.level.com.mycompany.orders=DEBUG` to raise verbosity for one package during an active incident, without changing the root logger and drowning every library in noise."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **ERROR: requires immediate human attention** — unhandled exceptions, failed payments, integration outages; every ERROR should be actionable; if expected and harmless, demote to WARN\n- **WARN: unexpected but recovered** — retry succeeded after failure, circuit breaker opened, rate limit exceeded; spikes in WARN often precede ERROR storms; review in batch but not immediately\n- **INFO: normal operational milestones** — application started, significant business events; provides an audit trail without volume flooding; not every HTTP request (use access logs instead)\n- **DEBUG: disabled globally in production** — enable per-package with `/actuator/loggers` at runtime without restarting; `logging.level.com.myapp.payments=DEBUG` for targeted troubleshooting; global DEBUG overwhelms log aggregators\n- **`/actuator/loggers` for runtime level changes** — change log levels without redeployment; apply for a troubleshooting session; reset to INFO after; critical for diagnosing live production issues without downtime"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Log levels define a contract with whoever is on call — ERROR means a human should look at this now; DEBUG means this is noise in production. Getting levels wrong creates either alarm fatigue or silent failures.\n\n**ERROR — requires human attention**\n- ERROR means something failed that affects user experience or system correctness — a payment failed, a critical integration is down, an unexpected exception escaped all retry logic\n- Every ERROR-level log should be actionable — someone should be able to read it and know what happened and where to start investigating; if an ERROR is expected and harmless, it should be WARN\n\n**WARN — unexpected but handled**\n- WARN means something unexpected happened, the system recovered or degraded gracefully, but someone should be aware — a retry succeeded on the third attempt, a downstream service returned a 429 and we backed off, a circuit breaker opened\n- WARNs don't require immediate action but should be reviewed in batch; a spike in WARNs often precedes an ERROR\n\n**INFO — significant events in normal operation**\n- INFO marks milestones in normal operation — application started, a request was processed, an order was placed; these provide an audit trail without flooding the log stream\n- Log at INFO for: application lifecycle events, significant business events (order placed, payment processed), configuration loaded; avoid logging every HTTP request at INFO in high-volume services (Logback access log handles that separately)\n\n**DEBUG — detailed execution flow**\n- DEBUG is for development and troubleshooting — variable values, branch decisions, loop iterations; never enable globally in production because the volume overwhelms log aggregation systems\n- Enable selectively per package: `logging.level.com.myapp.payments=DEBUG` temporarily to diagnose a specific issue; configure with a runtime log level change endpoint (`/actuator/loggers`) without restarting\n\n**TRACE — granular frame-by-frame detail**\n- TRACE is rarely used in application code; Hibernate uses it to log individual SQL parameter binding, Spring Security uses it for filter chain decisions; useful only for deep framework debugging"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you dynamically change log levels in a running Spring Boot app?",
+        "What is the cost of debug logging when DEBUG level is disabled?",
+        "How do you correlate logs across multiple log statements for a single request?"
+      ],
+      "seo": {
+        "metaTitle": "Log Levels TRACE DEBUG INFO WARN ERROR | Java Logging Interview",
+        "metaDescription": "Understand when to use each log level in Java — TRACE, DEBUG, INFO, WARN, ERROR — with examples and common mistakes for production logging."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P11",
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "speakable_status": "pending_review",
+        "familiarity_anchors": [
+          "ERROR pages on-call; INFO is the audit trail",
+          "DEBUG and TRACE off in production by default",
+          "/actuator/loggers flips levels without redeploy"
+        ],
+        "standard_example": "log.info('order placed orderId={}', orderId) at INFO; log.debug('rows={}', count) at DEBUG",
+        "hook": "Log levels are a contract with on-call. Get them wrong and you either page the team for nothing or lose the real outage in noise.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A log level's the severity tag attached to one log statement. The five levels run TRACE, DEBUG, INFO, WARN, ERROR. It's the level that decides who looks, when, and whether the line even leaves the process in production."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "On-call's got a finite tolerance for noise. ERROR for every 404 burns the pager out. INFO for every line of method flow drowns the audit trail. The levels exist so the production stream stays scannable and ERROR doesn't lose its meaning."
+          },
+          {
+            "kind": "parts_or_states",
+            "label": "The five levels",
+            "layout": "ordered_list",
+            "steps": [
+              "TRACE — method entry, loop iterations. Off in production.",
+              "DEBUG — variable values, decision branches. Off by default; flipped per package during incidents.",
+              "INFO — business milestones. Order placed, payment captured. The audit trail.",
+              "WARN — unexpected but the system recovered. Retry on the third attempt; circuit breaker opened.",
+              "ERROR — requires human attention now. Pages the on-call engineer."
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraphs",
+            "paragraphs": [
+              "log.info('order placed orderId={} userId={}', orderId, userId) lands in production as one line in the audit trail; log.warn('payment retry attempt={}', attempt) records the soft failure without paging.",
+              "Use parameterized messages — log.debug('rows={}', count) — so the string never gets built when DEBUG is off. Concatenation builds it anyway, which costs allocations on hot paths."
+            ]
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "ERROR for an expected 404 trains the team to ignore errors. Demote it to WARN or INFO.",
+              "DEBUG turned on globally in production drowns the log aggregator. The sharp edge: flip it per package via /actuator/loggers, and reset when the incident closes.",
+              "Logging the full HTTP request body at INFO turns the audit trail into noise — and often leaks PII at the same time."
+            ]
+          }
+        ],
+        "cap": "ERROR pages, WARN signals drift, INFO tells the story, DEBUG and TRACE are diagnostic. Hold the contract and the stream doesn't drown.",
+        "followup_handoff": [
+          "How do you dynamically change log levels in a running Spring Boot app?",
+          "What is the cost of debug logging when DEBUG level is disabled?",
+          "How do you correlate logs across multiple statements for a single request?",
+          "When should an ERROR be demoted to WARN?"
+        ],
+        "tts_overrides": {
+          "TRACE": "trace",
+          "DEBUG": "debug",
+          "INFO": "info",
+          "WARN": "warn",
+          "ERROR": "error",
+          "404": "four oh four",
+          "PII": "P I I",
+          "/actuator/loggers": "the actuator loggers endpoint",
+          "log.info('order placed orderId={} userId={}', orderId, userId)": "log dot info with order placed, the order ID and user ID parameters",
+          "log.warn('payment retry attempt={}', attempt)": "log dot warn with payment retry attempt, the attempt number",
+          "log.debug('rows={}', count)": "log dot debug with rows, the count parameter"
+        }
+      }
+    },
+    {
+      "id": "obs-004",
+      "slug": "structured-logging-logback-correlation-ids",
+      "question": "How do you implement structured logging with Logback and include correlation IDs in every log line?",
+      "title": "Structured Logging with Logback and Correlation IDs",
+      "direct_answer": "Configure Logback to output JSON using `logstash-logback-encoder`. Use MDC (Mapped Diagnostic Context) to attach a correlation ID (trace ID) to every log line in a servlet filter or Spring interceptor.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Knowledge of MDC, structured log formats, and how logs integrate with a tracing system.",
+        "common_mistake": "Forgetting to clear MDC after the request completes, causing values to leak into subsequent requests on the same thread.",
+        "to_stand_out": "Explain how Sleuth/OpenTelemetry automatically populates MDC with traceId and spanId, so you get correlation for free when tracing is enabled."
+      },
+      "company_tags": [
+        "Datadog",
+        "Elastic",
+        "Atlassian",
+        "Spotify",
+        "GitHub"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem: 'Which Request Caused This Error?' — And Why grep Cannot Answer It",
+            "content": "When a user reports that their order failed, the first question is 'which request?' In a service handling thousands of requests per second across multiple pods, grepping for 'order failed' returns hundreds of matches. Without a **correlation ID** — a unique identifier that links every log entry from a single request — you are left matching timestamps and hoping.\n\nStructured logging solves the parsing problem: instead of free-text lines that tools must parse with fragile regex, each log event is a JSON object with fields that Elasticsearch or Splunk can index directly. Correlation IDs solve the grouping problem: a single ID attached to every log line in a request's lifecycle ties them together across services.\n\nThe standard approach in Spring Boot combines `logstash-logback-encoder` for JSON output with **MDC (Mapped Diagnostic Context)** for attaching the correlation ID. MDC is a thread-local map that Logback includes in every log line automatically. The critical detail most developers miss is the cleanup: because Tomcat reuses threads, failing to clear MDC after the request completes causes correlation IDs to leak into unrelated future requests."
+          },
+          {
+            "type": "step",
+            "title": "Wiring JSON Output: LogstashEncoder and the Fields It Exposes",
+            "content": "The first step is configuring Logback to emit JSON instead of plain text. The `logstash-logback-encoder` library provides `LogstashEncoder`, which transforms every log event into a JSON line with timestamp, level, logger, message, and all MDC entries as top-level fields.\n\n```xml\n<configuration>\n    <appender name=\"JSON\" class=\"ch.qos.logback.core.ConsoleAppender\">\n        <encoder class=\"net.logstash.logback.encoder.LogstashEncoder\">\n            <includeMdcKeyName>traceId</includeMdcKeyName>\n            <includeMdcKeyName>spanId</includeMdcKeyName>\n            <includeMdcKeyName>correlationId</includeMdcKeyName>\n        </encoder>\n    </appender>\n    <root level=\"INFO\">\n        <appender-ref ref=\"JSON\" />\n    </root>\n</configuration>\n```\n\nEvery MDC key listed in `includeMdcKeyName` appears as a top-level JSON field in the output. When you search Kibana for `correlationId: \"abc-123\"`, every log line from that request appears in one query — across all pods, all log levels, all classes. No regex, no timestamp alignment, no guessing. For extra context on individual log statements, `StructuredArguments.keyValue(\"orderId\", id)` adds typed JSON fields beside the message string so analysts can pivot on business identifiers without parsing the message text."
+          },
+          {
+            "type": "step",
+            "title": "The Correlation ID Filter — And the Thread-Local Leak That Bites You",
+            "content": "The correlation ID itself comes from a servlet filter that runs before any controller logic. The filter checks for an incoming `X-Correlation-ID` header — if present, it propagates the upstream ID; if absent, it generates a new UUID. It stores the ID in MDC, passes it back in the response header, and crucially clears MDC in a `finally` block.\n\n```java\n@Component\n@Order(Ordered.HIGHEST_PRECEDENCE)\npublic class CorrelationIdFilter extends OncePerRequestFilter {\n    @Override\n    protected void doFilterInternal(HttpServletRequest request,\n                                    HttpServletResponse response,\n                                    FilterChain chain) throws ServletException, IOException {\n        String correlationId = Optional\n                .ofNullable(request.getHeader(\"X-Correlation-ID\"))\n                .orElse(UUID.randomUUID().toString());\n\n        MDC.put(\"correlationId\", correlationId);\n        response.setHeader(\"X-Correlation-ID\", correlationId);\n        try {\n            chain.doFilter(request, response);\n        } finally {\n            MDC.remove(\"correlationId\");  // Without this, Tomcat's thread reuse leaks the ID\n        }\n    }\n}\n```\n\nThe `finally` block is the most commonly missed detail. Tomcat uses a thread pool — when a request completes, its thread returns to the pool and serves a different request. If you do not clear MDC, the next request on that thread inherits the previous request's correlation ID, producing logs that look like two unrelated requests share the same session. This bug is subtle because it only manifests under concurrent load and makes log investigation actively misleading rather than just incomplete."
+          },
+          {
+            "type": "step",
+            "title": "The Free Lunch: How OpenTelemetry Auto-Populates MDC Without a Custom Filter",
+            "content": "If you are using Spring Cloud Sleuth (Boot 2) or Micrometer Tracing (Boot 3), you get correlation for free. Both libraries automatically populate MDC with `traceId` and `spanId` for every incoming request. Every log statement on that thread includes the trace ID without any custom filter code.\n\nThis means you can search Kibana for a specific trace ID and see every log line across every service that handled that request — the same ID that appears in Jaeger's waterfall view. The custom `X-Correlation-ID` filter is only necessary when you need a business-level correlation ID that differs from the trace ID, or when tracing is not enabled.\n\nFor `@Async` methods and `CompletableFuture` chains, MDC context is lost at thread boundaries because MDC is thread-local. The solution is a `TaskDecorator` on the `ThreadPoolTaskExecutor` that captures MDC values from the calling thread and restores them on the executor thread. Micrometer Tracing and OpenTelemetry provide instrumented executors that handle this propagation automatically — `Context.taskWrapping(executor)` in the OpenTelemetry API wraps the executor transparently. Without this decorator, every async method loses its trace ID and correlation context, producing log lines that float detached from the request that spawned them."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`logstash-logback-encoder` outputs JSON without custom formatting** — replace the pattern encoder; all log entries become JSON objects with standard fields plus MDC values; no custom encoder code\n- **MDC propagates context to all log lines in the request thread** — `MDC.put(\"userId\", userId)` at the filter; every downstream logger in the same thread emits `userId` in the JSON; clear MDC in `finally`\n- **Sleuth auto-populates `traceId` and `spanId` in MDC** — every log line includes the distributed trace ID; paste the ID from a log into Jaeger to open the full distributed trace\n- **Correlation ID filter for request tracking across services** — a servlet filter generates or extracts the correlation ID from the `X-Correlation-Id` header and puts it in MDC; downstream HTTP calls propagate it in outbound headers\n- **Business context in MDC enables field-level alerting** — `orderId`, `paymentId`, `customerId` in MDC appear in all log entries for that request; Elasticsearch can alert on error rate per `customerId` without log parsing"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Structured logging means emitting JSON instead of plain text — which means each log entry becomes a queryable document that log aggregation systems (ELK, CloudWatch Logs Insights, GCP Logging) can filter, aggregate, and alert on by field value.\n\n**Setting up JSON logging with Logback**\n- Add `logstash-logback-encoder` dependency; configure a JSON encoder in `logback-spring.xml`: `<encoder class=\"net.logstash.logback.encoder.LogstashEncoder\"/>` replaces the plain-text pattern encoder\n- Each log line becomes `{\"@timestamp\":\"2024-01-15T10:30:00Z\",\"level\":\"ERROR\",\"logger\":\"com.myapp.OrderService\",\"message\":\"Payment failed\",\"traceId\":\"abc123\",\"userId\":\"456\"}`\n- Which means `level = \"ERROR\" AND userId = \"456\"` in Elasticsearch returns only the relevant entries from billions of log lines, without regex parsing\n\n**Correlation IDs with MDC**\n- A correlation ID is a unique identifier added to every log entry in a request — allowing you to filter all log entries from one request across all services\n- Add a servlet filter that extracts or generates the correlation ID from the incoming request: `MDC.put(\"correlationId\", correlationId)` in the filter; clear it in the `finally` block with `MDC.remove(\"correlationId\")`\n- The `logstash-logback-encoder` includes all MDC fields in the JSON output automatically — which means `correlationId` appears in every log entry without explicit inclusion\n\n**Spring Cloud Sleuth auto-populates trace IDs**\n- Spring Cloud Sleuth (or Micrometer Tracing in Spring Boot 3) automatically sets `traceId` and `spanId` in MDC for every request — which means every log entry includes the distributed trace ID, enabling correlation between the log entry and the Jaeger/Zipkin trace\n- Sleuth propagates the trace ID through HTTP headers (`X-B3-TraceId`) and Spring Kafka message headers, so the same trace ID appears in logs across all services that processed the request\n\n**Adding business context to logs**\n- Add business-relevant fields to MDC at the service boundary: `MDC.put(\"orderId\", orderId)` in the order service; `MDC.put(\"customerId\", customerId)` — these appear in all downstream log entries automatically\n- Structured log fields enable dashboards: count errors per `orderId` prefix, alert on elevated error rates for a specific `customerId`"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the risk of using MDC with virtual threads in Java 21?",
+        "How do you propagate correlation IDs across async boundaries like CompletableFuture?",
+        "What is the difference between MDC and NDC in logging?"
+      ],
+      "seo": {
+        "title": "Structured Logging with Logback and Correlation IDs in Java — Interview Answer",
+        "description": "How to set up structured JSON logging in Spring Boot using Logback and logstash-logback-encoder, with MDC-based correlation IDs.",
+        "keywords": [
+          "structured logging java",
+          "logback json",
+          "correlation id spring boot",
+          "MDC java",
+          "logstash logback encoder"
+        ],
+        "metaDescription": "Configure Logback to output JSON using logstash-logback-encoder.",
+        "metaTitle": "Structured Logging with Logback and Correlation IDs"
+      }
+    }
+  ]
+}
