@@ -1,45 +1,53 @@
-# Phase 3a — smoke review batch (12 v2 drafts)
+# Phase 3a — smoke review batch (12 v2-of-v2 drafts)
 
-One section per pillar. Each smoke is `speakable_status: pending_review` and is held for human review per `SPEAKABLE-PHASE-3A-PROMPT.md` §8 + §10. Phase 3b is held until the 12 smokes are individually approved, rejected, or flagged for rubric tuning.
+Each smoke is a complete rewrite from scratch in response to the user's feedback that the prior 12 outputs felt 'same as others' despite passing lint. The v2-of-v2s commit to a sharp angle in the hook, plant a counter-intuitive depth marker in pitfalls/example/rethink_if, and end on a portable principle (per the golden bar) — not a recap.
+
+All 12 are `speakable_status: pending_review` and held for human review per `SPEAKABLE-PHASE-3A-PROMPT.md` §8 + §10. Phase 3b is held until the 12 smokes are individually approved, rejected, or flagged for rubric tuning.
 
 ## At-a-glance
 
 | Pillar | Slug | Archetype | Lint | Iters | File |
 |---|---|---|---:|---:|---|
-| P01 | `checked-vs-unchecked-exception-java-comparison` | B | 86/100 (WARN) | 9 | `content/java-backend-intermediate/core-java/comparisons/complete-qa.json` |
-| P02 | `datasource-properties` | A | 100/100 (PASS) | 3 | `content/java-backend-intermediate/spring-boot/profiles-and-properties/complete-qa.json` |
-| P03 | `mongodb-vs-dynamodb-managed-tradeoffs` | B | 100/100 (PASS) | 6 | `content/java-backend-intermediate/nosql-mongodb/comparisons/complete-qa.json` |
-| P04 | `message-broker-vs-message-bus-vs-event-bus-semantics` | B | 96/100 (WARN) | 7 | `content/java-backend-intermediate/messaging-events/comparisons/complete-qa.json` |
+| P01 | `checked-vs-unchecked-exception-java-comparison` | B | 82/100 (WARN) | 4 | `content/java-backend-intermediate/core-java/comparisons/complete-qa.json` |
+| P02 | `datasource-properties` | A | 100/100 (PASS) | 2 | `content/java-backend-intermediate/spring-boot/profiles-and-properties/complete-qa.json` |
+| P03 | `mongodb-vs-dynamodb-managed-tradeoffs` | B | 96/100 (WARN) | 4 | `content/java-backend-intermediate/nosql-mongodb/comparisons/complete-qa.json` |
+| P04 | `message-broker-vs-message-bus-vs-event-bus-semantics` | B | 92/100 (WARN) | 7 | `content/java-backend-intermediate/messaging-events/comparisons/complete-qa.json` |
 | P05 | `datafetcher-and-dataloader-graphql-java` | A | 100/100 (PASS) | 2 | `content/java-backend-intermediate/graphql/graphql-fundamentals/complete-qa.json` |
 | P06 | `oo-design-with-solid-and-composition` | A (override; classifier said F) | 100/100 (PASS) | 2 | `content/java-backend-intermediate/low-level-design/lld-fundamentals/complete-qa.json` |
-| P07 | `sast-vs-dast-vs-iast-vs-sca-security-scanning-comparison` | B | 100/100 (PASS) | 6 | `content/java-backend-intermediate/application-security/comparisons/complete-qa.json` |
-| P08 | `chaos-engineering-java-microservices-game-days` | A | 100/100 (PASS) | 1 | `content/java-backend-intermediate/unit-testing/chaos-testing/complete-qa.json` |
-| P09 | `docker-vs-vm-virtualization-comparison` | E | 96/100 (WARN) | 2 | `content/java-backend-intermediate/docker/comparisons/complete-qa.json` |
-| P10 | `core-gcp-services-java-backend-developer` | A | 100/100 (PASS) | 3 | `content/java-backend-intermediate/gcp/gcp-core-services/complete-qa.json` |
+| P07 | `sast-vs-dast-vs-iast-vs-sca-security-scanning-comparison` | B | 100/100 (PASS) | 5 | `content/java-backend-intermediate/application-security/comparisons/complete-qa.json` |
+| P08 | `chaos-engineering-java-microservices-game-days` | A | 100/100 (PASS) | 2 | `content/java-backend-intermediate/unit-testing/chaos-testing/complete-qa.json` |
+| P09 | `docker-vs-vm-virtualization-comparison` | E | 100/100 (PASS) | 4 | `content/java-backend-intermediate/docker/comparisons/complete-qa.json` |
+| P10 | `core-gcp-services-java-backend-developer` | A | 100/100 (PASS) | 4 | `content/java-backend-intermediate/gcp/gcp-core-services/complete-qa.json` |
 | P11 | `log-levels-when-to-use-each` | A (override; classifier said D) | 90/100 (WARN) | 2 | `content/java-backend-intermediate/observability/structured-logging/complete-qa.json` |
-| P12 | `learn-new-technology-quickly` | G | 100/100 (PASS) | 3 | `content/java-backend-intermediate/behavioral/career-growth/complete-qa.json` |
+| P12 | `learn-new-technology-quickly` | G | 100/100 (PASS) | 4 | `content/java-backend-intermediate/behavioral/career-growth/complete-qa.json` |
 
 ## P01 — Java Language & Core
 
 - Slug: `checked-vs-unchecked-exception-java-comparison`
 - File: `content/java-backend-intermediate/core-java/comparisons/complete-qa.json`
 - Archetype: B
-- Lint score: 86/100 (status: WARN)
-- Iterations to converge: 9
-- Top 3 lint diagnostics resolved during iteration:
-  - voice/sentence length (avg 24.3 → ≤16)
-  - Flesch–Kincaid grade (14.4 → ≤9)
-  - paragraph >60 words split into grouped_paragraphs
+- Lint score: 82/100 (status: WARN)
+- Iterations to converge: 4
+- v2-of-v2 rewrite focus: Throws-metastasis depth marker + Spring's translation answer (JdbcTemplate wraps SQLException into DataAccessException; @ControllerAdvice at the boundary).
 
-### Legacy excerpt (first 200 chars)
+- Remaining WARNED rules:
+  - 7.2.1: definition-equivalent beat (what_each_is) lacks any canonical anchor for topic 'checked-vs-unchecked-exceptions'
+  - 7.3.2: Flesch-Kincaid grade 9.3 > 9 (target ≤ 9)
+  - 7.4.2: only 75% of beats <= soft (need >= 80%): tiny_example 49>40
 
-> The split is about **recoverability**, not severity. Checked exceptions are the ones the compiler forces callers to acknowledge, because the designer thought callers would have a distinct recovery str…
+### Legacy excerpt (first 300 chars)
+
+> The split is about **recoverability**, not severity. Checked exceptions are the ones the compiler forces callers to acknowledge, because the designer thought callers would have a distinct recovery strategy.  **Checked exceptions** - Direct subclasses of `Exception` (not `RuntimeException`): `IOExcep…
 
 ### v2 hook + first beat preview
 
-> hook: The split isn't about severity. It's about whether the compiler forces the caller to acknowledge the failure.
+> hook: The split isn't severity. It's whether the compiler makes the caller acknowledge the failure. Modern Java leans hard unchecked — and the reason's a trap throws clauses set.
 
-> beat[0] (what_each_is, grouped_paragraphs): : A subclass of Exception that isn't RuntimeException. The compiler forces the caller to catch it or declare it. IOException is the poster child. | : A subclass of RuntimeException. The compiler stays quiet at the call site. NullPointerExce…
+> beat[0] (what_each_is, grouped_paragraphs): [Checked] Sits directly under Exception. The compiler forces a catch or a throws clause. IOException. SQLException. InterruptedExc | [Unchecked] Sits under RuntimeException. The compiler doesn't force handling. NullPointerException. IllegalArgumentException. The fa
+
+### v2 cap (the portable principle)
+
+> Recoverability picks the side; the compiler keeps it honest. Modern Java leans unchecked plus a global handler. Checked stays for the rare case where the caller has somewhere to go.
 
 ### Imitation target
 
@@ -47,10 +55,11 @@ GB — `difference-between-equals-and-double-equals-java`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
 ## P02 — Spring Ecosystem
 
@@ -58,21 +67,24 @@ GB — `difference-between-equals-and-double-equals-java`
 - File: `content/java-backend-intermediate/spring-boot/profiles-and-properties/complete-qa.json`
 - Archetype: A
 - Lint score: 100/100 (status: PASS)
-- Iterations to converge: 3
-- Top 3 lint diagnostics resolved during iteration:
-  - comma/semicolon density per sentence
-  - Flesch–Kincaid grade tightened
-  - soft-cap trims on parts_or_states + pitfalls
+- Iterations to converge: 2
+- v2-of-v2 rewrite focus: Concrete (cores × 2) sizing example with RDS connection-cap math + the 3am 'Connection is closed' bug story as the depth marker.
 
-### Legacy excerpt (first 200 chars)
+- Lint clean — no remaining failed or warned rules.
 
-> **The four essential properties** - URL, username, password, and driver class name - Driver is auto-detected from the URL, so usually omitted **HikariCP — the default pool since Boot 2** - Tuning pref…
+### Legacy excerpt (first 300 chars)
+
+> **The four essential properties** - URL, username, password, and driver class name - Driver is auto-detected from the URL, so usually omitted  **HikariCP — the default pool since Boot 2** - Tuning prefix: `spring.datasource.hikari.*` - Key knobs: `maximum-pool-size`, `minimum-idle`, `connection-time…
 
 ### v2 hook + first beat preview
 
-> hook: Four properties name the database. Six more decide whether the app stays up under load.
+> hook: Four properties name the database. Six more decide whether the app stays up under load — and one of those six is the bug that breaks production at 3am, nowhere else.
 
-> beat[0] (definition, paragraph): DataSource properties are the keys under spring.datasource that tell Boot how to reach the database and how to manage the pool of open connections to it. Boot wires the DataSource bean from these keys at startup, before any repository runs.
+> beat[0] (definition, paragraph): DataSource properties are the keys under spring.datasource that tell Boot how to reach the database and how to manage its pool of long-lived connections. Boot wires the DataSource bean from these keys at startup, before any repository runs.
+
+### v2 cap (the portable principle)
+
+> Name the database with four keys. Tune the pool with four more. The pool's smaller than instinct says, the lifetime's tighter than the database expects, and the password lives in the platform — not the file.
 
 ### Imitation target
 
@@ -80,32 +92,37 @@ GA — `java-thread-lifecycle-states`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
 ## P03 — Data & Persistence
 
 - Slug: `mongodb-vs-dynamodb-managed-tradeoffs`
 - File: `content/java-backend-intermediate/nosql-mongodb/comparisons/complete-qa.json`
 - Archetype: B
-- Lint score: 100/100 (status: PASS)
-- Iterations to converge: 6
-- Top 3 lint diagnostics resolved during iteration:
-  - passive-voice ratio (27% → <10%)
-  - contractions ratio (9% → ≥30%)
-  - long paragraphs split, beats trimmed to soft cap
+- Lint score: 96/100 (status: WARN)
+- Iterations to converge: 4
+- v2-of-v2 rewrite focus: One-way-door framing (DynamoDB locks schema to today's access patterns) + GSI-cost gotcha + hot-partition celebrity-user story.
 
-### Legacy excerpt (first 200 chars)
+- Remaining WARNED rules:
+  - 7.4.2: only 75% of beats <= soft (need >= 80%): tiny_example 53>40
 
-> **Frame both** - Atlas: managed MongoDB with rich queries, pipeline, flexible schema - DynamoDB: purpose-built KV+doc; serverless, access-pattern-first **Call out the decision pivot** - Query flexibil…
+### Legacy excerpt (first 300 chars)
+
+> **Frame both** - Atlas: managed MongoDB with rich queries, pipeline, flexible schema - DynamoDB: purpose-built KV+doc; serverless, access-pattern-first  **Call out the decision pivot** - Query flexibility + aggregation + flex schema → Atlas - Serverless scale + predictable latency + bounded access p…
 
 ### v2 hook + first beat preview
 
-> hook: Both run as managed NoSQL on AWS. The split sits between query flexibility and serverless scale.
+> hook: Both AWS managed NoSQL — but the choice isn't 'managed vs more managed'. It's a one-way door. DynamoDB locks the schema to today's access patterns, and migrating off when those change is the bill.
 
-> beat[0] (what_each_is, grouped_paragraphs): : Atlas runs MongoDB for you on AWS. Flexible schema, rich queries, aggregation pipeline. The bill tracks cluster tier and hours. | : AWS's serverless KV-and-document store. Latency stays single-digit-millisecond at scale. The schema mirror…
+> beat[0] (what_each_is, grouped_paragraphs): [MongoDB Atlas] Managed MongoDB. Flexible schema, MQL, aggregation pipeline, change streams, plus Atlas Search and Vector Search. The bi | [DynamoDB] Serverless KV + document store. Single-digit-ms latency at any scale. The team enumerates access patterns up front; new 
+
+### v2 cap (the portable principle)
+
+> Pick DynamoDB only when the team owns every access pattern and AWS-native pays off. Atlas when queries will change. Getting it wrong shows up as a migration project, not a bigger bill.
 
 ### Imitation target
 
@@ -113,32 +130,38 @@ GB — `difference-between-equals-and-double-equals-java`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
-## P04 — APIs, Microservices & Messaging
+## P04 — APIs / Microservices / Messaging
 
 - Slug: `message-broker-vs-message-bus-vs-event-bus-semantics`
 - File: `content/java-backend-intermediate/messaging-events/comparisons/complete-qa.json`
 - Archetype: B
-- Lint score: 96/100 (status: WARN)
+- Lint score: 92/100 (status: WARN)
 - Iterations to converge: 7
-- Top 3 lint diagnostics resolved during iteration:
-  - Flesch–Kincaid grade (11.3 → ≤9)
-  - paragraph >60 words split
-  - definitions converted from paragraph → grouped_paragraphs
+- v2-of-v2 rewrite focus: In-process-vs-cross-process axis (not the loose names) + outbox bridge + the @EventListener-is-sync-by-default trap.
 
-### Legacy excerpt (first 200 chars)
+- Remaining WARNED rules:
+  - 7.3.2: Flesch-Kincaid grade 9.1 > 9 (target ≤ 9)
+  - 7.4.2: only 50% of beats <= soft (need >= 80%): what_each_is 59>50, tiny_example 57>40
 
-> The terminology is loose but the practical distinction is clear. - A message broker is cross-process infrastructure — Kafka, RabbitMQ, ActiveMQ, SQS — that sits between services and persists messages.…
+### Legacy excerpt (first 300 chars)
+
+> The terminology is loose but the practical distinction is clear. - A message broker is cross-process infrastructure — Kafka, RabbitMQ, ActiveMQ, SQS — that sits between services and persists messages. - A message bus or event bus is an in-process publish-subscribe library — Spring's `ApplicationEven…
 
 ### v2 hook + first beat preview
 
-> hook: The terms get used loosely. The real split is cross-process vs in-process — and that one decision drives durability, network cost, and replay.
+> hook: The names are loose. The axis is sharp. A broker's cross-process infra. A bus stays in-process. Treating ApplicationEventPublisher like Kafka is the most common bug here.
 
-> beat[0] (what_each_is, grouped_paragraphs): : Infra between services. Kafka, RabbitMQ, SQS. Producers send over the network. The broker keeps the message and re-delivers when the consumer wakes up. | : An in-JVM pub-sub library. Spring's ApplicationEventPublisher, Guava EventBus. One…
+> beat[0] (what_each_is, grouped_paragraphs): [Message broker] Separate infra — Kafka, RabbitMQ, SQS. Services talk to it over the network. It keeps the messages and survives consumer | [In-process bus] A pub/sub library inside one JVM. Spring's ApplicationEventPublisher. Guava EventBus. Just method calls. No network. No 
+
+### v2 cap (the portable principle)
+
+> Pick by topology, not by name. Same JVM, same risk-of-loss tolerance — bus. Cross-service or durable — broker. Outbox is how you cross the gap without losing events.
 
 ### Imitation target
 
@@ -146,10 +169,11 @@ GB — `difference-between-equals-and-double-equals-java`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
 ## P05 — Architecture & Design
 
@@ -158,20 +182,23 @@ GB — `difference-between-equals-and-double-equals-java`
 - Archetype: A
 - Lint score: 100/100 (status: PASS)
 - Iterations to converge: 2
-- Top 3 lint diagnostics resolved during iteration:
-  - pitfalls beat over hard cap (91 → ≤90)
-  - contractions added to hook + cap
-  - anchor / standard_example phrasings tightened
+- v2-of-v2 rewrite focus: Silent-data-corruption sharp edge (DataLoader maps results by array INDEX, not by key) + position-is-the-contract cap.
 
-### Legacy excerpt (first 200 chars)
+- Lint clean — no remaining failed or warned rules.
 
-> DataFetcher is the resolver primitive in graphql-java — every single field in your schema has one, whether you wrote it explicitly or Spring registered it through `@QueryMapping`. For simple scalar fi…
+### Legacy excerpt (first 300 chars)
+
+> DataFetcher is the resolver primitive in graphql-java — every single field in your schema has one, whether you wrote it explicitly or Spring registered it through `@QueryMapping`. For simple scalar fields like `title`, the default `PropertyDataFetcher` calls the getter. For relational fields like `B…
 
 ### v2 hook + first beat preview
 
-> hook: Every field in a graphql-java schema has a DataFetcher, and DataLoader's the batching layer that turns 51 round-trips into 2.
+> hook: Every field has a DataFetcher. DataLoader turns 51 round-trips into 2. The trap — the batch must return values by input-key position, or every book silently gets the wrong author.
 
-> beat[0] (definition, paragraph): A DataFetcher is the resolver behind one schema field. The engine calls it during execution, and a default PropertyDataFetcher reads scalar fields via getters. DataLoader wraps a batch function that takes many keys and returns the matching …
+> beat[0] (definition, paragraph): A DataFetcher's the resolver behind one schema field. The default PropertyDataFetcher reads scalars via getters. DataLoader wraps a batch function that takes many keys and returns the matching values in one call.
+
+### v2 cap (the portable principle)
+
+> Position is the contract. The cache is per-request. Forget either, and the bug is silent — the only kind of GraphQL bug that survives staging.
 
 ### Imitation target
 
@@ -179,32 +206,36 @@ GA — `java-thread-lifecycle-states`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
-## P06 — System Design / LLD
+## P06 — System Design + LLD
 
 - Slug: `oo-design-with-solid-and-composition`
 - File: `content/java-backend-intermediate/low-level-design/lld-fundamentals/complete-qa.json`
 - Archetype: A (override; classifier said F)
 - Lint score: 100/100 (status: PASS)
 - Iterations to converge: 2
-- Top 3 lint diagnostics resolved during iteration:
-  - classifier override (F→A) — conceptual taxonomy, no capacity numbers
-  - soft-cap trims on parts_or_states (5 SOLID principles)
-  - contractions ratio raised
+- v2-of-v2 rewrite focus: Forces-not-recipe framing + concrete refactor (PaymentProcessor if-else → PaymentMethod interface) with the 'tests for credit_card never change again' OCP win.
 
-### Legacy excerpt (first 200 chars)
+- Lint clean — no remaining failed or warned rules.
 
-> **Why SOLID and composition matter** Most LLD anti-patterns come from two failures: 1. Mixing responsibilities — one class does too much, changes ripple unpredictably (violates SRP, OCP) 2. Inheriting…
+### Legacy excerpt (first 300 chars)
+
+> **Why SOLID and composition matter**  Most LLD anti-patterns come from two failures:  1. Mixing responsibilities — one class does too much, changes ripple unpredictably (violates SRP, OCP) 2. Inheriting for code reuse — deep extends chains, subclasses can't substitute parents (violates LSP, makes ch…
 
 ### v2 hook + first beat preview
 
-> hook: SOLID isn't a checklist to recite. It's a set of forces, and composition over inheritance is the structural choice that lets you honor them.
+> hook: SOLID isn't a checklist to recite. It's the set of forces that show up when one class does too much — or when an inheritance chain breaks the moment a piece needs to swap.
 
-> beat[0] (definition, paragraph): SOLID names five constraints on object-oriented design. Composition over inheritance is the related rule that says behavior variation belongs in fields, not in subclasses. Together they keep classes small, swappable, and easy to change with…
+> beat[0] (definition, paragraph): SOLID is five constraints — single responsibility, open-closed, Liskov substitution, interface segregation, dependency inversion. Composition is the structural choice that makes the constraints easy to honor.
+
+### v2 cap (the portable principle)
+
+> SOLID's a noticing tool, not a recipe. The interviewer's listening for one thing — a refactor where the violation got spotted and fixed. Reach for composition first.
 
 ### Imitation target
 
@@ -212,10 +243,11 @@ GA — `java-thread-lifecycle-states`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
 ## P07 — Security
 
@@ -223,21 +255,24 @@ GA — `java-thread-lifecycle-states`
 - File: `content/java-backend-intermediate/application-security/comparisons/complete-qa.json`
 - Archetype: B
 - Lint score: 100/100 (status: PASS)
-- Iterations to converge: 6
-- Top 3 lint diagnostics resolved during iteration:
-  - collapsed legacy 7-way → 4-way (SAST, SCA, DAST, IAST) for B-shape
-  - contractions ratio raised
-  - mini_table tightened to single static-vs-runtime decision axis
+- Iterations to converge: 5
+- v2-of-v2 rewrite focus: SCA-first framing (Log4Shell, Spring4Shell are dependency CVEs not SAST findings) + reachability gotcha (Snyk/Endor cuts noise 50-80%).
 
-### Legacy excerpt (first 200 chars)
+- Lint clean — no remaining failed or warned rules.
 
-> Each scanner finds a different bug class. None is sufficient alone. More tools without triage is security theater. **Scanner map** - SAST (Semgrep, SonarQube, CodeQL) — source pattern analysis — fast,…
+### Legacy excerpt (first 300 chars)
+
+> Each scanner finds a different bug class. None is sufficient alone. More tools without triage is security theater.  **Scanner map** - SAST (Semgrep, SonarQube, CodeQL) — source pattern analysis — fast, PR-time, noisy - SCA (Snyk, Dependabot, OSV-Scanner, Trivy) — dependency CVEs — highest ROI; real …
 
 ### v2 hook + first beat preview
 
-> hook: Each scanner finds a different bug class. Stacking eight without triage doesn't make you safer — it buries the real bugs in noise.
+> hook: Most candidates name SAST first. The trap — the interviewer's listening for SCA. Log4Shell, Spring4Shell, and most real incidents are dependency CVEs, not code anyone wrote.
 
-> beat[0] (what_each_is, grouped_paragraphs): : Static source analysis. Semgrep, CodeQL. Catches injection patterns and crypto misuse at PR time. | : Scans deps for known CVEs. Snyk, Dependabot. Highest-ROI — real incidents come from deps. | : Probes the running app. ZAP, Burp. Catches…
+> beat[0] (what_each_is, grouped_paragraphs): [SAST] Static source analysis. Semgrep, CodeQL. Catches injection, crypto misuse. Fast, noisy. | [SCA] Dependency CVE check. Snyk, Dependabot, OSV-Scanner. The scanner that catches Log4Shell.
+
+### v2 cap (the portable principle)
+
+> More scanners doesn't mean safer. Pick the ones whose findings someone triages this sprint. Start with SCA — the bugs it catches are the ones that actually ship.
 
 ### Imitation target
 
@@ -245,10 +280,11 @@ GB — `difference-between-equals-and-double-equals-java`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
 ## P08 — Testing & Quality
 
@@ -256,21 +292,24 @@ GB — `difference-between-equals-and-double-equals-java`
 - File: `content/java-backend-intermediate/unit-testing/chaos-testing/complete-qa.json`
 - Archetype: A
 - Lint score: 100/100 (status: PASS)
-- Iterations to converge: 1
-- Top 3 lint diagnostics resolved during iteration:
-  - PASSED first iteration; no diagnostics resolved
-  - ordered_list chosen for the maturity ladder (game-day cadence)
-  - tts_overrides covered Hystrix / Litmus / Toxiproxy noise
+- Iterations to converge: 2
+- v2-of-v2 rewrite focus: Hypothesis-not-theatre framing + concrete game-day shape (kill 50% of order-service pods; abort if error >5% for 2min OR p99 >5s).
 
-### Legacy excerpt (first 200 chars)
+- Lint clean — no remaining failed or warned rules.
 
-> Chaos engineering is the discipline of injecting failure deliberately to verify that systems behave as designed under stress. **Origin** - Popularized by Netflix's Chaos Monkey - Now formalized by Pri…
+### Legacy excerpt (first 300 chars)
+
+> Chaos engineering is the discipline of injecting failure deliberately to verify that systems behave as designed under stress.  **Origin** - Popularized by Netflix's Chaos Monkey - Now formalized by Principles of Chaos Engineering  **The mistake** - Starting with 'kill random pods in prod'  **The rig…
 
 ### v2 hook + first beat preview
 
-> hook: Chaos engineering isn't 'kill random pods in prod'. It's a hypothesis-driven experiment with a small blast radius and an explicit abort.
+> hook: Chaos engineering's mistake isn't breaking things. It's running an experiment with no hypothesis and no abort. That's just an outage with a fancy name.
 
-> beat[0] (definition, paragraph): Chaos engineering is the discipline of injecting failure on purpose to confirm a system behaves the way the design says it will. Each experiment carries a hypothesis, a measurable steady state, an abort threshold, and a contained blast radi…
+> beat[0] (definition, paragraph): Chaos engineering is the discipline of injecting failure deliberately to generate evidence that the system behaves the way it's claimed to. Hypothesis first, blast radius bounded, abort criteria written down before anyone touches a button.
+
+### v2 cap (the portable principle)
+
+> An experiment without a hypothesis is theatre. With one, every game day either confirms a resilience claim or produces a runbook. Both outcomes ship value.
 
 ### Imitation target
 
@@ -278,43 +317,48 @@ GA — `java-thread-lifecycle-states`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
 ## P09 — DevOps
 
 - Slug: `docker-vs-vm-virtualization-comparison`
 - File: `content/java-backend-intermediate/docker/comparisons/complete-qa.json`
 - Archetype: E
-- Lint score: 96/100 (status: WARN)
-- Iterations to converge: 2
-- Top 3 lint diagnostics resolved during iteration:
-  - Flesch–Kincaid grade (9.9 → ≤9)
-  - options + decision beats trimmed to soft caps
-  - rethink_if callout chosen as depth marker
+- Lint score: 100/100 (status: PASS)
+- Iterations to converge: 4
+- v2-of-v2 rewrite focus: Containers-INSIDE-VMs framing (cloud production pattern) + Firecracker microVM as the third option + rethink_if covers tenant code, block-I/O saturation, database in container.
 
-### Legacy excerpt (first 200 chars)
+- Lint clean — no remaining failed or warned rules.
 
-> Containers and VMs solve different problems and in production they are usually used together — not as alternatives. **Architectural difference** - A VM virtualizes the entire hardware stack: hyperviso…
+### Legacy excerpt (first 300 chars)
+
+> Containers and VMs solve different problems and in production they are usually used together — not as alternatives.  **Architectural difference** - A VM virtualizes the entire hardware stack: hypervisor, virtual CPU, virtual memory, virtual disk, and a complete guest operating system; each VM runs i…
 
 ### v2 hook + first beat preview
 
-> hook: Containers and VMs aren't competitors. Containers are process isolation; VMs are hardware virtualization, and most production stacks use both.
+> hook: Containers vs VMs sounds like a fork in the road. In cloud, it's a stack — containers run inside VMs.
 
-> beat[0] (optimising_for, paragraph): Pick the lightest unit of compute that meets the isolation, startup, and density needs — without weakening the security boundary the workload actually requires.
+> beat[0] (optimising_for, paragraph): It's rarely 'one or the other'. The real call is how hard a boundary the workload needs, and where the speed and density numbers have to land.
+
+### v2 cap (the portable principle)
+
+> Pick both. Containers buy density and startup speed; the VM underneath buys the kernel boundary. The interviewer's listening for which boundary the workload actually needs.
 
 ### Imitation target
 
-GE — `abstract-class-vs-interface-java-when-to-use`
+(no E golden — built fresh per pillar P09 brief; archetype E shape per archetypes.md)
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
 ## P10 — Cloud
 
@@ -322,21 +366,24 @@ GE — `abstract-class-vs-interface-java-when-to-use`
 - File: `content/java-backend-intermediate/gcp/gcp-core-services/complete-qa.json`
 - Archetype: A
 - Lint score: 100/100 (status: PASS)
-- Iterations to converge: 3
-- Top 3 lint diagnostics resolved during iteration:
-  - contractions ratio (8% → ≥30%)
-  - comma density per sentence reduced
-  - parts_or_states + pitfalls trimmed to soft caps
+- Iterations to converge: 4
+- v2-of-v2 rewrite focus: Default-vs-escalation pivot per layer + cold-start sharp edge (JVM cold start on Cloud Run runs 6-10s) + Spanner-as-flagship costs ~14× Cloud SQL.
 
-### Legacy excerpt (first 200 chars)
+- Lint clean — no remaining failed or warned rules.
 
-> GCP for Java backend work organizes around the same three layers as other clouds — compute, data storage, and messaging — but GCP's standout services are Cloud Run for containerized serverless compute…
+### Legacy excerpt (first 300 chars)
+
+> GCP for Java backend work organizes around the same three layers as other clouds — compute, data storage, and messaging — but GCP's standout services are Cloud Run for containerized serverless compute and BigQuery for analytics.  **Compute — from most managed to most controlled** - Cloud Run runs Do…
 
 ### v2 hook + first beat preview
 
-> hook: Treat GCP as three layers — compute, data, integration. Each has a default and a specialist, and knowing when to escalate is the real skill.
+> hook: GCP interviews aren't testing memorisation of 200 services. They're testing one thing — picking the cheapest service that fits, then defending it when the team reaches for the flagship.
 
-> beat[0] (definition, paragraph): Core GCP for Java work is the small set of services that hold the JVM, the data, the messages, and the secrets. The catalog's huge, but a Spring Boot service touches the same eight or ten boxes most days.
+> beat[0] (definition, paragraph): GCP exposes the standard cloud building blocks. For a Java backend, the surface that actually matters is small — a handful of services tied together by IAM.
+
+### v2 cap (the portable principle)
+
+> Default to the cheapest managed option that fits today's load. Escalate only with a concrete limit to point at. The interviewer's listening for the second sentence.
 
 ### Imitation target
 
@@ -344,32 +391,37 @@ GA — `java-thread-lifecycle-states`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
-## P11 — Production / SRE
+## P11 — Observability & Production
 
 - Slug: `log-levels-when-to-use-each`
 - File: `content/java-backend-intermediate/observability/structured-logging/complete-qa.json`
 - Archetype: A (override; classifier said D)
 - Lint score: 90/100 (status: WARN)
 - Iterations to converge: 2
-- Top 3 lint diagnostics resolved during iteration:
-  - classifier override (D→A) — conceptual 5-level taxonomy, not a debug scenario
-  - contractions ratio raised (0% → ≥30%)
-  - remaining warn (7.2.1 missing canonical anchor) is locked-codex out of scope
+- v2-of-v2 rewrite focus: Pager-contract framing + parameterized-logging depth marker (log.debug("x={}", v) skips allocation when DEBUG off) + /actuator/loggers runtime trick.
 
-### Legacy excerpt (first 200 chars)
+- Remaining WARNED rules:
+  - 7.2.1: definition-equivalent beat (definition) lacks any canonical anchor for topic 'log-levels-and-structured-logging'
 
-> Log levels define a contract with whoever is on call — ERROR means a human should look at this now; DEBUG means this is noise in production. Getting levels wrong creates either alarm fatigue or silent…
+### Legacy excerpt (first 300 chars)
+
+> Log levels define a contract with whoever is on call — ERROR means a human should look at this now; DEBUG means this is noise in production. Getting levels wrong creates either alarm fatigue or silent failures.  **ERROR — requires human attention** - ERROR means something failed that affects user ex…
 
 ### v2 hook + first beat preview
 
-> hook: Log levels are a contract with on-call. Get them wrong and you either page the team for nothing or lose the real outage in noise.
+> hook: Log levels aren't a developer convenience. They're a contract with whoever's holding the pager.
 
-> beat[0] (definition, paragraph): A log level's the severity tag attached to one log statement. The five levels run TRACE, DEBUG, INFO, WARN, ERROR. It's the level that decides who looks, when, and whether the line even leaves the process in production.
+> beat[0] (definition, paragraph): A log level's the severity tag on one statement. Five levels run TRACE, DEBUG, INFO, WARN, ERROR. The level decides who looks, when, and whether the line even leaves the process in production.
+
+### v2 cap (the portable principle)
+
+> Treat the level as a pager contract. ERROR pages, WARN signals drift, INFO tells the story, DEBUG and TRACE are diagnostic. The noisier the level, the cheaper the on-call's attention.
 
 ### Imitation target
 
@@ -377,32 +429,36 @@ GA — `java-thread-lifecycle-states`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
 
-## P12 — Interview Readiness
+## P12 — Behavioural & Engineering Practices
 
 - Slug: `learn-new-technology-quickly`
 - File: `content/java-backend-intermediate/behavioral/career-growth/complete-qa.json`
 - Archetype: G
 - Lint score: 100/100 (status: PASS)
-- Iterations to converge: 3
-- Top 3 lint diagnostics resolved during iteration:
-  - action beat hard cap (105 → ≤100, then trimmed to soft 70)
-  - comma/semicolon density per sentence reduced via short fragments
-  - reflection callout trimmed to soft cap
+- Iterations to converge: 4
+- v2-of-v2 rewrite focus: Story-commit hook (Kafka engineer left 3 weeks before launch) + human moment in action (Day 4 evening — 'treating figure-it-out-alone as proof I deserved the role') + portable-principle cap.
 
-### Legacy excerpt (first 200 chars)
+- Lint clean — no remaining failed or warned rules.
 
-> I learn new stacks with a deliberate sprint: enough depth to ship safely, then backfill theory afterward. My rule is never stay solo longer than two days before scheduling a pairing session with someo…
+### Legacy excerpt (first 300 chars)
+
+> I learn new stacks with a deliberate sprint: enough depth to ship safely, then backfill theory afterward. My rule is never stay solo longer than two days before scheduling a pairing session with someone who has operated the technology in production, because solo exploration has sharply diminishing r…
 
 ### v2 hook + first beat preview
 
-> hook: Learning a new tech under deadline runs on structure, not luck. Mine: docs first, throwaway prototype, pair early, then ship.
+> hook: I'll take the time the only Kafka-experienced engineer on the team left three weeks before launch. I'd never written a producer.
 
-> beat[0] (situation, paragraph): We were migrating a Spring Boot monolith to an event-driven architecture. Three weeks before the feature deadline, the only Kafka-experienced engineer on the team left. I'd used RabbitMQ before but had never written a Kafka producer or cons…
+> beat[0] (situation, paragraph): We were halfway through migrating a Spring Boot monolith to event-driven. The senior who owned all our Kafka knowledge took a counter-offer with three weeks left on the clock. I'd shipped RabbitMQ before, but the producer and consumer code in our repo was effectively a black box 
+
+### v2 cap (the portable principle)
+
+> Under deadline, the bottleneck's rarely the docs. It's how late you let yourself ask. Schedule the pair on the calendar, not in your head.
 
 ### Imitation target
 
@@ -410,7 +466,9 @@ GG — `handle-technical-disagreements`
 
 ### Reviewer questions
 
-- Does the v2 sound like the golden's voice?
-- Is the depth appropriate for this pillar's audience?
-- Does it imitate without parroting?
-- Layout choices natural?
+- Does the hook commit to a sharp angle (not just restate the question)?
+- Is the depth marker counter-intuitive enough that an interviewer would press on it?
+- Are the pitfalls sharp edges with consequences (not textbook mistakes)?
+- Is the cap a portable principle (quotable beyond this question), not a recap?
+- Does it sound like the golden's voice without parroting it?
+
