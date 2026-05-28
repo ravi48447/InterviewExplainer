@@ -239,7 +239,7 @@ def load_codex() -> CodexBundle:
     phr = _load_json(CODEX_PHRASINGS)
     exm = _load_json(CODEX_EXAMPLES)
     phr_map = {t["id"]: t for t in phr.get("topics", [])}
-    exm_map = {t["topic_id"]: t for t in exm.get("examples", [])}
+    exm_map = {t["topic_id"]: t for t in exm.get("examples", []) if "topic_id" in t}
     return CodexBundle(banned=banned, phrasings_by_topic=phr_map, examples_by_topic=exm_map)
 
 
@@ -1256,6 +1256,8 @@ def lint_question(question: Dict[str, Any], cfg: LintConfig, question_path: str)
 
 def lint_complete_qa(path: Path, cfg: LintConfig) -> List[LintResult]:
     data = _load_json(path)
+    if not isinstance(data, dict):
+        return []
     questions = data.get("questions") or []
     out: List[LintResult] = []
     for q in questions:
