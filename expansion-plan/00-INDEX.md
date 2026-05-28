@@ -173,7 +173,7 @@ each playbook's "Depends on" / "Hard prerequisites" section.
 | 06 | [06-content-schema-and-qa-format.md](06-content-schema-and-qa-format.md)                                                   | A    | 03           | M      | 12 h      | DONE        |
 | 07 | [07-locked-domain-pattern.md](07-locked-domain-pattern.md)                                                                 | A    | 03,06        | M      | 12 h      | DONE        |
 | 08 | [08-module-registry-and-pillar-nav.md](08-module-registry-and-pillar-nav.md)                                               | A    | 07           | M      | 8 h       | DONE |
-| 09 | [09-speakable-program-overview.md](09-speakable-program-overview.md)                                                       | B    | 06           | M      | 8 h       | NOT_STARTED |
+| 09 | [09-speakable-program-overview.md](09-speakable-program-overview.md)                                                       | B    | 06           | M      | 8 h       | DONE |
 | 10 | [10-jbi-speakable-phase-3b-rollout.md](10-jbi-speakable-phase-3b-rollout.md)                                               | B    | 09           | XL     | 120 h     | NOT_STARTED |
 | 11 | [11-jbi-pillar-quality-audit.md](11-jbi-pillar-quality-audit.md)                                                           | B    | 08,10        | L      | 40 h      | NOT_STARTED |
 | 12 | [12-jbi-java-language-and-core.md](12-jbi-java-language-and-core.md)                                                       | B    | 11           | L      | 60 h      | NOT_STARTED |
