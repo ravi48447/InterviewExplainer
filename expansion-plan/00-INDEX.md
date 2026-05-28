@@ -73,9 +73,12 @@ InterviewExplainer from today's Java-Backend-Intermediate flagship into a
 multi-language, multi-hub interview platform.
 
 - 1 index file (this one)
-- 59 numbered playbooks (`01-…` through `59-…`)
+- 80 numbered playbooks (`01-…` through `80-…`)
   - `01–50`: original five-wave plan (A–E)
   - `51–59`: Wave F — content factory + full-size language tracks
+  - `60–67`: Wave G — full-size language tracks (Rust, Kotlin, C#, PHP, Swift, C++, Scala, Elixir)
+  - `68–75`: Wave H — role / domain hubs (Mobile, Data Eng, ML, Cloud, DevOps/SRE, Security, Frontend Web, Databases)
+  - `76–80`: Wave I — analytics, A/B, monetization, i18n, factory-v2 governance
 - Every playbook is a **completable unit of work** (S/M/L/XL effort)
 - Every playbook is independent enough that an AI agent with zero prior
   session memory can execute it cold, given only this folder + the repo
@@ -146,8 +149,12 @@ flowchart LR
   B --> D
   C --> E[Wave E<br/>Hubs and other langs 41-50]
   D --> E
-  A --> F[Wave F<br/>Content factory + full-size language tracks 51-59]
+  A --> F[Wave F<br/>Content factory + bulk language tracks 51-59]
   E --> F
+  F --> G[Wave G<br/>Full-size language tracks 60-67<br/>Rust, Kotlin, C#, PHP, Swift, C++, Scala, Elixir]
+  E --> H[Wave H<br/>Role and domain hubs 68-75<br/>Mobile, DataEng, ML, Cloud, DevOps, Security, Frontend, DB]
+  H --> I[Wave I<br/>Analytics, A/B, monetization, i18n, factory v2<br/>76-80]
+  F --> I
 ```
 
 Cross-wave parallelism only works for items with no dependency arrows in
@@ -158,7 +165,7 @@ each playbook's "Depends on" / "Hard prerequisites" section.
 | #  | File                                                                                                                       | Wave | Depends on   | Effort | Hard stop | Status      |
 | -- | -------------------------------------------------------------------------------------------------------------------------- | ---- | ------------ | ------ | --------- | ----------- |
 | 00 | [00-INDEX.md](00-INDEX.md)                                                                                                 | —    | —            | —      | —         | DONE        |
-| 01 | [01-vision-and-competitive-position.md](01-vision-and-competitive-position.md)                                             | A    | —            | S      | 4 h       | NOT_STARTED |
+| 01 | [01-vision-and-competitive-position.md](01-vision-and-competitive-position.md)                                             | A    | —            | S      | 4 h       | DONE        |
 | 02 | [02-current-content-inventory.md](02-current-content-inventory.md)                                                         | A    | 01           | S      | 4 h       | NOT_STARTED |
 | 03 | [03-dual-content-architecture.md](03-dual-content-architecture.md)                                                         | A    | 02           | M      | 8 h       | NOT_STARTED |
 | 04 | [04-master-url-and-seo-strategy.md](04-master-url-and-seo-strategy.md)                                                     | A    | 03           | M      | 8 h       | NOT_STARTED |
@@ -239,6 +246,73 @@ above (UI Contract + Taxonomy Registry).
 
 Wave F supersedes the original Q-count targets of playbook **49** for the JS/Go/Ruby tracks specifically. File 49 stays in the index for traceability and its non-Q-count guidance (SEO slugs, hub linking) still applies.
 
+## Wave G — Full-size dedicated language tracks (60–67)
+
+Wave G **supersedes** the batch coverage in playbook 58 for the four long-tail
+languages (C#, PHP, Rust, Kotlin) and adds four net-new languages (Swift, C++,
+Scala, Elixir). Each language gets its own playbook with three levels (fresher
+/ intermediate / advanced) and idiom-specific quality gates (e.g. Rust
+`unsafe`-without-`SAFETY` = 0; C# `.Result`/`.Wait()` = 0; Swift
+`DispatchQueue.main.sync` = 0; PHP `mysql_*` = 0). Wave G playbooks follow the
+same lighter skeleton as Wave F (TL;DR / Hard prerequisites / Why this matters
+/ Background / Step-by-step / Quality gates / Failure modes / DoD / Estimated
+effort) — not the 18-section / 1,000-line standard used for 01–50.
+
+| #  | File                                                                                       | Wave | Depends on             | Effort | Hard stop | Status      |
+| -- | ------------------------------------------------------------------------------------------ | ---- | ---------------------- | ------ | --------- | ----------- |
+| 60 | [60-rust-systems-track.md](60-rust-systems-track.md)                                       | G    | 51,52,53; supersedes 58 | XL     | 75 h      | NOT_STARTED |
+| 61 | [61-kotlin-jvm-track.md](61-kotlin-jvm-track.md)                                           | G    | 51,52,53; supersedes 58 | XL     | 65 h      | NOT_STARTED |
+| 62 | [62-csharp-dotnet-track.md](62-csharp-dotnet-track.md)                                     | G    | 51,52,53; supersedes 58 | XL     | 72 h      | NOT_STARTED |
+| 63 | [63-php-laravel-track.md](63-php-laravel-track.md)                                         | G    | 51,52,53; supersedes 58 | XL     | 60 h      | NOT_STARTED |
+| 64 | [64-swift-apple-track.md](64-swift-apple-track.md)                                         | G    | 51,52,53                | XL     | 60 h      | NOT_STARTED |
+| 65 | [65-cpp-systems-track.md](65-cpp-systems-track.md)                                         | G    | 51,52,53                | XL     | 80 h      | NOT_STARTED |
+| 66 | [66-scala-fp-jvm-track.md](66-scala-fp-jvm-track.md)                                       | G    | 51,52,53                | XL     | 56 h      | NOT_STARTED |
+| 67 | [67-elixir-phoenix-track.md](67-elixir-phoenix-track.md)                                   | G    | 51,52,53                | L      | 50 h      | NOT_STARTED |
+
+**Recommended Wave G order:** any order under the orchestrator (each language is independent). Java-adjacent (Kotlin 61 → Scala 66) and .NET (62) tend to be easier wins; C++ 65 and Rust 60 are the longest. Coordinate with the taxonomy owner (playbook 52) to add `language_pillar_modules.{swift,cpp,scala,elixir}.*` before starting 64-67.
+
+## Wave H — Role and Domain Hubs (68–75)
+
+Wave H ships eight cross-cutting hubs that **link** content from the language
+tracks rather than duplicating it. Each hub introduces a `*-cross-cutting`
+content tree for content that has no clean home in a single language track
+(mobile platform shells, dimensional modelling, LLM evals, cloud-agnostic
+patterns, SRE practice, identity protocols, frontend perf/a11y, database
+internals). The aggregator + frozen-category contract from playbook 41 is the
+template; each hub freezes 5-11 categories at launch and adds new ones only via
+its own playbook.
+
+| #  | File                                                                                       | Wave | Depends on                          | Effort | Hard stop | Status      |
+| -- | ------------------------------------------------------------------------------------------ | ---- | ----------------------------------- | ------ | --------- | ----------- |
+| 68 | [68-mobile-development-hub.md](68-mobile-development-hub.md)                               | H    | 41,61,64                            | L      | 45 h      | NOT_STARTED |
+| 69 | [69-data-engineering-hub.md](69-data-engineering-hub.md)                                   | H    | 38,41,66                            | L      | 36 h      | NOT_STARTED |
+| 70 | [70-machine-learning-hub.md](70-machine-learning-hub.md)                                   | H    | 39,41,44                            | L      | 45 h      | NOT_STARTED |
+| 71 | [71-cloud-architecture-hub.md](71-cloud-architecture-hub.md)                               | H    | 17,34,41,44                         | L      | 45 h      | NOT_STARTED |
+| 72 | [72-devops-sre-platform-hub.md](72-devops-sre-platform-hub.md)                             | H    | 17,34,41,71                         | L      | 48 h      | NOT_STARTED |
+| 73 | [73-security-engineering-hub.md](73-security-engineering-hub.md)                           | H    | 16,34,41,71,72                      | XL     | 55 h      | NOT_STARTED |
+| 74 | [74-frontend-web-frameworks-hub.md](74-frontend-web-frameworks-hub.md)                     | H    | 24,25,26,27,41,54,55                | XL     | 56 h      | NOT_STARTED |
+| 75 | [75-database-deep-dive-hub.md](75-database-deep-dive-hub.md)                               | H    | 14,33,41                            | XL     | 52 h      | NOT_STARTED |
+
+**Recommended Wave H order:** 71 (Cloud) and 72 (DevOps/SRE) before 73 (Security) — Security inherits the cloud + devsecops overlap rules. 41 (interview-qa hub) is required for all 8.
+
+## Wave I — Growth, Monetization, Governance (76–80)
+
+Wave I converts the now-rich content estate into a measured, monetizable,
+international, governed platform. Order matters: analytics (76) before A/B
+(77); A/B before pricing-A/B (78); analytics-with-locale-prop required for
+i18n (79); content-lifecycle governance (80) is the capstone that prevents the
+tree from rotting past ~30k Q.
+
+| #  | File                                                                                                    | Wave | Depends on                       | Effort | Hard stop | Status      |
+| -- | ------------------------------------------------------------------------------------------------------- | ---- | -------------------------------- | ------ | --------- | ----------- |
+| 76 | [76-analytics-and-content-instrumentation.md](76-analytics-and-content-instrumentation.md)              | I    | 50, ≥ 1 hub from 41–48 or 68–75  | L      | 28 h      | NOT_STARTED |
+| 77 | [77-ab-testing-and-personalization.md](77-ab-testing-and-personalization.md)                            | I    | 76                               | L      | 32 h      | NOT_STARTED |
+| 78 | [78-monetization-pricing-and-premium-tier.md](78-monetization-pricing-and-premium-tier.md)              | I    | 41,76,77,50                      | XL     | 80 h      | NOT_STARTED |
+| 79 | [79-i18n-and-localization-rollout.md](79-i18n-and-localization-rollout.md)                              | I    | 41,50,76                         | XL     | 56 h      | NOT_STARTED |
+| 80 | [80-content-factory-v2-graduation-and-archive-policy.md](80-content-factory-v2-graduation-and-archive-policy.md) | I    | 51,52,59,76, ≥ 3 language tracks | L      | 48 h      | NOT_STARTED |
+
+**Recommended Wave I order:** strict 76 → 77 → (78 ∥ 79) → 80. 78 and 79 can run in parallel under separate agents.
+
 ## How to mark a playbook DONE
 
 After every gate in a playbook passes:
@@ -255,20 +329,33 @@ Do NOT mark DONE if any quality gate in the playbook failed. Mark
 
 ## Where to put new work that doesn't fit
 
-If you discover work that doesn't fit into 01–59:
+If you discover work that doesn't fit into 01–80:
 
 - **Content depth** → fold into the matching pillar playbook (12–18 for JBI,
-  30–35 for PBI, 54–58 for non-Java languages).
+  30–35 for PBI, 54–58 / 60–67 for non-Java languages).
 - **New language or level** → add an entry to
   [`.cursor/content-factory/taxonomy.yaml`](../.cursor/content-factory/taxonomy.yaml)
-  AND create a new playbook (60+, e.g. `60-elixir-track.md`). Never add a
-  language by editing existing playbooks.
+  AND create a new playbook in the **81–89** slot (Wave G extension; e.g.
+  `81-dart-track.md`, `82-r-track.md`). Never add a language by editing
+  existing playbooks. Slots 60–67 are frozen for the eight languages already
+  shipped in Wave G.
+- **New hub** → add a new file in the **81–89** slot (Wave H extension; e.g.
+  `83-blockchain-web3-hub.md`, `84-game-development-hub.md`). Slots 68–75 are
+  frozen for the eight hubs already shipped in Wave H. Link from this index.
 - **Schema or layout-type change** → STOP. Open a schema-version playbook
-  (e.g. `90-schema-version-bump-add-X-section.md`). Bulk-generation
-  playbooks (53–58) are forbidden from doing this — UI Contract rule.
-- **New hub** → add a new file (`70+-<slug>.md`); link from this index.
-- **Infra (analytics, A/B, redirect map)** → add as appendix sub-sections to
-  [`50-interview-migration-seo-sitemap-operations.md`](50-interview-migration-seo-sitemap-operations.md).
+  in the **90+** slot (e.g. `90-schema-version-bump-add-X-section.md`).
+  Bulk-generation playbooks (53–58, 60–67) are forbidden from doing this —
+  UI Contract rule.
+- **Per-locale content packs** (e.g. translate JBI into Spanish) → new
+  playbook in the **81–89** slot that extends Wave I (e.g.
+  `85-i18n-content-pack-es.md`); each locale's content pack is its own
+  playbook because the review-gate and translation-budget shape differs per
+  locale.
+- **Infra (additional analytics, new experiment, new payment provider)** →
+  if the infra fits inside the contracts established by 76 / 77 / 78,
+  extend the registry in-place. If it requires a new contract (e.g.
+  switching analytics backend, adding GraphQL alongside REST), open a new
+  playbook in the **81–89** slot.
 
 Never add a new file without also updating the status table above.
 
