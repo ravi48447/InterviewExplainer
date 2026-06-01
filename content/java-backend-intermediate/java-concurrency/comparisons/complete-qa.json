@@ -1,0 +1,553 @@
+{
+  "topic": "Comparisons",
+  "topicSlug": "comparisons",
+  "questions": [
+    {
+      "id": "future-vs-completablefuture-comparison",
+      "slug": "future-vs-completablefuture-comparison",
+      "question": "What's the difference between `Future` and `CompletableFuture`? When would you still use plain `Future`?",
+      "title": "`Future` vs `CompletableFuture` — Blocking Handle vs Composable Async",
+      "direct_answer": "**`Future<T>`** (Java 5) is just a **blocking result handle** — you get it back from `ExecutorService.submit()` and call `.get()` to wait for the result. No callbacks, no composition, no exception handling beyond rethrow on `get()`, cannot be completed manually. **`CompletableFuture<T>`** (Java 8) implements `Future<T>` but adds a full **composable async API**: callbacks (`thenApply`), composition (`thenCompose`, `thenCombine`), exception recovery (`exceptionally`, `handle`), manual completion (`.complete(value)`), and executor control (`*Async(executor)`). **Use plain `Future`** only when you're legitimately working with an API that returns it and you really do just want to block on the result (batch jobs, simple `Callable` tasks). **Everywhere else use `CompletableFuture`** — modern HTTP clients, message handling, parallel fan-out. On Java 21+, for purely I/O-bound code, virtual threads with simple blocking calls often replace CompletableFuture chains entirely.",
+      "layout_type": "default",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows CompletableFuture is a superset (it implements Future) and why that matters; understands the limitations of plain Future that make it unsuitable for non-trivial async code",
+        "common_mistake": "Thinking Future is asynchronous (it isn't — `.get()` blocks). Using plain Future for complex async flows where composition would help",
+        "to_stand_out": "Note that CompletableFuture implements Future so it's drop-in; mention that virtual threads on Java 21 often replace CompletableFuture chains for I/O-bound code; highlight the commonPool trap with supplyAsync"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "linkedin",
+        "uber"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Distinction in One Sentence",
+            "content": "`Future` is a **result handle**. `CompletableFuture` is a **programmable async pipeline**.\n\nBoth represent \"a value that may not exist yet.\" The key difference is what you can do with that representation:\n\n- **`Future`** — you can check `isDone()`, cancel, or **block on `get()`**. That's it. No way to attach a callback. No way to chain with another async op without blocking.\n- **`CompletableFuture`** — implements `Future<T>` (so it's a drop-in replacement wherever `Future` is expected) but adds:\n  - **Callbacks**: `thenApply`, `thenAccept`, `thenRun`\n  - **Composition**: `thenCompose`, `thenCombine`, `applyToEither`\n  - **Fan-in**: `CompletableFuture.allOf`, `anyOf`\n  - **Exception handling**: `exceptionally`, `handle`, `whenComplete`\n  - **Manual completion**: `.complete(value)`, `.completeExceptionally(ex)`\n  - **Timeouts** (Java 9+): `orTimeout`, `completeOnTimeout`\n  - **Executor control**: `*Async(fn, executor)` variants\n\nThe practical implication: any non-trivial async code written with plain `Future` degenerates to a forest of `get()` calls and blocking. `CompletableFuture` lets you write async flows declaratively."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Side-by-Side Comparison",
+            "content": "| Capability | `Future<T>` | `CompletableFuture<T>` |\n|---|---|---|\n| **Get result** | `get()` (blocks), `get(timeout)` | `get()`, `join()`, `getNow(default)` |\n| **Check status** | `isDone()`, `isCancelled()` | Same + `isCompletedExceptionally()` |\n| **Cancel** | `cancel(boolean)` | Same |\n| **Attach callback** | ❌ | ✅ `thenApply/Accept/Run` |\n| **Chain async op** | ❌ (must block and resubmit) | ✅ `thenCompose` |\n| **Combine two futures** | ❌ | ✅ `thenCombine`, `allOf`, `anyOf` |\n| **Handle exception** | ❌ (only thrown from `get()`) | ✅ `exceptionally`, `handle` |\n| **Manual completion** | ❌ | ✅ `complete(v)`, `completeExceptionally(e)` |\n| **Timeout on the future** | ❌ (only on `get()`) | ✅ `orTimeout`, `completeOnTimeout` (Java 9+) |\n| **Executor control** | Tied to the submitting executor | ✅ per-stage via `*Async(fn, executor)` |\n| **Implements `Future`** | Yes (it is `Future`) | Yes (subtype of `Future`) |\n| **Implements `CompletionStage`** | ❌ | ✅ |\n| **Typical source** | `ExecutorService.submit()` | `supplyAsync`, `runAsync`, manual, chain |"
+          },
+          {
+            "type": "before_code",
+            "title": "Plain `Future` — Pain at Scale",
+            "content": "```java\nExecutorService pool = Executors.newFixedThreadPool(8);\n\n// Three independent fetches we want to combine\nFuture<User> userF = pool.submit(() -> userService.fetch(id));\nFuture<List<Order>> ordersF = pool.submit(() -> orderService.fetch(id));\nFuture<Prefs> prefsF = pool.submit(() -> prefsService.fetch(id));\n\n// To combine them, we MUST block\nUser user = userF.get();       // blocks\nList<Order> orders = ordersF.get(); // blocks\nPrefs prefs = prefsF.get();    // blocks\n\nUserDashboard result = build(user, orders, prefs);\n// The caller thread sat idle during three network calls.\n```\n\nThe more complex the flow (branching, exception recovery, timeouts), the more nested try/catches, `ExecutionException` unwrapping, and blocking `get()`s you accumulate. Future doesn't scale to real async code."
+          },
+          {
+            "type": "after_code",
+            "title": "`CompletableFuture` — Declarative Composition",
+            "content": "```java\nExecutor pool = Executors.newFixedThreadPool(8);\n\nCompletableFuture<User> userF =\n    CompletableFuture.supplyAsync(() -> userService.fetch(id), pool);\nCompletableFuture<List<Order>> ordersF =\n    CompletableFuture.supplyAsync(() -> orderService.fetch(id), pool);\nCompletableFuture<Prefs> prefsF =\n    CompletableFuture.supplyAsync(() -> prefsService.fetch(id), pool);\n\nCompletableFuture<UserDashboard> dashboardF =\n    userF.thenCombine(ordersF, (u, o) -> new Object[]{u, o})\n         .thenCombine(prefsF, (uo, p) -> build(\n             (User) ((Object[]) uo)[0],\n             (List<Order>) ((Object[]) uo)[1], p))\n         .orTimeout(2, TimeUnit.SECONDS)\n         .exceptionally(ex -> UserDashboard.empty());\n\n// Caller can return dashboardF immediately, never blocks\ndashboardF.thenAccept(this::renderResponse);\n```\n\nEverything runs in parallel, combines when all complete, times out at 2 s, recovers from errors — all declaratively. The caller never blocks."
+          },
+          {
+            "type": "step",
+            "title": "The `CompletableFuture.supplyAsync` Trap",
+            "content": "`CompletableFuture.supplyAsync(task)` **without an executor argument** runs `task` on `ForkJoinPool.commonPool` — default parallelism = `Runtime.getRuntime().availableProcessors() - 1`. That's a tiny pool sized for CPU-bound work.\n\nIf `task` is **blocking I/O**, it occupies a commonPool thread for the entire I/O. A few dozen such calls can saturate commonPool, stalling every parallel stream and CompletableFuture in the JVM.\n\n**Always pass an executor for blocking work**:\n```java\nExecutor io = Executors.newFixedThreadPool(50,\n    new ThreadFactoryBuilder().setNameFormat(\"io-%d\").build());\nCompletableFuture.supplyAsync(() -> httpClient.get(url), io);\n```\n\nOr on Java 21:\n```java\nExecutor io = Executors.newVirtualThreadPerTaskExecutor();\n```\n\nThis is the single most common production bug in CompletableFuture code."
+          },
+          {
+            "type": "step",
+            "title": "Virtual Threads — The Java 21 Shift",
+            "content": "Java 21's virtual threads change when CompletableFuture is the right tool.\n\n**Before Java 21**: for server-side I/O-bound code, CompletableFuture was the main way to get concurrency without thread-pool exhaustion. Every \"fetch from 5 services and combine\" was a `thenCombine` chain.\n\n**Java 21+**: virtual threads let you write simple blocking code that scales:\n```java\ntry (var executor = Executors.newVirtualThreadPerTaskExecutor()) {\n    Future<User> userF = executor.submit(() -> userService.fetch(id));\n    Future<List<Order>> ordersF = executor.submit(() -> orderService.fetch(id));\n    Future<Prefs> prefsF = executor.submit(() -> prefsService.fetch(id));\n    \n    return build(userF.get(), ordersF.get(), prefsF.get()); // blocking is fine!\n}\n```\n\nThis uses plain `Future<T>` — blocking on `.get()` on a virtual thread unmounts the carrier, freeing it for other work. The code is simpler than CompletableFuture chains.\n\n**When to still use CompletableFuture on Java 21**:\n- Callback-based library integration (you're wrapping a non-blocking API).\n- True parallel fan-out with combinators (`allOf(f1,...,f100)`).\n- Complex pipelines with exception recovery at multiple stages.\n\n**When plain Future + virtual threads wins on Java 21**:\n- Sequential I/O calls in a request handler.\n- Two-to-three parallel calls where blocking `.get()` is readable.\n- Existing code that's hard to refactor into CompletableFuture style."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When Each is Right",
+            "content": "**Use plain `Future`**:\n- Working with an API that returns `Future` and you truly just want to block.\n- Simple single-task submission: `Future<?> f = pool.submit(task); f.get();`\n- Java 21 + virtual threads: blocking `.get()` is cheap; `CompletableFuture` composition may be overkill.\n- Testing callable tasks where you care only about success/failure and blocking is fine.\n\n**Use `CompletableFuture`**:\n- Any non-trivial async flow with composition, timeouts, or exception recovery.\n- Wrapping callback-based libraries (create a CompletableFuture and complete it in the callback).\n- Fan-out to multiple services with declarative combinators.\n- Building async APIs that other code will chain onto.\n\n**Don't use `CompletableFuture`**:\n- For back-pressured streaming — use Reactor `Flux` or RxJava `Observable`.\n- For pure CPU work — use parallel streams or `ForkJoinPool` directly.\n- As the only tool when virtual threads would simplify the code.\n\n**Watch out for**:\n- Returning `CompletableFuture` without terminating it (no `exceptionally`/`handle`/`get`) — exceptions are lost silently.\n- Using `supplyAsync` without an executor for blocking work — saturates commonPool.\n- Mixing plain `Future` and `CompletableFuture` in the same flow — you lose composition as soon as you hit a plain Future."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`Future`** = blocking result handle; `.get()` waits, no callbacks, no composition.\n- **`CompletableFuture`** implements `Future` + `CompletionStage`; full composable async API.\n- CompletableFuture adds: callbacks, composition (`thenCompose`, `thenCombine`), exception recovery, manual completion, timeouts, executor control.\n- `CompletableFuture` is a drop-in replacement for `Future` — it *is* a Future.\n- **Default `supplyAsync` uses `commonPool`** — dangerous for blocking work; always pass an executor.\n- **Java 21 virtual threads** often replace CompletableFuture chains for I/O-bound code; plain blocking `Future.get()` becomes viable again.\n- CompletableFuture still wins for: callback wrapping, fan-out combinators, complex pipelines with recovery.\n- **Never leave a CompletableFuture chain without a terminator** — exceptions vanish silently.\n- For reactive streaming with backpressure, use Reactor/RxJava, not CompletableFuture."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`Future` is a **blocking result handle**; `CompletableFuture` is a **composable async pipeline**.\n\n**Plain `Future<T>`**\n- You get it from `ExecutorService.submit()`\n- Can call `isDone()`, `cancel()`, or **`get()` which blocks**\n- No callbacks, no composition, no exception handling\n- Cannot be completed manually\n- Fine for: single-task submit-and-block patterns\n\n**`CompletableFuture<T>`**\n- Implements `Future` — so it's a drop-in replacement\n- Plus a full composable API:\n  - Callbacks: `thenApply`, `thenAccept`, `thenRun`\n  - Composition: `thenCompose` (sequential), `thenCombine` (parallel), `allOf`/`anyOf` (fan-in)\n  - Exception handling: `exceptionally`, `handle`, `whenComplete`\n  - Manual completion: `.complete(value)`, `.completeExceptionally(ex)`\n  - Timeouts (Java 9+): `orTimeout`, `completeOnTimeout`\n  - Executor control: `*Async(fn, executor)` variants\n\n**The `supplyAsync` trap**\n- `CompletableFuture.supplyAsync(task)` without an executor uses `ForkJoinPool.commonPool`\n- Sized for CPU work (cores - 1)\n- Blocking I/O on commonPool saturates it; all parallel streams stall\n- **Always pass an executor for blocking work**\n\n**Java 21 shifts the balance**\n- Virtual threads make blocking `Future.get()` cheap again\n- Simple blocking code on a virtual thread executor often reads better than CompletableFuture chains\n- CompletableFuture remains essential for:\n  - Wrapping callback-based libraries\n  - Parallel fan-out with combinators (`allOf(f1, ..., fN)`)\n  - Complex pipelines with multi-stage exception recovery\n\n**When to use plain Future**\n- Working with a legacy API that returns Future\n- Simple submit-and-block patterns\n- Java 21 + virtual threads, where blocking is cheap and composition is overkill\n\n**When to use CompletableFuture**\n- Non-trivial async flows with composition/timeout/recovery\n- Wrapping callback-based libraries\n- Public API you want callers to chain onto\n\n**When neither is the right tool**\n- Backpressured streaming → Reactor `Flux`/RxJava `Observable`\n- Pure CPU work → parallel streams or `ForkJoinPool`\n\n**Recommendation:** On **Java 8–17**, default to **`CompletableFuture` for any async flow with more than one stage**; the composition API saves you from callback hell and manual blocking. Always **pass a custom executor** to `*Async` methods for blocking work. On **Java 21+**, re-evaluate: for I/O-bound request handlers, **virtual threads with plain blocking `Future.get()`** often wins on readability. Reserve CompletableFuture for **true parallel fan-out** (`allOf` over many calls) and **callback wrapping**. Always **terminate chains** with `exceptionally` or `handle` — unterminated chains silently eat exceptions and produce the nastiest kind of production bug."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is `Future.get()` a blocking call — what was the design intent?",
+        "How does virtual-thread `Future.get()` differ from platform-thread `Future.get()`?",
+        "What happens if you call `.get()` on a CompletableFuture that completed exceptionally?",
+        "Why is `supplyAsync` without an executor dangerous for blocking work?",
+        "How does `CompletionStage` relate to `CompletableFuture`?"
+      ],
+      "seo": {
+        "metaTitle": "`Future` vs `CompletableFuture` in Java — Blocking Handle vs Composable Async",
+        "metaDescription": "Detailed comparison of Java Future and CompletableFuture: capabilities side-by-side, the commonPool trap, Java 21 virtual thread implications, and when to use each."
+      },
+      "order": 1,
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "speakable_status": "pending_review",
+        "familiarity_anchors": [
+          "Future is a result handle — you can only get() and block",
+          "CompletableFuture is a programmable async pipeline with callbacks",
+          "Future has no way to compose or chain results without blocking"
+        ],
+        "standard_example": "Future: executor.submit(() -> fetch()) then future.get(). CompletableFuture: thenApply().thenCompose().exceptionally().",
+        "hook": "Future gives you a result handle. CompletableFuture gives you a programmable async pipeline. They're not interchangeable.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "grouped_paragraphs",
+            "groups": [
+              {
+                "heading": "Future",
+                "text": "A result handle for a submitted task. It's blocking — get() waits until done. No callbacks, no chaining, no way to react without blocking the current thread."
+              },
+              {
+                "heading": "CompletableFuture",
+                "text": "An async pipeline you can compose. Attach callbacks with thenApply(), chain with thenCompose(), combine with thenCombine(), handle errors with exceptionally(). Non-blocking by design."
+              }
+            ]
+          },
+          {
+            "kind": "differences",
+            "layout": "mini_table",
+            "columns": [
+              "Future",
+              "CompletableFuture"
+            ],
+            "rows": [
+              {
+                "axis": "chaining",
+                "values": [
+                  "none — block and get",
+                  "thenApply, thenCompose, thenCombine"
+                ]
+              },
+              {
+                "axis": "error handling",
+                "values": [
+                  "try/catch around get()",
+                  "exceptionally(), handle()"
+                ]
+              },
+              {
+                "axis": "completion",
+                "values": [
+                  "only by the task",
+                  "can complete manually"
+                ]
+              },
+              {
+                "axis": "blocking",
+                "values": [
+                  "get() blocks",
+                  "non-blocking with callbacks"
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "grouped_paragraphs",
+            "groups": [
+              {
+                "heading": "Future",
+                "text": "Simple fire-and-get patterns. When you submit one task and just need the result later — and blocking is acceptable."
+              },
+              {
+                "heading": "CompletableFuture",
+                "text": "Any async workflow with chaining, fan-out, or fan-in. The gotcha: CompletableFuture.get() still blocks — you can undo its async benefits by immediately calling get()."
+              }
+            ]
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Trap candidates miss: Future.get() without a timeout blocks forever if the task hangs. CompletableFuture doesn't automatically add a timeout either — use orTimeout(5, SECONDS) in Java 9+ to add one explicitly."
+          }
+        ],
+        "cap": "Future blocks, CompletableFuture composes. Use Future only for simple fire-and-get. Use CompletableFuture for any async pipeline.",
+        "followup_handoff": [
+          "What's the difference between thenApply and thenCompose?",
+          "How do you run multiple CompletableFutures in parallel and wait for all?",
+          "How does CompletableFuture handle exceptions in a chain?"
+        ],
+        "tts_overrides": {
+          "CompletableFuture": "completable future",
+          "thenApply()": "then apply",
+          "thenCompose()": "then compose",
+          "thenCombine()": "then combine",
+          "exceptionally()": "exceptionally",
+          "orTimeout()": "or timeout",
+          "get()": "get"
+        }
+      }
+    },
+    {
+      "id": "volatile-vs-synchronized-comparison",
+      "slug": "volatile-vs-synchronized-comparison",
+      "question": "What's the difference between `volatile` and `synchronized`? When is `volatile` enough?",
+      "title": "`volatile` vs `synchronized` — Visibility vs Atomicity",
+      "direct_answer": "**`volatile`** gives you only **visibility** — writes are immediately visible to all threads, and reads/writes can't be reordered across the `volatile` access. It does **NOT** give atomicity of compound operations. **`synchronized`** gives you both **mutual exclusion** (only one thread in the block at a time) and **visibility** (happens-before on lock acquire/release). **`volatile` is enough** for: flags (`volatile boolean running`), DCL's instance reference, single-writer-multi-reader scalars, and publishing references to immutable objects. **`volatile` is NOT enough** for compound operations like increment (`counter++` is read-modify-write, three operations), check-then-act (`if (!cache.contains(k)) cache.put(k,v)`), or any state involving multiple fields. For those, use `synchronized`, `ReentrantLock`, or an `Atomic*` class (which uses CAS internally). The biggest trap: making a counter `volatile` and thinking `counter++` is now thread-safe. It's not.",
+      "layout_type": "default",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the JMM distinction between visibility (volatile) and atomicity (synchronized), and can identify compound operations where volatile is insufficient",
+        "common_mistake": "Assuming `volatile counter++` is atomic — it isn't. Thinking synchronized doesn't provide visibility (it does). Using volatile for multi-field state",
+        "to_stand_out": "Cite specific use cases where volatile is enough (flags, DCL, immutable publication) vs not enough (counter, compound check-then-act). Mention that on Java 21, ReentrantLock is often preferable to synchronized due to virtual-thread pinning"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "oracle"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Different Guarantees",
+            "content": "Java concurrency has two distinct concerns:\n\n- **Visibility** — when one thread writes a value, when does another thread see it? Without any memory-model guarantee, a write could sit in a CPU cache indefinitely, invisible to other cores.\n- **Atomicity** — is a compound operation (read-then-write, or multiple writes) indivisible from another thread's perspective?\n\n**`volatile`** provides **visibility and ordering** but NOT compound atomicity.\n- Writes to a `volatile` field are flushed; reads are not cached.\n- Establishes happens-before: everything before a volatile write is visible after a volatile read of the same field.\n- But `x++` is read → modify → write, and another thread can interleave between steps.\n\n**`synchronized`** provides **mutual exclusion + visibility**.\n- Only one thread in the critical section at a time.\n- Lock acquire/release establishes happens-before, giving the same visibility as volatile.\n- Compound operations are safe because no other thread can interleave.\n\nKnowing which is which saves you from a class of bugs that only manifest under load."
+          },
+          {
+            "type": "comparison_table",
+            "title": "volatile vs synchronized",
+            "content": "| Aspect | `volatile` | `synchronized` |\n|---|---|---|\n| **Visibility guarantee** | ✅ | ✅ |\n| **Prevents reordering** | ✅ (around the volatile access) | ✅ (around the block) |\n| **Mutual exclusion** | ❌ | ✅ |\n| **Compound atomicity** (e.g., `x++`) | ❌ | ✅ |\n| **Multi-field consistency** | ❌ | ✅ |\n| **Overhead** | Low (memory barrier on read/write) | Higher (monitor lock) |\n| **Performance on contended reads** | Fast | Slower |\n| **Deadlock risk** | None | Yes |\n| **Pinning on virtual threads (Java 21)** | No | Yes — use `ReentrantLock` to avoid |\n| **Can block** | No | Yes (waiting for lock) |\n| **Typical use** | Flags, DCL, immutable publication | Critical sections, compound state |"
+          },
+          {
+            "type": "after_code",
+            "title": "When `volatile` is Enough — Flag, DCL, Publication",
+            "content": "**1. Simple boolean flag**:\n```java\nprivate volatile boolean running = true;\n\npublic void stop() { running = false; }\n\nprivate void workerLoop() {\n    while (running) {  // sees updated value without needing lock\n        processNext();\n    }\n}\n```\nOnly one field, single-writer (stop) and multi-reader (workers) — visibility is all you need.\n\n**2. Double-checked locking**:\n```java\nprivate static volatile Singleton instance;\n// volatile prevents reorder of constructor and reference assignment\n```\n\n**3. Publishing an immutable reference**:\n```java\nprivate volatile Config config; // replaced occasionally, otherwise read-only\n\npublic void reloadConfig(Config c) { config = c; }\npublic Config getConfig() { return config; }\n```\nImmutability of `Config` is key — readers see a fully-constructed object; the reference swap is atomic.\n\n**4. Last-write-wins single-value state**:\n```java\nprivate volatile long lastHeartbeat;\n\npublic void heartbeat() { lastHeartbeat = System.currentTimeMillis(); }\n```\nNo multiple-field invariants, just a scalar."
+          },
+          {
+            "type": "before_code",
+            "title": "When `volatile` is NOT Enough — The Classic Bugs",
+            "content": "**1. Increment counter — the canonical bug**:\n```java\nprivate volatile int counter = 0;\npublic void increment() { counter++; }\n// BROKEN: counter++ = read counter, add 1, write counter\n// Two threads can both read 5, both write 6; you lost an increment.\n```\n**Fix**: `AtomicInteger` with `.incrementAndGet()`, or `synchronized`, or `LongAdder` for high contention.\n\n**2. Check-then-act**:\n```java\nprivate volatile Map<String, String> cache = new HashMap<>();\npublic String getOrLoad(String key) {\n    if (!cache.containsKey(key)) {    // thread A sees missing\n        String value = load(key);\n        cache.put(key, value);         // thread B just put a different value\n    }\n    return cache.get(key);\n}\n// volatile on the reference doesn't help — the map itself isn't thread-safe\n// and the check-then-act isn't atomic\n```\n**Fix**: `ConcurrentHashMap` + `computeIfAbsent`.\n\n**3. Multi-field consistency**:\n```java\nprivate volatile int x = 0;\nprivate volatile int y = 0;\npublic void setBoth(int newX, int newY) {\n    x = newX;  // Another thread can observe x updated, y not yet\n    y = newY;\n}\n```\n**Fix**: synchronized block, or encapsulate (x, y) in an immutable pair and volatile-publish the whole thing."
+          },
+          {
+            "type": "step",
+            "title": "Performance and When to Choose",
+            "content": "**`volatile` cost**:\n- Compile to memory-barrier instructions on x86/ARM — usually a few nanoseconds.\n- Read cost is very low; write cost is slightly higher due to cache flush.\n- No blocking — always makes progress.\n\n**`synchronized` cost**:\n- Uncontended: JVM biased locking optimizes to near-volatile cost.\n- Contended: blocking threads, context switches, monitor queue management — 100x worse than volatile.\n- Under extreme contention: use `ReentrantLock` (tryLock, timeouts, fairness options).\n\n**Rule of thumb**: if you only need visibility of a single scalar, prefer `volatile`. If you need atomicity or involve multiple fields, use `synchronized` or atomics. If you need advanced features (tryLock, fairness, Condition variables), use `ReentrantLock`.\n\n**Java 21 caveat**: `synchronized` blocks containing blocking I/O **pin virtual threads** to their carrier. For new code targeting virtual threads, prefer `ReentrantLock`, which doesn't pin. `volatile` doesn't pin."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Decision Guide",
+            "content": "| Need | Use |\n|---|---|\n| Stop flag, heartbeat, simple scalar published once per write | **`volatile`** |\n| Double-checked locking instance reference | **`volatile`** (required) |\n| Publish immutable object | **`volatile` reference** |\n| Counter (increment / decrement) | **`AtomicInteger`** or **`LongAdder`** |\n| Compound check-then-act | **`synchronized`** or **`ReentrantLock`** or **`ConcurrentHashMap.computeIfAbsent`** |\n| Multi-field consistent update | **`synchronized`** + encapsulation, or immutable object + volatile ref swap |\n| Coordinate threads (wait/notify, signals) | **`synchronized` + wait/notify**, or **`ReentrantLock` + `Condition`** |\n| Java 21+ with blocking I/O in lock | **`ReentrantLock`** (avoids pinning) |\n\n**Watch out for**:\n- **Compound ops on volatile** — the classic bug; always atomic/synchronized.\n- **Volatile array/map** — the reference is volatile but the contents aren't thread-safe unless the collection is.\n- **Over-synchronizing** — if you only need visibility of one scalar, don't lock.\n- **Under-synchronizing** — \"my reads are `volatile`, should be fine\" — watch for multi-field invariants.\n- **`synchronized` pinning on Java 21** — migrate to `ReentrantLock` for hot-path I/O."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`volatile`** — visibility + ordering only; compound operations NOT atomic.\n- **`synchronized`** — mutual exclusion + visibility; compound operations safe.\n- **`volatile` is enough** for: flags, DCL reference, immutable publication, single-value scalars.\n- **`volatile` is NOT enough** for: counters (`x++`), check-then-act, multi-field invariants.\n- For atomic compound numeric ops, use **`AtomicInteger`/`AtomicLong`** (or `LongAdder` for high contention).\n- **`synchronized` has higher overhead** under contention; `volatile` is always non-blocking.\n- **Java 21 pinning**: `synchronized` pins virtual threads; `ReentrantLock` doesn't, `volatile` doesn't.\n- **Don't volatile a mutable collection reference** and expect thread safety — the collection contents aren't protected.\n- **Writing code that looks right but isn't** is the #1 volatile failure mode — always trace the compound operation."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`volatile` and `synchronized` solve overlapping but distinct problems in the Java Memory Model.\n\n**`volatile` — visibility and ordering**\n- Writes are flushed immediately; reads don't cache\n- Establishes happens-before: writes before a volatile write are visible after the matching read\n- Prevents reordering around the volatile access\n- **Does NOT provide atomicity** for compound operations\n- Non-blocking, very low overhead\n\n**`synchronized` — mutual exclusion + visibility**\n- Only one thread in the block at a time\n- Lock acquire/release gives the same visibility as volatile\n- Compound operations are safe because no interleaving\n- Higher overhead under contention\n- Can deadlock\n- **Pins virtual threads on Java 21** — use `ReentrantLock` instead for hot-path I/O\n\n**When `volatile` is enough**\n- Single-scalar flag: `volatile boolean running` — one writer, many readers\n- Double-checked locking instance reference\n- Publishing an immutable object reference: `volatile Config config; config = newConfig;`\n- Last-write-wins scalars: timestamps, sequence numbers\n\n**When `volatile` is NOT enough**\n\n**The canonical bug — counter increment**:\n- `volatile int counter; counter++;`\n- `counter++` is read → add → write, three separate operations\n- Two threads can both read 5 and both write 6; you lose an increment\n- Fix: `AtomicInteger.incrementAndGet()`, or `LongAdder` for high contention, or `synchronized`\n\n**Check-then-act**:\n- `if (!cache.containsKey(k)) cache.put(k, v);`\n- Two threads both see missing, both insert; one wins, logic inconsistent\n- Fix: `ConcurrentHashMap.computeIfAbsent`\n\n**Multi-field consistency**:\n- `volatile int x, y; x = 1; y = 2;`\n- Another thread can see x updated but y not yet\n- Fix: synchronized block, or encapsulate `(x,y)` in immutable object + volatile reference\n\n**Performance**\n- `volatile`: always a few nanoseconds, never blocks\n- `synchronized`: uncontended is cheap (JVM biased locking); contended is 100x worse\n- `ReentrantLock`: similar cost, more features (tryLock, fairness, Condition)\n\n**Decision guide**\n- Flag / single scalar / immutable ref → `volatile`\n- Counter / arithmetic atomicity → `AtomicInteger` / `LongAdder`\n- Compound state / check-then-act → `synchronized` or `ReentrantLock`\n- Virtual threads with blocking I/O in lock → `ReentrantLock`\n\n**Recommendation:** Default to **`volatile`** when you have a single scalar and just need visibility — it's the cheapest and non-blocking. Use **atomic classes** (`AtomicInteger`, `AtomicReference`) for compound numeric operations; they give lock-free CAS-based atomicity. Use **`synchronized`** or **`ReentrantLock`** when you need mutual exclusion across multiple fields or complex state. **On Java 21+**, prefer `ReentrantLock` over `synchronized` for any hot path that performs blocking I/O, because `synchronized` pins virtual threads and starves carriers. The cardinal rule: whenever you find yourself thinking \"this is just a counter, I'll make it volatile,\" stop — that's the #1 source of production bugs in this area."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is `volatile counter++` not thread-safe?",
+        "What's the happens-before relationship established by `volatile`?",
+        "When would you prefer `AtomicInteger` over `synchronized` for a counter?",
+        "Why does `synchronized` pin virtual threads on Java 21?",
+        "How do you publish an immutable object safely without any locking?"
+      ],
+      "seo": {
+        "metaTitle": "`volatile` vs `synchronized` in Java — Visibility vs Atomicity",
+        "metaDescription": "Clear comparison of Java volatile and synchronized: what guarantees each provides, when volatile is enough (flags, DCL, immutable publication), when it isn't (counter, check-then-act), and virtual-thread implications."
+      },
+      "order": 2,
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "speakable_status": "pending_review",
+        "familiarity_anchors": [
+          "volatile guarantees visibility — every thread sees the latest write",
+          "synchronized guarantees visibility plus atomicity plus mutual exclusion",
+          "volatile doesn't prevent check-then-act races; synchronized does"
+        ],
+        "standard_example": "volatile for a stop flag. synchronized for a counter increment (read-modify-write).",
+        "hook": "volatile fixes visibility. synchronized fixes visibility plus atomicity. They're not alternatives — they solve different problems.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "grouped_paragraphs",
+            "groups": [
+              {
+                "heading": "volatile",
+                "text": "Marks a variable as visible across all threads — writes go straight to main memory, reads bypass the CPU cache. No locking. No atomicity. Just a happens-before guarantee on single writes and reads."
+              },
+              {
+                "heading": "synchronized",
+                "text": "A mutual exclusion lock on a monitor. Guarantees visibility and atomicity. Only one thread in the block at a time. More expensive than volatile — it's a memory barrier plus a lock acquisition."
+              }
+            ]
+          },
+          {
+            "kind": "differences",
+            "layout": "mini_table",
+            "columns": [
+              "volatile",
+              "synchronized"
+            ],
+            "rows": [
+              {
+                "axis": "visibility",
+                "values": [
+                  "yes",
+                  "yes"
+                ]
+              },
+              {
+                "axis": "atomicity",
+                "values": [
+                  "no",
+                  "yes"
+                ]
+              },
+              {
+                "axis": "mutual exclusion",
+                "values": [
+                  "no",
+                  "yes"
+                ]
+              },
+              {
+                "axis": "performance",
+                "values": [
+                  "low overhead",
+                  "higher — lock acquisition"
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "grouped_paragraphs",
+            "groups": [
+              {
+                "heading": "volatile",
+                "text": "Single-writer flags — isRunning, isCancelled. Simple single-write/single-read patterns where only visibility matters."
+              },
+              {
+                "heading": "synchronized",
+                "text": "Any read-modify-write operation — counter++, cache updates. The gotcha candidates miss: volatile boolean done = false; if(!done) done = true; is still a race. The check and the set aren't atomic."
+              }
+            ]
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "count++ with volatile is still a race. It's three operations: read count, add 1, write back. Another thread can interleave between read and write. Use AtomicInteger.incrementAndGet() or synchronized — not volatile."
+          }
+        ],
+        "cap": "volatile for visibility only. synchronized for atomicity. Don't use volatile for compound operations — it's not a lock.",
+        "followup_handoff": [
+          "What is a happens-before relationship in the Java memory model?",
+          "When would you use AtomicInteger over synchronized?",
+          "What problem does the double-checked locking pattern solve?"
+        ],
+        "tts_overrides": {
+          "volatile": "volatile",
+          "synchronized": "synchronized",
+          "AtomicInteger": "atomic integer",
+          "incrementAndGet()": "increment and get",
+          "count++": "count plus plus"
+        }
+      }
+    },
+    {
+      "id": "virtual-vs-platform-threads-comparison",
+      "slug": "virtual-vs-platform-threads-comparison",
+      "question": "Virtual threads vs platform threads in Java 21 — full comparison of footprint, cost, scheduling, and compatibility.",
+      "title": "Virtual Threads vs Platform Threads in Java 21 — Complete Comparison",
+      "direct_answer": "**Platform threads** are traditional `java.lang.Thread` instances backed 1:1 by **OS kernel threads** — ~1 MB stack, ~1 ms creation, scheduled preemptively by the OS, limited to ~thousands per JVM. **Virtual threads** (Java 21 JEP 444) are lightweight JVM-managed threads scheduled onto a small pool of **carrier** platform threads. Stack is resizable (stored on the heap, KB not MB), creation is microseconds, and you can have **millions** concurrently. Both are subclasses of `java.lang.Thread` and expose the same API, so existing code just works. The tradeoffs: virtual threads **pin** on `synchronized` blocks and native frames (JVM can't unmount them), which under load can starve carriers. They don't add CPU parallelism — parallelism is still capped at CPU count. **Use virtual threads** for I/O-bound server code (REST APIs, message handlers, HTTP fan-out). **Use platform threads** for CPU-bound pools (`ForkJoinPool`) and when working with legacy `synchronized`-heavy code you can't refactor.",
+      "layout_type": "default",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the fundamental differences (OS-backed vs JVM-scheduled, memory footprint, blocking behavior) and can pick the right type for a given workload",
+        "common_mistake": "Assuming virtual threads always beat platform threads. Not recognizing that CPU-bound work doesn't benefit. Forgetting about pinning",
+        "to_stand_out": "Mention concrete numbers (1MB vs KB, thousands vs millions), the mount/unmount scheduling model, pinning on synchronized, and that `spring.threads.virtual.enabled=true` on Spring Boot 3.2+ is a one-line migration for request handlers"
+      },
+      "company_tags": [
+        "netflix",
+        "amazon",
+        "google",
+        "oracle",
+        "linkedin",
+        "lyft"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Core Difference",
+            "content": "**Platform threads** (classic Java threads) are 1:1-mapped to OS kernel threads. Every `new Thread()` causes a syscall to create a native thread. The OS scheduler manages them preemptively; stack sizes are fixed (default 1 MB on most JVMs); memory per thread is ~1 MB + kernel bookkeeping. You can create ~5–10K before running out of memory or hitting OS limits.\n\n**Virtual threads** (Java 21 GA) are **scheduled by the JVM** onto a small pool of **carrier platform threads** (by default, a `ForkJoinPool` sized to CPU count). They're still `java.lang.Thread` subclasses — same API — but stacks are stored on the heap as resizable objects, starting at a few KB. Creation is pure-Java and takes microseconds. You can have **millions** concurrent.\n\nThe big idea: when a virtual thread hits blocking I/O, the JVM **unmounts** it from the carrier — stack goes to the heap, carrier goes to another virtual thread. When I/O completes, the virtual thread is rescheduled onto any free carrier. The result: thread-per-request server code that scales to millions of concurrent I/O-bound requests without async/reactive complexity.\n\nBoth thread types coexist. Virtual threads *are* a kind of Thread; `Thread.currentThread().isVirtual()` tells them apart."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Full Side-by-Side Comparison",
+            "content": "| Dimension | Platform Thread | Virtual Thread |\n|---|---|---|\n| **Backed by** | OS kernel thread (1:1) | JVM schedules onto carrier |\n| **Carrier** | Self (it IS the OS thread) | `ForkJoinPool` of platform threads (= CPU count) |\n| **Stack size** | Fixed, ~1 MB default | Resizable, starts KB, on heap |\n| **Creation cost** | ~1 ms (syscall) | ~microseconds (pure Java) |\n| **Memory per thread** | ~1 MB + kernel | ~few KB (varies with stack depth) |\n| **Max practical** | Thousands (5K-10K) | **Millions** (limited by heap) |\n| **Scheduling** | Preemptive by OS | Cooperative by JVM at blocking points |\n| **Blocking I/O behavior** | OS parks the thread | JVM unmounts; carrier serves others |\n| **CPU parallelism** | Thread count | Carrier count (= CPU count) |\n| **Concurrency ceiling** | Memory and OS limits | Heap only |\n| **`Thread.currentThread().isVirtual()`** | `false` | `true` |\n| **ThreadLocal** | Normal overhead | Works but expensive at scale — prefer `ScopedValue` |\n| **`synchronized` block** | Normal | **Pins** the carrier — can starve under load |\n| **Native (JNI) frames** | Normal | **Pin** — can't unmount while present |\n| **Creation API** | `new Thread()`, `Executors.new*ThreadPool` | `Thread.ofVirtual().start()`, `Executors.newVirtualThreadPerTaskExecutor()` |\n| **Pooling** | Yes — essential for cost amortization | **No** — create one per task, they're cheap |\n| **Best for** | CPU-bound work, legacy code | I/O-bound, high-concurrency server code |\n| **Not suited for** | Massive concurrency (too heavy) | Pure CPU computation, `synchronized`-heavy code |"
+          },
+          {
+            "type": "after_code",
+            "title": "Creating Each Type",
+            "content": "**Platform thread — the classic way**:\n```java\n// Unbounded — avoid in practice\nThread t = new Thread(() -> handleRequest());\nt.start();\n\n// Bounded via ExecutorService — production pattern\nExecutorService pool = new ThreadPoolExecutor(\n    50, 50, 0, TimeUnit.MILLISECONDS,\n    new ArrayBlockingQueue<>(500),\n    new ThreadFactoryBuilder().setNameFormat(\"worker-%d\").build());\npool.submit(() -> handleRequest());\n```\n\n**Virtual thread — three idiomatic forms**:\n```java\n// 1. Builder\nThread vt = Thread.ofVirtual().name(\"vt-\", 0).start(() -> handleRequest());\n\n// 2. Executor (recommended for tasks)\ntry (var executor = Executors.newVirtualThreadPerTaskExecutor()) {\n    for (int i = 0; i < 1_000_000; i++) {\n        executor.submit(() -> fetch(i));\n    }\n} // close() waits for all tasks\n\n// 3. One-liner\nThread.startVirtualThread(() -> handleRequest());\n```\n\n**Spring Boot 3.2+**:\n```\nspring.threads.virtual.enabled=true\n```\nMakes the Tomcat/Jetty request executor a virtual-thread-per-task executor. Existing `@RestController` code is unchanged.\n\n**Detecting at runtime**:\n```java\nThread.currentThread().isVirtual() // true for virtual, false for platform\n```"
+          },
+          {
+            "type": "step",
+            "title": "The Scheduling Model — Mount and Unmount",
+            "content": "The JVM maintains a **scheduler** (a `ForkJoinPool` by default, parallelism = CPU count) of carrier platform threads. Virtual threads are queued on this scheduler.\n\n**When a virtual thread runs**:\n1. Scheduler picks an idle carrier.\n2. Virtual thread's continuation (captured stack) is restored onto the carrier.\n3. Task executes.\n\n**When the virtual thread hits blocking I/O** (`Socket.read`, `HttpClient.send`, JDBC, etc.):\n1. The JDK's instrumented blocking call triggers `Continuation.yield()`.\n2. The virtual thread's stack is copied to the heap.\n3. Carrier is released back to the scheduler.\n4. Scheduler picks up another waiting virtual thread.\n\n**When I/O completes**:\n1. Kernel notification (via `epoll`/`kqueue`) wakes the virtual thread.\n2. Scheduler picks a free carrier.\n3. Continuation is restored; execution resumes at the blocking point.\n\n**Platform threads don't do this dance** — they just block, and the OS parks them. Memory stays pinned; the kernel manages context switches.\n\n**Parallelism**: on both models, only `#carriers` (or `#platform-threads`) can actually execute at once. What changes is **concurrency** — how many tasks can be in-flight. Virtual threads let concurrency approach millions without running out of threads."
+          },
+          {
+            "type": "step",
+            "title": "Key Gotchas — Pinning and ThreadLocal",
+            "content": "**Pinning on `synchronized`**:\nA virtual thread inside a `synchronized` block **cannot unmount**. Blocking I/O inside the block holds the carrier. Under load, many pinned virtual threads = all carriers busy waiting on I/O = **carrier exhaustion**. System appears frozen; CPU at 0%.\n\n**Fix**: migrate `synchronized` wrapping blocking I/O to `ReentrantLock`, which uses Loom-aware `LockSupport.park()`.\n\nDetect pinning:\n```bash\njava -Djdk.tracePinnedThreads=full MyApp\n# or in production via JFR: jdk.VirtualThreadPinned event\n```\n\n**Pinning on native (JNI) frames**:\nWhile JNI is on the stack, the JVM can't capture the continuation — virtual thread pins. Usually fine unless your hot path does heavy native work.\n\n**ThreadLocal at scale**:\nEach virtual thread carries its own copies of ThreadLocals. A million virtual threads × large ThreadLocal state = heap exhaustion. Options:\n- Remove per-thread caches (they're anti-patterns anyway).\n- Keep small ThreadLocals (MDC for logging is fine).\n- For immutable per-scope values, migrate to **`ScopedValue`** (Java 21 preview, stable later).\n\n**Downstream saturation**:\nYour old 200-thread pool implicitly rate-limited DB calls. Virtual threads remove that limit; a million requests can hammer a 20-connection HikariCP pool. Add **`Semaphore`** or **Resilience4j Bulkhead** for explicit flow control."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Which Type to Use When",
+            "content": "**Use platform threads when**:\n- **CPU-bound work** — image processing, heavy parsing, encryption, math. Virtual threads don't add CPU parallelism.\n- Fixed pool sized to cores for compute (`ForkJoinPool`, `Executors.newFixedThreadPool(cores)`).\n- Legacy code with heavy `synchronized` usage around I/O that's expensive to refactor.\n- Library code using `ThreadLocal` for large per-thread caches that can't be easily refactored.\n- Java version < 21.\n\n**Use virtual threads when**:\n- **I/O-bound server code** — REST APIs with DB + downstream HTTP calls.\n- High concurrency (thousands of simultaneous connections).\n- Outbound fan-out (make 1000 parallel HTTP calls).\n- Message consumer dispatching each message to its own task.\n- Existing code using `CompletableFuture.supplyAsync` for blocking I/O — virtual threads often simplify.\n- Thread-pool sizing headaches that come from unpredictable load patterns.\n\n**Hybrid is common**:\n- Virtual threads for request dispatch and I/O orchestration.\n- Dedicated `ForkJoinPool` (platform threads) for CPU-heavy slices within a request.\n- Offload via `CompletableFuture.supplyAsync(cpuTask, cpuPool).join()` from the virtual thread.\n\n**Watch out for**:\n- **Pinning audit** — must be done before production migration.\n- **Downstream flow control** — new concern once thread count no longer limits concurrency.\n- **Observability** — thread dumps differ; `jcmd <pid> Thread.dump_to_file` for the new format.\n- **Don't pool virtual threads** — defeats the purpose."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Platform threads** = 1:1 OS kernel threads; ~1 MB, slow to create, thousands max.\n- **Virtual threads** = JVM-scheduled onto carrier pool; KB, fast to create, millions possible.\n- Both are `java.lang.Thread` subclasses — same API.\n- Virtual threads **unmount** on blocking I/O, freeing the carrier.\n- **Parallelism unchanged** = CPU count; **concurrency** can scale to millions.\n- **`synchronized` pins** virtual threads — migrate to `ReentrantLock` for I/O-heavy locks.\n- **Don't pool virtual threads** — create one per task; they're cheap.\n- **Spring Boot 3.2+**: `spring.threads.virtual.enabled=true` one-line migration for request handlers.\n- **Virtual threads are for I/O concurrency**, not CPU parallelism.\n- **Hybrid**: virtual threads for I/O + platform `ForkJoinPool` for CPU-heavy stages.\n- **New operational concern**: downstream flow control via `Semaphore` (thread count no longer rate-limits).\n- **Adoption caveat**: audit for `synchronized` + I/O pinning and heavy ThreadLocal usage first."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Platform threads and virtual threads differ fundamentally in how they're scheduled and what they cost.\n\n**Platform threads — the classic**\n- 1:1 mapped to OS kernel threads\n- ~1 MB stack, created via syscall (~1 ms)\n- Scheduled preemptively by the OS\n- Memory per thread dominates — thousands is the practical ceiling\n- Good for CPU-bound work (ForkJoinPool, fixed pool sized to cores)\n\n**Virtual threads — Java 21 Project Loom**\n- Scheduled by the JVM onto a small pool of carrier platform threads (by default, ForkJoinPool sized to CPU count)\n- Stack stored on the heap as a resizable object — KB, not MB\n- Creation is microseconds, pure Java\n- Millions concurrent\n- Subclass of `java.lang.Thread` — same API, existing code just works\n- Can detect with `Thread.currentThread().isVirtual()`\n\n**The mount/unmount mechanism**\n- Virtual thread starts running on a carrier\n- Hits blocking I/O — JDK's instrumented blocking call triggers `Continuation.yield()`\n- Stack copied to heap; carrier freed to serve another virtual thread\n- I/O completes — kernel notification wakes the virtual thread\n- Scheduler picks any free carrier; continuation restored; execution resumes\n\n**The killer numbers**\n- Platform: ~1 MB → max ~5K-10K threads\n- Virtual: ~few KB → **millions**\n- Parallelism unchanged: still capped at CPU count\n- Concurrency: limited by heap, not thread count\n\n**Creating each**\n- Platform: `new Thread()`, `Executors.newFixedThreadPool(n)`\n- Virtual: `Thread.ofVirtual().start()`, `Executors.newVirtualThreadPerTaskExecutor()`, `Thread.startVirtualThread()`\n- Spring Boot 3.2+: `spring.threads.virtual.enabled=true`\n\n**Don't pool virtual threads** — creation is free; one-per-task is the pattern\n\n**The gotchas**\n\n**Pinning on `synchronized`**:\n- While inside `synchronized`, virtual thread can't unmount\n- Blocking I/O inside synchronized holds a carrier\n- Under load: carrier exhaustion; system appears frozen\n- Fix: migrate to `ReentrantLock` (Loom-aware via `LockSupport.park`)\n- Detect: `-Djdk.tracePinnedThreads=full` or JFR `jdk.VirtualThreadPinned`\n\n**Pinning on native (JNI) frames**:\n- Fundamental; native code can't participate in continuation mechanism\n- Usually fine unless hot path does heavy native work\n\n**ThreadLocal at scale**:\n- Each virtual thread carries its own copy\n- Millions of threads × large ThreadLocals = heap pressure\n- Alternative: `ScopedValue` (Java 21 preview) for immutable per-scope values\n\n**Downstream saturation**:\n- Old 200-thread pool implicitly rate-limited DB connections\n- Virtual threads remove that limit; must add explicit `Semaphore` or Bulkhead\n\n**Decision guide**\n- **CPU-bound work** → platform threads (ForkJoinPool)\n- **I/O-bound server code** → virtual threads\n- **Legacy synchronized-heavy** → platform threads or refactor first\n- **Java < 21** → no choice, platform threads\n- **Hybrid**: virtual for I/O, platform ForkJoinPool for CPU slices offloaded via CompletableFuture\n\n**Recommendation:** On **Java 21+**, default to **virtual threads for server-side I/O-bound code** — `Executors.newVirtualThreadPerTaskExecutor()` or Spring Boot's `spring.threads.virtual.enabled=true`. Keep **platform threads for CPU-bound pools** (`ForkJoinPool.commonPool`, fixed platform-thread pools sized to cores). Before migrating existing code, **audit for `synchronized` around blocking I/O** (migrate to `ReentrantLock`) and **large ThreadLocal state** (reduce or move to `ScopedValue`), and **add explicit downstream flow control** via `Semaphore` because thread count no longer implicitly rate-limits you. Don't rewrite working Netty/WebFlux systems just because virtual threads exist — the migration cost exceeds the benefit; save them for new code and thread-per-request refactors."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why don't virtual threads increase CPU parallelism?",
+        "What happens when a virtual thread calls `Thread.sleep`?",
+        "How does `synchronized` pinning actually starve carriers?",
+        "What's `ScopedValue` and when would you use it over `ThreadLocal`?",
+        "Why shouldn't you pool virtual threads?"
+      ],
+      "seo": {
+        "metaTitle": "Virtual Threads vs Platform Threads in Java 21 — Complete Comparison",
+        "metaDescription": "Full comparison of Java virtual and platform threads: scheduling model, memory footprint, creation cost, mount/unmount, pinning, ThreadLocal, and decision guide for production use."
+      },
+      "order": 3,
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "speakable_status": "pending_review",
+        "familiarity_anchors": [
+          "platform threads map 1:1 to OS threads — expensive to create",
+          "virtual threads are lightweight — millions can exist simultaneously",
+          "virtual threads don't help CPU-bound work, only I/O-bound blocking"
+        ],
+        "standard_example": "1 million virtual threads each blocking on an HTTP call — vs 200 platform threads in a pool doing the same",
+        "hook": "Platform threads cost one OS thread each — you can't have a million. Virtual threads are JVM-managed and cheap. Java 21 flips how you think about I/O concurrency.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "grouped_paragraphs",
+            "groups": [
+              {
+                "heading": "Platform thread",
+                "text": "Maps 1:1 to an OS kernel thread. ~1MB stack. Thread creation triggers a syscall. Expensive — you need a pool to reuse them. Blocking one means blocking an OS thread."
+              },
+              {
+                "heading": "Virtual thread",
+                "text": "JVM-managed, mounted on carrier threads. Heap-allocated stack — starts tiny, grows on demand. Blocking a virtual thread unmounts it from the carrier, freeing the OS thread for other work."
+              }
+            ]
+          },
+          {
+            "kind": "differences",
+            "layout": "mini_table",
+            "columns": [
+              "Platform thread",
+              "Virtual thread"
+            ],
+            "rows": [
+              {
+                "axis": "OS mapping",
+                "values": [
+                  "1:1 to OS thread",
+                  "M:N — many per carrier"
+                ]
+              },
+              {
+                "axis": "cost",
+                "values": [
+                  "~1MB stack, syscall",
+                  "small heap, no syscall"
+                ]
+              },
+              {
+                "axis": "blocking",
+                "values": [
+                  "blocks OS thread",
+                  "unmounts from carrier"
+                ]
+              },
+              {
+                "axis": "use for",
+                "values": [
+                  "CPU-bound, everything pre-Java 21",
+                  "I/O-bound, high-concurrency servers"
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "grouped_paragraphs",
+            "groups": [
+              {
+                "heading": "Virtual threads",
+                "text": "I/O-bound workloads with many concurrent connections — HTTP servers, database calls, file I/O. The thread-per-request model works again."
+              },
+              {
+                "heading": "Platform threads",
+                "text": "CPU-bound work — virtual threads don't help. The gotcha: virtual threads can be pinned to a carrier by synchronized blocks and native code — avoid those in hot I/O paths."
+              }
+            ]
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Tomcat with platform threads: 200 threads, 200 concurrent requests max before queuing. Same app with virtual threads: one virtual thread per request, no pool needed. 10,000 concurrent requests, each blocking on a DB call — virtual threads handle it, platform threads don't."
+          }
+        ],
+        "cap": "Virtual threads for I/O-bound work at scale. Platform threads for CPU-bound. Virtual threads shine when blocking is the bottleneck.",
+        "followup_handoff": [
+          "What is pinning and how does it reduce virtual thread benefits?",
+          "How does structured concurrency work with virtual threads?",
+          "Why don't virtual threads help CPU-bound workloads?"
+        ],
+        "tts_overrides": {
+          "1:1": "one to one",
+          "M:N": "M to N",
+          "1MB": "one megabyte",
+          "Tomcat": "tomcat",
+          "Java 21": "java 21"
+        }
+      }
+    }
+  ]
+}
