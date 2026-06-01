@@ -180,7 +180,7 @@ export function DomainHubContent({ slug }: { slug: string }) {
 
   if (!domain) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-16 text-center">
+      <div className="w-full min-w-0 px-4 py-16 text-center">
         <h1 className="text-xl font-bold text-foreground mb-2">Domain not found</h1>
         <p className="text-sm text-muted-foreground mb-4">This domain is being prepared.</p>
         <Link href="/domains">
@@ -197,7 +197,7 @@ export function DomainHubContent({ slug }: { slug: string }) {
   const canProceed = selectedRole && selectedExp;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 lg:px-6">
+    <div className="w-full min-w-0 px-4 py-8 lg:px-6">
       {/* Breadcrumb */}
       <FadeInUp>
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-6">

@@ -6,8 +6,8 @@ import { FadeInUp, StaggerContainer, StaggerItem } from "@/components/motion-wra
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Code2, Cloud, Layout, Server, Database, Cpu, Sparkles } from "lucide-react";
+import { EXPERIENCE_LEVELS, LEVEL_KEYS, type ExperienceLevelKey } from "@/lib/levels";
 
-const experienceFilters = ["All", "0-1 yrs", "1-3 yrs", "3-5 yrs", "5+ yrs"];
 const roleFilters = ["All", "Backend", "Frontend", "Fullstack", "DevOps", "Data Analyst"];
 
 const domains = [
@@ -18,7 +18,7 @@ const domains = [
     specialization: "Backend & Fullstack",
     description: "Core Java, JVM internals, concurrency, Spring, and SQL for backend interviews.",
     roles: ["Backend", "Fullstack"],
-    experience: ["0-1", "1-3", "3-5", "5+"],
+    experience: ["beginner", "intermediate", "advanced"] as ExperienceLevelKey[],
     techStack: ["Core Java", "Spring Boot", "JVM", "Concurrency", "Hibernate", "SQL"],
     questions: 450,
     icon: Code2,
@@ -31,7 +31,7 @@ const domains = [
     specialization: "Backend & Data",
     description: "Python for backend, scripting, data processing, and automation roles.",
     roles: ["Backend", "Data Analyst"],
-    experience: ["0-1", "1-3", "3-5", "5+"],
+    experience: ["beginner", "intermediate", "advanced"] as ExperienceLevelKey[],
     techStack: ["Django", "FastAPI", "Pandas", "NumPy", "SQLAlchemy", "Celery"],
     questions: 380,
     icon: Cpu,
@@ -44,7 +44,7 @@ const domains = [
     specialization: "Infrastructure & Cloud",
     description: "Linux, Docker, Kubernetes, CI/CD, cloud platforms, and monitoring.",
     roles: ["DevOps"],
-    experience: ["1-3", "3-5", "5+"],
+    experience: ["intermediate", "advanced"] as ExperienceLevelKey[],
     techStack: ["Docker", "Kubernetes", "Jenkins", "Terraform", "AWS", "Prometheus"],
     questions: 320,
     icon: Cloud,
@@ -57,7 +57,7 @@ const domains = [
     specialization: "UI & Interaction",
     description: "React, TypeScript, CSS, performance, accessibility, and browser APIs.",
     roles: ["Frontend", "Fullstack"],
-    experience: ["0-1", "1-3", "3-5", "5+"],
+    experience: ["beginner", "intermediate", "advanced"] as ExperienceLevelKey[],
     techStack: ["React", "TypeScript", "Next.js", "CSS-in-JS", "Tailwind", "Testing"],
     questions: 410,
     icon: Layout,
@@ -70,7 +70,7 @@ const domains = [
     specialization: "Architecture & Scale",
     description: "Load balancing, caching, databases, microservices, and distributed systems.",
     roles: ["Backend", "Fullstack"],
-    experience: ["3-5", "5+"],
+    experience: ["intermediate", "advanced"] as ExperienceLevelKey[],
     techStack: ["Load Balancers", "Caching", "Databases", "Message Queues", "CDN", "Microservices"],
     questions: 280,
     icon: Server,
@@ -83,7 +83,7 @@ const domains = [
     specialization: "Analytics & Queries",
     description: "Joins, subqueries, indexing, normalization, transactions, and analytics.",
     roles: ["Data Analyst", "Backend"],
-    experience: ["0-1", "1-3", "3-5"],
+    experience: ["beginner", "intermediate"] as ExperienceLevelKey[],
     techStack: ["PostgreSQL", "MySQL", "Window Functions", "CTEs", "Indexing", "ETL"],
     questions: 290,
     icon: Database,
@@ -92,18 +92,18 @@ const domains = [
 ];
 
 export function DomainsContent() {
-  const [activeExp, setActiveExp] = useState("All");
+  const [activeExp, setActiveExp] = useState<"All" | ExperienceLevelKey>("All");
   const [activeRole, setActiveRole] = useState("All");
   const [hoveredDomain, setHoveredDomain] = useState<string | null>(null);
 
   const filteredDomains = domains.filter((d) => {
-    const expMatch = activeExp === "All" || d.experience.some((e) => activeExp.startsWith(e));
+    const expMatch = activeExp === "All" || d.experience.includes(activeExp);
     const roleMatch = activeRole === "All" || d.roles.includes(activeRole);
     return expMatch && roleMatch;
   });
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 lg:px-6">
+    <div className="w-full min-w-0 px-4 py-8 lg:px-6">
       {/* Page header */}
       <FadeInUp>
         <div className="mb-8">
@@ -124,18 +124,18 @@ export function DomainsContent() {
         <div className="mb-8 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-muted-foreground mr-1.5 w-16 shrink-0">Experience</span>
-            {experienceFilters.map((filter) => (
+            {(["All", ...LEVEL_KEYS] as const).map((filter) => (
               <button
                 key={filter}
                 type="button"
-                onClick={() => setActiveExp(filter)}
+                onClick={() => setActiveExp(filter as "All" | ExperienceLevelKey)}
                 className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                   activeExp === filter
                     ? "border-primary/40 bg-primary/8 text-primary"
                     : "border-border/50 bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
-                {filter}
+                {filter === "All" ? "All" : `${EXPERIENCE_LEVELS[filter].label} (${EXPERIENCE_LEVELS[filter].range})`}
               </button>
             ))}
           </div>
@@ -265,7 +265,7 @@ export function DomainsContent() {
                     </div>
                     <div className="h-3 w-px bg-border/50" />
                     <div className="flex gap-1">
-                      {["0-1", "1-3", "3-5", "5+"].map((band) => (
+                      {LEVEL_KEYS.map((band) => (
                         <span
                           key={band}
                           className={`rounded px-1 py-0.5 text-[10px] font-medium ${
@@ -274,7 +274,7 @@ export function DomainsContent() {
                               : "bg-muted/40 text-muted-foreground/30"
                           }`}
                         >
-                          {band}
+                          {EXPERIENCE_LEVELS[band].range}
                         </span>
                       ))}
                     </div>

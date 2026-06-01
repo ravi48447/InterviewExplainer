@@ -7,7 +7,9 @@ import com.interviewexplainer.backendapi.modules.auth.dto.*;
 import com.interviewexplainer.backendapi.modules.analytics.repository.UserProfileRepository;
 import com.interviewexplainer.backendapi.modules.content.repository.DomainRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -39,14 +41,27 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        String email = auth.getName();
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        
-        String domainSlug = userProfileRepository.findById(user.getId())
-                .flatMap(profile -> domainRepository.findById(profile.getPrimaryDomainId()))
-                .map(domain -> domain.getSlug())
                 .orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        
+        var profileOpt = userProfileRepository.findById(user.getId());
+        String domainSlug = profileOpt.map(p -> p.getPrimaryDomainSlug()).orElse(null);
+        if (domainSlug == null) {
+            domainSlug = profileOpt
+                    .map(p -> p.getPrimaryDomainId())
+                    .filter(id -> id != null)
+                    .flatMap(id -> domainRepository.findById(id))
+                    .map(domain -> domain.getSlug())
+                    .orElse(null);
+        }
 
         return ResponseEntity.ok(new UserResponse(user.getId(), user.getName(), user.getEmail(), domainSlug));
     }

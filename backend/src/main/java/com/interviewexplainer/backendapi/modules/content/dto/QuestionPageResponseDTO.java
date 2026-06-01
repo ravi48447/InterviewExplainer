@@ -20,6 +20,7 @@ public record QuestionPageResponseDTO(
     Long stackId,
     String stackName,
     String stackSlug,
+    String domainSlug,
 
     // Structured answer sections (in order)
     List<AnswerSectionDTO> answerSections,

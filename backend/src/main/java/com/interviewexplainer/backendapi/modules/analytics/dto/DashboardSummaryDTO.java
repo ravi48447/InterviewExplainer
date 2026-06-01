@@ -10,12 +10,15 @@ public record DashboardSummaryDTO(
     long completedQuestions,
     long totalTimeSpent,
     int currentStreak,
+    int longestStreak,
     long bookmarksCount,
     List<StackPerformanceDTO> stackPerformance,
     List<WeakAreaDTO> weakAreas,
-    List<String> recentActivity,
+    List<RecentActivityDTO> recentActivity,
     String primaryDomainName,
     String primaryDomainSlug,
     String experienceLevel,
-    List<RadarDataDTO> radarData
+    List<RadarDataDTO> radarData,
+    List<DailyActivityDTO> dailyActivity,
+    DifficultyBreakdownDTO difficultyBreakdown
 ) {}

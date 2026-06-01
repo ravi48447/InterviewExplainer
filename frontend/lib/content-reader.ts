@@ -92,6 +92,14 @@ const CONTENT_INTERVIEW_ROOT = path.join(process.cwd(), '..', 'content', 'interv
 
 const CONTENT_JBI_ROOT = path.join(process.cwd(), '..', 'content', 'java-backend-intermediate');
 const CONTENT_JFI_ROOT = path.join(process.cwd(), '..', 'content', 'java-fullstack-intermediate');
+const CONTENT_JBF_ROOT = path.join(process.cwd(), '..', 'content', 'java-backend-fresher');
+const CONTENT_JFF_ROOT = path.join(process.cwd(), '..', 'content', 'java-fullstack-fresher');
+const CONTENT_GOI_ROOT = path.join(process.cwd(), '..', 'content', 'go-intermediate');
+const CONTENT_GOF_ROOT = path.join(process.cwd(), '..', 'content', 'go-fresher');
+const CONTENT_FEI_ROOT = path.join(process.cwd(), '..', 'content', 'frontend-intermediate');
+const CONTENT_FEF_ROOT = path.join(process.cwd(), '..', 'content', 'frontend-fresher');
+export const CONTENT_RBI_ROOT = 'content/ruby-backend-intermediate';
+export const CONTENT_RBF_ROOT = 'content/ruby-backend-fresher';
 
 /**
  * Stack-slug aliases for the Java-Backend-Intermediate migration.
@@ -143,6 +151,46 @@ const LOCKED_DOMAINS: Record<string, LockedDomainInfo> = {
   'java-fullstack-intermediate': {
     domainSlug: 'java-fullstack-intermediate',
     rootDir: CONTENT_JFI_ROOT,
+    stackAliases: {},
+  },
+  'java-backend-fresher': {
+    domainSlug: 'java-backend-fresher',
+    rootDir: CONTENT_JBF_ROOT,
+    stackAliases: {},
+  },
+  'go-intermediate': {
+    domainSlug: 'go-intermediate',
+    rootDir: CONTENT_GOI_ROOT,
+    stackAliases: {},
+  },
+  'go-fresher': {
+    domainSlug: 'go-fresher',
+    rootDir: CONTENT_GOF_ROOT,
+    stackAliases: {},
+  },
+  'java-fullstack-fresher': {
+    domainSlug: 'java-fullstack-fresher',
+    rootDir: CONTENT_JFF_ROOT,
+    stackAliases: {},
+  },
+  'ruby-backend-intermediate': {
+    domainSlug: 'ruby-backend-intermediate',
+    rootDir: path.join(process.cwd(), '..', CONTENT_RBI_ROOT),
+    stackAliases: {},
+  },
+  'ruby-backend-fresher': {
+    domainSlug: 'ruby-backend-fresher',
+    rootDir: path.join(process.cwd(), '..', CONTENT_RBF_ROOT),
+    stackAliases: {},
+  },
+  'frontend-intermediate': {
+    domainSlug: 'frontend-intermediate',
+    rootDir: CONTENT_FEI_ROOT,
+    stackAliases: {},
+  },
+  'frontend-fresher': {
+    domainSlug: 'frontend-fresher',
+    rootDir: CONTENT_FEF_ROOT,
     stackAliases: {},
   },
 };
@@ -465,9 +513,6 @@ const SLUG_TO_PATH: Record<string, string> = {
   'typescript-fullstack-intermediate': 'typescript/fullstack/intermediate',
   'typescript-fullstack-advanced':     'typescript/fullstack/advanced',
 
-  'java-android-beginner':     'java/android/beginner',
-  'java-android-intermediate': 'java/android/intermediate',
-  'java-android-advanced':     'java/android/advanced',
 
   'business-analyst-analysis-beginner':        'business-analyst/analysis/beginner',
   'business-analyst-analysis-intermediate':    'business-analyst/analysis/intermediate',

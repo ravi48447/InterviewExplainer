@@ -1,361 +1,1104 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   fetchStack,
-  fetchQuestionsForStack,
   TechStack,
   QuestionSummary,
+  StackSubcategory,
   difficultyColor,
   difficultyLabel,
+  type ModuleRevision,
 } from "@/lib/api";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { ArrowLeft, TrendingUp, ChevronRight, Play, BookCheck, Clock, Target, Zap, CheckCircle2, BookMarked, ArrowUpRight, BarChart2, Layers } from "lucide-react";
+import {
+  ChevronRight, Play, BookCheck, Clock, Layers,
+  Award, Sparkles, Filter, Home, ChevronDown, ChevronUp,
+  FolderOpen, Folder, BarChart2, Zap, BookMarked, AlertCircle,
+  Compass, Hammer, ArrowUpRight, Search, X, Target, CheckCircle2,
+  BookOpen,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { ModuleRevisionPanel } from "@/components/ModuleRevisionPanel";
+import ContentTreeNav from "@/components/ContentTreeNav";
+import { PILLAR_HUBS } from "@/lib/seo-pillars";
+import { isPremiumCourseLms } from "@/lib/course-lms";
 
-export default function StackPage({ params }: { params: Promise<{ domainSlug: string; stackSlug: string }> }) {
+interface SubcategoryInfo {
+  slug: string;
+  name: string;
+  questionCount: number; // from content files
+}
+
+/** Merged subcategory: content structure + DB questions */
+interface MergedSubcat {
+  slug: string;
+  name: string;
+  contentCount: number;
+  questions: QuestionSummary[];
+}
+
+/**
+ * Curriculum-priority sort:
+ *   1. Anything else, in the *given* (curriculum) order
+ *   2. `scenario-based` topic always last (interviewers ask it last too)
+ *
+ * The synthetic "Revision" entry is prepended *outside* this function in the
+ * page render — it should not pass through here.
+ */
+function withScenarioLast<T extends { slug: string }>(items: T[]): T[] {
+  const main: T[] = [];
+  const scenarios: T[] = [];
+  for (const it of items) {
+    if (it.slug === "scenario-based" || it.slug === "scenario_based") scenarios.push(it);
+    else main.push(it);
+  }
+  return [...main, ...scenarios];
+}
+
+function mergeSubcategoriesForStack(
+  contentSubcats: SubcategoryInfo[],
+  dbSubcats: StackSubcategory[],
+): MergedSubcat[] {
+  const dbMap = new Map(dbSubcats.map((sc) => [sc.slug, sc]));
+  const contentMap = new Map(contentSubcats.map((c) => [c.slug, c]));
+  const seen = new Set<string>();
+  const ordered: MergedSubcat[] = [];
+
+  const pushSlug = (slug: string) => {
+    if (seen.has(slug)) return;
+    seen.add(slug);
+    const db = dbMap.get(slug);
+    const content = contentMap.get(slug);
+    ordered.push({
+      slug,
+      name: db?.name ?? content?.name ?? slug,
+      contentCount: content?.questionCount ?? 0,
+      questions: db?.questions ?? [],
+    });
+  };
+
+  for (const sc of dbSubcats) pushSlug(sc.slug);
+  for (const c of contentSubcats) {
+    if (!seen.has(c.slug)) pushSlug(c.slug);
+  }
+  return withScenarioLast(ordered);
+}
+
+/** Synthetic slug used by the Revision-as-first-topic accordion row. */
+const REVISION_SUBCAT_SLUG = "__revision__";
+
+interface CurriculumModuleRef {
+  moduleSlug: string;
+  title: string;
+  pillarName: string;
+  moduleNumber: string;
+}
+
+export default function StackPage({
+  params,
+}: {
+  params: Promise<{ domainSlug: string; stackSlug: string }>;
+}) {
   const { domainSlug, stackSlug } = React.use(params);
+
   const [stack, setStack] = useState<TechStack | null>(null);
-  const [questions, setQuestions] = useState<QuestionSummary[]>([]);
+  const [dbSubcats, setDbSubcats] = useState<StackSubcategory[]>([]);
+  const [contentSubcats, setContentSubcats] = useState<SubcategoryInfo[]>([]);
+  const [moduleRevision, setModuleRevision] = useState<ModuleRevision | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [activeSubcat, setActiveSubcat] = useState<string | null>(null);
+  const [expandedSubcats, setExpandedSubcats] = useState<Set<string>>(new Set());
+  const [difficultyFilter, setDifficultyFilter] = useState<string>("all");
+  const [questionQuery, setQuestionQuery] = useState("");
+  const [curriculumNav, setCurriculumNav] = useState<{
+    previousModule: CurriculumModuleRef | null;
+    nextModule: CurriculumModuleRef | null;
+  }>({
+    previousModule: null,
+    nextModule: null,
+  });
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      try {
-        const [s, q] = await Promise.all([
-          fetchStack(stackSlug),
-          fetchQuestionsForStack(stackSlug),
-        ]);
-        setStack(s);
-        setQuestions(q);
-      } catch (err) {
-        console.error("Failed to load stack data:", err);
-      } finally {
-        setLoading(false);
+
+      // Run JSON content API + Spring Boot stack metadata in parallel.
+      // JSON is primary for questions (local file, always fast).
+      // Spring Boot provides rich stack metadata (name, description) if running.
+      const [jsonResult, stackResult] = await Promise.allSettled([
+        fetch(`/api/content/stack-questions?domainSlug=${domainSlug}&stackSlug=${stackSlug}`)
+          .then(r => (r.ok ? r.json() : Promise.reject('not ok'))),
+        fetchStack(stackSlug),
+      ]);
+
+      // ── Questions: JSON content only ──
+      if (
+        jsonResult.status === 'fulfilled' &&
+        Array.isArray(jsonResult.value) &&
+        jsonResult.value.length > 0
+      ) {
+        const subcats = jsonResult.value as StackSubcategory[];
+        setDbSubcats(subcats);
+        setExpandedSubcats(new Set(subcats.map(sc => sc.slug)));
+      } else {
+        console.warn('No subcategory data found for stack:', stackSlug);
       }
+
+      // ── Stack metadata: Spring Boot first, derive from slug as fallback ──
+      if (stackResult.status === 'fulfilled') {
+        setStack(stackResult.value);
+      } else {
+        const derivedName = stackSlug
+          .split('-')
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
+        setStack({
+          id: 0,
+          name: derivedName,
+          slug: stackSlug,
+          description: null,
+          iconUrl: null,
+          questionCount: 0,
+        });
+      }
+
+      setLoading(false);
     };
     load();
+  }, [stackSlug, domainSlug]);
+
+  useEffect(() => {
+    // Explicit module-to-module progression for LMS tracks.
+    fetch(
+      `/api/content/curriculum-nav?domainSlug=${encodeURIComponent(domainSlug)}&stackSlug=${encodeURIComponent(stackSlug)}`,
+      { cache: "no-store" },
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setCurriculumNav({
+          previousModule: data.previousModule ?? null,
+          nextModule: data.nextModule ?? null,
+        });
+      })
+      .catch(() => {});
+  }, [domainSlug, stackSlug]);
+
+  // Fetch content structure from Next.js API route
+  useEffect(() => {
+    fetch(`/api/content/stack-structure?domainSlug=${domainSlug}&stackSlug=${stackSlug}`)
+      .then(r => r.json())
+      .then(d => setContentSubcats(d.subcategories || []))
+      .catch(() => {});
+  }, [domainSlug, stackSlug]);
+
+  // Module-level revision sheet (shown as first synthetic topic). Loaded
+  // lazily and silently — modules without a `_revision.json` simply do not
+  // render the Revision row.
+  useEffect(() => {
+    let alive = true;
+    fetch(
+      `/api/content/module-revision?domainSlug=${encodeURIComponent(domainSlug)}&stackSlug=${encodeURIComponent(stackSlug)}`,
+      { cache: "no-store" },
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!alive) return;
+        setModuleRevision(data?.revision ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [domainSlug, stackSlug]);
+
+  // Merge content structure with DB data — preserve curriculum order from stack-questions (`dbSubcats`), not A–Z slug order.
+  const mergedSubcats: MergedSubcat[] = useMemo(
+    () => mergeSubcategoriesForStack(contentSubcats, dbSubcats),
+    [contentSubcats, dbSubcats],
+  );
+
+  // Expand newly discovered subcategories that have questions
+  useEffect(() => {
+    const withQ = mergedSubcats.filter(sc => sc.questions.length > 0).map(sc => sc.slug);
+    setExpandedSubcats(prev => new Set([...prev, ...withQ]));
+  }, [mergedSubcats]);
+
+  // Auto-expand the Revision row whenever a module revision is available.
+  useEffect(() => {
+    if (moduleRevision && moduleRevision.sections.length > 0) {
+      setExpandedSubcats(prev => new Set([...prev, REVISION_SUBCAT_SLUG]));
+    }
+  }, [moduleRevision]);
+
+  const allQuestions = useMemo(
+    () => mergedSubcats.flatMap(sc => sc.questions),
+    [mergedSubcats]
+  );
+
+  const totalContentQ = useMemo(
+    () => contentSubcats.reduce((s, c) => s + c.questionCount, 0),
+    [contentSubcats]
+  );
+
+  const firstQuestion = allQuestions[0] ?? null;
+  const totalTime = allQuestions.reduce((s, q) => s + (q.estimatedReadTime || 5), 0);
+  const easyCt = allQuestions.filter(q => q.difficulty === "easy").length;
+  const medCt = allQuestions.filter(q => q.difficulty === "medium").length;
+  const hardCt = allQuestions.filter(q => q.difficulty === "hard").length;
+
+  // A module is "empty" when neither content nor DB surfaces any question.
+  // This typically happens for brand-new scaffolded modules in a locked
+  // domain (e.g. JFI's React / Angular modules before Q&A is authored).
+  // We only flag empty AFTER loading has finished AND after contentSubcats
+  // has been fetched — otherwise we'd briefly show the placeholder during
+  // the initial render pass.
+  const contentStructureLoaded = contentSubcats.length > 0 || mergedSubcats.length > 0;
+  const isModuleEmpty =
+    !loading &&
+    contentStructureLoaded &&
+    allQuestions.length === 0 &&
+    totalContentQ === 0;
+
+  // Matching pillar hubs for this module — surfaced on the empty-state
+  // banner so users land on something useful instead of a dead end.
+  const matchingPillarHubs = useMemo(() => {
+    return PILLAR_HUBS.filter(p => p.moduleSlugs.includes(stackSlug));
   }, [stackSlug]);
 
-  if (loading) return (
-    <div className="container py-24 max-w-4xl mx-auto space-y-12">
-      <Skeleton className="h-4 w-32" />
-      <Skeleton className="h-16 w-1/2 rounded-2xl" />
-      <div className="space-y-4">
-        {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-16 w-full rounded-2xl" />)}
+  const premiumCourse = isPremiumCourseLms(domainSlug);
+
+  const displayedSubcats = useMemo(() => {
+    const q = questionQuery.trim().toLowerCase();
+    const src = activeSubcat
+      ? mergedSubcats.filter(sc => sc.slug === activeSubcat)
+      : mergedSubcats;
+
+    let next = difficultyFilter === "all"
+      ? src
+      : src
+      .map(sc => ({
+        ...sc,
+        questions: sc.questions.filter(q => q.difficulty === difficultyFilter),
+      }))
+      .filter(sc => {
+        const hasQuestions = sc.questions.length > 0;
+        const structureOnly = !hasQuestions && sc.contentCount > 0;
+        return hasQuestions || structureOnly;
+      });
+
+    if (q.length > 0) {
+      next = next
+        .map(sc => {
+          const topicMatch =
+            sc.name.toLowerCase().includes(q) || sc.slug.toLowerCase().includes(q);
+          const questionMatches = topicMatch
+            ? sc.questions
+            : sc.questions.filter(qq =>
+                qq.title.toLowerCase().includes(q) || qq.slug.toLowerCase().includes(q),
+              );
+          return { ...sc, questions: questionMatches };
+        })
+        .filter(sc => {
+          const topicMatch =
+            sc.name.toLowerCase().includes(q) || sc.slug.toLowerCase().includes(q);
+          return topicMatch || sc.questions.length > 0;
+        });
+    }
+
+    return next;
+  }, [mergedSubcats, activeSubcat, difficultyFilter, questionQuery]);
+
+  const visibleQuestionCount = useMemo(
+    () => displayedSubcats.reduce((sum, sc) => sum + sc.questions.length, 0),
+    [displayedSubcats],
+  );
+  const loadedTopicCount = useMemo(
+    () => mergedSubcats.filter(sc => sc.questions.length > 0).length,
+    [mergedSubcats],
+  );
+  const completionPct = totalContentQ > 0
+    ? Math.round((allQuestions.length / totalContentQ) * 100)
+    : 0;
+  const pendingCount = Math.max(totalContentQ - allQuestions.length, 0);
+  const hasActiveFilters =
+    activeSubcat !== null || difficultyFilter !== "all" || questionQuery.trim().length > 0;
+  const activeSubcatName = activeSubcat
+    ? mergedSubcats.find(sc => sc.slug === activeSubcat)?.name ?? null
+    : null;
+
+  const toggleSubcat = (slug: string) =>
+    setExpandedSubcats(prev => {
+      const n = new Set(prev);
+      n.has(slug) ? n.delete(slug) : n.add(slug);
+      return n;
+    });
+
+  if (loading)
+    return (
+      <div className="w-full min-w-0 py-24 px-6 lg:px-12 xl:px-20 space-y-12">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-16 w-1/2 rounded-2xl" />
+        <div className="space-y-4">
+          {[1, 2, 3, 4, 5].map(i => (
+            <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
 
-  if (!stack) return (
-    <div className="min-h-screen flex items-center justify-center text-muted-foreground">
-      Stack not found.
-    </div>
-  );
-
-  const firstQuestion = questions[0];
-  const avgTime = questions.length > 0
-    ? Math.round(questions.reduce((s, q) => s + (q.estimatedReadTime || 5), 0) / questions.length)
-    : 5;
-  const totalTime = questions.reduce((s, q) => s + (q.estimatedReadTime || 5), 0);
-  const easyCt = questions.filter(q => q.difficulty === 'easy').length;
-  const medCt  = questions.filter(q => q.difficulty === 'medium').length;
-  const hardCt = questions.filter(q => q.difficulty === 'hard').length;
-
-  const studyTips = [
-    { icon: "🎯", text: "Go through questions in order — they build on each other." },
-    { icon: "🗣️", text: "Practice saying your answer out loud before reading the full solution." },
-    { icon: "⚡", text: "Mark questions you struggled with to revisit in a second pass." },
-  ];
-
-  const advantages = [
-    { icon: "🚀", label: "Career Edge", text: "Top skill interviewers test for senior roles." },
-    { icon: "🧩", label: "System Thinking", text: "Builds mental models used across all tech interviews." },
-    { icon: "🎙️", label: "Speak Clearly", text: "Learn to explain concepts confidently out loud." },
-    { icon: "📈", label: "Compound Learning", text: "Each question prepares you for harder follow-ups." },
-  ];
+  if (!stack)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+        Stack not found.
+      </div>
+    );
 
   return (
-    <div className="min-h-screen bg-[#fafafa] font-sans text-slate-800 selection:bg-blue-200">
-      <div className="max-w-[1300px] mx-auto bg-white min-h-screen shadow-sm border-x border-slate-100 flex">
+    <div
+      className={cn("min-h-screen font-sans", premiumCourse ? "bg-[#111111]" : "bg-[#111111]")}
+      style={{
+        backgroundImage: [
+          "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
+          "linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
+        ].join(", "),
+        backgroundSize: "40px 40px",
+      }}
+    >
+      <div className="mx-auto w-full max-w-[1780px] min-w-0 min-h-screen flex gap-5 px-4 py-5">
 
-        {/* ─── LEFT SIDEBAR — Why This Stack ─── */}
-        <nav className="hidden lg:flex w-[220px] shrink-0 flex-col sticky top-0 h-screen overflow-y-auto border-r border-slate-100 py-10 px-5 gap-5">
-          
-          {/* Back link */}
-          <Link href={`/${domainSlug}`} className="text-[11px] font-bold uppercase tracking-widest text-slate-400 hover:text-[#2e64e5] flex items-center gap-1.5 transition-colors">
-            <ArrowLeft className="h-3 w-3" /> All Stacks
-          </Link>
-
-          {/* Stack identity */}
-          <div className="rounded-[10px] bg-[#2e64e5]/5 border border-[#2e64e5]/10 p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Layers className="h-4 w-4 text-[#2e64e5] shrink-0" />
-              <span className="text-[12px] font-bold text-[#2e64e5] uppercase tracking-widest">This Stack</span>
-            </div>
-            <p className="text-[13px] font-bold text-slate-800 leading-tight">{stack.name}</p>
-            {stack.description && (
-              <p className="text-[11.5px] text-slate-500 mt-1.5 leading-relaxed line-clamp-4">{stack.description}</p>
-            )}
-          </div>
-
-          {/* Advantages */}
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Why Master This?</p>
-            <div className="flex flex-col gap-3">
-              {advantages.map((a) => (
-                <div key={a.label} className="flex items-start gap-2.5">
-                  <span className="text-[14px] leading-none mt-0.5 shrink-0">{a.icon}</span>
-                  <div>
-                    <p className="text-[11.5px] font-bold text-slate-700 leading-tight">{a.label}</p>
-                    <p className="text-[11px] text-slate-500 leading-snug mt-0.5">{a.text}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Skills you'll gain */}
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Skills You'll Gain</p>
-            <div className="flex flex-wrap gap-1.5">
-              {["Concept clarity", "Answer structure", "Edge cases", "Comparison thinking", "Real-world usage"].map(skill => (
-                <span key={skill} className="text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-1 leading-none">
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* CTA */}
-          <div className="mt-auto">
-            {firstQuestion && (
-              <Link href={`/${domainSlug}/${stackSlug}/${firstQuestion.slug}`}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-[8px] bg-[#2e64e5] text-white font-bold text-[12px] tracking-wide hover:bg-blue-700 transition-colors shadow-sm">
-                <Play className="h-3.5 w-3.5 fill-current" />
-                Start Now
-              </Link>
-            )}
-          </div>
-        </nav>
+        {/* ─── LEFT SIDEBAR ─── */}
+        <div className="hidden lg:block shrink-0 self-start sticky top-5">
+          <ContentTreeNav
+            domainSlug={domainSlug}
+            activeStackSlug={stackSlug}
+          />
+        </div>
 
         {/* ─── MAIN COLUMN ─── */}
-        <main className="flex-1 min-w-0 px-6 sm:px-10 py-10">
-          <Link href={`/${domainSlug}`}
-            className="inline-flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wider text-slate-400 hover:text-[#2e64e5] mb-8 transition-colors">
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Roadmap
-          </Link>
+        <main className="flex-1 min-w-0">
+          {/* Breadcrumb */}
+          <nav className="flex items-center gap-1.5 text-xs mb-4 text-slate-500">
+            <Link href="/" className="flex items-center gap-1 hover:text-slate-300 transition-colors">
+              <Home className="h-3 w-3" /> Home
+            </Link>
+            <ChevronRight className="h-3 w-3 text-slate-700" />
+            <Link href={`/${domainSlug}`} className="hover:text-slate-300 transition-colors">
+              {domainSlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+            </Link>
+            <ChevronRight className="h-3 w-3 text-slate-700" />
+            <span className="font-semibold text-slate-300">{stack.name}</span>
+            {activeSubcat && (
+              <>
+                <ChevronRight className="h-3 w-3 text-slate-700" />
+                <span className={cn("font-semibold", premiumCourse ? "text-amber-400" : "text-blue-400")}>
+                  {mergedSubcats.find(sc => sc.slug === activeSubcat)?.name}
+                </span>
+              </>
+            )}
+          </nav>
 
-          {/* Header */}
-          <header className="mb-10 rounded-[12px] border border-slate-200 bg-[#f8f9fa] px-6 py-5 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-            <div className="flex items-center gap-2 text-[#2e64e5] font-bold uppercase tracking-widest text-[10px] mb-3">
-              <TrendingUp className="h-3.5 w-3.5" />
-              <span>Skill Mastery Path</span>
+          {/* Hero */}
+          <header className="mb-5 rounded-2xl overflow-hidden shadow-xl">
+            {/* Dark gradient top */}
+            <div className={cn(
+              "px-7 py-7",
+              premiumCourse
+                ? "bg-gradient-to-br from-zinc-950 via-zinc-900 to-amber-950"
+                : "bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950",
+            )}>
+              <div className="flex items-start justify-between gap-6">
+                <div className="flex-1 min-w-0">
+                  <p className={cn(
+                    "text-[10px] font-black uppercase tracking-[0.24em] mb-2",
+                    premiumCourse ? "text-amber-400" : "text-blue-400",
+                  )}>
+                    Interview Track
+                  </p>
+                  <h1 className="text-[1.85rem] font-black text-white tracking-tight leading-tight">
+                    {stack.name}
+                    {activeSubcat && (
+                      <span className="font-bold text-blue-300">
+                        {" "}— {mergedSubcats.find(sc => sc.slug === activeSubcat)?.name}
+                      </span>
+                    )}
+                  </h1>
+                  {stack.description && (
+                    <p className="mt-2 text-sm text-slate-400 leading-relaxed max-w-2xl">
+                      {stack.description}
+                    </p>
+                  )}
+                  <div className="mt-4 flex items-center gap-2 flex-wrap">
+                    <span className="rounded-md border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-slate-100">
+                      {mergedSubcats.length} topics
+                    </span>
+                    <span className="rounded-md border border-blue-400/30 bg-blue-500/15 px-2.5 py-1 text-[11px] font-semibold text-blue-200">
+                      {allQuestions.length} questions
+                    </span>
+                    <span className="rounded-md border border-amber-400/30 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200">
+                      ~{totalTime} min
+                    </span>
+                    {pendingCount > 0 && (
+                      <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
+                        {pendingCount} pending
+                      </span>
+                    )}
+                  </div>
+                  {firstQuestion && (
+                    <div className="mt-5 flex items-center gap-3 flex-wrap">
+                      <Link
+                        href={`/${domainSlug}/${stackSlug}/${firstQuestion.slug}`}
+                        className={cn(
+                          "inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-all",
+                          premiumCourse
+                            ? "bg-amber-500 text-white hover:bg-amber-400"
+                            : "bg-blue-500 text-white hover:bg-blue-400",
+                        )}
+                      >
+                        <Play className="h-4 w-4 fill-current" />
+                        Start Practicing
+                      </Link>
+                      {curriculumNav.nextModule && (
+                        <Link
+                          href={`/${domainSlug}/${curriculumNav.nextModule.moduleSlug}`}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/20 text-white/70 text-sm font-semibold hover:bg-white/10 transition-colors"
+                        >
+                          Next module
+                          <ArrowUpRight className="h-4 w-4" />
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Readiness ring */}
+                <div className="hidden lg:flex flex-col items-center justify-center w-28 h-28 rounded-2xl border border-white/10 bg-white/5 shrink-0 gap-1">
+                  <span className="text-3xl font-black text-white leading-none">{completionPct}%</span>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">coverage</span>
+                  <div className="mt-1 w-14 h-1 rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-blue-400 to-indigo-400"
+                      style={{ width: `${completionPct}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-slate-500">{allQuestions.length}/{totalContentQ}</span>
+                </div>
+              </div>
             </div>
 
-            <h1 className="text-[1.8rem] font-bold tracking-tight text-slate-900 mb-2">
-              {stack.name}
-            </h1>
-
-            {stack.description && (
-              <p className="text-[14px] text-slate-600 leading-[1.6] mb-4">
-                {stack.description}
-              </p>
-            )}
-
-            <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-slate-200">
-              <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500">
-                <BookCheck className="h-3.5 w-3.5 text-slate-400" />
-                <span><strong className="text-slate-700">{questions.length}</strong> questions</span>
+            {/* Dark stats strip */}
+            <div className={cn(
+              "px-7 py-3 border-t flex items-center gap-5 flex-wrap",
+              premiumCourse
+                ? "bg-zinc-900 border-zinc-800"
+                : "bg-slate-800 border-slate-700/60",
+            )}>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <BookCheck className="h-3.5 w-3.5 text-blue-400" />
+                {mergedSubcats.length} topics
               </div>
-              <div className="h-3 w-px bg-slate-200" />
-              <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500">
-                <Clock className="h-3.5 w-3.5 text-slate-400" />
-                <span>~<strong className="text-slate-700">{totalTime}</strong> min total</span>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <Layers className="h-3.5 w-3.5 text-slate-500" />
+                {allQuestions.length}/{totalContentQ} loaded
               </div>
-              <div className="h-3 w-px bg-slate-200" />
-              <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500">
-                <BarChart2 className="h-3.5 w-3.5 text-slate-400" />
-                <span><strong className="text-slate-700">{avgTime}m</strong> avg per question</span>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <Clock className="h-3.5 w-3.5 text-amber-400" />
+                {totalTime} min
               </div>
-              {firstQuestion && (
-                <Link href={`/${domainSlug}/${stackSlug}/${firstQuestion.slug}`}
-                  className="ml-auto flex items-center gap-2 px-5 py-2 rounded-[8px] bg-[#2e64e5] text-white font-bold text-[12px] tracking-wide hover:bg-blue-700 transition-colors shadow-sm outline-none focus:ring-2 focus:ring-blue-500/50">
-                  <Play className="h-3.5 w-3.5 fill-current" />
-                  Start Practicing
-                </Link>
-              )}
+              <div className="ml-auto flex items-center gap-3 text-[11px]">
+                <span className="flex items-center gap-1 text-slate-400">
+                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />{easyCt} easy
+                </span>
+                <span className="flex items-center gap-1 text-slate-400">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />{medCt} med
+                </span>
+                <span className="flex items-center gap-1 text-slate-400">
+                  <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />{hardCt} hard
+                </span>
+              </div>
             </div>
           </header>
 
-          {/* Question List */}
-          <div className="space-y-2.5 pb-8">
-            {questions.map((q, idx) => (
-              <motion.div
-                key={q.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.02 }}
-              >
-                <Link href={`/${domainSlug}/${stackSlug}/${q.slug}`}
-                  className="group flex items-center justify-between p-4 rounded-[12px] bg-white border border-slate-200 hover:border-[#2e64e5] hover:shadow-sm transition-all duration-300 outline-none focus:ring-2 focus:ring-[#2e64e5]/50">
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <span className="text-[12px] font-bold text-slate-300 min-w-[1.5rem] tabular-nums shrink-0">
-                      {String(idx + 1).padStart(2, '0')}
-                    </span>
-                    <div className="min-w-0">
-                      <h3 className="text-[15px] font-semibold text-slate-800 group-hover:text-[#2e64e5] transition-colors leading-tight truncate">
-                        {q.title}
-                      </h3>
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md"
-                          style={{ 
-                            color: difficultyColor(q.difficulty),
-                            backgroundColor: difficultyColor(q.difficulty) + '18'
-                          }}>
-                          {difficultyLabel(q.difficulty)}
-                        </span>
-                        <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {q.estimatedReadTime ?? 5} min
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-[#2e64e5]/10 group-hover:text-[#2e64e5] text-slate-400 transition-colors shrink-0 ml-3">
-                    <ChevronRight className="h-4 w-4" />
-                  </div>
+          {(curriculumNav.previousModule || curriculumNav.nextModule) && (
+            <div className="mb-5 flex items-center gap-3">
+              {curriculumNav.previousModule ? (
+                <Link
+                  href={`/${domainSlug}/${curriculumNav.previousModule.moduleSlug}`}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/8 border border-white/15 text-[13px] font-semibold text-slate-300 hover:bg-white/15 hover:text-white transition-all"
+                >
+                  <ChevronRight className="h-4 w-4 rotate-180 shrink-0" />
+                  {curriculumNav.previousModule.title}
                 </Link>
-              </motion.div>
-            ))}
-          </div>
-
-          {questions.length === 0 && (
-            <div className="text-center py-20 text-slate-500 bg-slate-50 rounded-[12px] border border-slate-100">
-              <p className="text-[14px]">No questions yet in this stack.</p>
+              ) : null}
+              <div className="flex-1" />
+              {curriculumNav.nextModule ? (
+                <Link
+                  href={`/${domainSlug}/${curriculumNav.nextModule.moduleSlug}`}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/8 border border-white/15 text-[13px] font-semibold text-slate-300 hover:bg-white/15 hover:text-white transition-all"
+                >
+                  {curriculumNav.nextModule.title}
+                  <ChevronRight className="h-4 w-4 shrink-0" />
+                </Link>
+              ) : null}
             </div>
           )}
 
+
+          {isModuleEmpty && (
+            <section
+              aria-labelledby="coming-soon-heading"
+              className="mb-5 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50/60 shadow-sm overflow-hidden"
+            >
+              <div className="px-6 py-5 border-b border-amber-100 flex items-start gap-4 flex-wrap">
+                <div className="shrink-0 w-11 h-11 rounded-lg bg-amber-500 flex items-center justify-center">
+                  <Hammer className="h-5 w-5 text-white" />
+                </div>
+                <div className="flex-1 min-w-[240px]">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-1">
+                    Content in progress
+                  </div>
+                  <h2
+                    id="coming-soon-heading"
+                    className="text-lg font-black text-slate-900 mb-1 leading-snug"
+                  >
+                    {stack.name} questions are being authored
+                  </h2>
+                  <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
+                    This module is scaffolded but doesn't have question
+                    content yet. We ship curated, interview-ready answers
+                    one pillar at a time — check back soon, or explore a
+                    related area below.
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-6 py-4 flex items-center gap-3 flex-wrap">
+                <Link
+                  href={`/${domainSlug}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition-colors"
+                >
+                  <Layers className="h-4 w-4" />
+                  Back to roadmap
+                </Link>
+                <Link
+                  href="/prep"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 transition-colors"
+                >
+                  <Compass className="h-4 w-4" />
+                  All prep categories
+                </Link>
+              </div>
+
+              {matchingPillarHubs.length > 0 && (
+                <div className="px-6 py-4 border-t border-amber-100 bg-white/60">
+                  <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                    Related prep you can start now
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {matchingPillarHubs.map(p => (
+                      <Link
+                        key={p.pillarSlug}
+                        href={`/${p.pillarSlug}`}
+                        className="group flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-amber-300 hover:shadow-sm transition-all"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-black text-slate-900 group-hover:text-amber-700 leading-snug">
+                            {p.title.replace(/\s+Interview Prep$/, "")}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-slate-500 leading-snug line-clamp-1">
+                            {p.tagline}
+                          </div>
+                        </div>
+                        <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-amber-500 shrink-0 mt-0.5" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Study toolbar */}
+          <section className="mb-4 rounded-xl border border-white/10 bg-white/95 backdrop-blur-sm shadow-xl">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Study filters
+              </p>
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-bold text-slate-700">
+                  {displayedSubcats.length} topics
+                </span>
+                <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 font-bold text-blue-700">
+                  {visibleQuestionCount} visible
+                </span>
+              </div>
+            </div>
+            <div className="px-4 py-3 space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setActiveSubcat(null)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
+                    activeSubcat === null
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+                  )}
+                >
+                  All Topics
+                </button>
+                {mergedSubcats.map(sc => (
+                  <button
+                    key={sc.slug}
+                    onClick={() => setActiveSubcat(sc.slug === activeSubcat ? null : sc.slug)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border",
+                      activeSubcat === sc.slug
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+                    )}
+                  >
+                    {sc.name}
+                    <span className={cn(
+                      "ml-1.5 text-[10px] font-bold",
+                      activeSubcat === sc.slug ? "text-blue-200" : "text-slate-400"
+                    )}>
+                      {sc.questions.length > 0 ? `${sc.questions.length}/${sc.contentCount}` : sc.contentCount}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <Filter className="h-3.5 w-3.5 text-slate-400" />
+                  {["all", "easy", "medium", "hard"].map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setDifficultyFilter(d)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md text-[11px] font-bold transition-all border capitalize",
+                        difficultyFilter === d
+                          ? d === "all" ? "bg-slate-700 text-white border-slate-700"
+                            : d === "easy" ? "bg-green-600 text-white border-green-600"
+                            : d === "medium" ? "bg-amber-500 text-white border-amber-500"
+                            : "bg-red-500 text-white border-red-500"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                      )}
+                    >
+                      {d === "all" ? "All" : d}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="search"
+                    value={questionQuery}
+                    onChange={(e) => setQuestionQuery(e.target.value)}
+                    placeholder="Search questions in this module..."
+                    className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-9 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-200/60"
+                  />
+                  {questionQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => setQuestionQuery("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                      aria-label="Clear search"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Subcategory groups */}
+          <div className="space-y-4 pb-10">
+            {displayedSubcats.length === 0 && !moduleRevision && (
+              <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-6 py-10 text-center">
+                <p className="text-sm font-bold text-slate-300">
+                  No topics match your current filters.
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Try clearing search or switching difficulty/topic filters.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveSubcat(null);
+                    setDifficultyFilter("all");
+                    setQuestionQuery("");
+                  }}
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/8 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/15 hover:text-white transition-all"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Clear all filters
+                </button>
+              </div>
+            )}
+
+            {/*
+              Revision row: synthetic first "topic" backed by the module's
+              `_revision.json`. Rendered above the regular topics so learners
+              skim concepts before drilling. Hidden when the search query
+              filters topics out — except when it explicitly matches "revision".
+            */}
+            {moduleRevision && moduleRevision.sections.length > 0 && (
+              (() => {
+                const q = questionQuery.trim().toLowerCase();
+                const matchesQuery = q.length === 0 || "revision".includes(q) || moduleRevision.title.toLowerCase().includes(q);
+                if (!matchesQuery) return null;
+                const isRevExpanded = expandedSubcats.has(REVISION_SUBCAT_SLUG);
+                return (
+                  <div className="rounded-2xl overflow-hidden bg-white border border-blue-200/80 shadow-[0_4px_24px_rgba(30,64,175,0.25)]">
+                    <button
+                      onClick={() => toggleSubcat(REVISION_SUBCAT_SLUG)}
+                      className="relative w-full flex items-center gap-4 px-5 py-4 transition-colors border-b border-blue-700/60 bg-gradient-to-r from-blue-900 via-indigo-900 to-blue-900 hover:from-blue-800 hover:via-indigo-800 hover:to-blue-800 overflow-hidden"
+                    >
+                      <span className="absolute right-14 top-1/2 -translate-y-1/2 text-[3.5rem] font-black text-white/[0.06] select-none pointer-events-none leading-none tabular-nums">
+                        00
+                      </span>
+                      <div className="w-1 h-9 rounded-full shrink-0 bg-gradient-to-b from-blue-300 to-indigo-400" />
+                      <div className="flex-1 text-left min-w-0 relative z-10">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-[14px] font-black leading-tight tracking-tight text-white flex items-center gap-2">
+                            <BookOpen className="h-3.5 w-3.5" />
+                            Revision
+                          </h2>
+                          <span className="rounded-md border border-blue-300/40 bg-blue-300/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-100">
+                            Read me first
+                          </span>
+                        </div>
+                        <p className="text-[10px] mt-0.5 font-medium text-blue-200">
+                          {moduleRevision.sections.length} concepts
+                          {moduleRevision.estimatedMinutes ? ` · ~${moduleRevision.estimatedMinutes} min` : ""}
+                          {" · skim before drilling questions"}
+                        </p>
+                      </div>
+                      <span className="text-[11px] font-black px-2.5 py-1 rounded-lg shrink-0 relative z-10 bg-blue-400/20 text-blue-100 border border-blue-300/40">
+                        {moduleRevision.sections.length}
+                      </span>
+                      {isRevExpanded
+                        ? <ChevronUp className="h-4 w-4 text-blue-200 shrink-0 relative z-10" />
+                        : <ChevronDown className="h-4 w-4 text-blue-200 shrink-0 relative z-10" />}
+                    </button>
+                    {isRevExpanded && (
+                      <ModuleRevisionPanel
+                        revision={moduleRevision}
+                        stackLabel={stack?.name ?? stackSlug}
+                      />
+                    )}
+                  </div>
+                );
+              })()
+            )}
+
+            {displayedSubcats.map((sc, scIdx) => {
+              const isExpanded = expandedSubcats.has(sc.slug);
+              const hasQuestions = sc.questions.length > 0;
+              const filteredQ = difficultyFilter === "all"
+                ? sc.questions
+                : sc.questions.filter(q => q.difficulty === difficultyFilter);
+
+              return (
+                <div
+                  key={sc.slug}
+                  className={cn(
+                    "rounded-2xl overflow-hidden bg-white",
+                    hasQuestions
+                      ? "border border-slate-200/80 shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
+                      : "border border-dashed border-slate-300/50 shadow-lg opacity-60"
+                  )}
+                >
+                  {/* Subcategory header */}
+                  <button
+                    onClick={() => toggleSubcat(sc.slug)}
+                    className={cn(
+                      "relative w-full flex items-center gap-4 px-5 py-4 transition-colors border-b overflow-hidden",
+                      hasQuestions
+                        ? "bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:via-slate-700 hover:to-slate-800 border-slate-700/60"
+                        : "bg-slate-700/60 hover:bg-slate-700/80 border-slate-600/40 opacity-70"
+                    )}
+                  >
+                    {/* Decorative large module number */}
+                    <span className="absolute right-14 top-1/2 -translate-y-1/2 text-[3.5rem] font-black text-white/[0.04] select-none pointer-events-none leading-none tabular-nums">
+                      {String(scIdx + 1).padStart(2, '0')}
+                    </span>
+
+                    {/* Left colored accent bar */}
+                    <div className={cn(
+                      "w-1 h-9 rounded-full shrink-0",
+                      hasQuestions ? "bg-gradient-to-b from-blue-400 to-indigo-500" : "bg-slate-600"
+                    )} />
+
+                    <div className="flex-1 text-left min-w-0 relative z-10">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className={cn(
+                          "text-[14px] font-black leading-tight tracking-tight",
+                          hasQuestions ? "text-white" : "text-slate-500",
+                        )}>
+                          {sc.name}
+                        </h2>
+                      </div>
+                      <p className={cn("text-[10px] mt-0.5 font-medium", hasQuestions ? "text-slate-400" : "text-slate-600")}>
+                        {hasQuestions
+                          ? `${sc.questions.length} questions ready${sc.contentCount > sc.questions.length ? ` · ${sc.contentCount - sc.questions.length} coming soon` : " · fully loaded"}`
+                          : `${sc.contentCount} questions in progress`}
+                      </p>
+                    </div>
+
+                    {/* Difficulty mini-badges */}
+                    <div className="hidden sm:flex items-center gap-1 mr-1 relative z-10">
+                      {sc.questions.length > 0 && (
+                        <>
+                          {[
+                            { d: "easy", color: "bg-green-900/60 text-green-400 border border-green-800/50" },
+                            { d: "medium", color: "bg-amber-900/60 text-amber-400 border border-amber-800/50" },
+                            { d: "hard", color: "bg-red-900/60 text-red-400 border border-red-800/50" },
+                          ].map(({ d, color }) => {
+                            const c = sc.questions.filter(q => q.difficulty === d).length;
+                            return c > 0 ? (
+                              <span key={d} className={cn("px-1.5 py-0.5 rounded-md text-[10px] font-bold", color)}>
+                                {c}{d === "easy" ? "E" : d === "medium" ? "M" : "H"}
+                              </span>
+                            ) : null;
+                          })}
+                        </>
+                      )}
+                    </div>
+
+                    <span className={cn(
+                      "text-[11px] font-black px-2.5 py-1 rounded-lg shrink-0 relative z-10",
+                      hasQuestions ? "bg-blue-500/20 text-blue-300 border border-blue-700/40" : "bg-slate-700/50 text-slate-500"
+                    )}>
+                      {sc.contentCount}
+                    </span>
+
+                    {isExpanded
+                      ? <ChevronUp className="h-4 w-4 text-slate-500 shrink-0 relative z-10" />
+                      : <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 relative z-10" />}
+                  </button>
+
+                  {/* Question list */}
+                  {isExpanded && (
+                    <div>
+                      {filteredQ.length > 0 ? (
+                        <div className="divide-y divide-slate-100">
+                          {filteredQ.map((q, idx) => {
+                            const rowBg =
+                              q.difficulty === "easy"
+                                ? "bg-green-50/60 hover:bg-green-50"
+                                : q.difficulty === "medium"
+                                ? "bg-amber-50/60 hover:bg-amber-50"
+                                : q.difficulty === "hard"
+                                ? "bg-red-50/50 hover:bg-red-50/80"
+                                : "bg-white hover:bg-slate-50";
+                            return (
+                            <div key={`${idx}-${q.slug}`}>
+                              <Link
+                                href={`/${domainSlug}/${stackSlug}/${q.slug}`}
+                                className={cn("group flex items-center gap-4 px-5 py-4 transition-colors", rowBg)}
+                              >
+                                {/* Difficulty accent bar */}
+                                <div
+                                  className="w-[3px] h-10 rounded-full shrink-0"
+                                  style={{ backgroundColor: difficultyColor(q.difficulty) }}
+                                />
+                                <span className="w-6 text-[11px] font-mono text-slate-300 shrink-0 text-right">
+                                  {String(idx + 1).padStart(2, "0")}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="text-[13.5px] font-semibold text-slate-800 group-hover:text-blue-700 transition-colors leading-snug line-clamp-1">
+                                    {q.title}
+                                  </h3>
+                                  <div className="mt-0.5 flex items-center gap-2">
+                                    <span
+                                      className="text-[10px] font-bold uppercase tracking-wider"
+                                      style={{ color: difficultyColor(q.difficulty) }}
+                                    >
+                                      {difficultyLabel(q.difficulty)}
+                                    </span>
+                                    <span className="text-slate-300 text-[10px]">·</span>
+                                    <span className="text-[11px] text-slate-400 flex items-center gap-0.5">
+                                      <Clock className="h-2.5 w-2.5" />
+                                      {q.estimatedReadTime ?? 5} min
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500 group-hover:border-blue-300 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                  Open →
+                                </div>
+                              </Link>
+                            </div>
+                            );
+                          })}
+                        </div>
+                      ) : sc.questions.length === 0 ? (
+                        <div className="px-5 py-6 text-center">
+                          <div className="inline-flex items-center gap-2 text-slate-400 text-xs bg-slate-50 px-4 py-2 rounded-lg border border-dashed border-slate-200 bg-amber-50/50">
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            <span>
+                              {sc.contentCount} questions ready to import
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="px-5 py-4 text-center text-xs text-slate-400">
+                          No questions match this difficulty filter.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
           {/* Completion Banner */}
-          {questions.length > 0 && (
-            <section className="mt-6 p-8 rounded-[16px] bg-blue-50 border border-blue-100 flex flex-col sm:flex-row items-center justify-between gap-5 relative overflow-hidden">
-              <div className="absolute -right-4 top-1/2 -translate-y-1/2 opacity-[0.04] pointer-events-none">
-                <BookCheck className="w-48 h-48" />
+          {allQuestions.length > 0 && !hasActiveFilters && (
+            <section className="mb-8 p-7 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-xl">
+              <div className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-[0.08] pointer-events-none">
+                <Award className="w-64 h-64 text-white" />
               </div>
               <div className="relative z-10">
-                <h2 className="text-[1.1rem] font-bold text-slate-900 mb-1 tracking-tight">
-                  Ready to master all {questions.length} questions?
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="h-5 w-5 text-amber-300" />
+                  <span className="text-xs font-bold text-amber-200 uppercase tracking-wide">
+                    Complete the Path
+                  </span>
+                </div>
+                <h2 className="text-xl font-black text-white mb-1">
+                  {allQuestions.length} questions across {mergedSubcats.length} topics
                 </h2>
-                <p className="text-[13.5px] text-slate-600 max-w-sm leading-[1.6]">
-                  Go sequentially for the best learning experience. Estimated total: ~{totalTime} min.
+                <p className="text-sm text-slate-300 max-w-md">
+                  Total: <strong>{totalContentQ}</strong> questions in curriculum ·{" "}
+                  <strong>{allQuestions.length}</strong> available now
                 </p>
               </div>
               {firstQuestion && (
-                <div className="relative z-10 shrink-0">
-                  <Link href={`/${domainSlug}/${stackSlug}/${firstQuestion.slug}`}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-[8px] bg-[#2e64e5] text-white font-bold text-[13px] tracking-wide hover:bg-blue-700 transition-colors shadow-sm outline-none focus:ring-2 focus:ring-blue-500/50">
+                <div className="relative z-10 shrink-0 flex flex-col sm:flex-row gap-2">
+                  <Link
+                    href={`/${domainSlug}/${stackSlug}/${firstQuestion.slug}`}
+                    className="inline-flex items-center gap-2 px-7 py-3 rounded-xl bg-blue-600 text-white font-black text-sm hover:bg-blue-700 transition-all shadow-lg"
+                  >
+                    <Play className="h-5 w-5 fill-current" />
                     Begin from Start
-                    <ChevronRight className="h-4 w-4" />
                   </Link>
+                  {curriculumNav.nextModule ? (
+                    <Link
+                      href={`/${domainSlug}/${curriculumNav.nextModule.moduleSlug}`}
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white border border-slate-300 text-slate-800 font-black text-sm hover:bg-slate-100 transition-all shadow-sm"
+                    >
+                      Skip to next module
+                      <ArrowUpRight className="h-4 w-4" />
+                    </Link>
+                  ) : null}
                 </div>
               )}
             </section>
           )}
         </main>
 
-        {/* ─── RIGHT SIDEBAR ─── */}
-        <aside className="hidden xl:flex w-[300px] shrink-0 flex-col gap-5 sticky top-0 h-screen overflow-y-auto py-10 pr-7 pl-2">
-
-          {/* Stats at a Glance */}
-          <div className="rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <Zap className="h-4 w-4 text-amber-500" />
-              At a Glance
-            </h3>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-blue-50 rounded-[10px] p-3 border border-blue-100">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-[#2e64e5] mb-1">Questions</div>
-                <div className="text-[1.4rem] font-bold text-slate-800 leading-none">{questions.length}</div>
-              </div>
-              <div className="bg-amber-50 rounded-[10px] p-3 border border-amber-100">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-amber-600 mb-1">Total Time</div>
-                <div className="text-[1.4rem] font-bold text-slate-800 leading-none">{totalTime}m</div>
-              </div>
+        {/* ─── RIGHT SIDEBAR — Stats ─── */}
+        <aside className="hidden xl:flex w-[260px] shrink-0 flex-col gap-4 self-start sticky top-5 px-3 py-5">
+          {/* Quick Stats */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center gap-2">
+              <Zap className="h-3.5 w-3.5 text-amber-300" />
+              <h3 className="text-[11px] font-bold text-slate-100 uppercase tracking-wide">Overview</h3>
             </div>
-            <div className="space-y-2.5 pt-3 border-t border-slate-100">
-              <div className="flex justify-between text-[13px]">
-                <span className="text-slate-500 font-medium">Avg per question</span>
-                <span className="font-bold text-slate-800">{avgTime} min</span>
+            <div className="p-3 space-y-2">
+              {[
+                { label: "Topics", value: mergedSubcats.length },
+                { label: "Available", value: allQuestions.length },
+                { label: "Total Curriculum", value: totalContentQ },
+                { label: "Est. Time", value: `${totalTime}m` },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex justify-between text-xs rounded-lg px-3 py-2 border border-slate-200 bg-slate-50">
+                  <span className="text-slate-600 font-medium">{label}</span>
+                  <span className="font-black text-slate-900">{value}</span>
+                </div>
+              ))}
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">
+                  Readiness
+                </p>
+                <p className="mt-0.5 text-sm font-black text-blue-900">{completionPct}% complete</p>
               </div>
             </div>
           </div>
 
-          {/* Difficulty Breakdown */}
-          <div className="rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <BarChart2 className="h-4 w-4 text-[#2e64e5]" />
-              Difficulty Mix
-            </h3>
-            <div className="space-y-2.5">
+          {/* Difficulty Mix */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-4 py-2.5 bg-blue-700 border-b border-blue-800 flex items-center gap-2">
+              <BarChart2 className="h-3.5 w-3.5 text-blue-200" />
+              <h3 className="text-[11px] font-bold text-white uppercase tracking-wide">Difficulty Mix</h3>
+            </div>
+            <div className="p-3 space-y-2.5">
               {[
-                { label: "Easy", count: easyCt, color: "#22c55e", bg: "#f0fdf4", border: "#bbf7d0" },
-                { label: "Medium", count: medCt, color: "#f59e0b", bg: "#fffbeb", border: "#fde68a" },
-                { label: "Hard", count: hardCt, color: "#ef4444", bg: "#fef2f2", border: "#fecaca" },
-              ].map(({ label, count, color, bg, border }) => (
-                <div key={label} className="flex items-center gap-3">
-                  <div className="text-[10px] font-bold uppercase tracking-widest w-14" style={{ color }}>{label}</div>
-                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                { label: "Easy", count: easyCt, gradient: "from-green-500 to-emerald-600", color: "#22c55e" },
+                { label: "Medium", count: medCt, gradient: "from-orange-500 to-amber-600", color: "#f59e0b" },
+                { label: "Hard", count: hardCt, gradient: "from-red-500 to-rose-600", color: "#ef4444" },
+              ].map(({ label, count, gradient, color }) => (
+                <div key={label} className="space-y-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-bold" style={{ color }}>{label}</span>
+                    <span className="font-black text-slate-900">{count}</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
                     <div
-                      className="h-full rounded-full transition-all"
-                      style={{ width: questions.length ? `${(count / questions.length) * 100}%` : '0%', backgroundColor: color }}
+                      className={`h-full rounded-full bg-gradient-to-r ${gradient}`}
+                      style={{ width: allQuestions.length ? `${(count / allQuestions.length) * 100}%` : "0%" }}
                     />
                   </div>
-                  <span className="text-[12px] font-bold text-slate-600 w-4 text-right">{count}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Study Tips */}
-          <div className="rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <BookMarked className="h-4 w-4 text-[#2e64e5]" />
-              Study Tips
-            </h3>
-            <div className="space-y-3.5">
-              {studyTips.map((tip, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="text-[15px] leading-none mt-0.5 shrink-0">{tip.icon}</span>
-                  <p className="text-[12.5px] text-slate-600 leading-[1.55]">{tip.text}</p>
-                </div>
-              ))}
+          {/* Study tips */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-4 py-2.5 bg-amber-600 border-b border-amber-700 flex items-center gap-2">
+              <BookMarked className="h-3.5 w-3.5 text-amber-100" />
+              <h3 className="text-[11px] font-bold text-white uppercase tracking-wide">Study Tips</h3>
+            </div>
+            <div className="p-3">
+              <div className="space-y-2">
+                {[
+                  "Finish one topic before jumping to another.",
+                  "Practice answers aloud before checking notes.",
+                  "Mark hard questions and revisit them tomorrow.",
+                ].map((tip, i) => (
+                  <div key={tip} className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+                    <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">
+                      {i + 1}
+                    </span>
+                    <p className="text-[11px] text-slate-700 leading-relaxed">{tip}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-
-          {/* Quick Nav */}
-          <div className="rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-[13px] font-bold text-slate-800 mb-4">Quick Navigation</h3>
-            <div className="flex flex-col gap-2">
-              <Link href={`/${domainSlug}`} className="flex items-center justify-between text-[13px] font-medium text-slate-600 hover:text-[#2e64e5] transition-colors py-1.5 border-b border-slate-50">
-                <span>← Back to Roadmap</span>
-              </Link>
-              <Link href="/domains" className="flex items-center justify-between text-[13px] font-medium text-slate-600 hover:text-[#2e64e5] transition-colors py-1.5 border-b border-slate-50">
-                <span>Browse All Paths</span>
-                <ArrowUpRight className="h-3.5 w-3.5 text-slate-400" />
-              </Link>
-              <Link href="/dashboard" className="flex items-center justify-between text-[13px] font-medium text-slate-600 hover:text-[#2e64e5] transition-colors py-1.5">
-                <span>My Dashboard</span>
-                <ArrowUpRight className="h-3.5 w-3.5 text-slate-400" />
-              </Link>
-            </div>
-          </div>
-
         </aside>
+      </div>
+    </div>
+  );
+}
 
+function StatItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+        {icon}
+      </div>
+      <div>
+        <div className="text-[10px] text-slate-500 font-medium">{label}</div>
+        <div className="text-base font-bold text-slate-900 leading-tight">{value}</div>
       </div>
     </div>
   );

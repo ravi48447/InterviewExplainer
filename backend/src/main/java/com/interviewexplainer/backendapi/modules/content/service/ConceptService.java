@@ -49,7 +49,7 @@ public class ConceptService {
         return new QuestionSummaryDTO(
                 q.getId(), q.getTitle(), q.getSlug(),
                 q.getDifficulty(), q.getEstimatedReadTime(), orderIndex,
-                null, null
+                null, null, null, null
         );
     }
 

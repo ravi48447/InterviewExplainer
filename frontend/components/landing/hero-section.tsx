@@ -140,7 +140,7 @@ export function HeroSection() {
         <div className="absolute left-[10%] bottom-[15%] h-48 w-48 rounded-full bg-chart-2/[0.04] blur-[60px]" />
       </div>
 
-      <div className="relative mx-auto max-w-6xl">
+      <div className="relative w-full min-w-0">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           {/* Left content */}
           <div className="max-w-xl">

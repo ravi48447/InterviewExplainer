@@ -112,6 +112,15 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
     Optional<Long> findFirstStackIdForQuestion(@Param("questionId") Long questionId);
 
     @Query(value = """
+        SELECT d.slug
+        FROM domains d
+        JOIN domain_stack_map dsm ON d.id = dsm.domain_id
+        WHERE dsm.stack_id = :stackId
+        LIMIT 1
+        """, nativeQuery = true)
+    Optional<String> findFirstDomainSlugForStack(@Param("stackId") Long stackId);
+
+    @Query(value = """
         SELECT d.slug as domain_slug, s.slug as stack_slug
         FROM tech_stacks s
         JOIN question_stack_index qsi ON s.id = qsi.stack_id
@@ -121,4 +130,5 @@ public interface QuestionRepository extends JpaRepository<Question, Long> {
         LIMIT 1
         """, nativeQuery = true)
     Optional<Object> findFirstContextForQuestion(@Param("questionId") Long questionId);
+
 }

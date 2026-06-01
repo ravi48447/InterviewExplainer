@@ -12,6 +12,7 @@ import com.interviewexplainer.backendapi.modules.learning.repository.UserQuestio
 import com.interviewexplainer.backendapi.modules.learning.repository.UserBookmarkRepository;
 import com.interviewexplainer.backendapi.modules.learning.repository.UserStreakRepository;
 import com.interviewexplainer.backendapi.modules.content.entity.*;
+import com.interviewexplainer.backendapi.modules.content.entity.enums.QuestionDifficulty;
 import com.interviewexplainer.backendapi.modules.content.repository.*;
 import com.interviewexplainer.backendapi.modules.content.dto.*;
 
@@ -74,11 +75,15 @@ public class DashboardService {
         long completedQuestions = 0;
         long totalTimeSpent = 0;
         int currentStreak = 0;
+        int longestStreak = 0;
         long bookmarksCount = 0;
-        List<String> recentActivity = new ArrayList<>();
+        List<RecentActivityDTO> recentActivity = new ArrayList<>();
         List<StackPerformanceDTO> performance = new ArrayList<>();
         List<WeakAreaDTO> weakAreas = new ArrayList<>();
         List<RadarDataDTO> radarData = new ArrayList<>();
+        List<DailyActivityDTO> dailyActivity = new ArrayList<>();
+        DifficultyBreakdownDTO difficultyBreakdown = new DifficultyBreakdownDTO(0, 0, 0);
+        java.util.Set<Long> completedQuestionIds = new java.util.HashSet<>();
 
         String primaryDomainName = null;
         String primaryDomainSlug = null;
@@ -91,6 +96,7 @@ public class DashboardService {
             if (profile != null) {
                 experienceLevelStr = profile.getExperienceLevel();
                 Long domainId = profile.getPrimaryDomainId();
+                String storedSlug = profile.getPrimaryDomainSlug();
                 
                 if (domainId != null) {
                     var domainOpt = domainRepository.findById(domainId);
@@ -117,11 +123,14 @@ public class DashboardService {
                         if (!domainQuestionIds.isEmpty()) {
                             List<UserQuestionProgress> domainProgress = progressRepository
                                     .findByUserIdAndQuestionIdIn(userId, domainQuestionIds);
-                            
-                            completedQuestions = domainProgress.stream()
-                                    .filter(p -> "completed".equals(p.getStatus()))
-                                    .count();
-                            
+
+                            for (UserQuestionProgress p : domainProgress) {
+                                if ("completed".equals(p.getStatus())) {
+                                    completedQuestionIds.add(p.getQuestionId());
+                                }
+                            }
+                            completedQuestions = completedQuestionIds.size();
+
                             totalTimeSpent = domainProgress.stream()
                                     .mapToLong(p -> p.getTimeSpentSeconds() != null ? p.getTimeSpentSeconds() : 0L)
                                     .sum();
@@ -187,12 +196,30 @@ public class DashboardService {
                 }
 
                 // Global user stats (Streak/Bookmarks/Activity)
-                currentStreak = streakRepository.findById(userId).map(UserStreak::getCurrentStreak).orElse(0);
+                UserStreak streakEntity = streakRepository.findById(userId).orElse(null);
+                currentStreak = streakEntity != null && streakEntity.getCurrentStreak() != null ? streakEntity.getCurrentStreak() : 0;
+                longestStreak = streakEntity != null && streakEntity.getLongestStreak() != null ? streakEntity.getLongestStreak() : 0;
                 bookmarksCount = bookmarkRepository.findByUserId(userId).size();
-                recentActivity = activityLogRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+
+                List<UserActivityLog> activityLogs = activityLogRepository.findByUserIdOrderByCreatedAtDesc(userId);
+                recentActivity = activityLogs.stream()
                         .limit(5)
-                        .map(log -> (log.getActivityType() != null ? log.getActivityType().replace("_", " ") : "Activity") + " - " + (log.getCreatedAt() != null ? log.getCreatedAt().toLocalDate().toString() : ""))
+                        .map(this::toRecentActivity)
                         .collect(Collectors.toList());
+
+                // Real study-activity heatmap (last 53 weeks), counting engagement per day.
+                dailyActivity = buildDailyActivity(userId, activityLogs);
+
+                // Real difficulty distribution of the user's completed questions.
+                difficultyBreakdown = buildDifficultyBreakdown(completedQuestionIds);
+
+                // The stored content slug is the source of truth for the focus
+                // domain (the frontend renders that domain's real stacks/questions
+                // from the filesystem content tree). Prefer it over the slug
+                // derived from the legacy numeric domain id.
+                if (storedSlug != null && !storedSlug.isBlank()) {
+                    primaryDomainSlug = storedSlug;
+                }
             }
         }
 
@@ -221,6 +248,7 @@ public class DashboardService {
                 completedQuestions,
                 totalTimeSpent,
                 currentStreak,
+                longestStreak,
                 bookmarksCount,
                 performance,
                 weakAreas,
@@ -228,7 +256,86 @@ public class DashboardService {
                 primaryDomainName,
                 primaryDomainSlug,
                 experienceLevelStr,
-                radarData);
+                radarData,
+                dailyActivity,
+                difficultyBreakdown);
+    }
+
+    /* ── Real-data helpers ─────────────────────────────────────────── */
+
+    private RecentActivityDTO toRecentActivity(UserActivityLog log) {
+        String rawType = log.getActivityType() != null ? log.getActivityType() : "ACTIVITY";
+        String title = humanizeActivityType(rawType);
+        String detail = null;
+        if (log.getEntityType() != null
+                && log.getEntityType().toLowerCase().contains("question")
+                && log.getEntityId() != null) {
+            detail = questionRepository.findById(log.getEntityId())
+                    .map(Question::getTitle)
+                    .orElse(null);
+        }
+        String date = log.getCreatedAt() != null ? log.getCreatedAt().toLocalDate().toString() : "";
+        return new RecentActivityDTO(title, detail, rawType, date);
+    }
+
+    private String humanizeActivityType(String type) {
+        switch (type.toUpperCase()) {
+            case "QUESTION_COMPLETED": return "Completed a question";
+            case "QUESTION_VIEWED":    return "Viewed a question";
+            case "QUESTION_STARTED":   return "Started a question";
+            case "BOOKMARK_ADDED":     return "Saved a bookmark";
+            case "BOOKMARK_REMOVED":   return "Removed a bookmark";
+            case "MOCK_STARTED":       return "Started a mock interview";
+            case "MOCK_COMPLETED":     return "Finished a mock interview";
+            default:
+                String lower = type.toLowerCase().replace('_', ' ').trim();
+                if (lower.isEmpty()) return "Activity";
+                return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
+        }
+    }
+
+    /**
+     * Builds a per-day engagement count for the dashboard heatmap (last ~53
+     * weeks). Prefers the activity log; if that is empty it falls back to the
+     * user's question-progress timestamps so the heatmap still reflects real
+     * study even before activity-log instrumentation is complete. Only non-zero
+     * days are emitted (the frontend fills the gaps).
+     */
+    private List<DailyActivityDTO> buildDailyActivity(UUID userId, List<UserActivityLog> activityLogs) {
+        java.util.Map<LocalDate, Integer> dayCounts = new java.util.HashMap<>();
+        for (UserActivityLog log : activityLogs) {
+            if (log.getCreatedAt() != null) {
+                dayCounts.merge(log.getCreatedAt().toLocalDate(), 1, Integer::sum);
+            }
+        }
+        if (dayCounts.isEmpty()) {
+            for (UserQuestionProgress p : progressRepository.findByUserId(userId)) {
+                LocalDate day = null;
+                if (p.getCompletedAt() != null) day = p.getCompletedAt().toLocalDate();
+                else if (p.getLastViewedAt() != null) day = p.getLastViewedAt().toLocalDate();
+                if (day != null) dayCounts.merge(day, 1, Integer::sum);
+            }
+        }
+        List<DailyActivityDTO> out = new ArrayList<>();
+        LocalDate today = LocalDate.now();
+        LocalDate start = today.minusDays(370);
+        for (LocalDate d = start; !d.isAfter(today); d = d.plusDays(1)) {
+            int c = dayCounts.getOrDefault(d, 0);
+            if (c > 0) out.add(new DailyActivityDTO(d.toString(), c));
+        }
+        return out;
+    }
+
+    private DifficultyBreakdownDTO buildDifficultyBreakdown(java.util.Set<Long> completedQuestionIds) {
+        if (completedQuestionIds.isEmpty()) return new DifficultyBreakdownDTO(0, 0, 0);
+        int easy = 0, medium = 0, hard = 0;
+        for (Question q : questionRepository.findAllById(completedQuestionIds)) {
+            QuestionDifficulty diff = q.getDifficulty();
+            if (diff == QuestionDifficulty.easy) easy++;
+            else if (diff == QuestionDifficulty.hard) hard++;
+            else medium++;
+        }
+        return new DifficultyBreakdownDTO(easy, medium, hard);
     }
 
     @Transactional
@@ -236,6 +343,19 @@ public class DashboardService {
         UserProfile profile = userProfileRepository.findById(userId)
                 .orElse(new UserProfile(userId, domainId, "E1_1_TO_3"));
         profile.setPrimaryDomainId(domainId);
+        userProfileRepository.save(profile);
+    }
+
+    /**
+     * Sets the user's focus domain by its canonical content slug (e.g.
+     * "java-backend-intermediate"). This is what the dashboard uses to load the
+     * domain's real stacks/questions from the filesystem content tree.
+     */
+    @Transactional
+    public void updatePrimaryDomainSlug(UUID userId, String slug) {
+        UserProfile profile = userProfileRepository.findById(userId)
+                .orElse(new UserProfile(userId, null, "intermediate"));
+        profile.setPrimaryDomainSlug(slug);
         userProfileRepository.save(profile);
     }
 

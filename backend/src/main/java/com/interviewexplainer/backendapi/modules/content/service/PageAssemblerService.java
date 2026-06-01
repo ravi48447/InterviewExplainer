@@ -146,12 +146,12 @@ public class PageAssemblerService {
 
         List<QuestionSummaryDTO> recommendedQuestions = recommendationService.getRecommendations(question.getId(), 10)
                 .stream()
-                .map(q -> new QuestionSummaryDTO(q.id(), q.title(), q.slug(), q.difficulty(), q.estimatedReadTime(), q.orderIndex(), finalDomainSlug, finalStackSlug))
+                .map(q -> new QuestionSummaryDTO(q.id(), q.title(), q.slug(), q.difficulty(), q.estimatedReadTime(), q.orderIndex(), finalDomainSlug, finalStackSlug, null, null))
                 .toList();
 
         List<QuestionSummaryDTO> peopleAlsoAsk = recommendationService.getPeopleAlsoAsk(question.getId())
                 .stream()
-                .map(q -> new QuestionSummaryDTO(q.id(), q.title(), q.slug(), q.difficulty(), q.estimatedReadTime(), q.orderIndex(), finalDomainSlug, finalStackSlug))
+                .map(q -> new QuestionSummaryDTO(q.id(), q.title(), q.slug(), q.difficulty(), q.estimatedReadTime(), q.orderIndex(), finalDomainSlug, finalStackSlug, null, null))
                 .toList();
 
         List<String> interviewCoach = sections.stream()
@@ -176,6 +176,7 @@ public class PageAssemblerService {
         return new QuestionPagePayload(
                 question.getId(),
                 question.getTitle(),
+                question.getQuestionText(),
                 question.getSlug(),
                 question.getDifficulty(),
                 question.getEstimatedReadTime(),
@@ -201,6 +202,6 @@ public class PageAssemblerService {
     }
 
     private QuestionSummaryDTO toSummary(Question q, String dSlug, String sSlug) {
-        return new QuestionSummaryDTO(q.getId(), q.getTitle(), q.getSlug(), q.getDifficulty(), q.getEstimatedReadTime(), null, dSlug, sSlug);
+        return new QuestionSummaryDTO(q.getId(), q.getTitle(), q.getSlug(), q.getDifficulty(), q.getEstimatedReadTime(), null, dSlug, sSlug, null, null);
     }
 }

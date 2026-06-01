@@ -49,9 +49,32 @@ public class DomainService {
     }
 
     public DomainDTO resolveDomain(String lang, String track, String exp) {
-        return domainRepository.findByTriple(lang, track, exp)
-                .map(this::toDTO)
-                .orElseThrow(() -> new ResourceNotFoundException("No domain matches selection: " + lang + "/" + track + "/" + exp));
+        // 1. Try exact match on experience_level label (e.g. "beginner")
+        var byTriple = domainRepository.findByTriple(lang, track, exp);
+        if (byTriple.isPresent()) return toDTO(byTriple.get());
+
+        // 2. Try canonical slug: {lang}-{track}-{exp}  (e.g. "java-backend-beginner")
+        String canonicalSlug = lang + "-" + track + "-" + exp;
+        var bySlug = domainRepository.findBySlug(canonicalSlug);
+        if (bySlug.isPresent()) return toDTO(bySlug.get());
+
+        // 3. Map legacy numeric labels to new level words and retry
+        String mappedExp = switch (exp) {
+            case "0-1", "1-3" -> "beginner";
+            case "3-5"        -> "intermediate";
+            case "5+"         -> "advanced";
+            default           -> exp;
+        };
+        if (!mappedExp.equals(exp)) {
+            var byMappedTriple = domainRepository.findByTriple(lang, track, mappedExp);
+            if (byMappedTriple.isPresent()) return toDTO(byMappedTriple.get());
+
+            String mappedSlug = lang + "-" + track + "-" + mappedExp;
+            var byMappedSlug = domainRepository.findBySlug(mappedSlug);
+            if (byMappedSlug.isPresent()) return toDTO(byMappedSlug.get());
+        }
+
+        throw new ResourceNotFoundException("No domain matches selection: " + lang + "/" + track + "/" + exp);
     }
 
     /**

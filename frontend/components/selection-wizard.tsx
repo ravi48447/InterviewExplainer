@@ -22,7 +22,8 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { TechIcon } from "./tech-icon";
-import { fetchTracks, fetchExperienceLevels, fetchLanguages, resolveDomain } from "@/lib/api";
+import { EXPERIENCE_LEVELS, LEVEL_KEYS, type ExperienceLevelKey } from "@/lib/levels";
+import { type ContentDomain } from "@/lib/types/content-domain";
 
 interface Track {
     id: number;
@@ -41,13 +42,22 @@ interface LanguageOption {
     iconUrl?: string | null;
 }
 
-interface ExpLevel {
-    label: string; // 0-1, etc.
-    minYears: number | null;
-    maxYears: number | null;
-    icon?: any;
-    color?: string;
+function deriveTracksFromDomains(domains: ContentDomain[], languageSlug?: string): Track[] {
+    const filtered = languageSlug ? domains.filter(d => d.languageSlug === languageSlug) : domains;
+    const seen = new Set<string>();
+    return filtered
+        .filter(d => { if (seen.has(d.trackSlug)) return false; seen.add(d.trackSlug); return true; })
+        .map((d, i) => ({ id: i, name: d.track, slug: d.trackSlug, description: null }));
 }
+
+function deriveLanguagesFromDomains(domains: ContentDomain[], trackSlug?: string): LanguageOption[] {
+    const filtered = trackSlug ? domains.filter(d => d.trackSlug === trackSlug) : domains;
+    const seen = new Set<string>();
+    return filtered
+        .filter(d => { if (seen.has(d.languageSlug)) return false; seen.add(d.languageSlug); return true; })
+        .map((d, i) => ({ id: i, name: d.language, slug: d.languageSlug }));
+}
+
 
 const trackTheme: Record<string, any> = {
     frontend: { icon: Palette, color: "from-blue-500 to-cyan-400" },
@@ -57,11 +67,9 @@ const trackTheme: Record<string, any> = {
     business: { icon: Compass, color: "from-blue-600 to-indigo-400" },
 };
 
-const expTheme: Record<string, any> = {
-    "0-1": { label: "Foundation", subtitle: "Junior Tier", icon: Sparkles, color: "from-emerald-500 to-teal-400" },
-    "1-3": { label: "Momentum", subtitle: "Growth Tier", icon: Target, color: "from-blue-500 to-cyan-400" },
-    "3-5": { label: "Dominance", subtitle: "Pro Tier", icon: Trophy, color: "from-purple-500 to-pink-400" },
-    "5+": { label: "Architect", subtitle: "Expert Tier", icon: Compass, color: "from-orange-500 to-red-400" },
+const expTheme: Record<ExperienceLevelKey, { subtitle: string; icon: any; color: string }> = {
+    beginner:     { subtitle: "Junior Tier",  icon: Sparkles, color: "from-emerald-500 to-teal-400" },
+    intermediate: { subtitle: "Pro Tier",     icon: Trophy,   color: "from-purple-500 to-pink-400"  },
 };
 
 // Hardcoded themes for visual flair, but data is dynamic
@@ -74,14 +82,13 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
     const [step, setStep] = useState(0); // 0=Discovery Mode, 1=Primary, 2=Secondary, 3=Exp
     const [discoveryMode, setDiscoveryMode] = useState<"role" | "tech" | null>(null);
     const [loading, setLoading] = useState(false);
+    const [allDomains, setAllDomains] = useState<ContentDomain[]>([]);
     const [data, setData] = useState<{
         tracks: Track[];
         languages: LanguageOption[];
-        expLevels: ExpLevel[];
     }>({
         tracks: [],
         languages: [],
-        expLevels: [],
     });
 
     const [selections, setSelections] = useState({
@@ -89,45 +96,29 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
         trackName: "",
         language: "",
         languageSlug: "",
-        experience: "",
+        experienceKey: "" as ExperienceLevelKey | "",
     });
     const router = useRouter();
 
-    // Initial Fetch (Tracks and Exp)
     useEffect(() => {
-        const loadInitial = async () => {
-            try {
-                const [t, e, l] = await Promise.all([fetchTracks(), fetchExperienceLevels(), fetchLanguages()]);
-                setData(prev => ({ ...prev, tracks: t, expLevels: e, languages: l }));
-            } catch (err) {
-                console.error("Failed to load initial wizard data", err);
-            }
-        };
-        loadInitial();
+        fetch("/api/content/all-domains")
+            .then(r => r.ok ? r.json() : [])
+            .then((domains: ContentDomain[]) => {
+                setAllDomains(domains);
+                setData({
+                    tracks: deriveTracksFromDomains(domains),
+                    languages: deriveLanguagesFromDomains(domains),
+                });
+            })
+            .catch(err => console.error("Failed to load wizard data", err));
     }, []);
 
-    const fetchLanguagesForTrack = async (trackSlug: string) => {
-        setLoading(true);
-        try {
-            const res = await fetchLanguages(trackSlug);
-            setData(prev => ({ ...prev, languages: res }));
-        } catch (err) {
-            console.error("Failed to fetch languages for track", err);
-        } finally {
-            setLoading(false);
-        }
+    const filterLanguagesForTrack = (trackSlug: string) => {
+        setData(prev => ({ ...prev, languages: deriveLanguagesFromDomains(allDomains, trackSlug) }));
     };
 
-    const fetchTracksForLanguage = async (languageSlug: string) => {
-        setLoading(true);
-        try {
-            const res = await fetchTracks(languageSlug);
-            setData(prev => ({ ...prev, tracks: res }));
-        } catch (err) {
-            console.error("Failed to fetch tracks for language", err);
-        } finally {
-            setLoading(false);
-        }
+    const filterTracksForLanguage = (languageSlug: string) => {
+        setData(prev => ({ ...prev, tracks: deriveTracksFromDomains(allDomains, languageSlug) }));
     };
 
     const handleSelection = (key: string, value: any) => {
@@ -137,22 +128,21 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
         } else if (key === "track") {
             setSelections(prev => ({ ...prev, track: value.slug, trackName: value.name }));
             if (discoveryMode === "role") {
-                fetchLanguagesForTrack(value.slug);
+                filterLanguagesForTrack(value.slug);
                 setStep(2);
             } else {
-                setStep(3); // Already picked language
+                setStep(3);
             }
         } else if (key === "language") {
             setSelections(prev => ({ ...prev, language: value.name, languageSlug: value.slug }));
             if (discoveryMode === "tech") {
-                fetchTracksForLanguage(value.slug);
+                filterTracksForLanguage(value.slug);
                 setStep(2);
             } else {
-                setStep(3); // Already picked track
+                setStep(3);
             }
         } else if (key === "experience") {
-            setSelections(prev => ({ ...prev, experience: value.label }));
-            // Final step handled by button
+            setSelections(prev => ({ ...prev, experienceKey: value.key as ExperienceLevelKey }));
         }
     };
 
@@ -205,10 +195,11 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                 return {
                     title: "Career Tier Selection",
                     subtitle: "Our USP: Tailored insights for your professional stage",
-                    options: data.expLevels.map(e => ({
-                        ...e,
-                        range: e.label,
-                        ...expTheme[e.label as keyof typeof expTheme]
+                    options: LEVEL_KEYS.map(key => ({
+                        key,
+                        label: EXPERIENCE_LEVELS[key].label,
+                        range: EXPERIENCE_LEVELS[key].range,
+                        ...expTheme[key],
                     })),
                 };
             default:
@@ -360,11 +351,11 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
 
                                 {step === 3 && options.map((opt: any) => (
                                     <button
-                                        key={opt.label}
+                                        key={opt.key}
                                         onClick={() => handleSelection("experience", opt)}
                                         className={cn(
                                             "relative group p-6 rounded-3xl glass-strong text-center transition-all duration-500 border border-white/5 flex flex-col items-center",
-                                            selections.experience === opt.label
+                                            selections.experienceKey === opt.key
                                                 ? "border-primary/50 bg-primary/10 scale-105 shadow-[0_0_30px_rgba(0,242,254,0.1)]"
                                                 : "hover:border-white/20 hover:bg-white/5"
                                         )}
@@ -373,7 +364,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                             {opt.icon ? <opt.icon className="h-6 w-6 text-black" /> : <Sparkles className="h-6 w-6 text-black" />}
                                         </div>
                                         <span className="text-2xl font-black bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent mb-1">{opt.label}</span>
-                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">{opt.themeLabel || opt.label}</span>
+                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">{opt.range}</span>
                                         <span className="text-[9px] uppercase tracking-tighter opacity-40 mt-1">{opt.subtitle}</span>
                                     </button>
                                 ))}
@@ -386,26 +377,14 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                     </Button>
                                 ) : <div />}
 
-                                {step === 3 && selections.experience && (
+                                {step === 3 && selections.experienceKey && (
                                     <Button
                                         size="lg"
                                         className="rounded-2xl h-14 px-10 bg-primary text-black font-black uppercase tracking-[0.15em] hover:scale-105 transition-all shadow-[0_20px_50px_rgba(0,242,254,0.4)] relative overflow-hidden group"
-                                        onClick={async () => {
-                                            if (loading) return;
-                                            setLoading(true);
-                                            try {
-                                                const dom = await resolveDomain(
-                                                    selections.languageSlug || "na",
-                                                    selections.track,
-                                                    selections.experience
-                                                );
-                                                router.push(`/${dom.slug}`);
-                                                if (onClose) onClose();
-                                            } catch (err) {
-                                                console.error("Failed to resolve domain", err);
-                                            } finally {
-                                                setLoading(false);
-                                            }
+                                        onClick={() => {
+                                            const slug = `${selections.languageSlug}-${selections.track}-${selections.experienceKey}`;
+                                            router.push(`/${slug}`);
+                                            if (onClose) onClose();
                                         }}
                                     >
                                         <span className="relative z-10 flex items-center">

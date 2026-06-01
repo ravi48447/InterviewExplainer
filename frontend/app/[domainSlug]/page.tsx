@@ -2,59 +2,107 @@
 
 import React, { useEffect, useState } from "react";
 import {
-  fetchDomain,
-  fetchCategoriesForDomain,
   Domain,
   DomainCategory,
   TechStack,
-  fetchQuestionsForStack,
   QuestionSummary,
   difficultyColor,
   difficultyLabel,
 } from "@/lib/api";
+import { EXPERIENCE_LEVELS, levelKeyFromLegacy, type ExperienceLevelKey } from "@/lib/levels";
+import { parseDomainSlug } from "@/lib/domain-display";
 import { useAuth } from "@/context/auth-context";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { ArrowLeft, ChevronRight, Layers, BookOpen, ChevronDown, Clock, Target, Zap, CheckCircle2, TrendingUp, BookMarked, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, Layers, BookOpen, ChevronDown, Clock, Target, Zap, CheckCircle2, TrendingUp, BookMarked, ArrowUpRight, Filter, SlidersHorizontal, GraduationCap, Award, Sparkles } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { isPremiumCourseLms } from "@/lib/course-lms";
+import { CourseLmsExperience } from "@/components/course/CourseLmsExperience";
+
+/** Derive level key from any domain slug variant (legacy or new) */
+function extractLevelKey(slug: string): ExperienceLevelKey {
+  // Smart parse first (handles multi-word slugs like data-analyst-sql-analytics-beginner)
+  const parsed = parseDomainSlug(slug);
+  if (parsed) return parsed.levelKey;
+
+  // Fallback for legacy numeric slugs
+  const parts = slug.split('-');
+  const suffix = parts.slice(2).join('-');
+  return levelKeyFromLegacy(suffix);
+}
 
 export default function DomainPage({ params }: { params: Promise<{ domainSlug: string }> }) {
   const { domainSlug } = React.use(params);
-  const { user, refreshUser } = useAuth();
+  if (isPremiumCourseLms(domainSlug)) {
+    return <CourseLmsExperience domainSlug={domainSlug} />;
+  }
+  return <DomainClassicPage domainSlug={domainSlug} />;
+}
+
+function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
+  const { user } = useAuth();
   const [domain, setDomain] = useState<Domain | null>(null);
   const [categories, setCategories] = useState<DomainCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"default" | "questions">("default");
+
+  // Derive level from slug immediately — no async needed
+  const levelKey   = extractLevelKey(domainSlug);
+  const levelMeta  = EXPERIENCE_LEVELS[levelKey];
 
   useEffect(() => {
     const load = async () => {
-      try {
-        const [d, cats] = await Promise.all([
-          fetchDomain(domainSlug),
-          fetchCategoriesForDomain(domainSlug),
-        ]);
-        setDomain(d);
-        setCategories(cats);
+      // JSON content is the single source of truth for domain stacks
+      const jsonResult = await fetch(`/api/content/domain-stacks?domainSlug=${domainSlug}`)
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null);
 
-        // If user is logged in, sync this as their primary domain
-        if (user && d?.id) {
-          import('@/lib/api-client').then(m => {
-            m.default.post(`/dashboard/primary-domain/${d.id}`).then(() => {
-              refreshUser();
-            }).catch(console.error);
-          });
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+      if (jsonResult?.categories?.length > 0) {
+        setCategories(jsonResult.categories as DomainCategory[]);
       }
+
+      // Derive domain metadata from slug using smart parser
+      const domainParsed = parseDomainSlug(domainSlug);
+      const lang  = domainParsed?.language ?? domainSlug.split('-')[0].charAt(0).toUpperCase() + domainSlug.split('-')[0].slice(1);
+      const track = domainParsed?.track ?? (() => {
+        const parts = domainSlug.split('-');
+        return parts.length > 2
+          ? parts.slice(1, -1).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+          : parts[1]?.charAt(0).toUpperCase() + (parts[1]?.slice(1) ?? '');
+      })();
+
+      // Compute total questions from already-loaded categories for dynamic description
+      const totalQ = jsonResult?.categories?.reduce(
+        (sum: number, c: { stacks: { questionCount: number }[] }) =>
+          sum + c.stacks.reduce((s: number, st: { questionCount: number }) => s + st.questionCount, 0), 0
+      ) ?? 0;
+      const totalS = jsonResult?.categories?.reduce(
+        (sum: number, c: { stacks: unknown[] }) => sum + c.stacks.length, 0
+      ) ?? 0;
+
+      const displayName = track ? `${lang} ${track}` : lang;
+      setDomain({
+        id: 0,
+        name: displayName,
+        slug: domainSlug,
+        description: totalQ > 0
+          ? `${levelMeta.label} (${levelMeta.range}) interview prep — ${totalS} tech stacks, ${totalQ} curated questions covering everything ${displayName} interviewers ask.`
+          : `${levelMeta.label} (${levelMeta.range}) interview preparation for ${displayName} developers.`,
+        language: lang,
+        languageSlug: domainParsed?.langSlug ?? domainSlug.split('-')[0],
+        track: track,
+        trackSlug: domainParsed?.trackSlug ?? (domainSlug.split('-')[1] ?? ''),
+        experienceLabel: levelMeta.range,
+      });
+
+      setLoading(false);
     };
     load();
   }, [domainSlug, user]);
 
   if (loading) return (
-    <div className="container py-20 max-w-4xl mx-auto space-y-8">
+    <div className="w-full max-w-[1600px] mx-auto py-20 px-6 lg:px-12 xl:px-20 space-y-8">
       <Skeleton className="h-6 w-40" />
       <Skeleton className="h-20 w-2/3 rounded-2xl" />
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -72,6 +120,17 @@ export default function DomainPage({ params }: { params: Promise<{ domainSlug: s
   const totalStacks = categories.reduce((acc, c) => acc + c.stacks.length, 0);
   const totalQs = categories.reduce((acc, c) => acc + c.stacks.reduce((s, st) => s + st.questionCount, 0), 0);
 
+  const filteredCategories = selectedCategory === "all"
+    ? categories
+    : categories.filter(c => c.id.toString() === selectedCategory);
+
+  const sortedCategories = filteredCategories.map(cat => ({
+    ...cat,
+    stacks: sortBy === "questions"
+      ? [...cat.stacks].sort((a, b) => b.questionCount - a.questionCount)
+      : cat.stacks
+  }));
+
   const benefits = [
     "Structured interview preparation",
     "Practice real technical questions",
@@ -87,192 +146,279 @@ export default function DomainPage({ params }: { params: Promise<{ domainSlug: s
   ];
 
   return (
-    <div className="min-h-screen bg-[#fafafa] font-sans text-slate-800 selection:bg-blue-200">
-      <div className="max-w-[1300px] mx-auto bg-white min-h-screen shadow-sm border-x border-slate-100 flex">
-        
-        {/* ─── MAIN COLUMN ─── */}
-        <main className="flex-1 min-w-0 px-6 sm:px-10 py-10">
-          <Link href="/domains"
-            className="inline-flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wider text-slate-400 hover:text-[#2e64e5] mb-8 transition-colors">
-            <ArrowLeft className="h-3.5 w-3.5" />
-            All Paths
-          </Link>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-slate-800 selection:bg-blue-200">
+      <div className="w-full max-w-[1600px] mx-auto min-h-screen flex gap-6 px-6 py-6">
 
-          {/* Domain Intro Block */}
-          <header className="mb-10 rounded-[12px] border border-slate-200 bg-[#f8f9fa] px-6 py-5 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-            <div className="flex flex-wrap gap-2 mb-3">
-              {domain.language && (
-                <span className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-md bg-blue-50 text-[#2e64e5] border border-blue-100">
-                  {domain.language}
+        {/* ─── LEFT SIDEBAR ─── */}
+        <aside className="hidden lg:flex w-[280px] shrink-0 flex-col gap-4 self-start sticky top-6">
+          {/* Navigation */}
+          <div className="rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
+              <Link href="/domains"
+                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-[#2e64e5] transition-colors">
+                <ArrowLeft className="h-3 w-3" />
+                All Paths
+              </Link>
+            </div>
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <GraduationCap className="h-4 w-4 text-blue-600" />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Study Path</h3>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {domain.name} preparation guide
+              </p>
+            </div>
+          </div>
+
+          {/* Filter by Category */}
+          <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-gradient-to-r from-blue-100 to-blue-50 border-b border-blue-200">
+              <div className="flex items-center gap-2">
+                <Filter className="h-3.5 w-3.5 text-blue-600" />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Filter Topics</h3>
+              </div>
+            </div>
+            <div className="p-3">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-white border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700 font-medium"
+              >
+                <option value="all">All Modules ({categories.length})</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id.toString()}>
+                    {cat.name} ({cat.stacks.length})
+                  </option>
+                ))}
+              </select>
+
+              <div className="mt-3 pt-3 border-t border-blue-200">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                  <SlidersHorizontal className="h-3 w-3 text-blue-600" />
+                  Sort By:
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as "default" | "questions")}
+                  className="w-full mt-2 px-3 py-2 text-sm bg-white border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700 font-medium"
+                >
+                  <option value="default">Default Order</option>
+                  <option value="questions">Most Questions First</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress Tracker */}
+          <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Award className="h-4 w-4 text-emerald-600" />
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Your Progress</h3>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-600">Topics Completed</span>
+                <span className="font-bold text-slate-800">0/{totalStacks}</span>
+              </div>
+              <div className="w-full bg-emerald-100 rounded-full h-2 overflow-hidden">
+                <div className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full" style={{ width: '0%' }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Study Tips */}
+          <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-4 w-4 text-amber-600" />
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Quick Tip</h3>
+            </div>
+            <p className="text-xs text-slate-700 leading-relaxed">
+              Focus on understanding concepts deeply rather than memorizing answers. Practice explaining them out loud.
+            </p>
+          </div>
+        </aside>
+
+        {/* ─── MAIN COLUMN ─── */}
+        <main className="flex-1 min-w-0">
+          {/* Domain Hero Header */}
+          <header className="mb-6 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+            {/* Top Section with Gradient */}
+            <div className="relative px-6 py-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+              <div className="flex flex-wrap gap-2 mb-3">
+                {domain.language && (
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
+                    {domain.language}
+                  </span>
+                )}
+                {domain.track && (
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-purple-100 text-purple-700 border border-purple-200 shadow-sm">
+                    {domain.track}
+                  </span>
+                )}
+                <span className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg border shadow-sm ${levelMeta.colorClass}`}>
+                  {levelMeta.label} · {levelMeta.range}
                 </span>
-              )}
-              {domain.track && (
-                <span className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
-                  {domain.track}
-                </span>
-              )}
-              {domain.experienceLabel && (
-                <span className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-md bg-amber-50 text-amber-600 border border-amber-100">
-                  {domain.experienceLabel}
-                </span>
+              </div>
+
+              <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-3">
+                {domain.name}
+              </h1>
+
+              {domain.description ? (
+                <p className="text-sm text-slate-700 leading-relaxed max-w-3xl">
+                  {domain.description}
+                </p>
+              ) : (
+                <p className="text-sm text-slate-700 leading-relaxed max-w-3xl">
+                  Master the core concepts and advanced topics required to excel in {domain.name} interviews.
+                </p>
               )}
             </div>
-            
-            <h1 className="text-[1.8rem] font-bold tracking-tight text-slate-900 mb-2">
-              {domain.name}
-            </h1>
-            
-            {domain.description ? (
-              <p className="text-[14px] text-slate-600 leading-[1.6]">
-                {domain.description}
-              </p>
-            ) : (
-              <p className="text-[14px] text-slate-600 leading-[1.6]">
-                Master the core concepts and advanced topics required to excel in {domain.name} interviews.
-              </p>
-            )}
 
-            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-slate-200">
-              <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500">
-                <Layers className="h-3.5 w-3.5 text-slate-400" />
-                <span><strong className="text-slate-700">{totalStacks}</strong> stacks</span>
-              </div>
-              <div className="h-3 w-px bg-slate-200" />
-              <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500">
-                <BookOpen className="h-3.5 w-3.5 text-slate-400" />
-                <span><strong className="text-slate-700">{totalQs}</strong> questions total</span>
-              </div>
-              {domain.experienceLabel && (
-                <>
-                  <div className="h-3 w-px bg-slate-200" />
-                  <div className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500">
-                    <TrendingUp className="h-3.5 w-3.5 text-slate-400" />
-                    <span>{domain.experienceLabel} level</span>
+            {/* Stats Bar */}
+            <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <Layers className="h-5 w-5 text-blue-600" />
                   </div>
-                </>
-              )}
+                  <div>
+                    <div className="text-xs text-slate-500 font-medium">Topics</div>
+                    <div className="text-lg font-bold text-slate-900">{totalStacks}</div>
+                  </div>
+                </div>
+
+                <div className="h-10 w-px bg-slate-200" />
+
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                    <BookOpen className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 font-medium">Total Questions</div>
+                    <div className="text-lg font-bold text-slate-900">{totalQs}</div>
+                  </div>
+                </div>
+
+                <div className="h-10 w-px bg-slate-200" />
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: levelMeta.color + '20' }}>
+                    <TrendingUp className="h-5 w-5" style={{ color: levelMeta.color }} />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 font-medium">Level</div>
+                    <div className="text-sm font-bold text-slate-900">{levelMeta.label} <span className="text-slate-500 font-normal">({levelMeta.range})</span></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </header>
 
-          {/* Categories and Stacks */}
-          <div className="space-y-10 pb-16">
-            {categories.map((category) => (
-              <section key={category.id}>
-                <div className="flex items-center gap-3 mb-5">
-                  <h2 className="text-[15px] font-bold text-slate-900 tracking-tight flex items-center gap-2 whitespace-nowrap">
-                    <div className="w-2 h-2 rounded-full bg-[#2e64e5]" />
-                    {category.name}
-                  </h2>
-                  <div className="h-px flex-1 bg-slate-100" />
-                  <span className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">{category.stacks.length} Stacks</span>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                  {category.stacks.map((stack, idx) => (
-                    <StackAccordion key={stack.id} domainSlug={domainSlug} stack={stack} index={idx} />
-                  ))}
-                </div>
-              </section>
+          {/* Modules (collapsible) */}
+          <div className="space-y-3 pb-10">
+            {sortedCategories.map((category, catIdx) => (
+              <ModuleAccordion key={category.id} category={category} domainSlug={domainSlug} index={catIdx} />
             ))}
           </div>
 
-          {categories.length === 0 && (
-            <div className="text-center py-20 text-slate-500 bg-slate-50 rounded-[12px] border border-slate-100">
-              <p className="text-[14px]">No stacks found for this domain yet.</p>
+          {sortedCategories.length === 0 && (
+            <div className="text-center py-20 text-slate-500 bg-white/90 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm">
+              <p className="text-sm">No stacks found for this filter.</p>
             </div>
           )}
         </main>
 
         {/* ─── RIGHT SIDEBAR ─── */}
-        <aside className="hidden xl:flex w-[320px] shrink-0 flex-col gap-5 sticky top-0 h-screen overflow-y-auto py-10 pr-7 pl-2">
+        <aside className="hidden xl:flex w-[300px] shrink-0 flex-col gap-4 self-start sticky top-6">
 
-
-          {/* Quick Stats — FIRST (most important) */}
-          <div className="rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <Zap className="h-4 w-4 text-amber-500" />
-              At a Glance
-            </h3>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div className="bg-blue-50 rounded-[10px] p-3 border border-blue-100">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-[#2e64e5] mb-1">Stacks</div>
-                <div className="text-[1.4rem] font-bold text-slate-800 leading-none">{totalStacks}</div>
-              </div>
-              <div className="bg-emerald-50 rounded-[10px] p-3 border border-emerald-100">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mb-1">Questions</div>
-                <div className="text-[1.4rem] font-bold text-slate-800 leading-none">{totalQs}</div>
+          {/* Learning Stats */}
+          <div className="rounded-xl border border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-gradient-to-r from-purple-100 to-pink-100 border-b border-purple-200">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-purple-600" />
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">At a Glance</h3>
               </div>
             </div>
-            <div className="space-y-2.5 pt-2 border-t border-slate-100">
-              {domain?.experienceLabel && (
-                <div className="flex justify-between text-[13px]">
-                  <span className="text-slate-500 font-medium">Level</span>
-                  <span className="font-bold text-slate-800">{domain.experienceLabel}</span>
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-white rounded-lg p-3 border border-purple-200 shadow-sm">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-purple-600 mb-1">Stacks</div>
+                  <div className="text-2xl font-black text-slate-900 leading-none">{totalStacks}</div>
                 </div>
-              )}
-              {domain?.language && (
-                <div className="flex justify-between text-[13px]">
-                  <span className="text-slate-500 font-medium">Language</span>
-                  <span className="font-bold text-slate-800">{domain.language}</span>
+                <div className="bg-white rounded-lg p-3 border border-purple-200 shadow-sm">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-purple-600 mb-1">Questions</div>
+                  <div className="text-2xl font-black text-slate-900 leading-none">{totalQs}</div>
                 </div>
-              )}
-              {domain?.track && (
-                <div className="flex justify-between text-[13px]">
-                  <span className="text-slate-500 font-medium">Track</span>
-                  <span className="font-bold text-slate-800">{domain.track}</span>
+              </div>
+              <div className="space-y-2 pt-3 border-t border-purple-200">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-600 font-medium">Level</span>
+                  <span className="font-bold" style={{ color: levelMeta.color }}>
+                    {levelMeta.label} ({levelMeta.range})
+                  </span>
                 </div>
-              )}
+                {domain?.language && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600 font-medium">Language</span>
+                    <span className="font-bold text-slate-900">{domain.language}</span>
+                  </div>
+                )}
+                {domain?.track && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-600 font-medium">Track</span>
+                    <span className="font-bold text-slate-900">{domain.track}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* About this Path — SECOND */}
-          <div className="rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-[13px] font-bold text-slate-800 flex items-center gap-2 mb-4">
-              <Target className="h-4 w-4 text-[#2e64e5]" />
-              About this Path
-            </h3>
-            <p className="text-[13px] text-slate-600 leading-[1.6] mb-4">
-              {domain?.description
-                ? domain.description
-                : `This path is curated specifically for ${domain?.name} interview preparation. Work through each stack sequentially to build solid fundamentals.`}
-            </p>
+          {/* What You'll Learn */}
+          <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-50 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Target className="h-4 w-4 text-teal-600" />
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">What You'll Learn</h3>
+            </div>
             <div className="space-y-2">
               {benefits.map((b, i) => (
-                <div key={i} className="flex items-start gap-2.5 text-[13px] text-slate-700">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                <div key={i} className="flex items-start gap-2 text-xs text-slate-700">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-teal-600 mt-0.5 shrink-0" />
                   <span>{b}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* How to Use This Page */}
-          <div className="rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-[13px] font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <BookMarked className="h-4 w-4 text-[#2e64e5]" />
-              How to Study
-            </h3>
-            <div className="space-y-3.5">
+          {/* Study Strategy */}
+          <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <BookMarked className="h-4 w-4 text-indigo-600" />
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Study Strategy</h3>
+            </div>
+            <div className="space-y-3">
               {tips.map((tip, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="text-[15px] leading-none mt-0.5">{tip.icon}</span>
-                  <p className="text-[12.5px] text-slate-600 leading-[1.55]">{tip.text}</p>
+                <div key={i} className="flex items-start gap-2 bg-white/60 rounded-lg p-2 border border-indigo-100">
+                  <span className="text-sm leading-none mt-0.5">{tip.icon}</span>
+                  <p className="text-xs text-slate-700 leading-relaxed">{tip.text}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Quick Links */}
-          <div className="rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-[13px] font-bold text-slate-800 mb-4">Quick Links</h3>
-            <div className="flex flex-col gap-2">
-              <Link href="/domains" className="flex items-center justify-between text-[13px] font-medium text-slate-600 hover:text-[#2e64e5] transition-colors py-1.5 border-b border-slate-50 last:border-0">
+          {/* Quick Actions */}
+          <div className="rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Quick Actions</h3>
+            </div>
+            <div className="p-3 space-y-2">
+              <Link href="/domains" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
                 <span>Browse All Paths</span>
-                <ArrowUpRight className="h-3.5 w-3.5 text-slate-400" />
+                <ArrowUpRight className="h-3 w-3" />
               </Link>
-              <Link href="/dashboard" className="flex items-center justify-between text-[13px] font-medium text-slate-600 hover:text-[#2e64e5] transition-colors py-1.5 border-b border-slate-50 last:border-0">
+              <Link href="/dashboard" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
                 <span>My Dashboard</span>
-                <ArrowUpRight className="h-3.5 w-3.5 text-slate-400" />
+                <ArrowUpRight className="h-3 w-3" />
               </Link>
             </div>
           </div>
@@ -280,6 +426,74 @@ export default function DomainPage({ params }: { params: Promise<{ domainSlug: s
         </aside>
 
       </div>
+    </div>
+  );
+}
+
+const MODULE_COLORS = [
+  'from-blue-500 to-indigo-600',
+  'from-emerald-500 to-teal-600',
+  'from-purple-500 to-violet-600',
+  'from-amber-500 to-orange-600',
+  'from-rose-500 to-pink-600',
+  'from-cyan-500 to-sky-600',
+  'from-lime-500 to-green-600',
+  'from-fuchsia-500 to-purple-600',
+  'from-red-500 to-rose-600',
+  'from-indigo-500 to-blue-600',
+  'from-teal-500 to-emerald-600',
+];
+
+function ModuleAccordion({ category, domainSlug, index }: { category: DomainCategory; domainSlug: string; index: number }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const totalQs = category.stacks.reduce((s, st) => s + st.questionCount, 0);
+  const colorGrad = MODULE_COLORS[index % MODULE_COLORS.length];
+
+  return (
+    <div className={cn(
+      "border rounded-xl transition-all duration-300 overflow-hidden",
+      isOpen
+        ? "border-slate-300 shadow-lg bg-white"
+        : "border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 bg-white"
+    )}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center gap-4 p-4 sm:px-5 text-left hover:bg-slate-50/50 transition-colors focus:outline-none group"
+      >
+        <div className={cn(
+          "shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center shadow-md transition-transform duration-200",
+          colorGrad,
+          isOpen && "scale-110"
+        )}>
+          <span className="text-white text-sm font-black">{index + 1}</span>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <h2 className="text-[16px] font-black text-slate-900 tracking-tight group-hover:text-blue-700 transition-colors leading-tight">
+            {category.name}
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {category.stacks.length} {category.stacks.length === 1 ? 'topic' : 'topics'} · {totalQs} questions
+          </p>
+        </div>
+
+        <div className={cn(
+          "w-8 h-8 rounded-full border flex items-center justify-center transition-all shrink-0",
+          isOpen
+            ? "border-blue-400 bg-blue-50 text-blue-600"
+            : "border-slate-200 bg-white text-slate-400 group-hover:border-blue-300 group-hover:text-blue-500"
+        )}>
+          <ChevronDown className={cn("h-4 w-4 transition-transform duration-300", isOpen && "rotate-180")} />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="border-t border-slate-100 bg-slate-50/30 px-3 sm:px-4 py-3 space-y-2">
+          {category.stacks.map((stack, idx) => (
+            <StackAccordion key={stack.id} domainSlug={domainSlug} stack={stack} index={idx} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -292,24 +506,29 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
   useEffect(() => {
     if (isOpen && questions.length === 0) {
       setLoadingQs(true);
-      fetchQuestionsForStack(stack.slug)
-        .then(setQuestions)
+      fetch(`/api/content/stack-questions?domainSlug=${domainSlug}&stackSlug=${stack.slug}`)
+        .then(r => r.ok ? r.json() : [])
+        .then((subcats: Array<{ questions: QuestionSummary[] }>) => {
+          const flat = subcats.flatMap(sc => sc.questions);
+          setQuestions(flat);
+        })
         .catch(console.error)
         .finally(() => setLoadingQs(false));
     }
-  }, [isOpen, stack.slug, questions.length]);
+  }, [isOpen, stack.slug, domainSlug, questions.length]);
+
+  const easyCt  = questions.filter(q => q.difficulty === 'easy').length;
+  const medCt   = questions.filter(q => q.difficulty === 'medium').length;
+  const hardCt  = questions.filter(q => q.difficulty === 'hard').length;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
+    <div
       className={`border rounded-[12px] transition-all duration-300 overflow-hidden ${
         isOpen ? "border-[#2e64e5]/30 shadow-md ring-1 ring-[#2e64e5]/5 bg-white" : "border-slate-200 shadow-sm hover:border-slate-300 hover:shadow-md bg-[#f8f9fa]"
       }`}
     >
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center">
-        <button 
+        <button
           onClick={() => setIsOpen(!isOpen)}
           className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:px-5 text-left hover:bg-slate-50/50 transition-colors focus:outline-none group"
         >
@@ -319,35 +538,41 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
             }`}>
               <Layers className="h-3.5 w-3.5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="text-[15px] font-bold text-slate-800 tracking-tight group-hover:text-[#2e64e5] transition-colors leading-tight mb-0.5">
                 {stack.name}
               </h3>
               {stack.description && (
-                <p className="text-[13px] text-slate-500 leading-snug line-clamp-1">
+                <p className="text-[12px] text-slate-500 leading-snug line-clamp-2 max-w-xl">
                   {stack.description}
                 </p>
               )}
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3 shrink-0 pl-11 sm:pl-0">
+            {isOpen && questions.length > 0 && (
+              <div className="hidden sm:flex items-center gap-1 mr-2">
+                {easyCt > 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">{easyCt}</span>}
+                {medCt > 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700">{medCt}</span>}
+                {hardCt > 0 && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">{hardCt}</span>}
+              </div>
+            )}
             <div className="flex flex-col sm:items-end gap-0.5 hidden sm:flex">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total</span>
-              <span className="text-[12px] font-semibold text-slate-600">{stack.questionCount} Qs</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Questions</span>
+              <span className="text-[12px] font-semibold text-slate-600">{stack.questionCount}</span>
             </div>
           </div>
         </button>
 
-        {/* Dedicated "Go to Stack" action area (separated from accordion toggle logic) */}
         <div className="flex items-center gap-2 p-4 pt-0 sm:pt-4 sm:pl-0 sm:border-l-0 border-slate-100 bg-inherit shrink-0">
-          <Link 
-            href={`/${domainSlug}/${stack.slug}`} 
+          <Link
+            href={`/${domainSlug}/${stack.slug}`}
             className="flex items-center justify-center h-8 px-3 rounded-md bg-white border border-slate-200 text-[#2e64e5] text-[11px] font-bold uppercase tracking-wider hover:border-[#2e64e5] hover:bg-[#2e64e5]/5 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2e64e5]/30 group/btn"
           >
             Start <ChevronRight className="h-3.5 w-3.5 ml-1 group-hover/btn:translate-x-0.5 transition-transform" />
           </Link>
-          <button 
+          <button
             onClick={() => setIsOpen(!isOpen)}
             className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-[#2e64e5]/30 ${
               isOpen ? "border-[#2e64e5] bg-[#2e64e5] text-white" : "border-slate-200 bg-white text-slate-400 hover:border-[#2e64e5]/30 hover:text-[#2e64e5]"
@@ -368,13 +593,12 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
              </div>
           ) : questions.length > 0 ? (
              <div className="relative py-3 px-3 sm:px-4">
-               {/* Vertical timeline line */}
                <div className="absolute left-[34px] top-6 bottom-6 w-px bg-slate-100 hidden sm:block"></div>
-               
+
                <div className="flex flex-col gap-1.5 relative z-10">
                  {questions.map((q, idx) => (
-                    <Link 
-                      key={q.id} 
+                    <Link
+                      key={`${idx}-${q.slug}`}
                       href={`/${domainSlug}/${stack.slug}/${q.slug}`}
                       className="group/link flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:pr-4 rounded-[8px] hover:bg-[#f8f9fa] transition-all duration-200"
                     >
@@ -386,7 +610,7 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
                             {q.title}
                           </h4>
                        </div>
-                       
+
                        <div className="flex items-center gap-3 pl-8 sm:pl-0 shrink-0 opacity-80 group-hover/link:opacity-100 transition-opacity">
                           <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded text-white shadow-sm"
                              style={{ backgroundColor: difficultyColor(q.difficulty) }}
@@ -401,10 +625,10 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
                     </Link>
                  ))}
                </div>
-               
+
                <div className="mt-3 text-center border-t border-slate-100 pt-3">
                   <Link href={`/${domainSlug}/${stack.slug}`} className="text-[#2e64e5] hover:text-blue-700 text-[12px] font-bold tracking-wide flex items-center justify-center gap-1 group/more">
-                    See Full Stack Page <ChevronRight className="h-3.5 w-3.5 group-hover/more:translate-x-0.5 transition-transform" />
+                    Open Topic <ChevronRight className="h-3.5 w-3.5 group-hover/more:translate-x-0.5 transition-transform" />
                   </Link>
                </div>
              </div>
@@ -413,6 +637,6 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
           )}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }

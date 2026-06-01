@@ -56,11 +56,18 @@ public class AuthService {
                 request.getDomainId(),
                 request.getExperienceLevel()
         );
+        profile.setPrimaryDomainSlug(request.getDomainSlug());
         userProfileRepository.save(profile);
 
-        String domainSlug = domainRepository.findById(request.getDomainId())
-                .map(Domain::getSlug)
-                .orElse(null);
+        // The content slug chosen at signup is the source of truth. Fall back to
+        // resolving a slug from a (legacy) numeric domain id only when no slug
+        // was supplied.
+        String domainSlug = request.getDomainSlug();
+        if (domainSlug == null && request.getDomainId() != null) {
+            domainSlug = domainRepository.findById(request.getDomainId())
+                    .map(Domain::getSlug)
+                    .orElse(null);
+        }
 
         String token = jwtUtil.generateToken(userId, user.getEmail());
         UserResponse userResp = new UserResponse(user.getId(), user.getName(), user.getEmail(), domainSlug);
@@ -75,10 +82,16 @@ public class AuthService {
             throw new RuntimeException("Invalid credentials");
         }
 
-        String domainSlug = userProfileRepository.findById(user.getId())
-                .flatMap(profile -> domainRepository.findById(profile.getPrimaryDomainId()))
-                .map(Domain::getSlug)
-                .orElse(null);
+        UserProfile loginProfile = userProfileRepository.findById(user.getId()).orElse(null);
+        String domainSlug = null;
+        if (loginProfile != null) {
+            domainSlug = loginProfile.getPrimaryDomainSlug();
+            if (domainSlug == null && loginProfile.getPrimaryDomainId() != null) {
+                domainSlug = domainRepository.findById(loginProfile.getPrimaryDomainId())
+                        .map(Domain::getSlug)
+                        .orElse(null);
+            }
+        }
 
         String token = jwtUtil.generateToken(user.getId(), user.getEmail());
         UserResponse userResp = new UserResponse(user.getId(), user.getName(), user.getEmail(), domainSlug);
@@ -86,15 +99,16 @@ public class AuthService {
     }
 
     private ExperienceBand parseExperienceBand(String level) {
-        if (level == null) return ExperienceBand.E1_1_TO_3;
+        if (level == null) return ExperienceBand.BEGINNER;
         try {
-            if (level.contains("0-1")) return ExperienceBand.E0_0_TO_1;
-            if (level.contains("1-3")) return ExperienceBand.E1_1_TO_3;
-            if (level.contains("3-5")) return ExperienceBand.E2_3_TO_5;
-            if (level.contains("5+")) return ExperienceBand.E3_5_PLUS;
-            return ExperienceBand.valueOf(level);
+            return switch (level.toLowerCase()) {
+                case "0-1", "1-3", "0-2", "beginner"    -> ExperienceBand.BEGINNER;
+                case "3-5", "2-5", "intermediate"        -> ExperienceBand.INTERMEDIATE;
+                case "5+",  "advanced"                   -> ExperienceBand.ADVANCED;
+                default -> ExperienceBand.valueOf(level.toUpperCase());
+            };
         } catch (Exception e) {
-            return ExperienceBand.E1_1_TO_3;
+            return ExperienceBand.BEGINNER;
         }
     }
 }

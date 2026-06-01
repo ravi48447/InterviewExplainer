@@ -1,5 +1,5 @@
 // API v2 client — aligned with new PostgreSQL schema
-const API_BASE = 'http://localhost:8080/api/v2';
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080') + '/api/v2';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -11,7 +11,17 @@ export type AnswerSectionType =
   | 'important_points'
   | 'code_example'
   | 'speakable_answer'
-  | 'followup_questions';
+  | 'deep_explanation'
+  | 'practice_prompt'
+  | 'followup_questions'
+  | 'explanation'
+  | 'short_summary'
+  | 'detailed_explanation'
+  | 'best_practices'
+  | 'common_mistakes'
+  | 'real_world_example'
+  | 'scenario_based'
+  | string;
 
 export interface Language {
   id: number;
@@ -67,6 +77,24 @@ export interface RadarData {
   score: number;
 }
 
+export interface DailyActivity {
+  date: string;
+  count: number;
+}
+
+export interface DifficultyBreakdown {
+  easy: number;
+  medium: number;
+  hard: number;
+}
+
+export interface RecentActivityItem {
+  title: string;
+  detail: string | null;
+  activityType: string;
+  date: string;
+}
+
 export interface DashboardSummary {
   totalQuestions: number;
   totalConcepts: number;
@@ -75,14 +103,17 @@ export interface DashboardSummary {
   completedQuestions: number;
   totalTimeSpent: number;
   currentStreak: number;
+  longestStreak: number;
   bookmarksCount: number;
   stackPerformance: StackPerformance[];
   weakAreas: WeakArea[];
-  recentActivity: string[];
+  recentActivity: RecentActivityItem[];
   primaryDomainName: string | null;
   primaryDomainSlug: string | null;
   experienceLevel: string | null;
   radarData: RadarData[];
+  dailyActivity: DailyActivity[];
+  difficultyBreakdown: DifficultyBreakdown;
 }
 
 export interface TechStack {
@@ -103,6 +134,8 @@ export interface QuestionSummary {
   orderIndex: number | null;
   domainSlug?: string | null;
   stackSlug?: string | null;
+  subcategorySlug?: string | null;
+  subcategoryName?: string | null;
 }
 
 export interface AnswerSection {
@@ -110,6 +143,7 @@ export interface AnswerSection {
   sectionType: AnswerSectionType;
   sectionOrder: number;
   content: string;
+  sectionTitle?: string;
 }
 
 export interface ConceptLink {
@@ -137,6 +171,7 @@ export interface QuestionQuiz {
 export interface QuestionPagePayload {
   id: number;
   title: string;
+  questionText: string | null;
   slug: string;
   difficulty: Difficulty;
   estimatedReadTime: number;
@@ -161,10 +196,10 @@ export interface QuestionPagePayload {
 }
 
 export const fetchPeopleAlsoAsk = (questionId: number): Promise<{ questions: QuestionSummary[] }> =>
-  fetch(`http://localhost:8080/api/v2/recommendations/paa/${questionId}`).then(r => r.json());
+  fetch(`${API_BASE}/recommendations/paa/${questionId}`).then(r => r.json());
 
 export const markQuestionComplete = (userId: number, questionId: number): Promise<{ status: string }> =>
-  fetch(`http://localhost:8080/api/v2/user-progress/complete`, {
+  fetch(`${API_BASE}/user-progress/complete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, questionId })
@@ -172,16 +207,25 @@ export const markQuestionComplete = (userId: number, questionId: number): Promis
 
 // ─── API Helpers ──────────────────────────────────────────────────────────────
 
+const BACKEND_TIMEOUT_MS = 4000; // fail fast if Spring Boot is unreachable / slow
+
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    cache: 'no-store',
-    headers: { 'Accept': 'application/json' },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as any).message ?? `HTTP ${res.status}: ${path}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).message ?? `HTTP ${res.status}: ${path}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 // ─── Language / Track / Experience ───────────────────────────────────────────
@@ -231,15 +275,53 @@ export const fetchStack = (slug: string): Promise<TechStack> =>
 export const fetchQuestionsForStack = (slug: string): Promise<QuestionSummary[]> =>
   get(`/stacks/${encodeURIComponent(slug)}/questions`);
 
+/**
+ * Interview prep: a single short Markdown "Revision" sheet attached at the
+ * MODULE level (not per topic). Lives at `<module>/_revision.json` and is
+ * surfaced to learners as the first synthetic topic of the module.
+ *
+ * Five to six skim-first sections, each ~150 words. Designed to be printed
+ * as a 2–3 page PDF before the user drills the interview questions.
+ */
+export interface ModuleRevisionSection {
+  id: string;
+  title: string;
+  body: string;
+}
+
+export interface ModuleRevision {
+  title: string;
+  estimatedMinutes?: number;
+  sections: ModuleRevisionSection[];
+}
+
+export interface StackSubcategory {
+  slug: string;
+  name: string;
+  orderIndex: number;
+  questionCount: number;
+  questions: QuestionSummary[];
+}
+
+export const fetchSubcategoriesForStack = (slug: string): Promise<StackSubcategory[]> =>
+  get(`/stacks/${encodeURIComponent(slug)}/subcategories`);
+
 // ─── Aggregated Page Payload (docs-platform architecture) ───────────────────
 
 export const fetchPagePayload = async (slug: string): Promise<QuestionPagePayload> => {
-  const res = await fetch(`http://localhost:8080/api/v2/question/${encodeURIComponent(slug)}`, {
-    cache: 'no-store',
-    headers: { 'Accept': 'application/json' },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: /api/v2/question/${slug}`);
-  return res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000); // 4-second timeout
+  try {
+    const res = await fetch(`${API_BASE}/question/${encodeURIComponent(slug)}`, {
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: /api/v2/question/${slug}`);
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 // ─── Questions ────────────────────────────────────────────────────────────────

@@ -90,6 +90,7 @@ public class QuestionService {
 
         String stackName = null;
         String stackSlug = null;
+        String domainSlug = null;
         QuestionSummaryDTO previousQuestion = null;
         QuestionSummaryDTO nextQuestion = null;
         List<QuestionSummaryDTO> quickQuestions = List.of();
@@ -99,6 +100,8 @@ public class QuestionService {
             if (stack != null) {
                 stackName = stack.getName();
                 stackSlug = stack.getSlug();
+                // Get domain slug from first domain mapping
+                domainSlug = questionRepository.findFirstDomainSlugForStack(stackId).orElse(null);
             }
 
             previousQuestion = questionRepository
@@ -132,6 +135,7 @@ public class QuestionService {
                 stackId,
                 stackName,
                 stackSlug,
+                domainSlug,
                 answerSections,
                 previousQuestion,
                 nextQuestion,
@@ -150,7 +154,7 @@ public class QuestionService {
         return new QuestionSummaryDTO(
                 q.getId(), q.getTitle(), q.getSlug(),
                 q.getDifficulty(), q.getEstimatedReadTime(), null,
-                null, null
+                null, null, null, null
         );
     }
 }

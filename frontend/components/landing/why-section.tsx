@@ -30,7 +30,7 @@ const features = [
 export function WhySection() {
   return (
     <section className="px-4 py-16 sm:py-20 lg:px-6 bg-muted/20">
-      <div className="mx-auto max-w-6xl">
+      <div className="w-full min-w-0">
         <FadeInUp>
           <div className="mb-10 text-center">
             <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl text-balance">

@@ -1,73 +1,120 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { fetchDomains, fetchTracks, fetchExperienceLevels, Domain, Track, ExperienceLevel } from "@/lib/api";
+import { useSearchParams } from "next/navigation";
+import { type ContentDomain } from "@/lib/types/content-domain";
+import { EXPERIENCE_LEVELS, LEVEL_KEYS, type ExperienceLevelKey } from "@/lib/levels";
+import { ENABLED_LANGUAGES } from "@/lib/launch-config";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
 import {
-  Compass, ArrowRight, Filter, ChevronDown,
-  Search, X, BookOpen, Layers,
-  Globe, Server, Code2, Database, Cpu, Briefcase
+  Compass, ArrowRight, Filter, ChevronDown, ChevronRight,
+  Search, X, BookOpen, Layers, Clock,
+  Globe, Server, Code2, Database, Cpu, Briefcase, Home, TrendingUp, Target, Award, Lightbulb
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { TechIcon } from "@/components/tech-icon";
 
 const trackIcon: Record<string, React.ReactNode> = {
-  frontend: <Globe className="h-3.5 w-3.5" />,
-  backend: <Server className="h-3.5 w-3.5" />,
-  fullstack: <Code2 className="h-3.5 w-3.5" />,
-  data: <Database className="h-3.5 w-3.5" />,
-  devops: <Cpu className="h-3.5 w-3.5" />,
-  business: <Briefcase className="h-3.5 w-3.5" />,
+  frontend:           <Globe     className="h-4 w-4" />,
+  backend:            <Server    className="h-4 w-4" />,
+  fullstack:          <Code2     className="h-4 w-4" />,
+  'data-engineering': <Database  className="h-4 w-4" />,
+  'ml-ai':            <Cpu       className="h-4 w-4" />,
+  cicd:               <Cpu       className="h-4 w-4" />,
+  cloud:              <Cpu       className="h-4 w-4" />,
+  infrastructure:     <Cpu       className="h-4 w-4" />,
+  sre:                <Cpu       className="h-4 w-4" />,
+  'sql-analytics':    <Database  className="h-4 w-4" />,
+  'python-analysis':  <Database  className="h-4 w-4" />,
+  visualization:      <Database  className="h-4 w-4" />,
+  'case-studies':     <Database  className="h-4 w-4" />,
+  analysis:           <Briefcase className="h-4 w-4" />,
 };
+
 const trackColor: Record<string, string> = {
-  frontend: "#6366f1",
-  backend: "#0ea5e9",
-  fullstack: "#8b5cf6",
-  data: "#f59e0b",
-  devops: "#10b981",
-  business: "#ef4444",
+  frontend:           "#6366f1",
+  backend:            "#0ea5e9",
+  fullstack:          "#8b5cf6",
+  'data-engineering': "#f59e0b",
+  'ml-ai':            "#ec4899",
+  cicd:               "#10b981",
+  cloud:              "#0ea5e9",
+  infrastructure:     "#10b981",
+  sre:                "#14b8a6",
+  'sql-analytics':    "#f59e0b",
+  'python-analysis':  "#f59e0b",
+  visualization:      "#a855f7",
+  'case-studies':     "#f97316",
+  analysis:           "#ef4444",
 };
+
+const LANG_ORDER = [
+  "Java", "Python", "JavaScript", "TypeScript", "Go", "Kotlin",
+  "C#", "Ruby", "DevOps", "Data Analyst", "Business Analyst",
+];
 
 export default function DomainsPage() {
-  const [domains, setDomains] = useState<Domain[]>([]);
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [expLevels, setExpLevels] = useState<ExperienceLevel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ search: "", track: "", experience: "" });
+  const searchParams = useSearchParams();
+  const langParam = searchParams?.get('language')?.toLowerCase() ?? '';
+
+  const [domains, setDomains]         = useState<ContentDomain[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [filters, setFilters]         = useState({ search: "", track: "", level: "", language: langParam });
   const [expandedLang, setExpandedLang] = useState<Record<string, boolean>>({});
 
+  // Sync language filter if URL param changes
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [d, t, e] = await Promise.all([fetchDomains(), fetchTracks(), fetchExperienceLevels()]);
-        setDomains(d); setTracks(t); setExpLevels(e);
-        // Do NOT auto-expand any section — let the user choose
-      } catch (err) { console.error(err); }
-      finally { setLoading(false); }
-    };
-    load();
-  }, []);
+    if (langParam) setFilters(f => ({ ...f, language: langParam }));
+  }, [langParam]);
+
+  useEffect(() => {
+    fetch("/api/content/all-domains")
+      .then(r => r.ok ? r.json() : [])
+      .then((data: ContentDomain[]) => {
+        // Launch gate: only expose languages listed in launch-config.ts.
+        // See ROADMAP.md for the plan to unlock the others.
+        const enabled = new Set(
+          (ENABLED_LANGUAGES as readonly string[]).map(s => s.toLowerCase())
+        );
+        const visible = data.filter(d => enabled.has(d.language.toLowerCase()));
+        setDomains(visible);
+        // Auto-expand matching language or first group
+        const firstLang =
+          visible.find(d => d.language.toLowerCase() === langParam)?.language
+          ?? visible[0]?.language
+          ?? '';
+        if (firstLang) setExpandedLang({ [firstLang]: true });
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [langParam]);
+
+  // Derive unique tracks from content
+  const uniqueTracks = useMemo(() => {
+    const seen = new Set<string>();
+    return domains
+      .filter(d => { const k = d.trackSlug; if (seen.has(k)) return false; seen.add(k); return true; })
+      .map(d => ({ slug: d.trackSlug, name: d.track }));
+  }, [domains]);
 
   const filtered = useMemo(() => domains.filter(d => {
     const s = filters.search.toLowerCase();
-    const matchesSearch = !s || d.name.toLowerCase().includes(s) || (d.language?.toLowerCase() ?? "").includes(s);
-    return matchesSearch &&
-      (!filters.track || d.trackSlug === filters.track) &&
-      (!filters.experience || d.experienceLabel === filters.experience);
+    return (
+      (!s || d.name.toLowerCase().includes(s) || d.language.toLowerCase().includes(s) || d.track.toLowerCase().includes(s)) &&
+      (!filters.track    || d.trackSlug === filters.track) &&
+      (!filters.level    || d.level === filters.level) &&
+      (!filters.language || d.language.toLowerCase() === filters.language.toLowerCase())
+    );
   }), [domains, filters]);
 
-  // Popularity order — most-used first; unknowns go to end
-  const LANG_ORDER = ["Python", "JavaScript", "Java", "TypeScript", "React", "Go", "C++", "Ruby", "Business Analyst", "Other"];
-
-  const grouped = useMemo(() => filtered.reduce((acc, d) => {
-    const raw = d.language;
-    // null / "na" / empty → show as "Business Analyst"
-    const k = (!raw || raw.toLowerCase() === "na") ? "Business Analyst" : raw;
-    if (!acc[k]) acc[k] = [];
-    acc[k].push(d);
-    return acc;
-  }, {} as Record<string, Domain[]>), [filtered]);
+  const grouped = useMemo(() =>
+    filtered.reduce((acc, d) => {
+      if (!acc[d.language]) acc[d.language] = [];
+      acc[d.language].push(d);
+      return acc;
+    }, {} as Record<string, ContentDomain[]>),
+  [filtered]);
 
   const langKeys = useMemo(() => {
     const keys = Object.keys(grouped);
@@ -80,129 +127,163 @@ export default function DomainsPage() {
       return ai - bi;
     });
   }, [grouped]);
-  const uniqueExp = useMemo(() =>
-    expLevels.filter((e, i, self) => self.findIndex(s => s.label === e.label) === i),
-    [expLevels]);
-  const hasFilter = !!(filters.track || filters.experience || filters.search);
-  const toggle = (lang: string) => setExpandedLang(p => ({ ...p, [lang]: !p[lang] }));
-  const resetAll = () => setFilters({ search: "", track: "", experience: "" });
+
+  const totalQuestions = useMemo(() => domains.filter(d => d.hasContent).reduce((s, d) => s + d.questionCount, 0), [domains]);
+  const liveCount     = useMemo(() => domains.filter(d => d.hasContent).length, [domains]);
+  const hasFilter = !!(filters.track || filters.level || filters.search || filters.language);
+  const toggle    = (lang: string) => setExpandedLang(p => ({ ...p, [lang]: !p[lang] }));
+  const resetAll  = () => setFilters({ search: "", track: "", level: "", language: "" });
 
   if (loading) return (
-    <div className="min-h-screen bg-[#fafafa]">
-      <div className="max-w-[1200px] mx-auto py-16 px-6 space-y-6">
+    <div className="min-h-screen bg-slate-50">
+      <div className="w-full min-w-0 py-16 px-6 lg:px-12 xl:px-20 space-y-6">
         <Skeleton className="h-8 w-40 rounded-xl" />
-        <div className="grid grid-cols-4 gap-8">
-          <Skeleton className="h-80 col-span-1 rounded-2xl" />
-          <div className="col-span-3 space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-5">
+          <Skeleton className="h-96 rounded-2xl" />
+          <div className="space-y-4">
             {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-2xl" />)}
           </div>
+          <Skeleton className="hidden lg:block h-96 rounded-2xl" />
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#fafafa] font-sans text-slate-800 selection:bg-blue-100">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-8 py-10">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-slate-800">
+      <div className="w-full min-w-0 px-6 py-6">
 
-        {/* ─── HERO HEADER ─── */}
-        <header className="mb-10 rounded-[18px] bg-white border border-slate-200 shadow-sm overflow-hidden relative">
-          <div className="absolute -right-24 -top-24 w-96 h-96 bg-[#2e64e5]/5 rounded-full blur-3xl pointer-events-none" />
-          {/* Main row */}
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6 px-8 pt-8 pb-6">
-            <div>
-              <div className="flex items-center gap-2 text-[#2e64e5] font-bold uppercase tracking-widest text-[10px] mb-3">
-                <Compass className="h-3.5 w-3.5" />
-                <span>Interview Preparation Hub</span>
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-2 text-xs text-slate-500 mb-4">
+          <Link href="/" className="hover:text-slate-700 transition-colors flex items-center gap-1">
+            <Home className="h-3 w-3" /> Home
+          </Link>
+          <ChevronRight className="h-3 w-3" />
+          <span className="text-slate-700 font-semibold">Learning Paths</span>
+        </nav>
+
+        {/* Hero */}
+        <header className="mb-6 bg-white/90 backdrop-blur-sm rounded-xl border border-slate-200 shadow-lg overflow-hidden">
+          <div className="relative px-6 py-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+            <div className="flex items-start justify-between gap-6">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 text-[11px] font-bold text-blue-600 uppercase tracking-wide mb-2">
+                  <Compass className="h-3.5 w-3.5" />
+                  Interview Preparation Hub
+                </div>
+                <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">
+                  Choose Your Learning Path
+                </h1>
+                <p className="text-sm text-slate-700 leading-relaxed max-w-2xl">
+                  Master technical interviews with <span className="font-bold text-slate-900">domain-specific questions</span> tailored
+                  to your <span className="font-bold text-slate-900">tech stack</span> and <span className="font-bold text-slate-900">experience level</span>.
+                </p>
               </div>
-              <h1 className="text-[2rem] font-black tracking-tight text-slate-900 mb-2">
-                Choose Your Learning Path
-              </h1>
-              <p className="text-[14px] text-slate-500 max-w-[500px] leading-[1.7]">
-                Curated prep paths by technology, role, and experience level — tailored to what hiring managers actually ask.
-              </p>
-            </div>
-            <div className="flex gap-3 shrink-0">
-              <div className="rounded-[12px] bg-[#f8f9fa] border border-slate-200 px-5 py-4 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Paths</p>
-                <p className="text-[1.6rem] font-black text-slate-800 leading-none">{domains.length}</p>
-              </div>
-              <div className="rounded-[12px] bg-blue-50 border border-blue-100 px-5 py-4 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#2e64e5] mb-1">Tracks</p>
-                <p className="text-[1.6rem] font-black text-slate-800 leading-none">{tracks.length}</p>
+              <div className="flex gap-3 shrink-0">
+                <div className="text-center px-5 py-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+                  <div className="text-[11px] text-blue-100 font-semibold mb-1">Live Paths</div>
+                  <div className="text-2xl font-black text-white">{liveCount}</div>
+                </div>
+                <div className="text-center px-5 py-3 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl shadow-lg">
+                  <div className="text-[11px] text-emerald-100 font-semibold mb-1">Questions</div>
+                  <div className="text-2xl font-black text-white">{totalQuestions > 1000 ? `${(totalQuestions / 1000).toFixed(1)}k+` : totalQuestions}</div>
+                </div>
               </div>
             </div>
           </div>
-          {/* Benefit strip — compact */}
-          <div className="border-t border-slate-100 bg-[#fafafa] px-8 py-2.5 flex flex-wrap gap-x-6 gap-y-1.5">
-            {[
-              "✅ Top-company interview questions",
-              "🎯 Matched to your experience level",
-              "⚡ Structured Easy → Hard progression",
-            ].map(b => (
-              <span key={b} className="text-[12px] font-medium text-slate-500">{b}</span>
-            ))}
+
+          {/* How It Works */}
+          <div className="px-6 py-3 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 border-t border-blue-200">
+            <div className="flex flex-wrap items-center justify-center gap-4 gap-y-3">
+              {[
+                { n: 1, text: "Select Language",  sub: "Choose your stack",              g: "from-blue-600 to-indigo-600" },
+                { n: 2, text: "Match Your Level", sub: "Fresher / Intermediate", g: "from-purple-600 to-pink-600" },
+                { n: 3, text: "Start Learning",   sub: "Access questions instantly",      g: "from-emerald-600 to-teal-600" },
+              ].map(({ n, text, sub, g }, i) => (
+                <React.Fragment key={n}>
+                  {i > 0 && <div className="text-blue-400 text-lg hidden sm:block">→</div>}
+                  <div className="flex items-center gap-2">
+                    <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${g} text-white font-bold flex items-center justify-center text-xs shadow-md shrink-0`}>{n}</div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-800">{text}</div>
+                      <div className="text-[11px] text-slate-600">{sub}</div>
+                    </div>
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
           </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_220px] gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-5">
 
-          {/* ─── FILTER SIDEBAR ─── */}
-          <aside className="sticky top-6">
-            <div className="bg-white border border-slate-200 rounded-[18px] shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h3 className="text-[12px] font-bold uppercase tracking-widest text-slate-700 flex items-center gap-2">
-                  <Filter className="h-3.5 w-3.5 text-slate-400" /> Filter Paths
+          {/* ── Left Filter Sidebar ── */}
+          <aside className="space-y-4">
+            <div className="bg-white/90 backdrop-blur-sm rounded-xl border border-slate-200 shadow-md overflow-hidden">
+              <div className="px-4 py-3 bg-gradient-to-r from-indigo-100 via-purple-100 to-pink-100 border-b border-indigo-200">
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                  <Filter className="h-3.5 w-3.5 text-indigo-600" />
+                  Filter Your Path
                 </h3>
-                {hasFilter && (
-                  <button onClick={resetAll} className="text-[11px] font-bold text-[#2e64e5] hover:text-blue-700 flex items-center gap-1 transition-colors">
-                    Clear <X className="h-3 w-3" />
-                  </button>
-                )}
               </div>
 
-              <div className="p-5 space-y-6">
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by name or language..."
-                    value={filters.search}
-                    onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-                    className="w-full bg-[#f8f9fa] border border-slate-200 rounded-[10px] h-10 pl-9 pr-4 text-[13px] placeholder:text-slate-400 focus:border-[#2e64e5]/50 focus:outline-none focus:ring-2 focus:ring-[#2e64e5]/10 transition-all"
-                  />
+              <div className="p-4 space-y-4">
+                {/* Language */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                    <Code2 className="h-3 w-3 text-blue-600" /> Programming Language
+                  </label>
+                  <select
+                    value={filters.language}
+                    onChange={e => setFilters(f => ({ ...f, language: e.target.value }))}
+                    className="w-full bg-white border-2 border-slate-200 rounded-lg h-10 px-3 text-sm font-medium focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all"
+                  >
+                    <option value="">All Languages ({langKeys.length})</option>
+                    {langKeys.map(lang => <option key={lang} value={lang}>{lang}</option>)}
+                  </select>
                 </div>
 
-                {/* Role Track */}
+                {/* Search */}
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Role Track</p>
-                  <div className="flex flex-col gap-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                    <Search className="h-3 w-3 text-purple-600" /> Search Paths
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Find a path..."
+                      value={filters.search}
+                      onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
+                      className="w-full bg-white border-2 border-slate-200 rounded-lg h-10 pl-10 pr-3 text-sm font-medium focus:border-purple-400 focus:ring-2 focus:ring-purple-100 focus:outline-none transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Track */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                    <Layers className="h-3 w-3 text-teal-600" /> Career Track
+                  </label>
+                  <div className="space-y-1.5">
                     <button
                       onClick={() => setFilters(f => ({ ...f, track: "" }))}
-                      className={cn(
-                        "w-full flex items-center gap-2.5 px-3 py-2 rounded-[9px] text-[13px] font-semibold text-left transition-colors",
-                        filters.track === "" ? "bg-[#2e64e5] text-white" : "text-slate-600 hover:bg-slate-50"
-                      )}
-                    >
-                      <Layers className="h-3.5 w-3.5 shrink-0" /> All Tracks
-                    </button>
-                    {tracks.map(t => {
-                      const slug = t.slug.toLowerCase();
-                      const color = trackColor[slug] ?? "#64748b";
-                      const icon = trackIcon[slug] ?? <Layers className="h-3.5 w-3.5" />;
+                      className={cn("w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all",
+                        filters.track === "" ? "bg-gradient-to-r from-slate-700 to-slate-800 text-white shadow-md" : "text-slate-700 hover:bg-slate-100 border border-slate-200"
+                      )}>All Tracks</button>
+                    {uniqueTracks.map(t => {
+                      const color  = trackColor[t.slug] ?? "#64748b";
+                      const icon   = trackIcon[t.slug] ?? <Layers className="h-4 w-4" />;
                       const active = filters.track === t.slug;
                       return (
-                        <button
-                          key={t.id}
+                        <button key={t.slug}
                           onClick={() => setFilters(f => ({ ...f, track: active ? "" : t.slug }))}
-                          className={cn(
-                            "w-full flex items-center gap-2.5 px-3 py-2 rounded-[9px] text-[13px] font-semibold text-left transition-colors",
-                            active ? "text-white" : "text-slate-600 hover:bg-slate-50"
+                          className={cn("w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                            active ? "text-white shadow-md" : "text-slate-700 hover:bg-slate-100 border border-slate-200"
                           )}
-                          style={active ? { backgroundColor: color } : undefined}
+                          style={active ? { background: `linear-gradient(135deg, ${color}, ${color}dd)` } : undefined}
                         >
-                          <span style={active ? { color: "white" } : { color }}>{icon}</span>
+                          <span style={{ color: active ? "white" : color }}>{icon}</span>
                           {t.name}
                         </button>
                       );
@@ -210,277 +291,352 @@ export default function DomainsPage() {
                   </div>
                 </div>
 
-                {/* Experience Level */}
+                {/* Experience Level — new 3-level model */}
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Experience Level</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {uniqueExp.map(e => (
-                      <button
-                        key={e.id}
-                        onClick={() => setFilters(f => ({ ...f, experience: f.experience === e.label ? "" : e.label }))}
-                        className={cn(
-                          "px-2 py-2 rounded-[9px] text-[12px] font-bold border text-center transition-all",
-                          filters.experience === e.label
-                            ? "bg-[#2e64e5] border-[#2e64e5] text-white shadow-sm"
-                            : "bg-[#f8f9fa] border-slate-200 text-slate-600 hover:border-[#2e64e5]/30"
-                        )}
-                      >
-                        {e.label} Yrs
-                      </button>
-                    ))}
+                  <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                    <TrendingUp className="h-3 w-3 text-orange-600" /> Experience Level
+                  </label>
+                  <div className="space-y-1.5">
+                    {LEVEL_KEYS.map(key => {
+                      const meta   = EXPERIENCE_LEVELS[key];
+                      const active = filters.level === key;
+                      return (
+                        <button key={key}
+                          onClick={() => setFilters(f => ({ ...f, level: active ? "" : key }))}
+                          className={cn("w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-bold border-2 transition-all",
+                            active ? "text-white shadow-md border-transparent" : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                          )}
+                          style={active ? { backgroundColor: meta.color } : undefined}
+                        >
+                          <span className={cn("inline-block w-2 h-2 rounded-full shrink-0")} style={{ backgroundColor: meta.color }} />
+                          <span>{meta.label}</span>
+                          <span className={cn("ml-auto text-[11px] font-normal", active ? "text-white/80" : "text-slate-400")}>
+                            {meta.range}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
 
               {hasFilter && (
-                <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/80">
-                  <p className="text-[11px] text-slate-500 font-medium">
-                    Showing <span className="font-bold text-slate-700">{filtered.length}</span> of {domains.length} paths
-                  </p>
+                <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-t border-slate-200">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 font-medium">
+                      Showing <span className="font-black text-slate-900">{filtered.length}</span> of {domains.length}
+                    </span>
+                    <button onClick={resetAll} className="text-blue-600 hover:text-blue-800 font-bold">Clear All</button>
+                  </div>
                 </div>
               )}
+            </div>
 
-              {/* Study tips — inline at bottom of filter card */}
-              <div className="px-5 pb-5 pt-2 border-t border-slate-100">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2.5">How to Pick</p>
-                <div className="space-y-2">
-                  {[
-                    ["1", "Choose your main language"],
-                    ["2", "Match your experience level"],
-                    ["3", "Finish one path before switching"],
-                  ].map(([n, tip]) => (
-                    <div key={n} className="flex items-start gap-2">
-                      <span className="text-[9px] font-black text-slate-300 mt-0.5 shrink-0">{n}.</span>
-                      <p className="text-[12px] text-slate-500 leading-snug">{tip}</p>
-                    </div>
-                  ))}
-                </div>
+            {/* Study Roadmap */}
+            <div className="bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 rounded-xl border border-teal-200 shadow-md p-4">
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center gap-2">
+                <BookOpen className="h-4 w-4 text-teal-600" /> Study Roadmap
+              </h4>
+              <div className="space-y-2.5">
+                {["Select your language", "Match experience level", "Complete one path fully"].map((step, i) => (
+                  <div key={step} className="flex items-start gap-2 bg-white/60 rounded-lg p-2 border border-teal-100">
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0 ${
+                      i === 0 ? "bg-gradient-to-br from-teal-500 to-cyan-600" :
+                      i === 1 ? "bg-gradient-to-br from-purple-500 to-pink-600" :
+                                "bg-gradient-to-br from-emerald-500 to-teal-600"
+                    }`}>{i + 1}</div>
+                    <p className="text-xs text-slate-700 font-medium">{step}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </aside>
 
-          {/* ─── MAIN CONTENT ─── */}
-          <div>
-            {/* Active filter pill strip */}
+          {/* ── Main Content ── */}
+          <div className="space-y-4">
+            {/* Active Filter Pills */}
             {hasFilter && (
-              <div className="flex flex-wrap gap-2 mb-5">
+              <div className="flex flex-wrap gap-2">
+                {filters.language && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 rounded-full text-xs font-medium text-slate-700">
+                    <TechIcon name={filters.language.toLowerCase()} className="h-3 w-3" />
+                    {filters.language}
+                    <button onClick={() => setFilters(f => ({ ...f, language: "" }))}><X className="h-3 w-3" /></button>
+                  </span>
+                )}
                 {filters.search && (
-                  <span className="flex items-center gap-1.5 text-[11px] font-bold bg-white border border-slate-200 rounded-full px-3 py-1 text-slate-600 shadow-sm">
-                    Search: &ldquo;{filters.search}&rdquo;
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 rounded-full text-xs font-medium text-slate-700">
+                    "{filters.search}"
                     <button onClick={() => setFilters(f => ({ ...f, search: "" }))}><X className="h-3 w-3" /></button>
                   </span>
                 )}
                 {filters.track && (
-                  <span className="flex items-center gap-1.5 text-[11px] font-bold bg-white border border-slate-200 rounded-full px-3 py-1 text-slate-600 shadow-sm">
-                    {filters.track}
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 rounded-full text-xs font-medium text-slate-700">
+                    {uniqueTracks.find(t => t.slug === filters.track)?.name ?? filters.track}
                     <button onClick={() => setFilters(f => ({ ...f, track: "" }))}><X className="h-3 w-3" /></button>
                   </span>
                 )}
-                {filters.experience && (
-                  <span className="flex items-center gap-1.5 text-[11px] font-bold bg-white border border-slate-200 rounded-full px-3 py-1 text-slate-600 shadow-sm">
-                    {filters.experience} Yrs
-                    <button onClick={() => setFilters(f => ({ ...f, experience: "" }))}><X className="h-3 w-3" /></button>
+                {filters.level && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 rounded-full text-xs font-medium text-slate-700">
+                    {EXPERIENCE_LEVELS[filters.level as ExperienceLevelKey]?.label}
+                    <button onClick={() => setFilters(f => ({ ...f, level: "" }))}><X className="h-3 w-3" /></button>
                   </span>
                 )}
               </div>
             )}
 
-            {/* Quick Jump — styled as a clean pill bar */}
+            {/* Quick Jump */}
             {!hasFilter && langKeys.length > 0 && (
-              <div className="mb-5 flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 shrink-0">Jump:</span>
-                {langKeys.map(lang => (
-                  <button
-                    key={lang}
-                    onClick={() => setExpandedLang(p => ({ ...p, [lang]: true }))}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-slate-200 text-[12px] font-semibold text-slate-600 hover:border-[#2e64e5]/50 hover:text-[#2e64e5] hover:bg-blue-50/40 transition-all shadow-sm"
-                  >
-                    {lang}
-                    <span className="text-[10px] font-bold text-slate-300">{grouped[lang].length}</span>
-                  </button>
-                ))}
+              <div className="bg-white/90 backdrop-blur-sm rounded-xl border border-blue-200 shadow-md overflow-hidden">
+                <div className="px-4 py-3 bg-gradient-to-r from-blue-100 via-indigo-100 to-purple-100 border-b border-blue-200">
+                  <div className="flex items-center gap-2">
+                    <Code2 className="h-4 w-4 text-blue-600" />
+                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Quick Jump by Language</h3>
+                  </div>
+                </div>
+                <div className="p-4 flex flex-wrap gap-2">
+                  {langKeys.map(lang => {
+                    const liveInLang = (grouped[lang] ?? []).filter(d => d.hasContent).length;
+                    const totalInLang = grouped[lang]?.length ?? 0;
+                    return (
+                      <button key={lang}
+                        onClick={() => {
+                          setExpandedLang(p => ({ ...p, [lang]: !p[lang] }));
+                          setTimeout(() => document.getElementById(`lang-${lang}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+                        }}
+                        className={cn("inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold border-2 transition-all shadow-sm",
+                          expandedLang[lang] ? "bg-gradient-to-r from-blue-600 to-indigo-600 border-blue-600 text-white shadow-md scale-105" : "bg-white border-slate-200 text-slate-700 hover:border-blue-400 hover:bg-blue-50"
+                        )}
+                      >
+                        <TechIcon name={lang.toLowerCase()} className="h-4 w-4" />
+                        {lang}
+                        <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", expandedLang[lang] ? "bg-white/20" : "bg-slate-100")}>
+                          {liveInLang > 0 ? `${liveInLang}/${totalInLang}` : "Soon"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            {/* Language accordion sections */}
-            <div className="space-y-3">
+            {/* Language Sections */}
+            <div className="space-y-4">
               {langKeys.map(lang => (
-                <div key={lang} className="bg-white border border-slate-200 rounded-[14px] overflow-hidden shadow-sm">
-                  <button
-                    onClick={() => toggle(lang)}
-                    className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-slate-50/50 transition-colors group"
-                  >
+                <div key={lang} id={`lang-${lang}`} className="bg-white/90 backdrop-blur-sm rounded-xl border border-slate-200 shadow-md overflow-hidden">
+                  <button onClick={() => toggle(lang)}
+                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-[10px] bg-[#2e64e5]/8 border border-[#2e64e5]/10 flex items-center justify-center">
-                        <span className="text-[13px] font-black text-[#2e64e5]">{lang.slice(0, 2).toUpperCase()}</span>
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center shadow-sm border border-slate-200">
+                        <TechIcon name={lang.toLowerCase()} className="h-6 w-6" />
                       </div>
-                      <div>
-                        <h2 className="text-[16px] font-bold text-slate-800 group-hover:text-[#2e64e5] transition-colors leading-tight">{lang}</h2>
-                        <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
-                          {grouped[lang].length} preparation path{grouped[lang].length !== 1 ? "s" : ""}
+                      <div className="text-left">
+                        <h2 className="text-lg font-black text-slate-900">{lang}</h2>
+                        <p className="text-xs text-slate-600 font-medium">
+                          {grouped[lang].filter(d => d.hasContent).length} live · {grouped[lang].filter(d => !d.hasContent).length} coming soon
                         </p>
                       </div>
                     </div>
-                    <div className={cn(
-                      "w-8 h-8 rounded-full border flex items-center justify-center transition-all",
-                      expandedLang[lang]
-                        ? "bg-[#2e64e5] border-[#2e64e5] text-white"
-                        : "border-slate-200 text-slate-400 group-hover:border-[#2e64e5]/30 group-hover:text-[#2e64e5]"
-                    )}>
-                      <ChevronDown className={cn("h-4 w-4 transition-transform duration-300", expandedLang[lang] && "rotate-180")} />
+                    <div className="flex items-center gap-3">
+                      <span className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700">
+                        {grouped[lang].length} paths
+                      </span>
+                      <ChevronDown className={cn("h-5 w-5 text-slate-400 transition-transform duration-300", expandedLang[lang] && "rotate-180 text-blue-600")} />
                     </div>
                   </button>
 
-                  <AnimatePresence>
-                    {expandedLang[lang] && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.22 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="px-5 pb-5 pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 bg-[#fafafa]">
-                          {grouped[lang].map((domain, idx) => (
-                            <DomainCard key={domain.id} domain={domain} index={idx} />
-                          ))}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {expandedLang[lang] && (
+                    <div className="animate-fade-in-up overflow-hidden" style={{ animationDuration: '0.25s' }}>
+                      <div className="px-4 pb-4 pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-200 bg-gradient-to-br from-slate-50 to-blue-50/20">
+                        {grouped[lang].map((domain, idx) => (
+                          <DomainCard key={domain.slug} domain={domain} index={idx} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
 
-            {filtered.length === 0 && (
-              <div className="text-center py-24 bg-white rounded-[14px] border border-slate-200">
-                <Compass className="h-10 w-10 text-slate-200 mx-auto mb-4" />
-                <h3 className="text-[15px] font-bold text-slate-700">No matching paths found</h3>
-                <p className="text-[13px] text-slate-400 mt-1">Try adjusting your filters or search terms.</p>
-                <button onClick={resetAll} className="mt-4 text-[12px] font-bold text-[#2e64e5] hover:text-blue-700 transition-colors">
-                  Clear all filters
+            {filtered.length === 0 && !loading && (
+              <div className="text-center py-16 bg-white/90 backdrop-blur-sm rounded-xl border border-slate-200 shadow-md">
+                <Compass className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+                <h3 className="text-sm font-semibold text-slate-700">No paths found</h3>
+                <p className="text-sm text-slate-500 mt-1">Try adjusting your filters</p>
+                <button onClick={resetAll} className="mt-4 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors">
+                  Clear Filters
                 </button>
               </div>
             )}
           </div>
 
-          {/* ─── RIGHT SIDEBAR — single merged card + tip ─── */}
-          <aside className="hidden lg:flex flex-col gap-4 sticky top-6">
-
-            {/* Merged: Where to Start + What to Expect */}
-            <div className="bg-white rounded-[14px] border border-slate-200 shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">🚦 Find Your Level</p>
+          {/* ── Right Sidebar ── */}
+          <aside className="hidden lg:block space-y-4">
+            {/* Experience Level Guide */}
+            <div className="bg-white/90 backdrop-blur-sm rounded-xl border border-slate-200 shadow-md overflow-hidden">
+              <div className="px-4 py-3 bg-gradient-to-r from-orange-100 via-amber-100 to-yellow-100 border-b border-orange-200">
+                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                  <TrendingUp className="h-3.5 w-3.5 text-orange-600" /> Experience Levels
+                </h3>
               </div>
-              <div className="divide-y divide-slate-50">
-                {([
-                  { exp: "0–1 Yrs",  role: "Fresher / Trainee",  color: "#22c55e", tip: "Fundamentals & core concepts" },
-                  { exp: "1–3 Yrs",  role: "Junior Developer",   color: "#2e64e5", tip: "Applied patterns & real-world usage" },
-                  { exp: "3–5 Yrs",  role: "Mid / Senior Dev",   color: "#f59e0b", tip: "Architecture & design trade-offs" },
-                  { exp: "5+ Yrs",   role: "Lead / Principal",   color: "#ef4444", tip: "System depth & cross-domain thinking" },
-                ] as const).map(({ exp, role, color, tip }) => (
-                  <div key={exp} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/50 transition-colors">
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                    <div className="min-w-0">
-                      <p className="text-[12.5px] font-bold text-slate-700 leading-none">{role}</p>
-                      <p className="text-[10.5px] text-slate-400 mt-0.5">{exp} &middot; {tip}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="border-t border-slate-100 px-5 py-3 bg-[#fafafa]">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">You'll be tested on</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {["Concepts", "Depth", "Trade-offs", "Real-world", "Follow-ups"].map(s => (
-                    <span key={s} className="text-[10px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-full px-2.5 py-0.5">{s}</span>
-                  ))}
-                </div>
+              <div className="p-3 space-y-2">
+                {LEVEL_KEYS.map(key => {
+                  const meta = EXPERIENCE_LEVELS[key];
+                  const descs: Record<ExperienceLevelKey, string> = {
+                    beginner:     "Core fundamentals & basics",
+                    intermediate: "Architecture & real-world patterns",
+                  };
+                  return (
+                    <button key={key}
+                      onClick={() => setFilters(f => ({ ...f, level: f.level === key ? "" : key }))}
+                      className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-left border",
+                        filters.level === key ? "border-transparent shadow-md" : "border-transparent hover:bg-slate-50 hover:border-slate-200"
+                      )}
+                      style={filters.level === key ? { backgroundColor: meta.color + "18", borderColor: meta.color + "40" } : undefined}
+                    >
+                      <div className="w-10 h-10 rounded-lg flex items-center justify-center shadow-md text-white text-[11px] font-bold shrink-0"
+                        style={{ backgroundColor: meta.color }}>
+                        {meta.range}
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-xs font-bold text-slate-800">{meta.label}</div>
+                        <div className="text-[11px] text-slate-500">{descs[key]}</div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Pro tip — compact */}
-            <div className="bg-[#2e64e5]/5 rounded-[14px] border border-[#2e64e5]/10 px-5 py-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#2e64e5] mb-1.5">💡 Pro Tip</p>
-              <p className="text-[12.5px] text-slate-600 leading-[1.6]">
-                One completed stack beats five half-finished ones. Go deep, not wide.
+            {/* Interview Focus */}
+            <div className="bg-gradient-to-br from-purple-50 via-pink-50 to-rose-50 rounded-xl border border-purple-200 shadow-md p-4">
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center gap-2">
+                <Target className="h-4 w-4 text-purple-600" /> Interview Focus Areas
+              </h4>
+              <div className="space-y-2">
+                {[
+                  { label: "Core Concepts",  color: "bg-purple-100 border-purple-200 text-purple-700" },
+                  { label: "System Design",  color: "bg-pink-100 border-pink-200 text-pink-700" },
+                  { label: "Trade-offs",     color: "bg-rose-100 border-rose-200 text-rose-700" },
+                  { label: "Real-world",     color: "bg-orange-100 border-orange-200 text-orange-700" },
+                ].map(s => (
+                  <div key={s.label} className={`text-xs font-bold ${s.color} border rounded-lg px-3 py-2 shadow-sm`}>{s.label}</div>
+                ))}
+              </div>
+            </div>
+
+            {/* Pro Tip */}
+            <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 rounded-xl border border-emerald-200 shadow-md p-4">
+              <div className="text-xs font-bold text-slate-800 uppercase tracking-wide mb-2 flex items-center gap-2">
+                <Lightbulb className="h-4 w-4 text-emerald-600" />
+                Pro Study Tip
+              </div>
+              <p className="text-xs text-slate-700 leading-relaxed bg-white/60 rounded-lg p-3 border border-emerald-200">
+                Focus on completing one path thoroughly before moving to another.{" "}
+                <span className="font-bold text-slate-900">Depth beats breadth</span> in technical interviews.
               </p>
             </div>
 
+            {/* Platform Stats */}
+            <div className="bg-gradient-to-br from-indigo-50 via-blue-50 to-cyan-50 rounded-xl border border-indigo-200 shadow-md p-4">
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center gap-2">
+                <Award className="h-4 w-4 text-indigo-600" /> Platform Stats
+              </h4>
+              <div className="space-y-2">
+                {[
+                  { label: "Live Paths",       value: liveCount },
+                  { label: "Coming Soon",      value: domains.length - liveCount },
+                  { label: "Questions",        value: totalQuestions > 1000 ? `${(totalQuestions / 1000).toFixed(1)}k+` : totalQuestions },
+                  { label: "Exp. Levels",      value: 3 },
+                ].map(s => (
+                  <div key={s.label} className="flex justify-between items-center text-xs bg-white/60 rounded-lg p-2 border border-indigo-100">
+                    <span className="text-slate-600 font-medium">{s.label}</span>
+                    <span className="font-black text-indigo-600">{s.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </aside>
-
         </div>
       </div>
     </div>
   );
 }
 
-function briefFor(domain: Domain): string {
-  const level = domain.experienceLabel ?? "";
-  const lang  = domain.language ?? "this technology";
-  const track = domain.track ?? "";
-  if (domain.description) return domain.description;
-  const levelMap: Record<string, string> = {
-    "0-1": "Covers core fundamentals and common entry-level interview questions.",
-    "1-3": "Bridges theory and practice — tackles mid-level system and design questions.",
-    "3-5": "Focuses on senior patterns, architecture decisions, and trade-off discussions.",
-    "5+":  "Principal-level depth: leadership, scalability, and cross-cutting concerns.",
-  };
-  return levelMap[level] ?? `Structured ${lang} interview prep for the ${track} track.`;
-}
+function DomainCard({ domain, index = 0 }: { domain: ContentDomain; index?: number }) {
+  const color  = trackColor[domain.trackSlug] ?? "#64748b";
+  const meta   = EXPERIENCE_LEVELS[domain.level];
 
-function DomainCard({ domain, index = 0 }: { domain: Domain; index?: number }) {
-  const slug  = domain.trackSlug?.toLowerCase() ?? "";
-  const color = trackColor[slug] ?? "#64748b";
-  const brief = briefFor(domain);
+  const brief: Record<ExperienceLevelKey, string> = {
+    beginner:     `Fundamentals & core concepts for ${domain.language} ${domain.track} developers.`,
+    intermediate: `Architecture, patterns & real-world scenarios for ${domain.language} ${domain.track}.`,
+  };
+
+  const cardInner = (
+    <div className={cn(
+      "h-full border rounded-lg p-4 transition-all",
+      domain.hasContent
+        ? "bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm group"
+        : "bg-slate-50 border-slate-200 border-dashed opacity-70 cursor-default"
+    )}>
+      <div className="flex items-start justify-between mb-2">
+        <div className="h-1 w-8 rounded-full mt-1" style={{ backgroundColor: domain.hasContent ? color : "#94a3b8" }} />
+        {!domain.hasContent && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500">
+            <Clock className="h-2.5 w-2.5" /> Coming Soon
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <span className="text-xs font-semibold px-2 py-0.5 rounded"
+          style={{ color: domain.hasContent ? color : "#94a3b8", backgroundColor: (domain.hasContent ? color : "#94a3b8") + "15" }}>
+          {domain.track}
+        </span>
+        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded border",
+          domain.hasContent ? meta.colorClass : "bg-slate-100 text-slate-400 border-slate-200"
+        )}>
+          {meta.label} · {meta.range}
+        </span>
+      </div>
+
+      <h3 className={cn("text-sm font-semibold mb-1",
+        domain.hasContent ? "text-slate-900 group-hover:text-slate-700" : "text-slate-400"
+      )}>
+        {domain.name}
+      </h3>
+      <p className={cn("text-xs leading-relaxed mb-3", domain.hasContent ? "text-slate-600" : "text-slate-400")}>
+        {brief[domain.level]}
+      </p>
+
+      {domain.hasContent ? (
+        <>
+          <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium mb-3">
+            <span>{domain.stackCount} stacks</span>
+            <span>·</span>
+            <span>{domain.questionCount.toLocaleString()} questions</span>
+          </div>
+          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+            <span className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+              <BookOpen className="h-3.5 w-3.5" /> View Stacks
+            </span>
+            <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+          </div>
+        </>
+      ) : (
+        <div className="pt-3 border-t border-slate-200">
+          <p className="text-[11px] text-slate-400">Content in preparation — check back soon.</p>
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04 }}
-      className="h-full"
-    >
-      <Link href={`/${domain.slug}`} className="block group outline-none focus:ring-2 focus:ring-[#2e64e5]/30 rounded-[12px] h-full">
-        <div className="relative p-4 rounded-[12px] bg-white border border-slate-200 hover:border-[#2e64e5]/40 hover:shadow-md transition-all duration-300 flex flex-col gap-2.5 h-full">
-
-          {/* Badges row */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {domain.track && (
-              <span
-                className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full flex items-center gap-1"
-                style={{ color, backgroundColor: color + "15" }}
-              >
-                {trackIcon[slug] ?? null}{domain.track}
-              </span>
-            )}
-            {domain.experienceLabel && (
-              <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-100">
-                {domain.experienceLabel} Yrs
-              </span>
-            )}
-          </div>
-
-          {/* Title */}
-          <h3 className="text-[14.5px] font-bold text-slate-800 group-hover:text-[#2e64e5] transition-colors leading-snug">
-            {domain.name}
-          </h3>
-
-          {/* Brief description */}
-          <p className="text-[12px] text-slate-500 leading-[1.55] flex-1">
-            {brief}
-          </p>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 mt-1">
-            <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
-              <BookOpen className="h-3 w-3" /> View Stacks
-            </span>
-            <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-[#2e64e5]/10 group-hover:text-[#2e64e5] transition-colors">
-              <ArrowRight className="h-3.5 w-3.5" />
-            </div>
-          </div>
-        </div>
-      </Link>
-    </motion.div>
+    <div className="h-full">
+      {domain.hasContent
+        ? <Link href={`/${domain.slug}`} className="block h-full">{cardInner}</Link>
+        : <div className="h-full">{cardInner}</div>
+      }
+    </div>
   );
 }

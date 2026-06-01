@@ -1,6 +1,7 @@
 package com.interviewexplainer.backendapi.modules.content.controller;
 
 import com.interviewexplainer.backendapi.modules.content.dto.QuestionSummaryDTO;
+import com.interviewexplainer.backendapi.modules.content.dto.StackSubcategoryDTO;
 import com.interviewexplainer.backendapi.modules.content.dto.TechStackDTO;
 import com.interviewexplainer.backendapi.modules.content.service.StackService;
 import org.springframework.data.domain.Page;
@@ -31,6 +32,15 @@ public class StackController {
     @GetMapping("/stacks/{slug}/questions")
     public ResponseEntity<List<QuestionSummaryDTO>> getQuestions(@PathVariable("slug") String slug) {
         return ResponseEntity.ok(stackService.getQuestionsForStack(slug));
+    }
+
+    /**
+     * Get questions grouped by subcategory for a stack.
+     * Returns the subcategory tree with questions nested inside.
+     */
+    @GetMapping("/stacks/{slug}/subcategories")
+    public ResponseEntity<List<StackSubcategoryDTO>> getSubcategories(@PathVariable("slug") String slug) {
+        return ResponseEntity.ok(stackService.getSubcategoriesForStack(slug));
     }
 
     /**

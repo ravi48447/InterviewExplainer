@@ -43,7 +43,7 @@ public class SearchService {
                     return new QuestionSummaryDTO(
                         q.getId(), q.getTitle(), q.getSlug(),
                         q.getDifficulty(), q.getEstimatedReadTime(), null,
-                        domainSlug, stackSlug
+                        domainSlug, stackSlug, null, null
                     );
                 })
                 .toList();

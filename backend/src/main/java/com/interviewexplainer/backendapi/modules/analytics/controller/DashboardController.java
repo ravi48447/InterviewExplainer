@@ -39,6 +39,15 @@ public class DashboardController {
         }
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/primary-domain-slug")
+    public ResponseEntity<Void> updatePrimaryDomainSlug(@RequestParam("slug") String slug, jakarta.servlet.http.HttpServletRequest request) {
+        UUID userId = extractUserId(request);
+        if (userId != null && slug != null && !slug.isBlank()) {
+            dashboardService.updatePrimaryDomainSlug(userId, slug);
+        }
+        return ResponseEntity.ok().build();
+    }
     
     private UUID extractUserId(jakarta.servlet.http.HttpServletRequest request) {
         String authHeader = request.getHeader("Authorization");

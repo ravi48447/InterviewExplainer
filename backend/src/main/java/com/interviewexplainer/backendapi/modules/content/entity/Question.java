@@ -17,6 +17,9 @@ public class Question extends AuditableEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String title;
 
+    @Column(name = "question_text", columnDefinition = "TEXT")
+    private String questionText;
+
     @Column(unique = true, nullable = false, length = 255)
     private String slug;
 
@@ -80,6 +83,14 @@ public class Question extends AuditableEntity {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public String getQuestionText() {
+        return questionText;
+    }
+
+    public void setQuestionText(String questionText) {
+        this.questionText = questionText;
     }
 
     public String getSlug() {

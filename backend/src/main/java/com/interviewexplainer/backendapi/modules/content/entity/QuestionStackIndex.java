@@ -19,6 +19,12 @@ public class QuestionStackIndex {
     @Column(name = "order_index")
     private Integer orderIndex;
 
+    @Column(name = "subcategory_slug", length = 120)
+    private String subcategorySlug;
+
+    @Column(name = "subcategory_name", length = 200)
+    private String subcategoryName;
+
     protected QuestionStackIndex() {}
 
     public QuestionStackIndex(Long stackId, Long questionId, Integer orderIndex) {
@@ -31,4 +37,6 @@ public class QuestionStackIndex {
     public Long getStackId() { return stackId; }
     public Long getQuestionId() { return questionId; }
     public Integer getOrderIndex() { return orderIndex; }
+    public String getSubcategorySlug() { return subcategorySlug; }
+    public String getSubcategoryName() { return subcategoryName; }
 }

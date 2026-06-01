@@ -39,7 +39,7 @@ public class NavigationService {
         return new QuestionSummaryDTO(
                 q.getId(), q.getTitle(), q.getSlug(),
                 q.getDifficulty(), q.getEstimatedReadTime(), null,
-                null, null
+                null, null, null, null
         );
     }
 }

@@ -12,6 +12,7 @@ public record QuestionPagePayload(
     // Core question
     Long id,
     String title,
+    String questionText,
     String slug,
     QuestionDifficulty difficulty,
     Integer estimatedReadTime,

@@ -13,5 +13,12 @@ public enum AnswerSectionType {
     real_world_scenario,
     interview_tips,
     common_mistakes,
-    practice_prompt
+    practice_prompt,
+    // Additional types stored in DB from older imports
+    deep_explanation,
+    BRIEF,
+    COMPARISON,
+    DETAILED,
+    EXAMPLE,
+    TIPS
 }

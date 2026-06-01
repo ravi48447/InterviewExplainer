@@ -91,7 +91,7 @@ public class RecommendationService {
                         // Fallback or ignore
                     }
 
-                    return new QuestionSummaryDTO(id, title, slug, diff, readTime, null, domainSlug, stackSlug);
+                    return new QuestionSummaryDTO(id, title, slug, diff, readTime, null, domainSlug, stackSlug, null, null);
                 } catch (Exception e) {
                     System.err.println("Error mapping recommendation row: " + e.getMessage());
                     return null;

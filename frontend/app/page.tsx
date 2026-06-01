@@ -1,393 +1,537 @@
-"use client";
-
-import { motion } from "framer-motion";
 import Link from "next/link";
 import {
   ArrowRight,
-  Code2,
-  Terminal,
-  Cpu,
-  Globe,
-  Zap,
-  Shield,
-  CheckCircle,
-  Database,
-  Layout,
+  BookOpen,
+  Target,
+  TrendingUp,
+  CheckCircle2,
+  Sparkles,
   Layers,
-  BarChart3,
-  Briefcase,
-  GitBranch
+  Code2,
+  Award,
+  Brain,
+  Rocket,
+  Lightbulb,
+  Compass,
+  Star,
 } from "lucide-react";
-import SelectionWizard from "@/components/selection-wizard";
-import { useState, useEffect } from "react";
 import { TechIcon } from "@/components/tech-icon";
+import { HeroActions, FinalCTA } from "@/components/landing/hero-actions";
 import { HeroDashboardVisual } from "@/components/landing/hero-dashboard-visual";
-import { fetchDomains, Domain } from "@/lib/api";
+import { NewsletterWidget } from "@/components/NewsletterWidget";
+import {
+  HomeStandoutPicks,
+  type HomeStandoutPick,
+} from "@/components/landing/home-priority-grid";
+import {
+  ENABLED_LANGUAGES,
+  LAUNCH_QUICK_PATHS,
+  isHubEnabled,
+} from "@/lib/launch-config";
+import { getSubcategoriesWithQuestions } from "@/lib/content-reader";
 
-
-const ECOSYSTEM = [
-  { name: "Java", icon: "java" },
-  { name: "Python", icon: "python" },
-  { name: "Go", icon: "go" },
-  { name: "Ruby", icon: "ruby" },
-  { name: "C++", icon: "c++" },
-  { name: "JavaScript", icon: "javascript" },
-  { name: "React", icon: "react" },
-  { name: "Angular", icon: "angular" },
-  { name: "Node.js", icon: "node.js" },
-  { name: "Docker", icon: "docker" },
-  { name: "AWS", icon: "aws" },
-  { name: "SQL", icon: "sql" }
+// Every language we intend to support, ever. `available` is derived from
+// launch-config so the ROADMAP and UI can't drift apart.
+const ALL_LANGUAGES = [
+  { name: "Java",       slug: "java",       icon: "java",       gradient: "from-orange-500 to-red-600" },
+  { name: "Python",     slug: "python",     icon: "python",     gradient: "from-blue-500 to-cyan-600" },
+  { name: "JavaScript", slug: "javascript", icon: "javascript", gradient: "from-yellow-400 to-orange-500" },
+  { name: "TypeScript", slug: "typescript", icon: "typescript", gradient: "from-blue-600 to-indigo-700" },
+  { name: "Go",         slug: "go",         icon: "go",         gradient: "from-cyan-500 to-blue-600" },
+  { name: "Kotlin",     slug: "kotlin",     icon: "kotlin",     gradient: "from-purple-500 to-violet-600" },
+  { name: "Ruby",       slug: "ruby",       icon: "ruby",       gradient: "from-red-500 to-rose-600" },
+  { name: "C#",         slug: "csharp",     icon: "csharp",     gradient: "from-indigo-600 to-purple-700" },
 ];
 
-const FAMOUS_DOMAINS = [
-  { slug: "java-backend-3-5", label: "Java Mastery", icon: "java", color: "from-orange-500 to-red-600" },
-  { slug: "python-backend-1-3", label: "Python Expert", icon: "python", color: "from-blue-500 to-cyan-500" },
-  { slug: "frontend-react-3-5", label: "React Architect", icon: "react", color: "from-cyan-400 to-blue-500" },
-  { slug: "go-backend-3-5", label: "Go Specialist", icon: "go", color: "from-blue-400 to-indigo-500" }
-];
+const LANGUAGES = ALL_LANGUAGES.map((l) => ({
+  ...l,
+  available: (ENABLED_LANGUAGES as readonly string[]).includes(l.slug),
+}));
 
-const CODE_PREVIEW = `// Premium Studio Content
-public class MasterySystem {
-    public static void main(String[] args) {
-        Engineer user = Engineers.find("You");
-        
-        user.applyMastery("System Design")
-            .practice("Concurrency")
-            .verify("Production Ready");
+// Pillars — keep only those that point to a hub we've launched.
+// When we unlock a hub, it automatically appears here.
+const ALL_PILLARS = [
+  { key: "interviewQA",    icon: BookOpen, title: "Interview Q&A",   desc: "Domain-specific questions tailored to your language, track, and experience level.",   stat: "400+ Questions",  gradient: "from-blue-500 to-indigo-600",   href: "/domains" },
+  { key: "systemDesign",   icon: Compass,  title: "System Design",   desc: "Real interview problems with architecture, deep-dives, and scaling strategies.",       stat: "25+ Problems",    gradient: "from-emerald-500 to-teal-600",  href: "/system-design" },
+  { key: "dsa",            icon: Code2,    title: "DSA Problems",    desc: "Problems organized by pattern — two pointers, sliding window, DP, graphs.",            stat: "450+ Problems",   gradient: "from-violet-500 to-purple-600", href: "/dsa" },
+  { key: "behavioral",     icon: Brain,    title: "Behavioral Prep", desc: "STAR method with company-specific guides and Amazon Leadership Principles.",           stat: "70+ Questions",   gradient: "from-amber-500 to-orange-600",  href: "/behavioral" },
+  { key: "companies",      icon: Target,   title: "Company Prep",    desc: "FAANG, unicorns and top-tech process breakdowns.",                                     stat: "22+ Companies",   gradient: "from-orange-500 to-red-600",    href: "/companies" },
+  { key: "career",         icon: Rocket,   title: "Career Guide",    desc: "Resume optimization, salary negotiation playbook, and career transition strategies.",  stat: "42+ Articles",    gradient: "from-rose-500 to-pink-600",     href: "/career" },
+] as const;
 
-        System.out.println("Status: HIRED");
-    }
-}`;
+const PILLARS = ALL_PILLARS.filter((p) => isHubEnabled(p.key));
 
-function CodeLine({ content }: { content: string }) {
-  const highlighted = content
-    .replace(/(\/\/.*)/, '<span class="text-green-500/60 font-italic">$1</span>')
-    .replace(/(public class|public static void|Engineer|Engineers|System\.out\.println)/g, '<span class="text-primary">$1</span>')
-    .replace(/(".*?")/g, '<span class="text-yellow-400">$1</span>')
-    .replace(/(find|applyMastery|practice|verify)/g, '<span class="text-cyan-400">$1</span>');
+/**
+ * Memoized question counts for homepage standout picks (reads complete-qa.json
+ * per module on first access; survives HMR via globalThis).
+ */
+const _g = globalThis as typeof globalThis & {
+  _ie_homeStandoutPicks?: HomeStandoutPick[];
+  _ie_moduleQuestionCount?: Map<string, number>;
+};
 
-  return <span dangerouslySetInnerHTML={{ __html: highlighted }} />;
+function getCachedQuestionCount(
+  domainSlug: string,
+  moduleSlug: string,
+): number {
+  if (!_g._ie_moduleQuestionCount) _g._ie_moduleQuestionCount = new Map();
+  const key = `${domainSlug}::${moduleSlug}`;
+  const cached = _g._ie_moduleQuestionCount.get(key);
+  if (cached !== undefined) return cached;
+  const subcats = getSubcategoriesWithQuestions(domainSlug, moduleSlug);
+  const total = subcats.reduce((s, sc) => s + sc.questions.length, 0);
+  _g._ie_moduleQuestionCount.set(key, total);
+  return total;
 }
 
+function buildHomeStandoutPicks(): HomeStandoutPick[] {
+  if (_g._ie_homeStandoutPicks) return _g._ie_homeStandoutPicks;
+
+  const jbi = "java-backend-intermediate";
+  const jfi = "java-fullstack-intermediate";
+  const goi = "go-intermediate";
+  const coreJava = getCachedQuestionCount(jbi, "core-java");
+  const javaOop = getCachedQuestionCount(jbi, "java-oop");
+  const javaConcurrency = getCachedQuestionCount(jbi, "java-concurrency");
+  const sqlDb = getCachedQuestionCount(jbi, "sql-databases");
+  const springBoot = getCachedQuestionCount(jbi, "spring-boot");
+  const restApi = getCachedQuestionCount(jbi, "rest-api");
+  const microservices = getCachedQuestionCount(jbi, "microservices");
+  const messaging = getCachedQuestionCount(jbi, "messaging-events");
+  const kubernetes = getCachedQuestionCount(jbi, "kubernetes");
+  const lld = getCachedQuestionCount(jbi, "low-level-design");
+  const systemDesign =
+    getCachedQuestionCount(jbi, "system-design") +
+    getCachedQuestionCount(jbi, "system-design-cases");
+  const reactCore = getCachedQuestionCount(jfi, "react-core");
+  const typescript = getCachedQuestionCount(jfi, "typescript-essentials");
+  const javascriptCore = getCachedQuestionCount(jfi, "javascript-core");
+  const goConcurrency = getCachedQuestionCount(goi, "goroutines-channels");
+  const goCore = getCachedQuestionCount(goi, "core-go");
+
+  const picks: HomeStandoutPick[] = [
+    {
+      headline: "Top core Java interview questions",
+      tagline:
+        "Exceptions, generics, strings, I/O — the language fundamentals interviewers open with.",
+      href: "/core-java-interview-questions#all-questions",
+      questionCount: coreJava,
+      icon: "java",
+    },
+    {
+      headline: "Top Java OOP & SOLID interview questions",
+      tagline:
+        "Encapsulation, polymorphism, SOLID in Java, and the comparisons that show up in every loop.",
+      href: "/java-oop-interview-questions#all-questions",
+      questionCount: javaOop,
+      icon: "braces",
+    },
+    {
+      headline: "Top Java concurrency interview questions",
+      tagline:
+        "Threads, locks, the memory model, executors, and the scenario questions seniors get.",
+      href: "/java-concurrency-interview-questions#all-questions",
+      questionCount: javaConcurrency,
+      icon: "zap",
+    },
+    {
+      headline: "Top SQL interview questions",
+      tagline:
+        "Indexes, joins, transactions, isolation, and the database round beyond ORM trivia.",
+      href: "/sql-interview-questions#all-questions",
+      questionCount: sqlDb,
+      icon: "sql",
+    },
+    {
+      headline: "Top Spring Boot interview questions",
+      tagline:
+        "Auto-config, starters, profiles, actuator, and production follow-ups.",
+      href: "/spring-boot-interview-questions#all-questions",
+      questionCount: springBoot,
+      icon: "spring",
+    },
+    {
+      headline: "Top REST API & Spring MVC interview questions",
+      tagline:
+        "Controllers, HTTP semantics, validation, error handling, and API design trade-offs.",
+      href: "/rest-api-interview-questions#all-questions",
+      questionCount: restApi,
+      icon: "layers",
+    },
+    {
+      headline: "Top microservices interview questions",
+      tagline:
+        "Discovery, resilience, sagas, idempotency, and how services fail at scale.",
+      href: "/microservices-interview-questions#all-questions",
+      questionCount: microservices,
+      icon: "link2",
+    },
+    {
+      headline: "Top Kafka & event-driven interview questions",
+      tagline:
+        "Ordering, delivery guarantees, outbox, and the event-driven questions interviewers love.",
+      href: "/kafka-interview-questions#all-questions",
+      questionCount: messaging,
+      icon: "radio",
+    },
+    {
+      headline: "Top Kubernetes interview questions",
+      tagline:
+        "Pods, services, ingress, rollouts, probes, and the ops round for backend roles.",
+      href: "/kubernetes-interview-questions#all-questions",
+      questionCount: kubernetes,
+      icon: "cloud",
+    },
+    {
+      headline: "Top low-level design (LLD) interview questions",
+      tagline:
+        "Parking lot, elevator, vending machine — object design under time pressure.",
+      href: "/low-level-design-interview-questions#all-questions",
+      questionCount: lld,
+      icon: "layout",
+    },
+    {
+      headline: "Top system design interview questions",
+      tagline:
+        "Full hub: fundamentals, case studies, capacity, caching, and distributed trade-offs.",
+      href: "/system-design#all-modules",
+      questionCount: systemDesign,
+      icon: "network",
+    },
+    {
+      headline: "Top Python interview prep",
+      tagline:
+        "Backend, fullstack, ML, and data-engineering paths — pick your domain and level.",
+      href: "/domains?language=Python",
+      questionCount: null,
+      icon: "python",
+    },
+    {
+      headline: "Top React interview questions",
+      tagline:
+        "Hooks, JSX, state, effects, and performance from the fullstack track.",
+      href: "/react-interview-questions#all-questions",
+      questionCount: reactCore,
+      icon: "react",
+    },
+    {
+      headline: "Top TypeScript interview questions",
+      tagline:
+        "Types, generics, narrowing, and utility types — what frontend + fullstack loops ask.",
+      href: "/typescript-interview-questions#all-questions",
+      questionCount: typescript,
+      icon: "typescript",
+    },
+    {
+      headline: "Top JavaScript interview questions",
+      tagline:
+        "ES6+, closures, async/await, and the event loop — core JS before the framework layer.",
+      href: "/javascript-interview-questions#all-questions",
+      questionCount: javascriptCore,
+      icon: "javascript",
+    },
+    {
+      headline: "Top Go interview questions",
+      tagline:
+        "Interfaces, goroutines, channels, and the idiomatic patterns every Go interview probes.",
+      href: "/go-intermediate#pillar-P01",
+      questionCount: goCore,
+      icon: "go",
+    },
+    {
+      headline: "Top Go concurrency interview questions",
+      tagline:
+        "Goroutines, channels, select, context, and the race conditions that trip up candidates.",
+      href: "/golang-goroutines-interview-questions#all-questions",
+      questionCount: goConcurrency,
+      icon: "zap",
+    },
+  ];
+
+  _g._ie_homeStandoutPicks = picks;
+  return picks;
+}
+
+const WHY_DIFFERENT = [
+  { icon: Brain,      title: "Domain-Specific Content",  desc: "Java Backend ≠ Python Backend. Every question is tailored to your exact technology stack and patterns.",                gradient: "from-blue-500 to-indigo-600" },
+  { icon: TrendingUp, title: "Experience-Level Aware",   desc: "Juniors get solid foundations with examples. Seniors get architecture patterns and scalability challenges.",            gradient: "from-purple-500 to-pink-600" },
+  { icon: Target,     title: "Real Interview Focus",     desc: "Practice questions modeled on top tech company interviews. Learn what recruiters expect at your level, not theory.",    gradient: "from-orange-500 to-red-600" },
+  { icon: Rocket,     title: "Progressive Learning",     desc: "Master basics, tackle intermediate, conquer advanced. Track your journey across every topic.",                           gradient: "from-cyan-500 to-blue-600" },
+];
+
 export default function HomePage() {
-  const [showWizard, setShowWizard] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [domains, setDomains] = useState<Domain[]>([]);
-
-  useEffect(() => {
-    setMounted(true);
-    fetchDomains().then(setDomains).catch(console.error);
-  }, []);
-
-  if (!mounted) return null;
-
-  const featured = domains.slice(0, 6);
+  const standoutPicks = buildHomeStandoutPicks();
 
   return (
-    <div className="relative min-h-screen bg-background overflow-x-hidden">
-      {/* Hero Section - Premium 2-Column Layout */}
-      <section className="relative z-10 pt-32 pb-20 px-4">
-        <div className="container mx-auto">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            {/* Left Column: Content */}
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8 }}
-              className="text-left"
-            >
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass border-primary/10 text-xs font-bold tracking-widest uppercase text-primary mb-8"
-              >
-                <Zap className="h-3.5 w-3.5" />
-                V3 Studio Edition Now Live
-              </motion.div>
-
-              <h1 className="text-6xl md:text-[5.5rem] font-black tracking-tight leading-[0.9] mb-8">
-                Decode <br />
-                <span className="text-glow bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
-                  Interviews.
-                </span>
-              </h1>
-
-              <p className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-xl leading-relaxed font-medium">
-                The ultimate explanation engine for career mastery.
-                Experience-wise depth, architectural decodings, and the "InterviewExplainer" advantage for every career stage.
-              </p>
-
-              <div className="flex flex-col sm:flex-row items-center gap-8">
-                <button
-                  onClick={() => setShowWizard(true)}
-                  className="group relative px-10 py-5 rounded-2xl bg-primary text-primary-foreground font-black tracking-[0.1em] uppercase text-sm overflow-hidden hover:scale-105 active:scale-95 transition-all shadow-[0_20px_50px_rgba(var(--primary),0.3)]"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-                  Get Decoded Now
-                </button>
-                <Link href="/domains" className="flex items-center gap-2 text-sm font-bold hover:text-primary transition-colors group">
-                  Explore InterviewExplainer <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                </Link>
-              </div>
-            </motion.div>
-
-            {/* Right Column: High-Impact 3D Visual */}
-            <motion.div
-              initial={{ opacity: 0, x: 30, scale: 0.95 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              transition={{ duration: 1, delay: 0.2 }}
-              className="relative aspect-square lg:aspect-auto h-full min-h-[500px] flex items-center justify-center"
-            >
-              <HeroDashboardVisual />
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Mastery Hotspots - NEW */}
-      <section className="container mx-auto px-4 py-16 relative z-10">
-        <div className="flex flex-col items-center text-center mb-16 px-4">
-          <h2 className="text-sm font-black tracking-[0.4em] uppercase text-primary mb-4">High-Profile Hotspots</h2>
-          <p className="text-3xl md:text-5xl font-black tracking-tight">Famous Mastery Paths</p>
+    <div className="min-h-screen bg-white">
+      {/* ── Hero ── */}
+      <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-gradient-to-br from-blue-50 via-blue-50 to-indigo-50">
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:4rem_4rem]" />
+          <div className="absolute top-1/4 right-1/4 w-[600px] h-[600px] bg-blue-200/20 rounded-full blur-3xl" />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {FAMOUS_DOMAINS.map((hotspot, idx) => (
-            <Link href={`/${hotspot.slug}`} key={hotspot.slug} className="group relative">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                transition={{ delay: idx * 0.1 }}
-                whileHover={{ y: -10, transition: { duration: 0.2 } }}
-                className="relative overflow-hidden p-8 rounded-[2rem] glass-strong border border-white/5 h-full flex flex-col items-center text-center gap-6"
-              >
-                {/* Glow Effect */}
-                <div className={`absolute inset-0 bg-gradient-to-br ${hotspot.color} opacity-0 group-hover:opacity-5 blur-2xl transition-opacity animate-pulse`} />
-
-                <div className={`w-20 h-20 rounded-3xl bg-gradient-to-br ${hotspot.color} p-[2px] shadow-2xl group-hover:scale-110 transition-transform`}>
-                  <div className="w-full h-full rounded-[1.4rem] bg-background flex items-center justify-center">
-                    <TechIcon name={hotspot.icon} className="w-12 h-12" />
-                  </div>
+        <div className="w-full px-6 sm:px-12 lg:px-20 relative z-10">
+          <div className="w-full min-w-0">
+            <div className="grid lg:grid-cols-2 gap-16 items-center">
+              <div className="animate-fade-in-left">
+                <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-100 to-indigo-100 border-2 border-blue-300 rounded-full mb-8 shadow-sm animate-fade-in-up anim-delay-2">
+                  <Sparkles className="h-5 w-5 text-blue-600" />
+                  <span className="text-sm font-bold text-blue-700">Built for developers, by developers</span>
                 </div>
 
-                <div className="space-y-2">
-                  <h3 className="text-xl font-black tracking-tight group-hover:text-primary transition-colors">{hotspot.label}</h3>
-                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{hotspot.slug.split('-').join(' ')}</p>
-                </div>
+                <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black text-slate-900 mb-6 leading-[1.05] animate-fade-in-up anim-delay-3">
+                  Interview Prep That
+                  <span className="block mt-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    Knows Your Stack
+                  </span>
+                </h1>
 
-                <div className="mt-auto px-6 py-2 rounded-full border border-primary/20 bg-primary/5 text-[10px] font-black uppercase tracking-widest group-hover:bg-primary group-hover:text-black transition-all">
-                  Direct Access
-                </div>
-              </motion.div>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* USP Section: The InterviewExplainer Advantage */}
-      <section className="container mx-auto px-4 py-20 relative z-10">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {[
-            {
-              title: "Category Wise Depth",
-              desc: "Content tailored for your experience level. Whether 0-1 yrs or 5+ yrs, we have the right depth.",
-              icon: Layers
-            },
-            {
-              title: "InterviewExplainer Decoding",
-              desc: "We don't just dump code. We decode the internal architecture and 'Why' behind every pattern.",
-              icon: Zap
-            },
-            {
-              title: "Effortless Mastery",
-              desc: "Absorb complex engineering concepts through our studio-grade visual decodings.",
-              icon: Shield
-            }
-          ].map((usp, idx) => (
-            <motion.div
-              key={usp.title}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              viewport={{ once: true }}
-              className="p-8 rounded-[2.5rem] glass border-primary/10 hover:glass-strong transition-all flex flex-col gap-4 text-center items-center"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-2">
-                <usp.icon className="h-6 w-6" />
-              </div>
-              <h3 className="text-xl font-black tracking-tight">{usp.title}</h3>
-              <p className="text-muted-foreground/80 text-sm leading-relaxed">
-                {usp.desc}
-              </p>
-            </motion.div>
-          ))}
-        </div>
-      </section >
-
-      {/* Role Discovery - Mid-sized Floating Cards */}
-      < section className="container mx-auto px-4 py-20 relative z-10" >
-        <div className="flex items-center justify-between mb-16 px-4">
-          <div className="space-y-1">
-            <h2 className="text-3xl font-bold tracking-tight">Select Your Career Path</h2>
-            <p className="text-muted-foreground">Premium tracks curated by FAANG mentors</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 px-4">
-          {featured.map((domain, idx) => (
-            <Link href={`/${domain.slug}`} key={domain.id} className="block group">
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                whileHover={{
-                  y: -8,
-                  rotateX: 2,
-                  rotateY: 2,
-                  transition: { duration: 0.3 }
-                }}
-                className="relative p-5 rounded-2xl glass hover:glass-strong border-border/50 transition-all duration-500 overflow-hidden shadow-lg h-full"
-                style={{ perspective: "1000px" }}
-              >
-                {/* Top Accent Border */}
-                <div className={`absolute top-0 left-0 right-0 h-1 bg-primary opacity-20 group-hover:opacity-100 transition-opacity`} />
-
-                <div className={`absolute top-0 right-0 w-24 h-24 bg-primary opacity-0 group-hover:opacity-10 blur-3xl transition-opacity`} />
-
-                <div className="flex items-start justify-between mb-6">
-                  <div className={`w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                    <Database className="h-5 w-5 text-primary" />
-                  </div>
-
-                  {/* Exp Badge */}
-                  <div className="px-2 py-0.5 rounded-md bg-primary/5 border border-primary/10 text-[9px] font-black tracking-widest uppercase text-muted-foreground transition-colors group-hover:text-primary">
-                    {domain.experienceLabel || "Mixed Exp"}
-                  </div>
-                </div>
-
-                <h3 className="text-lg font-bold mb-1.5 group-hover:text-primary transition-colors">{domain.name}</h3>
-                <p className="text-muted-foreground/80 text-[13px] mb-6 leading-relaxed line-clamp-2">
-                  {domain.description || `${domain.name} mastery series decodings.`}
+                <p className="text-xl text-slate-600 mb-10 leading-relaxed animate-fade-in-up anim-delay-4">
+                  Get <span className="font-bold text-slate-900">domain-specific questions</span> that match your{" "}
+                  <span className="font-bold text-slate-900">tech stack</span> and{" "}
+                  <span className="font-bold text-slate-900">experience level</span>. No generic content.
                 </p>
 
-                <div className="flex items-center justify-between pt-4 border-t border-border/50 mt-auto">
-                  <span className="text-[9px] font-black tracking-widest text-muted-foreground/50 uppercase">{domain.language || "General"}</span>
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-primary group-hover:translate-x-1 transition-transform">
-                    <span>Explore Track</span>
-                    <ArrowRight className="h-3 w-3" />
-                  </div>
+                <div className="animate-fade-in-up anim-delay-5">
+                  <HeroActions />
                 </div>
-              </motion.div>
-            </Link>
-          ))}
-        </div>
-      </section >
 
-      {/* Ecosystem Section */}
-      < section className="py-20 bg-black/40 border-y border-white/5 relative z-10 overflow-hidden" >
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-sm font-black tracking-[0.3em] uppercase text-primary/60 mb-4">Tech Ecosystem</h2>
-            <p className="text-2xl md:text-3xl font-bold">Languages & Frameworks We Cover</p>
-          </div>
-
-          <div className="flex flex-wrap justify-center gap-3 lg:gap-4 max-w-5xl mx-auto px-4">
-            {ECOSYSTEM.map((tech, idx) => (
-              <motion.div
-                key={tech.name}
-                initial={{ opacity: 0, y: 10 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.03 }}
-                className="group flex items-center gap-3 px-5 py-2.5 rounded-2xl glass border-white/5 hover:border-primary/30 hover:bg-primary/5 transition-all cursor-default"
-              >
-                <TechIcon name={tech.icon} className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                <span className="text-xs font-bold tracking-wider uppercase text-muted-foreground group-hover:text-white transition-colors">{tech.name}</span>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section >
-
-      {/* Code Studio Preview - Mac Style */}
-      < section className="container mx-auto px-4 py-32 relative z-10" >
-        <div className="grid lg:grid-cols-2 gap-20 items-center">
-          <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 text-primary">
-              <Code2 className="h-5 w-5" />
-              <span className="font-bold tracking-widest uppercase text-xs">Studio Grade Content</span>
-            </div>
-            <h2 className="text-4xl md:text-6xl font-black tracking-tight leading-tight">
-              Learn in a <br /> Professional <span className="text-primary italic">IDE Environment</span>
-            </h2>
-            <p className="text-lg text-muted-foreground leading-relaxed">
-              Don't just read theory. Our explanations are served in a premium,
-              colorful IDE environment that replicates modern production workflows.
-              Beautiful syntax highlighting, clean typography, and FAANG-grade logic.
-            </p>
-            <ul className="space-y-4">
-              {[
-                "Production-ready patterns",
-                "Advanced Concurrency & Scalability",
-                "Interactive System Design diagrams",
-                "Optimized for dark-mode readability"
-              ].map(item => (
-                <li key={item} className="flex items-center gap-3 font-medium text-muted-foreground">
-                  <CheckCircle className="h-5 w-5 text-primary" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <motion.div
-            initial={{ opacity: 0, x: 50 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8 }}
-            className="relative"
-          >
-            <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 to-blue-500/20 blur-3xl opacity-50" />
-
-            {/* Mac Window */}
-            <div className="relative rounded-[2rem] glass-strong border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.6)] overflow-hidden">
-              <div className="bg-white/5 px-8 py-5 border-b border-white/10 flex items-center justify-between">
-                <div className="flex gap-2.5">
-                  <div className="w-3.5 h-3.5 rounded-full bg-[#FF5F56]" />
-                  <div className="w-3.5 h-3.5 rounded-full bg-[#FFBD2E]" />
-                  <div className="w-3.5 h-3.5 rounded-full bg-[#27C93F]" />
+                <div className="flex flex-wrap items-center gap-8 animate-fade-in-up anim-delay-6">
+                  {["100% Free to Browse", `${(ENABLED_LANGUAGES as readonly string[]).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' & ')} Content Live`, "Sign up to track progress"].map((text, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-slate-600">
+                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      <span className="font-semibold">{text}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">
-                  engineer_mastery.java
-                </div>
-                <div className="w-12" />
               </div>
-              <div className="p-10 md:p-14 bg-black/40 backdrop-blur-xl">
-                <pre className="font-mono text-sm md:text-base leading-relaxed overflow-x-auto selection:bg-primary/30">
-                  <code className="text-blue-300">
-                    {CODE_PREVIEW.split('\n').map((line, i) => (
-                      <div key={i} className="flex gap-6">
-                        <span className="text-muted-foreground/30 w-4 text-right select-none">{i + 1}</span>
-                        <CodeLine content={line} />
+
+              <div className="animate-fade-in-scale anim-delay-3">
+                <HeroDashboardVisual />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {standoutPicks.length > 0 && <HomeStandoutPicks picks={standoutPicks} />}
+
+      {/* ── Pillars (only shown if we've enabled more than Interview Q&A) ── */}
+      {PILLARS.length > 1 && (
+        <section className="py-20 bg-white">
+          <div className="w-full px-6 sm:px-12 lg:px-20">
+            <div className="w-full min-w-0">
+              <div className="text-center mb-16">
+                <div className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-100 border-2 border-indigo-300 rounded-full mb-6">
+                  <Layers className="h-5 w-5 text-indigo-600" />
+                  <span className="text-sm font-bold text-indigo-700">Everything You Need</span>
+                </div>
+                <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4">
+                  One Platform. Complete Prep.
+                </h2>
+                <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+                  Stop juggling 5 different sites. We cover every dimension of the technical interview.
+                </p>
+              </div>
+
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {PILLARS.map((pillar) => (
+                  <Link href={pillar.href} key={pillar.title}>
+                    <div className="group h-full relative bg-white border border-slate-200 rounded-xl p-6 hover:shadow-xl hover:border-indigo-300 hover:-translate-y-1 transition-all duration-300">
+                      <div className={`w-12 h-12 bg-gradient-to-br ${pillar.gradient} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-all duration-300`}>
+                        <pillar.icon className="h-6 w-6 text-white" />
                       </div>
-                    ))}
-                  </code>
-                </pre>
+                      <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors">{pillar.title}</h3>
+                      <p className="text-sm text-slate-600 leading-relaxed mb-4">{pillar.desc}</p>
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                        <span className="text-xs font-bold text-indigo-600">{pillar.stat}</span>
+                        <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
+                      </div>
+                    </div>
+                  </Link>
+                ))}
               </div>
             </div>
-          </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Choose Language ── */}
+      <section className="py-20 bg-gradient-to-br from-slate-50 via-white to-slate-50">
+        <div className="w-full px-6 sm:px-12 lg:px-20">
+          <div className="w-full min-w-0">
+            <div className="w-full min-w-0 mb-16">
+              <div className="bg-white border-2 border-indigo-200 rounded-2xl p-8 shadow-lg">
+                <p className="text-lg leading-relaxed text-slate-700 text-center">
+                  <span className="font-bold text-slate-900">InterviewExplainer</span> isn't just another question bank. Browse{" "}
+                  <span className="font-bold text-blue-700">domain-specific questions</span> curated for your exact{" "}
+                  <span className="font-bold text-indigo-700">tech stack</span> and{" "}
+                  <span className="font-bold text-purple-700">experience level</span>. Whether you are a junior Java developer or a senior Python architect, you get questions that match{" "}
+                  <span className="font-bold text-slate-900">what real interviewers actually ask</span>.
+                  <span className="block mt-4 text-lg font-bold text-slate-900">
+                    No generic content. No irrelevant theory. Just focused, practical prep that gets you hired.
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center gap-2 px-5 py-2 bg-blue-100 border-2 border-blue-300 rounded-full mb-6">
+                <Code2 className="h-5 w-5 text-blue-600" />
+                <span className="text-sm font-bold text-blue-700">Step 1: Choose Your Language</span>
+              </div>
+              <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4">Pick Your Programming Language</h2>
+              <p className="text-xl text-slate-600">Start with your primary language, then explore tailored career paths</p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
+              {LANGUAGES.map((lang) =>
+                lang.available ? (
+                  <Link key={lang.name} href={`/domains?language=${lang.name}`}>
+                    <div className="relative bg-white/80 backdrop-blur-sm border border-blue-100 rounded-xl p-4 hover:shadow-lg hover:border-blue-300 hover:-translate-y-1 transition-all duration-300">
+                      <TechIcon name={lang.icon} className="h-12 w-12 mx-auto mb-2" />
+                      <p className="text-center text-sm font-semibold text-slate-800">{lang.name}</p>
+                    </div>
+                  </Link>
+                ) : (
+                  <div key={lang.name} className="relative bg-white/50 border border-slate-100 rounded-xl p-4 opacity-50 cursor-not-allowed">
+                    <TechIcon name={lang.icon} className="h-12 w-12 mx-auto mb-2 grayscale" />
+                    <p className="text-center text-sm font-semibold text-slate-500">{lang.name}</p>
+                    <span className="absolute top-1.5 right-1.5 text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Soon</span>
+                  </div>
+                ),
+              )}
+            </div>
+          </div>
         </div>
-      </section >
+      </section>
 
-      {/* Build Path Button Floating Footer (Optional) */}
-      < footer className="py-12 border-t border-white/5 text-center relative z-10" >
-        <p className="text-muted-foreground text-sm font-medium">
-          © 2026 InterviewExplainer Studio. High-Fidelity Engineering Education.
-        </p>
-      </footer >
+      {/* ── Quick Paths ── */}
+      <section className="py-20 bg-gradient-to-br from-slate-50 via-indigo-50 to-slate-50">
+        <div className="w-full px-6 sm:px-12 lg:px-20">
+          <div className="w-full min-w-0">
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center gap-2 px-5 py-2 bg-purple-100 border-2 border-purple-300 rounded-full mb-6">
+                <Rocket className="h-5 w-5 text-purple-600" />
+                <span className="text-sm font-bold text-purple-700">Step 2: Quick Start Paths</span>
+              </div>
+              <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4">Jump Into Popular Career Paths</h2>
+              <p className="text-xl text-slate-600">Pre-built learning paths for high-demand tech roles</p>
+            </div>
 
-      {showWizard && <SelectionWizard onClose={() => setShowWizard(false)} />
-      }
-    </div >
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {LAUNCH_QUICK_PATHS.map((path) => (
+                <Link href={path.href} key={path.href}>
+                  <div className="group relative bg-white border border-slate-200 rounded-xl p-5 hover:shadow-xl hover:border-indigo-300 hover:-translate-y-1 transition-all duration-300">
+                    <div className={`absolute left-0 top-6 bottom-6 w-1 bg-gradient-to-b ${path.gradient} rounded-r-full opacity-60 group-hover:w-1.5 transition-all duration-300`} />
+                    <div className="relative flex items-start gap-4 mb-3">
+                      <div className={`w-14 h-14 bg-gradient-to-br ${path.gradient} rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-300 shadow-md`}>
+                        <TechIcon name={path.icon} className="h-7 w-7 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors leading-tight">{path.title}</h3>
+                        <span className="inline-block px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-md border border-indigo-200">{path.level}</span>
+                      </div>
+                    </div>
+                    <p className="relative text-sm text-slate-600 mb-4 pl-0.5">{path.topics}</p>
+                    <div className="relative flex items-center text-indigo-600 text-sm font-semibold group-hover:gap-1 transition-all">
+                      Start Learning
+                      <ArrowRight className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+
+            <div className="text-center mt-12">
+              <Link href="/domains" className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-lg rounded-xl hover:shadow-xl hover:scale-105 transition-all">
+                Browse All Career Paths
+                <ArrowRight className="h-5 w-5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Why Different ── */}
+      <section className="py-20 bg-gradient-to-br from-purple-50 via-indigo-50 to-purple-50">
+        <div className="w-full px-6 sm:px-12 lg:px-20">
+          <div className="w-full min-w-0">
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center gap-2 px-5 py-2 bg-purple-100 border-2 border-purple-300 rounded-full mb-6">
+                <Lightbulb className="h-5 w-5 text-purple-600" />
+                <span className="text-sm font-bold text-purple-700">Why InterviewExplainer</span>
+              </div>
+              <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4">Built Different. Designed Smart.</h2>
+              <p className="text-xl text-slate-600 max-w-2xl mx-auto">Generic interview prep doesn't work. We adapt everything to you.</p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {WHY_DIFFERENT.map((feature) => (
+                <div key={feature.title} className="group relative bg-white/80 backdrop-blur-sm border border-purple-100 rounded-xl p-5 hover:shadow-xl hover:border-purple-300 hover:-translate-y-1 transition-all duration-300">
+                  <div className={`w-12 h-12 bg-gradient-to-br ${feature.gradient} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-all duration-300`}>
+                    <feature.icon className="h-6 w-6 text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900 mb-2">{feature.title}</h3>
+                  <p className="text-sm text-slate-600 leading-relaxed">{feature.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Stats ── */}
+      <section className="py-20 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600">
+        <div className="w-full px-6 sm:px-12 lg:px-20">
+          <div className="w-full min-w-0">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-10 text-center">
+              {[
+                { value: "Java & Python", label: "Live Today", Icon: BookOpen },
+                { value: "3", label: "Experience Levels", Icon: Layers },
+                { value: "100%", label: "Free to Browse", Icon: Target },
+                { value: "∞", label: "Free Forever", Icon: Star },
+              ].map((stat) => (
+                <div key={stat.label}>
+                  <stat.Icon className="h-10 w-10 text-blue-200 mx-auto mb-4" />
+                  <div className="text-5xl font-black text-white mb-2">{stat.value}</div>
+                  <div className="text-base text-blue-100 font-semibold">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Newsletter ── */}
+      <section className="py-20 bg-gradient-to-br from-slate-50 via-white to-slate-50">
+        <div className="w-full px-6 sm:px-12 lg:px-20">
+          <div className="max-w-xl mx-auto text-center">
+            <h2 className="text-3xl font-black text-slate-900 mb-3">New domains launching soon</h2>
+            <p className="text-slate-600 mb-8">
+              JavaScript, TypeScript, Go, Ruby, and Kotlin packs are in progress. Be first to know when they go live.
+            </p>
+            <NewsletterWidget heading="Get notified when new content drops" subheading="" />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Final CTA ── */}
+      <section className="py-32 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+        <div className="w-full px-6 sm:px-12 lg:px-20">
+          <div className="w-full min-w-0 text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-yellow-400 to-orange-500 mb-8 shadow-xl">
+              <Award className="h-10 w-10 text-white" />
+            </div>
+            <h2 className="text-5xl sm:text-6xl font-black text-slate-900 mb-6">Ready to Ace Your Interview?</h2>
+            <p className="text-2xl text-slate-600 mb-12 max-w-2xl mx-auto">
+              Browse free. Sign up to track your progress and unlock personalized insights.
+            </p>
+            <FinalCTA />
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }

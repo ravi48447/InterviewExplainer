@@ -59,7 +59,7 @@ const domains = [
 export function DomainDiscovery() {
   return (
     <section id="domain-discovery" className="px-4 py-16 sm:py-20 lg:px-6">
-      <div className="mx-auto max-w-6xl">
+      <div className="w-full min-w-0">
         <FadeInUp>
           <div className="mb-10 text-center">
             <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl text-balance">

@@ -10,5 +10,7 @@ public record QuestionSummaryDTO(
     Integer estimatedReadTime,
     Integer orderIndex,
     String domainSlug,
-    String stackSlug
+    String stackSlug,
+    String subcategorySlug,
+    String subcategoryName
 ) {}
