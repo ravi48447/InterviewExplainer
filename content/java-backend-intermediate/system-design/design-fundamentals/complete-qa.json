@@ -1,0 +1,303 @@
+{
+  "topic": "Design Fundamentals",
+  "topicSlug": "design-fundamentals",
+  "questions": [
+    {
+      "id": "sdf-005",
+      "slug": "consistent-hashing",
+      "question": "How does consistent hashing work and why is it essential for distributed systems?",
+      "title": "Consistent Hashing: How Distributed Systems Distribute Data",
+      "direct_answer": "Consistent hashing maps both **keys and nodes** onto the same circular hash space (the 'ring'); a key is owned by the **first node clockwise** from its hash. Adding or removing a node only re-shuffles **K/N** of the keys (vs **K × (N-1)/N** for plain `hash mod N`). **Virtual nodes** (each physical node owns hundreds of ring positions) smooth out load imbalance. Used by **Cassandra, DynamoDB, Riak, Memcached clients, CDNs, and load balancers** anywhere data or requests must be distributed and the node set changes.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Why `hash mod N` fails on resize, the ring concept, virtual nodes for load balancing, replication on the ring, and real-world usage.",
+        "common_mistake": "Forgetting virtual nodes (one position per physical node creates terrible load skew), or assuming consistent hashing solves replication itself (it just locates the primary).",
+        "to_stand_out": "Discuss bounded-load consistent hashing (Google's variant), rendezvous hashing (HRW) as an alternative, and how Cassandra picks coordinators + replicas using the ring."
+      },
+      "company_tags": [
+        "Amazon",
+        "Akamai",
+        "Discord",
+        "Cassandra",
+        "Cloudflare"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem with hash mod N",
+            "content": "Naive sharding: `node = hash(key) mod N`. For 4 nodes (N=4), key 'user42' maps to node `hash('user42') % 4`.\n\n**Fine until N changes.** Add a fifth node: `hash(key) % 5` — now ~80% of all keys map to a different node. Every cache miss, every data migration, all at once. A 5–9 minute outage is normal during such a resize.\n\nConsistent hashing solves this: when you add or remove a node, only a small fraction of keys (~K/N where K is total keys, N is node count) need to move. The rest stay on the same node."
+          },
+          {
+            "type": "step",
+            "title": "How the Ring Works",
+            "content": "**Construction:**\n- Choose a hash function with output range [0, 2^32) (or 2^64).\n- Map both **keys** and **nodes** onto the same circular space using this hash.\n- Visualize as a clock face from 0 to 2^32 wrapping back to 0.\n\n**Placement rule:** key K is owned by the **first node** clockwise from `hash(K)` on the ring.\n\n```mermaid\nflowchart TB\n    subgraph Ring[\"Hash Ring (0 → 2^32 → wrap)\"]\n        N1[Node A<br/>hash 100]\n        N2[Node B<br/>hash 800]\n        N3[Node C<br/>hash 2000]\n        K1[key1<br/>hash 250 → B]\n        K2[key2<br/>hash 1500 → C]\n        K3[key3<br/>hash 50 → A]\n    end\n\n    classDef node fill:#dbeafe,stroke:#3b82f6\n    classDef key fill:#fef3c7,stroke:#f59e0b\n    class N1,N2,N3 node\n    class K1,K2,K3 key\n```\n\n**Lookup:** binary search the sorted list of node hashes; find first ≥ `hash(K)`.\n- O(log N) lookup time.\n- O(N) memory for the ring metadata.\n\n**On node addition:** the new node takes over keys in its arc from the previous node clockwise — no other node is affected.\n\n**On node removal:** the next node clockwise inherits the failed node's keys — no other node is affected."
+          },
+          {
+            "type": "step",
+            "title": "Virtual Nodes — Solving the Load Imbalance",
+            "content": "**The naive ring's flaw:** with 4 nodes randomly placed on the ring, one node could end up owning 60% of the keyspace by sheer bad luck. Even with perfect hashing, variance with small N is huge.\n\n**Virtual nodes (vnodes):**\n- Each physical node is mapped to **many** positions on the ring (typically 100–1000).\n- Hash `node-id + i` for i = 0 to V (vnodes per node).\n- With V=200 and N=4 → 800 positions on the ring; load imbalance shrinks dramatically (variance ~1/√V).\n\n**Two more wins from vnodes:**\n\n1. **Faster rebalancing.** When a node fails, its 200 vnodes spread across 200 different arcs — 200 different remaining nodes can each pick up a small slice in parallel. No single node is overloaded.\n2. **Heterogeneous capacity.** A node with 2x the disk gets 2x the vnodes; ring weights itself.\n\n**Used by:** Cassandra (default 256 vnodes per node), DynamoDB, Riak, Discord's chat sharding."
+          },
+          {
+            "type": "step",
+            "title": "Replication on the Ring",
+            "content": "Consistent hashing locates the **primary** node for a key. For replication, walk clockwise N more times.\n\n**Cassandra's replica placement:**\n- N=3 replication. Primary = first node clockwise.\n- Replica 1 = next physical node clockwise (skipping vnodes of the same physical node).\n- Replica 2 = next physical node after that.\n\n**Topology-aware variants:**\n- **Rack-aware:** replicas placed on different racks within an AZ.\n- **AZ-aware:** replicas placed across different AZs.\n- **Region-aware (Network Topology Strategy):** replicas split across regions.\n\nThe ring tells you the **set of replicas**; consistency level (ONE, QUORUM, ALL) governs reads/writes."
+          },
+          {
+            "type": "step",
+            "title": "When a Node Joins or Leaves",
+            "content": "**Joining:**\n1. New node N5 generates its vnode positions.\n2. For each vnode position, identify the predecessor (the node that previously owned that arc).\n3. Stream data for those arcs from predecessor to N5.\n4. Update the cluster ring metadata; clients learn the new ring.\n5. Old node deletes the migrated data.\n\n**Leaving (graceful):**\n1. Node announces shutdown.\n2. For each of its vnodes, the next clockwise node takes over.\n3. Stream data forward; remove vnodes from ring; finalize.\n\n**Failure (sudden):**\n1. Cluster detects via heartbeat timeout.\n2. Replicas of the failed node (the vnodes' next clockwise neighbors) become responsible.\n3. Hinted handoff: writes meant for the failed node are buffered by another node and replayed when it returns.\n4. If failure is permanent: replace + rebalance, like join.\n\n**Throttling:** rebalances move TBs; throttle to avoid saturating network/disk during the migration."
+          },
+          {
+            "type": "step",
+            "title": "Implementation Sketch",
+            "content": "```java\npublic class ConsistentHash<T> {\n    private final NavigableMap<Long, T> ring = new TreeMap<>();\n    private final int vnodesPerNode;\n    private final HashFunction hash;\n\n    public void addNode(T node) {\n        for (int i = 0; i < vnodesPerNode; i++) {\n            long h = hash.hash((node.toString() + \"#\" + i).getBytes());\n            ring.put(h, node);\n        }\n    }\n\n    public T getNode(String key) {\n        if (ring.isEmpty()) return null;\n        long h = hash.hash(key.getBytes());\n        Map.Entry<Long, T> e = ring.ceilingEntry(h);\n        if (e == null) e = ring.firstEntry();           // wrap around\n        return e.getValue();\n    }\n\n    public List<T> getReplicas(String key, int n) {\n        Set<T> seen = new LinkedHashSet<>();\n        long h = hash.hash(key.getBytes());\n        Iterator<Map.Entry<Long, T>> it =\n            ring.tailMap(h, true).entrySet().iterator();\n        while (seen.size() < n) {\n            if (!it.hasNext()) it = ring.entrySet().iterator();   // wrap\n            seen.add(it.next().getValue());\n        }\n        return new ArrayList<>(seen);\n    }\n\n    public void removeNode(T node) {\n        for (int i = 0; i < vnodesPerNode; i++) {\n            long h = hash.hash((node.toString() + \"#\" + i).getBytes());\n            ring.remove(h);\n        }\n    }\n}\n```\n\nNotes:\n- `TreeMap.ceilingEntry` is O(log N).\n- For N replicas, walk clockwise skipping duplicate physical nodes.\n- Use a strong hash (Murmur3, xxHash) — cryptographic hashes are unnecessary and slower."
+          },
+          {
+            "type": "step",
+            "title": "Variants and Alternatives",
+            "content": "**Bounded-load consistent hashing (Google, 2017):**\n- Cap each node's load at `(1 + ε) × average`. Excess keys spill to the next node.\n- Bounds worst-case skew tightly while preserving most consistency-hashing benefits.\n- Used in Google's Maglev load balancer.\n\n**Rendezvous hashing (Highest Random Weight, HRW):**\n- For key K, compute `hash(K, node)` for every node; pick the node with highest score.\n- O(N) lookup but no ring metadata to maintain.\n- Trivially handles weighted nodes; good for small N (~hundreds).\n- Used by some CDN edge-node selection.\n\n**Jump consistent hash (Google, 2014):**\n- O(log N) lookup, O(1) memory, no ring at all.\n- Limitation: only supports adding nodes at the end (numeric IDs); can't remove arbitrary nodes.\n- Used in Google's internal sharding when topology is append-only.\n\n**Maglev hashing:**\n- Builds a precomputed lookup table with bounded disruption on changes.\n- Used in Google's L4 load balancer (Maglev) and Envoy."
+          },
+          {
+            "type": "step",
+            "title": "Where Consistent Hashing Is Used",
+            "content": "- **Distributed databases** — Cassandra, DynamoDB, Riak (data sharding + replica placement).\n- **Distributed caches** — Memcached client-side sharding (Ketama), Redis Cluster (similar concept with hash slots).\n- **Load balancers** — sticky sessions to backend pods (consistent hashing on session key).\n- **CDN edge selection** — routing user to nearest cached copy of an asset.\n- **Service mesh / sidecar routing** — Envoy ring hash for sticky destinations.\n- **Distributed storage** — Ceph CRUSH algorithm uses related ideas.\n- **Application-level sharding** — routing user IDs to specific shards in a sharded service.\n\nIf you have N stateful nodes and the set of N changes over time, consistent hashing is almost certainly part of the answer."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`hash mod N` is fine until N changes** — then ~all keys remap.\n- **Consistent hashing** maps both keys and nodes onto a hash ring; key owner = next node clockwise.\n- **Adding/removing a node moves only K/N keys**; everyone else is undisturbed.\n- **Virtual nodes (100–1000 per physical node)** are mandatory for load balance; also enable parallel rebalancing and weighted nodes.\n- **Replication = walk clockwise N nodes** from the primary (with topology awareness for AZs/racks).\n- **Bounded-load consistent hashing** caps worst-case skew (Google Maglev variant).\n- **Alternatives:** rendezvous hashing (HRW), jump consistent hash, Maglev hashing — each with niche advantages.\n- **Used everywhere** — Cassandra, DynamoDB, Memcached clients, CDNs, L4 load balancers."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**The problem**\n\nNaive sharding with `hash(key) mod N` works fine until N changes. Add one node and ~80% of keys remap — every cache miss, every data migration, all at once. A 5-9 minute outage during resizing is normal with naive hashing.\n\n**The solution — the ring**\n\nMap both keys AND nodes onto the same circular hash space (typically 0 to 2^32 wrapping). A key is owned by the first node clockwise from its hash. Lookup is O(log N) via binary search on the sorted node hashes.\n\nWhen you add a node, it takes over only the arc between itself and the previous node clockwise — no other node is affected. K/N keys move, not K × (N-1)/N.\n\nWhen you remove a node, the next clockwise neighbor inherits its keys.\n\n**The big problem with the naive ring — load imbalance**\n\nWith 4 nodes randomly placed, one might end up with 60% of the keyspace by bad luck. Variance is huge with small N.\n\n**Virtual nodes solve it**\n\nEach physical node maps to 100-1000 ring positions (Cassandra default 256). Variance shrinks roughly as 1/√V. Three more wins:\n- Faster rebalancing: failed node's vnodes spread across many remaining nodes; each picks up a slice in parallel\n- Weighted nodes: more disk = more vnodes; ring weights itself\n- Smoother failure recovery\n\n**Replication on the ring**\n\nConsistent hashing locates the primary; for N replicas, walk N more physical nodes clockwise (skipping vnodes of the same physical node). Topology-aware variants ensure replicas land on different racks or AZs.\n\nThe ring tells you the replica set; consistency level (ONE, QUORUM, ALL) governs reads/writes — separate concerns.\n\n**Node lifecycle**\n\n- Joining: new node generates vnode positions, streams data from predecessors, ring updated, clients learn\n- Graceful leaving: announce shutdown, next clockwise takes over each vnode, stream forward\n- Sudden failure: heartbeat timeout, replicas take responsibility, hinted handoff buffers writes for replay when node returns\n- Throttle rebalances — they move TBs and saturate network if unrestricted\n\n**Variants worth knowing**\n\n- Bounded-load (Google 2017): cap each node at (1+ε) × average, spill excess. Used in Maglev.\n- Rendezvous hashing (HRW): O(N) lookup, no ring metadata, easy weighted, good for small N\n- Jump consistent hash (Google 2014): O(log N), O(1) memory, but only append-only topology\n- Maglev hashing: precomputed lookup table with bounded disruption\n\n**Where it's used**\n\n- Cassandra, DynamoDB, Riak — data sharding + replica placement\n- Memcached clients (Ketama), Redis Cluster (slot variant)\n- L4 load balancers (Envoy ring hash) for sticky sessions\n- CDN edge selection\n- Application-level sharding by user ID\n\n**Implementation sketch**\n\n```java\nNavigableMap<Long, Node> ring = new TreeMap<>();\nfor (int i = 0; i < V; i++) ring.put(hash(node + \"#\" + i), node);\n// lookup\nMap.Entry<Long, Node> e = ring.ceilingEntry(hash(key));\nif (e == null) e = ring.firstEntry();   // wrap\n```\n\nUse Murmur3 or xxHash; cryptographic hashes are slower with no benefit here.\n\n**Recommendation**\n\n**Use consistent hashing whenever you have N stateful nodes and the set of N changes over time. Always use 100-1000 virtual nodes per physical node — not negotiable for load balance. Walk clockwise for replication, with topology awareness for AZ/rack separation. For load balancers needing strict per-node load bounds, look at Google's bounded-load variant (Maglev). For append-only sharding with O(1) memory, jump consistent hash. Otherwise the standard ring + vnodes is the workhorse used by Cassandra, DynamoDB, Memcached clients, and most CDN routing.**"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Walk through what happens to the cache hit rate when a 4-node Memcached cluster grows to 5 nodes — with and without consistent hashing.",
+        "How does Cassandra's Network Topology Strategy ensure replicas span AZs?",
+        "Implement consistent hashing with bounded loads — what changes from the basic algorithm?",
+        "When would you choose rendezvous hashing over consistent hashing?"
+      ],
+      "seo": {
+        "metaTitle": "Consistent Hashing Explained — Ring, Virtual Nodes, Replication",
+        "metaDescription": "How consistent hashing works (ring topology, clockwise placement), why hash mod N fails, virtual nodes for load balancing, replication walk on the ring, and variants like bounded-load and rendezvous hashing."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P06",
+        "hook": "The problem Naive sharding with hash(key) mod N works fine until N changes.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Naive sharding: node = hash(key) mod N. For 4 nodes (N=4), key 'user42' maps to node hash('user42') % 4. Fine until N changes. Add a fifth node: hash(key) % 5 — now ~80% of all keys map to a different node. Every cache miss, every data migration, all at once. A 5–9 minute outage is normal during such a resize. Consistent hashing solves this: when you add or remove a node, only a small fraction of keys (~K/N where K is total keys, N is node count) need to move. The rest stay on the same node."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Naive sharding: node = hash(key) mod N. For 4 nodes (N=4), key 'user42' maps to node hash('user42') % 4. Fine until N changes. Add a fifth node: hash(key) % 5 — now ~80% of all keys map to a different node. Every cache miss, every data migration, all at once. A 5–9 minute outage is normal during such a resize. Consistent hashing solves this: when you add or remove a node, only a small fraction of keys (~K/N where K is total keys, N is node count) need to move. The rest stay on the same node."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Construction: Choose a hash function with output range [0, 2^32) (or 2^64)",
+              "Map both keys and nodes onto the same circular space using this hash",
+              "Visualize as a clock face from 0 to 2^32 wrapping back to 0",
+              "Placement rule: key K is owned by the first node clockwise from hash(K) on the ring",
+              "``mermaid flowchart TB subgraph Ring[\"Hash Ring (0 → 2^32 → wrap)\"] N1[Node A<br/>hash 100] N2[Node B<br/>hash 800] N3[Node C<br/>hash 2000] K1[key1<br/>hash 250 → B] K2[key2<br/>hash 1500 → C] K3[key3<br/>hash 50 → A] end classDef node fill:#dbeafe,stroke:#3b82f6 classDef key fill:#fef3c7,stroke:#f59e0b class N1,N2,N3 node class K1,K2,K3 key ` Lookup: binary search the sorted list of node hashes; find first ≥ hash(K)`"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Naive sharding: node = hash(key) mod N. For 4 nodes (N=4), key 'user42' maps to node hash('user42') % 4. Fine until N changes. Add a fifth node: hash(key) % 5 — now ~80% of all keys map to a different node. Every cache miss, every data migration, all at once. A 5–9 minute outage is normal during such a resize. Consistent hashing solves this: when you add or remove a node, only a small fraction of keys (~K/N where K is total keys, N is node count) need to move. The rest stay on the same node."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Naive sharding: node = hash(key) mod N. For 4 nodes (N=4), key 'user42' maps to node hash('user42') % 4. Fine until N changes. Add a fifth node: hash(key) % 5 — now ~80% of all keys map to a different node. Every cache miss, every data migration, all at once. A 5–9 minute outage is normal during such a resize. Consistent hashing solves this: when you add or remove a node, only a small fraction of keys (~K/N where K is total keys, N is node count) need to move. The rest stay on the same node."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Forgetting virtual nodes (one position per physical node creates terrible load skew), or assuming consistent hashing solves replication itself (it just locates the primary)."
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "hash mod N is fine until N changes — then ~all keys remap. Consistent hashing maps both keys and nodes onto a hash ring; key owner = next node clockwise. Adding/removing a node moves only K/N keys; everyone else is undisturbed. Virtual nodes (100–1000 per physical node) are mandatory for load balance; also enable parallel rebalancing and weighted nodes. Replication = walk clockwise N nodes from the primary (with topology awareness for AZs/racks). Bounded-load consistent hashing caps worst-case skew (Google Maglev variant). Alternatives: rendezvous hashing."
+          }
+        ],
+        "cap": "Otherwise the standard ring + vnodes is the workhorse used by Cassandra, DynamoDB, Memcached clients, and most CDN routing.",
+        "familiarity_anchors": [
+          "Consistent",
+          "Adding",
+          "Virtual"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Walk through what happens to the cache hit rate when a 4-node Memcached cluster grows to 5 nodes — with and without consistent hashing.",
+          "How does Cassandra's Network Topology Strategy ensure replicas span AZs?",
+          "Implement consistent hashing with bounded loads — what changes from the basic algorithm?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Distributed Java system handling 10k requests per second"
+      }
+    },
+    {
+      "id": "sdf-007",
+      "slug": "api-gateway-pattern",
+      "question": "What is the API Gateway pattern and why is it essential for microservices architectures?",
+      "title": "API Gateway Pattern: Single Entry Point for Microservices",
+      "direct_answer": "An API Gateway is a **single front-door** that sits between clients and backend microservices, handling **authentication, rate limiting, routing, request/response transformation, protocol translation, and observability** in one place. It eliminates the need for every microservice to reimplement cross-cutting concerns and shields clients from the messy reality of which service owns what. The trade-off is **operational risk** — the gateway becomes a critical chokepoint that needs to be highly available, low-latency, and carefully versioned. Examples: **Kong, AWS API Gateway, Spring Cloud Gateway, Envoy, Netflix Zuul**.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "What concerns belong in the gateway vs in services, BFF (Backend-for-Frontend) pattern, and operational considerations.",
+        "common_mistake": "Putting business logic in the gateway (turns into a monolith), or skipping the gateway and forcing every service to handle auth/rate-limit/CORS itself.",
+        "to_stand_out": "Distinguish edge gateway vs internal service mesh, discuss BFF for client-specific aggregation, mention deployment patterns (canary at gateway level), and the gateway-as-bottleneck trap."
+      },
+      "company_tags": [
+        "Netflix",
+        "Amazon",
+        "Kong",
+        "Google",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem It Solves",
+            "content": "Without a gateway, every microservice must implement (or reimplement) cross-cutting concerns:\n\n- Authentication / token validation\n- Rate limiting per user / per API key\n- Request logging, tracing, metrics\n- CORS, IP allowlisting, geo-blocking\n- TLS termination, certificate rotation\n- Versioning, deprecation routing\n- Response caching\n- Request size limits, payload validation\n\nWithout a gateway: 50 services, 50 different auth implementations, 50 different rate-limiter configs, drifting policies, security gaps. Every team reinvents the wheel.\n\n**The API Gateway centralizes these concerns into one tier**, leaving each service to focus on its domain logic. Clients talk to one URL; the gateway handles the messy fan-out behind it."
+          },
+          {
+            "type": "step",
+            "title": "What Belongs in the Gateway",
+            "content": "**Always:**\n- TLS termination\n- Authentication (validate JWT / OAuth tokens; reject anonymous before hitting services)\n- Rate limiting (per API key / per IP / per route)\n- Request/response logging + metrics\n- Distributed tracing header propagation\n- Routing (URL path → service)\n- Basic input validation (body size, malformed JSON rejection)\n- CORS, security headers (HSTS, CSP)\n\n**Sometimes:**\n- Response caching (for cacheable GETs)\n- Request/response transformation (REST ↔ gRPC, schema migration during transitions)\n- Aggregation (BFF pattern — see next section)\n- Circuit breaking, retries, timeouts\n- Canary routing (5% of traffic to v2 service)\n- A/B test header injection\n\n**Never:**\n- Business logic. The moment the gateway 'knows' that an order with status SHIPPED can't be cancelled, it's become a microservice itself — a coupling disaster.\n- Database calls (other than its own config / rate-limit state).\n- Per-domain validation. Validate JSON shape, sure; validate that 'productId 42 is in stock' is the product service's job."
+          },
+          {
+            "type": "step",
+            "title": "Architecture",
+            "content": "```mermaid\nflowchart TB\n    Mobile([Mobile App])\n    Web([Web App])\n    Partner([Partner API])\n\n    GW{API Gateway<br/>auth, rate-limit, route}\n\n    UserSvc[User Service]\n    OrderSvc[Order Service]\n    PaymentSvc[Payment Service]\n    SearchSvc[Search Service]\n    NotifSvc[Notification Service]\n\n    Mobile --> GW\n    Web --> GW\n    Partner --> GW\n\n    GW --> UserSvc\n    GW --> OrderSvc\n    GW --> PaymentSvc\n    GW --> SearchSvc\n    GW --> NotifSvc\n\n    classDef gw fill:#fee2e2,stroke:#ef4444\n    classDef svc fill:#dcfce7,stroke:#22c55e\n    classDef client fill:#dbeafe,stroke:#3b82f6\n    class GW gw\n    class UserSvc,OrderSvc,PaymentSvc,SearchSvc,NotifSvc svc\n    class Mobile,Web,Partner client\n```\n\n**Flow:**\n1. Client request hits gateway over TLS.\n2. Gateway terminates TLS, validates auth token.\n3. Gateway checks rate limit for this client.\n4. Gateway routes by URL path to the right service.\n5. Gateway adds tracing headers, logs request/response.\n6. Optional: caches response, transforms format.\n\n**Backend services** see only authenticated, rate-limited, validated requests with consistent tracing. They can ignore auth, rate limits, CORS — the gateway already handled it."
+          },
+          {
+            "type": "step",
+            "title": "BFF (Backend-for-Frontend) Pattern",
+            "content": "**Problem:** mobile app needs different data shape than web app. Web wants 50 fields per product; mobile wants 10 (smaller payload, less battery). Forcing both into the same API leads to over-fetching for mobile or under-fetching for web.\n\n**Solution:** **a gateway per client type** — one for mobile, one for web, one for partners. Each BFF aggregates and shapes data for its specific client.\n\n```mermaid\nflowchart TB\n    Mobile([Mobile])\n    Web([Web])\n    MobileBFF[Mobile BFF]\n    WebBFF[Web BFF]\n    UserSvc[User Service]\n    OrderSvc[Order Service]\n    ProductSvc[Product Service]\n\n    Mobile --> MobileBFF\n    Web --> WebBFF\n    MobileBFF --> UserSvc\n    MobileBFF --> OrderSvc\n    MobileBFF --> ProductSvc\n    WebBFF --> UserSvc\n    WebBFF --> OrderSvc\n    WebBFF --> ProductSvc\n```\n\n**Why this works:**\n- Each BFF owned by the client team; rapid iteration without coordinating with backend services.\n- Mobile BFF can return Protobuf for size; web BFF returns JSON.\n- Mobile BFF can aggregate multiple service calls into one response (e.g., product page = product + reviews + recommendations).\n\n**GraphQL gateways** (Apollo Federation, etc.) are a flavor of BFF — the client picks fields it wants, the gateway fans out to services. Same idea, fancier query language."
+          },
+          {
+            "type": "step",
+            "title": "Edge Gateway vs Service Mesh — Different Layers",
+            "content": "Don't confuse the two:\n\n**Edge gateway (north-south traffic):**\n- Sits at the edge of your system; clients → gateway → services.\n- Handles client-facing concerns: auth, rate-limit per API key, public TLS.\n- Examples: Kong, AWS API Gateway, Spring Cloud Gateway, Apigee.\n\n**Service mesh (east-west traffic):**\n- Sits between services; service A → sidecar → sidecar → service B.\n- Handles service-to-service concerns: mTLS, retries, circuit breaking, traffic shifting.\n- Examples: Istio, Linkerd, Consul Connect.\n\nBoth use Envoy or similar proxies under the hood; they solve different problems at different layers. A mature microservices org has both:\n- Gateway protects the perimeter; service mesh enforces zero-trust internally.\n\n**Lighter setups** can skip the mesh and let the gateway handle some cross-service concerns at API boundaries."
+          },
+          {
+            "type": "step",
+            "title": "Operational Concerns and Failure Modes",
+            "content": "**Gateway = critical path.** Every client request goes through it. If it goes down, everything goes down. Consequences:\n\n**HA requirements:**\n- Multiple instances behind a load balancer.\n- Multi-AZ deployment.\n- Graceful drain on deploys (existing connections finish).\n- Health-check endpoints distinct from upstream-health endpoints.\n\n**Latency:**\n- Gateway adds 1–5 ms baseline. Acceptable for most APIs; problematic for ultra-low-latency.\n- Avoid synchronous remote calls during request processing (auth provider, rate limit store) — cache aggressively, fail open with circuit breakers.\n\n**Configuration drift:**\n- Hundreds of routes, each with its own auth/rate-limit/transform config.\n- Use declarative config (Kong DB-less, Spring Cloud Gateway YAML, OpenAPI specs) and CI-controlled deploys.\n\n**Security:**\n- Gateway enforces mTLS for service→gateway and TLS for client→gateway.\n- Don't trust client headers — strip them, then add gateway-set headers (`X-Auth-User`).\n- Rate limit is the first line of defense against scrapers and DDoS.\n\n**Versioning:**\n- Route by version header or URL prefix (`/v1`, `/v2`).\n- Deprecate old versions via sunset headers + monitoring of usage."
+          },
+          {
+            "type": "step",
+            "title": "When Not to Use a Gateway (or Use a Smaller One)",
+            "content": "**Tiny systems:** 2 microservices and 100 users? An NGINX reverse proxy with a lambda for auth is enough.\n\n**Pure internal systems:** if no external client traffic, a service mesh might be all you need.\n\n**Strict latency budgets** (<5ms p99 end-to-end): the gateway hop may be too expensive; consider direct client-to-service with a thin auth sidecar.\n\n**Smell of monolith creeping in:** if your gateway has thousands of lines of business-logic-feeling code (transformations, conditional routing based on payload content), it's becoming a service of its own. Split into a BFF if it's per-client logic; push back into the actual service if it's domain logic."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **One front door** — clients talk to the gateway; gateway routes to services.\n- **Centralizes cross-cutting concerns** — auth, rate limit, TLS, logging, tracing, CORS.\n- **Never put business logic in the gateway** — it becomes a monolith.\n- **BFF (Backend-for-Frontend)** — separate gateways per client type for tailored payloads and aggregation.\n- **Edge gateway (north-south) is different from service mesh (east-west);** mature systems use both.\n- **Critical path:** must be HA, multi-AZ, graceful drain on deploys, low baseline latency.\n- **Avoid sync remote calls in the request path** — cache auth/rate-limit state aggressively.\n- **Examples:** Kong, AWS API Gateway, Spring Cloud Gateway, Envoy/Istio Ingress, Apigee, Netflix Zuul."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**The problem it solves**\n\nWithout a gateway, every microservice has to implement auth, rate limiting, TLS, CORS, logging, tracing, request validation — the cross-cutting concerns. With 50 services, that's 50 different implementations drifting apart, security gaps everywhere, every team reinventing the wheel.\n\nThe API Gateway centralizes those concerns into one tier. Clients talk to one URL; the gateway handles auth, rate-limiting, routing, observability, then forwards to the right backend service.\n\n**What belongs in the gateway**\n\nAlways: TLS termination, auth (JWT/OAuth validation), rate limiting, logging, metrics, distributed tracing header propagation, routing, basic input validation, CORS, security headers.\n\nSometimes: response caching, request/response transformation (REST ↔ gRPC), aggregation for BFF, circuit breaking, retries, canary routing, A/B test injection.\n\nNever: business logic. The moment the gateway knows that 'an order with status SHIPPED can't be cancelled,' it's become a microservice itself — a coupling disaster. Validate JSON shape sure; validate 'productId 42 in stock' is the product service's job.\n\n**BFF — Backend-for-Frontend**\n\nMobile apps need different data shapes than web. Forcing both into one API leads to over-fetching or under-fetching. Solution: one gateway per client type — mobile BFF, web BFF, partner API gateway.\n\nEach BFF can:\n- Aggregate multiple service calls into one response (product page = product + reviews + recommendations)\n- Serve different formats (Protobuf for mobile size, JSON for web)\n- Iterate independently — owned by the client team\n\nGraphQL gateways are a fancy BFF flavor — client picks fields, gateway federates to services.\n\n**Edge gateway vs service mesh — different layers**\n\nEdge gateway: north-south traffic. Sits between clients and services. Auth, rate-limit per API key, public TLS. Kong, AWS API Gateway, Spring Cloud Gateway.\n\nService mesh: east-west traffic. Sits between services as sidecars. mTLS, retries, circuit breaking, traffic shifting. Istio, Linkerd.\n\nMature microservices have both. Lighter setups skip the mesh and let the gateway handle some cross-service concerns.\n\n**Operational realities**\n\nGateway = critical path. If it goes down, everything goes down.\n\n- HA: multiple instances, multi-AZ, graceful drain on deploys\n- Latency: adds 1-5ms baseline; avoid sync remote calls in the request path; cache auth/rate-limit aggressively\n- Config drift: hundreds of routes; declarative config (Kong DB-less, YAML), CI-controlled deploys\n- Security: don't trust client headers — strip, then add gateway-set ones (`X-Auth-User`)\n- Versioning: route by header or URL prefix (`/v1`, `/v2`); sunset headers for deprecation\n\n**When NOT to use a gateway**\n\n- Tiny systems: an NGINX + a lambda for auth is enough\n- Pure internal systems with no external traffic: service mesh might suffice\n- Strict <5ms latency budget: the hop may be too expensive\n- Gateway logic creep: thousands of lines of conditional transforms = it's becoming a service. Split into a BFF or push back into the actual service.\n\n**Recommendation**\n\n**Use an API Gateway for any system with multiple microservices and external clients. Centralize TLS, auth, rate limiting, observability — keep business logic out. For multiple client types, layer BFFs on top per client. Pair with a service mesh for east-west zero-trust. Treat the gateway as critical infrastructure: HA across AZs, low baseline latency, declarative config under CI control. Common picks: Kong, Spring Cloud Gateway, AWS API Gateway for managed; Envoy or Istio Ingress for self-hosted.**"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Design a multi-tenant API gateway that enforces different rate limits per customer plan.",
+        "How do you handle a gradual rollout of a new microservice version using the gateway?",
+        "Walk through the failure modes when the gateway can't reach the auth provider.",
+        "When would you use GraphQL federation instead of a traditional API gateway?"
+      ],
+      "seo": {
+        "metaTitle": "API Gateway Pattern — Microservices, BFF, Edge vs Mesh",
+        "metaDescription": "API Gateway responsibilities (auth, rate limit, routing, observability), Backend-for-Frontend pattern, edge gateway vs service mesh, operational concerns, and when not to use one."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P06",
+        "hook": "The problem it solves Without a gateway, every microservice has to implement auth, rate limiting, TLS, CORS, logging, tracing, request validation — the cross-cutting concerns.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Without a gateway, every microservice must implement (or reimplement) cross-cutting concerns: Authentication / token validation Rate limiting per user / per API key Request logging, tracing, metrics CORS, IP allowlisting, geo-blocking TLS termination, certificate rotation Versioning, deprecation routing Response caching Request size limits, payload validation Without a gateway: 50 services, 50 different auth implementations, 50 different rate-limiter configs, drifting policies, security gaps. Every team reinvents the wheel. The API Gateway centralizes these concerns into one tier, leaving each service to focus on its domain logic. Clients talk to one URL; the gateway handles the messy fan-out behind it."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Without a gateway, every microservice must implement (or reimplement) cross-cutting concerns: Authentication / token validation Rate limiting per user / per API key Request logging, tracing, metrics CORS, IP allowlisting, geo-blocking TLS termination, certificate rotation Versioning, deprecation routing Response caching Request size limits, payload validation Without a gateway: 50 services, 50 different auth implementations, 50 different rate-limiter configs, drifting policies, security gaps. Every team reinvents the wheel. The API Gateway centralizes these concerns into one tier, leaving each service to focus on its domain logic. Clients talk to one URL; the gateway handles the messy fan-out behind it."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Always: TLS termination Authentication (validate JWT / OAuth tokens; reject anonymous before hitting services) Rate limiting (per API key / per IP / per route) Request/response logging + metrics Distributed tracing header propagation Routing (URL path → service) Basic input validation (body size, malformed JSON rejection) CORS, security headers (HSTS, CSP) Sometimes: Response caching (for cacheable GETs) Request/response transformation (REST ↔ gRPC, schema migration during transitions) Aggregation (BFF pattern — see next section) Circuit breaking, retries, timeouts Canary routing (5% of traffic to v2 service) A/B test header injection Never: Business logic",
+              "The moment the gateway 'knows' that an order with status SHIPPED can't be cancelled, it's become a microservice itself — a coupling disaster",
+              "Database calls (other than its own config / rate-limit state)",
+              "Per-domain validation",
+              "Validate JSON shape, sure; validate that 'productId 42 is in stock' is the product service's job"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Without a gateway, every microservice must implement (or reimplement) cross-cutting concerns: Authentication / token validation Rate limiting per user / per API key Request logging, tracing, metrics CORS, IP allowlisting, geo-blocking TLS termination, certificate rotation Versioning, deprecation routing Response caching Request size limits, payload validation Without a gateway: 50 services, 50 different auth implementations, 50 different rate-limiter configs, drifting policies, security gaps. Every team reinvents the wheel. The API Gateway centralizes these concerns into one tier, leaving each service to focus on its domain logic. Clients talk to one URL; the gateway handles the messy fan-out behind it."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Without a gateway, every microservice must implement (or reimplement) cross-cutting concerns: Authentication / token validation Rate limiting per user / per API key Request logging, tracing, metrics CORS, IP allowlisting, geo-blocking TLS termination, certificate rotation Versioning, deprecation routing Response caching Request size limits, payload validation Without a gateway: 50 services, 50 different auth implementations, 50 different rate-limiter configs, drifting policies, security gaps. Every team reinvents the wheel. The API Gateway centralizes these concerns into one tier, leaving each service to focus on its domain logic. Clients talk to one URL; the gateway handles the messy fan-out behind it."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Putting business logic in the gateway (turns into a monolith), or skipping the gateway and forcing every service to handle auth/rate-limit/CORS itself."
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "One front door — clients talk to the gateway; gateway routes to services. Centralizes cross-cutting concerns — auth, rate limit, TLS, logging, tracing, CORS. Never put business logic in the gateway — it becomes a monolith. BFF (Backend-for-Frontend) — separate gateways per client type for tailored payloads and aggregation. Edge gateway (north-south) is different from service mesh (east-west); mature systems use both. Critical path: must be HA, multi-AZ, graceful drain on deploys, low baseline latency. Avoid sync remote calls in the request path — cache."
+          }
+        ],
+        "cap": "Common picks: Kong, Spring Cloud Gateway, AWS API Gateway for managed; Envoy or Istio Ingress for self-hosted.",
+        "familiarity_anchors": [
+          "Gateway",
+          "Examples",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Design a multi-tenant API gateway that enforces different rate limits per customer plan.",
+          "How do you handle a gradual rollout of a new microservice version using the gateway?",
+          "Walk through the failure modes when the gateway can't reach the auth provider."
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Distributed Java system handling 10k requests per second"
+      }
+    }
+  ]
+}

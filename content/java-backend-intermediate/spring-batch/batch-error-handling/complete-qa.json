@@ -1,0 +1,254 @@
+{
+  "topic": "Batch Error Handling",
+  "topicSlug": "batch-error-handling",
+  "questions": [
+    {
+      "id": "sb-005",
+      "slug": "spring-batch-retry-skip-logic",
+      "question": "How do you configure retry and skip logic in Spring Batch to handle transient errors and bad records?",
+      "title": "Spring Batch Retry and Skip Logic for Fault-Tolerant Jobs",
+      "direct_answer": "Spring Batch provides built-in **retry** and **skip** policies on chunk steps. **Retry** re-attempts processing or writing for a configured exception type up to a limit before failing — appropriate for **transient failures** (deadlock, network blip). **Skip** silently discards items that cause specified exceptions up to a tolerance count — appropriate for **bad records** (parse error, validation). Together with `SkipListener` and `RetryListener` they let you build fault-tolerant pipelines that survive dirty data and infrastructure flaps without aborting the entire batch run.",
+      "layout_type": "recipe-builder",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of where retry and skip apply (read, process, write phases) and their interaction with the chunk transaction",
+        "common_mistake": "Applying skip to write-phase exceptions without considering that a failed write rolls back the entire chunk — Spring Batch then re-reads items one at a time to isolate the bad row, which surprises many candidates",
+        "to_stand_out": "Explain the chunk retry rollback cycle and how Spring Batch uses single-item recovery after a write failure to isolate the offending record, plus `noRollback` and `processorTransactional(false)` for non-transactional side effects"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "Fidelity",
+        "Morgan Stanley",
+        "Cognizant",
+        "Infosys"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Skip Discards Bad Records — Retry Repeats Transient Failures",
+            "content": "Batch jobs processing millions of records will encounter failures. The right question is: **should the job stop, retry, or skip the bad record?** Spring Batch's `faultTolerant()` step builder configures both policies independently, so you can mix them precisely.\n\n**Skip — discard and continue:**\n- For permanent errors in individual records (parse error, validation failure)\n- `faultTolerant().skip(ValidationException.class).skipLimit(100)` — up to 100 skips before the step fails\n- Skipped items recorded in `StepExecution`; pair with a `SkipListener` to write them to a dead-letter destination\n\n**Retry — try again:**\n- For transient infrastructure failures (deadlock, timeout, 503)\n- `faultTolerant().retry(DeadlockLoserDataAccessException.class).retryLimit(3)` — up to 3 retry attempts per item\n- Retry applies to the **processor and writer**, not the reader\n- Combine with `ExponentialBackOffPolicy` to avoid retry storms\n\n**The interaction with transactions:**\n- A failed write rolls back the entire chunk\n- Spring Batch then re-reads each item one at a time to isolate the bad row\n- Good items succeed individually; the bad item is skipped (if configured) or fails the step\n- Processors must be idempotent — they may run twice for the same input"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Skip / Retry / Rollback Decision Flow on Write Failure",
+            "content": "```mermaid\nsequenceDiagram\n    participant Step as Chunk Step\n    participant Reader as ItemReader\n    participant Processor as ItemProcessor\n    participant Writer as ItemWriter\n    participant TxMgr as TransactionManager\n    participant Listener as SkipListener / RetryListener\n\n    Step->>TxMgr: begin chunk transaction\n    Step->>Reader: read N items\n    Reader-->>Step: items 1..N\n    Step->>Processor: process each item\n    Processor-->>Step: processed items\n    Step->>Writer: write(chunk)\n    Writer-->>Step: throws DataAccessException\n    Step->>TxMgr: rollback chunk transaction\n    Step->>Listener: onError (RetryListener)\n    Step->>Step: enter single-item mode\n\n    loop For each item in failed chunk\n        Step->>TxMgr: begin single-item transaction\n        Step->>Reader: re-read item\n        Step->>Processor: re-process item (must be idempotent)\n        Step->>Writer: write(single item)\n        alt write succeeds\n            Writer-->>Step: ok\n            Step->>TxMgr: commit\n        else exception is retryable\n            Writer-->>Step: throws (retryable)\n            Step->>TxMgr: rollback\n            Step->>Step: retry up to retryLimit (with backoff)\n        else exception is skippable\n            Writer-->>Step: throws (skippable)\n            Step->>TxMgr: rollback\n            Step->>Listener: onSkipInWrite(item, throwable)\n            Step->>Step: skipCount++; continue\n        else exception is fatal\n            Writer-->>Step: throws (fatal)\n            Step->>TxMgr: rollback\n            Step->>Step: step status = FAILED\n        end\n    end\n```"
+          },
+          {
+            "type": "step",
+            "title": "Configuring Skip — Per-Exception Limits and Listener-Driven Audit",
+            "content": "Skip is the right pattern for **predictable bad records** in dirty input data. The framework counts skips and enforces a tolerance; the listener writes the skipped item somewhere durable for audit.\n\n**Basic skip configuration**\n\n```java\n@Bean\npublic Step importStep(JobRepository repo, PlatformTransactionManager tx,\n                       ItemReader<Order> reader,\n                       ItemProcessor<Order, Invoice> processor,\n                       ItemWriter<Invoice> writer,\n                       SkipListener<Order, Invoice> skipListener) {\n    return new StepBuilder(\"importStep\", repo)\n            .<Order, Invoice>chunk(500, tx)\n            .reader(reader)\n            .processor(processor)\n            .writer(writer)\n            .faultTolerant()\n                .skip(FlatFileParseException.class)\n                .skip(ValidationException.class)\n                .skipLimit(500)\n                .listener(skipListener)\n            .build();\n}\n```\n\n**SkipListener for dead-letter handling**\n\n```java\n@Component\npublic class DeadLetterSkipListener implements SkipListener<Order, Invoice> {\n    private final KafkaTemplate<String, byte[]> kafka;\n\n    @Override\n    public void onSkipInRead(Throwable t) {\n        kafka.send(\"batch-skips\", \"READ\", serialize(Map.of(\n            \"phase\", \"READ\", \"error\", t.getMessage())));\n    }\n    @Override public void onSkipInProcess(Order item, Throwable t) {\n        kafka.send(\"batch-skips\", item.getId(), serialize(item, t));\n    }\n    @Override public void onSkipInWrite(Invoice item, Throwable t) {\n        kafka.send(\"batch-skips\", item.getOrderId(), serialize(item, t));\n    }\n}\n```\n\n**Per-exception limits with `LimitCheckingItemSkipPolicy`**\n- Different limits for different exception classes (1000 parse errors, 10 DB integrity errors)\n- More precise than the global `skipLimit`\n\n```java\nMap<Class<? extends Throwable>, Boolean> exceptions = Map.of(\n    FlatFileParseException.class, true,\n    DataIntegrityViolationException.class, true);\nLimitCheckingItemSkipPolicy policy = new LimitCheckingItemSkipPolicy();\npolicy.setSkipLimit(500);\npolicy.setSkippableExceptionMap(exceptions);\n```\n\n**Skip pitfalls**\n- **`skipLimit(Integer.MAX_VALUE)`** silently corrupts data; use a real number\n- **`skip(Exception.class)`** masks real bugs like NullPointerException\n- **No `SkipListener`** — skipped items vanish; can't reprocess or audit\n- **Skipping on non-idempotent processors** — side effects fired before the skip"
+          },
+          {
+            "type": "step",
+            "title": "Configuring Retry with Backoff — Avoiding Retry Storms",
+            "content": "Retry without backoff makes transient failures worse. If 100 concurrent chunk writers all retry immediately after a deadlock, they retry into the same contention.\n\n**Basic retry configuration**\n\n```java\n.faultTolerant()\n    .retry(DeadlockLoserDataAccessException.class)\n    .retry(TransientDataAccessException.class)\n    .retryLimit(3)\n    .backOffPolicy(exponentialBackoff())\n```\n\n**Exponential backoff policy**\n\n```java\n@Bean\npublic ExponentialBackOffPolicy exponentialBackoff() {\n    ExponentialBackOffPolicy policy = new ExponentialBackOffPolicy();\n    policy.setInitialInterval(500);\n    policy.setMultiplier(2.0);\n    policy.setMaxInterval(10_000);\n    return policy;\n}\n```\n\nFirst retry after 500ms, second after 1s, third after 2s — capped at 10s.\n\n**RetryListener for observability**\n\n```java\n@Component\npublic class MetricsRetryListener implements RetryListener {\n    private final MeterRegistry meter;\n    @Override public <T, E extends Throwable> void onError(\n            RetryContext ctx, RetryCallback<T, E> cb, Throwable t) {\n        meter.counter(\"batch.retry\",\n                \"exception\", t.getClass().getSimpleName(),\n                \"attempt\", String.valueOf(ctx.getRetryCount())).increment();\n    }\n    @Override public <T, E extends Throwable> void close(\n            RetryContext ctx, RetryCallback<T, E> cb, Throwable t) {\n        if (t != null) meter.counter(\"batch.retry.exhausted\").increment();\n    }\n}\n```\n\n**Job-level retry — outside Spring Batch**\n- Spring Batch has no built-in job-level retry\n- The scheduler (Quartz, Kubernetes CronJob) re-launches a `FAILED` job after a delay\n- Pair with `RunIdIncrementer` so each retry creates a new `JobExecution` against the same `JobInstance`\n\n**Retry pitfalls**\n- **Retry on non-transient errors** masks real bugs and inflates wall-clock time\n- **No backoff** — retry storms compound the original failure\n- **Retry on a stateful processor** — internal state may not be reset between attempts\n- **RetryLimit too high** — turns transient failure into a long delay before the user sees anything"
+          },
+          {
+            "type": "step",
+            "title": "noRollback, Non-Transactional Processors, and Side-Effect Boundaries",
+            "content": "Not every exception should trigger a chunk rollback, and not every operation in a chunk is transactional.\n\n**`noRollback(Class)`** — declares an exception expected and benign\n- `noRollback(ValidationException.class)` — validation errors don't roll back the chunk\n- The chunk continues; the offending item is excluded\n- Useful for filtering work where bad input is expected\n\n```java\n.faultTolerant()\n    .skip(ValidationException.class).skipLimit(1000)\n    .noRollback(ValidationException.class)\n```\n\n**`processorTransactional(false)`** — opt out of processor rollback semantics\n- Default: processor outputs are kept inside the chunk transaction\n- With `false`: processor outputs are not rolled back when the chunk does\n- Use when the processor's work is idempotent and re-execution is wasteful\n\n**The hard problem: non-transactional side effects in a chunk**\n- Sending emails, calling external APIs, publishing Kafka events — rollback does NOT undo these\n- Patterns to handle this:\n  - **Move the side effect to a separate step** that runs after the chunk step succeeds\n  - **Outbox pattern** — write the side-effect event to a `outbox` table inside the chunk transaction; a separate dispatcher publishes it\n  - **Idempotency keys** — design the side effect to deduplicate on retry\n\n```java\n@Bean\npublic Job orderJob(JobRepository repo, Step processStep, Step notifyStep) {\n    return new JobBuilder(\"orderJob\", repo)\n            .start(processStep)\n            .on(\"COMPLETED\").to(notifyStep)\n            .from(processStep).on(\"*\").end()\n            .end()\n            .build();\n}\n```\n\n**`SkipListener` and `RetryListener` together**\n- SkipListener fires for every skipped item — log to dead-letter\n- RetryListener fires for every retry attempt — emit metrics\n- Both are essential for production observability — without them you can't distinguish a healthy job retrying transient errors from one stuck in a loop"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When Each Pattern Helps, When It Hurts",
+            "content": "**When skip helps:**\n- Dirty input data with predictable bad-record types\n- Compliance jobs that must continue and report issues rather than abort\n- Pipelines with downstream tolerance for missing rows\n\n**When skip hurts:**\n- Financial reconciliation where one bad row means halt and investigate\n- Workloads where skipped items have no audit destination\n- High-skip-rate scenarios where the data is too dirty to trust\n\n**When retry helps:**\n- Transient infrastructure failures (deadlock, brief 503)\n- Distributed writes that occasionally lose a leader election\n- Idempotent processors and writers\n\n**When retry hurts:**\n- Non-transient errors (`NullPointerException`, schema violations) — wastes time\n- Non-idempotent processors — duplicate side effects on retry\n- Without backoff — compounds the original problem (retry storms)\n\n**Watch for:**\n- **Skip + non-idempotent processor** — side effects fire before the skip\n- **Retry on the wrong exception class** — turns 1s of failure into 30s of futile retries\n- **No SkipListener** — silent data corruption\n- **`noRollback` misused** — declares real failures benign\n- **Side effects inside the chunk** — rollback doesn't undo them; use outbox or separate step"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Skip = bad record** (log and continue); **retry = transient failure** (try again).\n- **`faultTolerant()`** is required to enable both skip and retry.\n- **Single-item recovery** after write failure — chunk re-reads one at a time to isolate the bad row.\n- **`SkipListener`** captures every skipped item — write to a dead-letter destination for audit.\n- **`RetryListener`** captures every retry attempt — emit metrics for observability.\n- **`ExponentialBackOffPolicy`** prevents retry storms.\n- **`noRollback(Class)`** marks an exception as expected and benign — chunk continues.\n- **Non-transactional side effects (emails, API calls)** are NOT rolled back; use outbox or a separate step."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch's fault tolerance has two complementary policies — skip and retry — and a third concept around when rollback applies.\n\n**Skip — discard and continue:**\n- For predictable bad records (parse, validation)\n- `faultTolerant().skip(Exception.class).skipLimit(N)`\n- SkipListener fires for every skipped item — write to a dead-letter destination\n\n**Retry — try again:**\n- For transient failures (deadlock, 503)\n- `faultTolerant().retry(Exception.class).retryLimit(N).backOffPolicy(...)`\n- ExponentialBackOffPolicy prevents retry storms\n- RetryListener emits metrics and observability signals\n\n**The single-item recovery cycle:**\n- When a chunk write fails, Spring Batch rolls back the chunk\n- Then re-reads each item one at a time to isolate the bad row\n- Good items succeed individually; bad item is skipped (if configured) or fails the step\n- Processors must be idempotent — they may run twice for the same input\n\n**`noRollback` and `processorTransactional(false)`:**\n- `noRollback(ValidationException.class)` — declares an exception expected and benign\n- `processorTransactional(false)` — processor outputs not rolled back\n- Together they refine the rollback contract\n\n**The hard problem — non-transactional side effects:**\n- Emails, API calls, Kafka publishes are NOT undone by rollback\n- Move them to a separate step that runs after success\n- Or use the outbox pattern — write a row inside the chunk transaction, dispatch from a separate step\n\n**Anti-patterns to call out:**\n- `skipLimit(Integer.MAX_VALUE)` — silent data corruption\n- `skip(Exception.class)` — masks real bugs\n- Retry without backoff — compounds the failure\n- Retry on non-idempotent processors — duplicate side effects\n\nIn an interview I'd emphasize the single-item recovery cycle and the idempotency requirement — those are what separate practitioners from rote knowledge."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Spring Batch handle a skip exception that occurs during a write when an entire chunk needs to be rolled back?",
+        "Can you combine retry and skip on the same step, and if so, what is the order of precedence?",
+        "How would you test retry behavior in a Spring Batch step without actually triggering real transient failures?",
+        "Why is idempotency required for processors when fault tolerance is enabled?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Retry and Skip Logic — Fault Tolerance Guide",
+        "metaDescription": "Configure Spring Batch retry policies with backoff and skip logic with SkipListener for fault-tolerant batch jobs that handle transient errors and dirty data."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Spring Batch's fault tolerance has two complementary policies — skip and retry — and a third concept around when rollback applies.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Batch jobs processing millions of records will encounter failures. The right question is: should the job stop, retry, or skip the bad record? Spring Batch's faultTolerant() step builder configures both policies independently, so you can mix them precisely. Skip — discard and continue: For permanent errors in individual records (parse error, validation failure) faultTolerant().skip(ValidationException.class).skipLimit(100) — up to 100 skips before the step fails Skipped items recorded in StepExecution; pair with."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "When skip helps: Dirty input data with predictable bad-record types Compliance jobs that must continue and report issues rather than abort Pipelines with downstream tolerance for missing rows When skip hurts: Financial reconciliation where one bad row means halt and investigate Workloads where skipped items have no audit destination High-skip-rate scenarios where the data is too dirty to trust When retry helps: Transient infrastructure failures (deadlock, brief 503) Distributed writes that occasionally lose a leader election Idempotent processors and writers When retry hurts: Non-transient errors (NullPointerException, schema violations) — wastes time Non-idempotent processors — duplicate side effects on retry Without backoff — compounds the original problem (retry storms) Watch for: Skip + non-idempotent processor — side effects fire before the skip Retry on the wrong exception class — turns 1s of failure into 30s of futile retries No SkipListener — silent data corruption noRollback misused — declares real failures benign Side effects inside the chunk — rollback doesn't undo them",
+              "use outbox or separate step"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When skip helps: Dirty input data with predictable bad-record types Compliance jobs that must continue and report issues rather than abort Pipelines with downstream tolerance for missing rows When skip hurts: Financial reconciliation where one bad row means halt and investigate Workloads where skipped items have no audit destination High-skip-rate scenarios where the data is too dirty to trust When retry helps: Transient infrastructure failures (deadlock, brief 503) Distributed writes that occasionally lose a leader election Idempotent processors and writers When retry hurts: Non-transient errors (NullPointerException, schema violations) — wastes."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Batch jobs processing millions of records will encounter failures. The right question is: should the job stop, retry, or skip the bad record? Spring Batch's faultTolerant() step builder configures both policies independently, so you can mix them precisely. Skip — discard and continue: For permanent errors in individual records (parse error, validation failure) faultTolerant().skip(ValidationException.class).skipLimit(100) — up to 100 skips before."
+          }
+        ],
+        "cap": "Skip — discard and continue: For predictable bad records (parse, validation) faultTolerant().skip(Exception.class).skipLimit(N) SkipListener fires for every skipped item — write to a dead-letter desti",
+        "familiarity_anchors": [
+          "Spring",
+          "Batch",
+          "Retry"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Spring Batch handle a skip exception that occurs during a write when an entire chunk needs to be rolled back?",
+          "Can you combine retry and skip on the same step, and if so, what is the order of precedence?",
+          "How would you test retry behavior in a Spring Batch step without actually triggering real transient failures?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    },
+    {
+      "id": "sb-005b",
+      "slug": "retry-vs-skip-policy-design",
+      "question": "How do you decide between retry and skip in a real production job, and how do you design custom RetryPolicy and SkipPolicy for nuanced exception handling?",
+      "title": "Designing Retry vs Skip Policy in Production",
+      "direct_answer": "The retry-vs-skip choice is driven by **exception class semantics**: **transient infrastructure failures** (deadlock, timeout, 503) get **retry**; **permanent data defects** (parse error, validation, schema mismatch) get **skip**; **fatal logic errors** (NullPointerException, IllegalStateException) get **neither** — fail fast and investigate. For nuanced control, implement custom **`RetryPolicy.canRetry(RetryContext)`** to limit retries per exception type or per business key, and custom **`SkipPolicy.shouldSkip(Throwable, long)`** to enforce per-exception caps, percentage tolerances, or circuit-breaker behavior that fails the step when error rate exceeds a threshold mid-run.",
+      "layout_type": "deep-dive",
+      "difficulty": "hard",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can map exception taxonomy to fault-tolerance policy and write non-trivial RetryPolicy/SkipPolicy implementations",
+        "common_mistake": "Catching `Exception.class` for both skip and retry, masking real bugs and turning data corruption into a silent failure mode",
+        "to_stand_out": "Discuss percentage-based skip tolerance, the difference between `RetryPolicy` and `BackOffPolicy`, and a circuit-breaker SkipPolicy that flips the step to FAILED when error rate exceeds a threshold mid-run"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "Morgan Stanley",
+        "Bloomberg",
+        "Stripe",
+        "JP Morgan"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Retry vs Skip Is a Question of Exception Semantics",
+            "content": "In production batch jobs the retry-vs-skip decision is the most consequential fault-tolerance design choice. Get it wrong and you either silently corrupt data (overly permissive skip) or waste hours retrying real bugs (overly aggressive retry).\n\n**The exception taxonomy that drives the decision:**\n- **Transient infrastructure** (deadlock, timeout, brief 503, network blip) — **retry with backoff**\n- **Permanent data defects** (parse error, validation, schema mismatch, business rule violation) — **skip with audit**\n- **Fatal logic errors** (NullPointerException, IllegalStateException, ClassCastException) — **neither; fail fast and investigate**\n\nThe framework's defaults rarely capture this nuance. `SimpleLimitSkipPolicy` is one global counter — fine for simple jobs but inadequate when you want to allow 1000 parse errors and only 10 integrity violations. `SimpleRetryPolicy` retries any matching exception up to N times — adequate for one-off transient failures but blind to per-business-key context.\n\nProduction-grade policies often need a custom `SkipPolicy` and `RetryPolicy` that implement business-aware logic: percentage-based tolerance, per-exception-class limits, or circuit-breaker behavior that fails fast when the error rate spikes mid-run."
+          },
+          {
+            "type": "step",
+            "title": "Mapping Exception Classes to Retry, Skip, or Fail",
+            "content": "Before writing policies, classify the exception classes the job can encounter. The classification drives the configuration.\n\n**Transient — retry candidates**\n- `DeadlockLoserDataAccessException` — Spring's wrapper for DB deadlock\n- `TransientDataAccessException` — superclass for transient JDBC errors\n- `CannotAcquireLockException` — JDBC lock wait timeout\n- `ResourceAccessException` (Spring REST) — connection refused, timeout\n- `KafkaTimeoutException` — broker temporarily unavailable\n- HTTP 5xx with retryable status codes\n\n**Permanent data — skip candidates**\n- `FlatFileParseException` — malformed CSV row\n- `ValidationException` — Bean Validation failure\n- `DataIntegrityViolationException` — UNIQUE or NOT NULL violation (sometimes — see below)\n- `IncorrectTokenCountException` — wrong number of CSV columns\n- Custom business validation exceptions\n\n**Fatal — fail fast**\n- `NullPointerException` — almost always a bug\n- `IllegalStateException` / `IllegalArgumentException` — invariant violation\n- `ClassCastException` — type system error\n- `OutOfMemoryError` — never recover; fail and let the operator investigate\n\n**The ambiguous middle**\n- `DataIntegrityViolationException` — could be a permanent duplicate row (skip) OR a constraint that fires on a transient race condition (retry)\n- Resolve by inspecting the exception cause or `getMessage()` and routing accordingly\n\n```java\npublic class IntegritySkipDecider implements SkipPolicy {\n    @Override\n    public boolean shouldSkip(Throwable t, long skipCount) {\n        if (t instanceof DataIntegrityViolationException dive) {\n            String msg = dive.getMessage() == null ? \"\" : dive.getMessage().toLowerCase();\n            if (msg.contains(\"unique\") || msg.contains(\"duplicate key\")) return true;\n            return false;\n        }\n        if (t instanceof FlatFileParseException) return true;\n        return false;\n    }\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "Custom RetryPolicy — Per-Exception and Per-Context Control",
+            "content": "`SimpleRetryPolicy` retries up to N times for any matching exception. Production usually wants more: different limits per exception class, per-business-key counts, or never-retry-after-N-total rules.\n\n**The RetryPolicy interface**\n\n```java\npublic interface RetryPolicy {\n    boolean canRetry(RetryContext context);\n    RetryContext open(RetryContext parent);\n    void close(RetryContext context);\n    void registerThrowable(RetryContext context, Throwable throwable);\n}\n```\n\n**Per-exception limits — built-in `ExceptionClassifierRetryPolicy`**\n\n```java\nMap<Class<? extends Throwable>, RetryPolicy> policies = Map.of(\n    DeadlockLoserDataAccessException.class, new SimpleRetryPolicy(5),\n    TransientDataAccessException.class, new SimpleRetryPolicy(3),\n    KafkaTimeoutException.class, new SimpleRetryPolicy(10));\nExceptionClassifierRetryPolicy retryPolicy = new ExceptionClassifierRetryPolicy();\nretryPolicy.setPolicyMap(policies);\n```\n\n**Custom RetryPolicy — circuit-breaker behavior**\n\n```java\npublic class CircuitBreakerRetryPolicy extends SimpleRetryPolicy {\n    private final AtomicLong totalFailures = new AtomicLong();\n    private final long globalFailureLimit;\n\n    public CircuitBreakerRetryPolicy(int retryLimit, long globalFailureLimit) {\n        super(retryLimit);\n        this.globalFailureLimit = globalFailureLimit;\n    }\n\n    @Override\n    public boolean canRetry(RetryContext context) {\n        if (totalFailures.get() >= globalFailureLimit) return false;\n        return super.canRetry(context);\n    }\n\n    @Override\n    public void registerThrowable(RetryContext context, Throwable t) {\n        totalFailures.incrementAndGet();\n        super.registerThrowable(context, t);\n    }\n}\n```\n\nWiring into the step requires building a `RetryTemplate` and using a `RetryOperationsInterceptor` (advanced); most use cases are met with `ExceptionClassifierRetryPolicy` plus a custom `BackOffPolicy`.\n\n**RetryPolicy vs BackOffPolicy**\n- `RetryPolicy` decides **whether** to retry\n- `BackOffPolicy` decides **how long to wait** before retrying\n- They compose — `ExponentialBackOffPolicy` with `ExceptionClassifierRetryPolicy` is a common pairing"
+          },
+          {
+            "type": "step",
+            "title": "Custom SkipPolicy — Percentage Tolerance and Audit Integration",
+            "content": "Production skip policies often encode business risk tolerance more precisely than absolute counts. A `PercentageSkipPolicy` is the most common upgrade from `SimpleLimitSkipPolicy`.\n\n**The SkipPolicy interface**\n\n```java\npublic interface SkipPolicy {\n    boolean shouldSkip(Throwable t, long skipCount) throws SkipLimitExceededException;\n}\n```\n\n**Percentage-based tolerance**\n\n```java\n@Component\n@StepScope\npublic class PercentageSkipPolicy implements SkipPolicy {\n    private final StepExecution stepExecution;\n    private final double maxSkipFraction;\n    private final long warmupItems;\n\n    public PercentageSkipPolicy(@Value(\"#{stepExecution}\") StepExecution stepExecution,\n                                @Value(\"#{jobParameters['maxSkipPercent']}\") Double maxPct,\n                                @Value(\"#{jobParameters['warmupItems']}\") Long warmup) {\n        this.stepExecution = stepExecution;\n        this.maxSkipFraction = maxPct == null ? 0.05 : maxPct;\n        this.warmupItems = warmup == null ? 1000 : warmup;\n    }\n\n    @Override\n    public boolean shouldSkip(Throwable t, long skipCount) {\n        if (!isSkippable(t)) return false;\n        long readCount = stepExecution.getReadCount();\n        if (readCount < warmupItems) return true;\n        return ((double) skipCount / readCount) <= maxSkipFraction;\n    }\n\n    private boolean isSkippable(Throwable t) {\n        return t instanceof FlatFileParseException || t instanceof ValidationException;\n    }\n}\n```\n\nIf 5% of items have failed by the time you're past the warmup window, the data is too dirty to trust — fail fast.\n\n**Tiered per-exception SkipPolicy**\n\n```java\npublic class TieredSkipPolicy implements SkipPolicy {\n    private final AtomicLong parseSkips = new AtomicLong();\n    private final AtomicLong validationSkips = new AtomicLong();\n    private final long parseSkipLimit;\n    private final long validationSkipLimit;\n\n    public TieredSkipPolicy(long parseSkipLimit, long validationSkipLimit) {\n        this.parseSkipLimit = parseSkipLimit;\n        this.validationSkipLimit = validationSkipLimit;\n    }\n\n    @Override\n    public boolean shouldSkip(Throwable t, long skipCount) {\n        if (t instanceof FlatFileParseException) {\n            return parseSkips.incrementAndGet() <= parseSkipLimit;\n        }\n        if (t instanceof ValidationException) {\n            return validationSkips.incrementAndGet() <= validationSkipLimit;\n        }\n        return false;\n    }\n}\n```\n\n**Pair every SkipPolicy with a SkipListener**\n- The policy decides whether to skip; the listener decides what to do with the skipped item\n- Always write to a durable destination (Kafka topic, file, audit table) for human review\n- Without this, you've created a silent data-loss vector\n\n**SkipPolicy pitfalls**\n- **Stateful counters not thread-safe** — multi-threaded steps need `AtomicLong`\n- **Reading `StepExecution.getReadCount()` mid-skip** — count is updated lazily; understand the timing\n- **No warmup window** — divide-by-zero or false-positive on the first failure\n- **Logic that depends on transaction state** — chunks roll back; skip counts may diverge from your mental model"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Retry, Skip, or Fail — Decision Matrix",
+            "content": "Map the exception class to the right policy and the rest follows.\n\n| Exception Class | Action | Why |\n|---|---|---|\n| `DeadlockLoserDataAccessException` | Retry with exponential backoff | Transient; resolves on retry |\n| `FlatFileParseException` | Skip with SkipListener | Permanent data defect; record to dead-letter |\n| `ValidationException` | Skip with SkipListener | Permanent business rule violation |\n| `DataIntegrityViolationException` | Inspect cause; skip on UNIQUE, fail otherwise | Ambiguous; needs business judgment |\n| `NullPointerException` | Fail fast | Bug; investigate immediately |\n| `OutOfMemoryError` | Fail fast | JVM in unrecoverable state |\n| `KafkaTimeoutException` | Retry with backoff | Transient broker issue |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Custom Policies — When to Build, When to Use Defaults",
+            "content": "**When custom RetryPolicy helps:**\n- Different exception classes need different retry limits\n- You need circuit-breaker behavior to bail out after N total failures\n- Per-business-key retry counting (avoid retrying the same broken record forever)\n\n**When custom RetryPolicy hurts:**\n- The default `SimpleRetryPolicy` already meets the requirement\n- Stateful policies that break under multi-threaded steps without atomic counters\n- Configuration drift — the policy ends up in code review for every behavior tweak\n\n**When custom SkipPolicy helps:**\n- Percentage-based tolerance better captures risk than absolute counts\n- Per-exception-class limits (parse common, integrity rare)\n- Circuit-breaker behavior — fail step if error rate exceeds threshold mid-run\n\n**When custom SkipPolicy hurts:**\n- Simple jobs where `SimpleLimitSkipPolicy` is sufficient\n- Logic that becomes harder to reason about than the policy it replaces\n- Stateful counters not protected against concurrency\n\n**Watch for:**\n- **Catching `Exception.class`** in either skip or retry — masks real bugs\n- **Skip without listener** — silent data loss\n- **Retry without backoff** — retry storms\n- **No exception classification** — same policy for transient and permanent errors\n- **Production-only behavior** in policies — cannot reproduce in tests\n- **Retry on processors with side effects** — duplicate emails, double charges"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Retry = transient infrastructure**; **skip = permanent data defect**; **fail fast = fatal logic error**.\n- **`ExceptionClassifierRetryPolicy`** maps exception classes to per-class retry limits.\n- **Custom `RetryPolicy.canRetry`** lets you implement circuit-breaker behavior across the entire step.\n- **`PercentageSkipPolicy`** captures business risk tolerance better than absolute counts.\n- **Tiered `SkipPolicy`** gives different limits per exception class.\n- **Always pair skip with `SkipListener`** writing to a dead-letter destination.\n- **`BackOffPolicy` is separate from `RetryPolicy`** — they compose.\n- **Anti-patterns** — `skip(Exception.class)`, retry without backoff, stateful policies without atomic counters."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The retry-vs-skip choice is driven by exception class semantics, not by a single tunable.\n\n**Map exceptions to actions:**\n- Transient infrastructure (deadlock, 503, timeout) → retry with exponential backoff\n- Permanent data defects (parse, validation, business rule violation) → skip with SkipListener\n- Fatal logic errors (NullPointerException, OutOfMemoryError) → fail fast\n\n**Custom RetryPolicy when you need nuance:**\n- `ExceptionClassifierRetryPolicy` for per-class retry limits\n- Custom `canRetry()` for circuit-breaker behavior — bail out after N total failures across the step\n- `RetryPolicy` decides whether to retry; `BackOffPolicy` decides how long to wait — they compose\n\n**Custom SkipPolicy when absolute counts aren't enough:**\n- `PercentageSkipPolicy` — fail fast if more than 5% of items skip after a warmup window\n- Tiered policy — allow 1000 parse errors but only 10 integrity violations\n- Stateful policies need `AtomicLong` for multi-threaded steps\n\n**Always pair skip with a SkipListener:**\n- Write skipped items to a Kafka topic, file, or audit table\n- Without this you've created a silent data-loss vector\n\n**Anti-patterns to avoid:**\n- `skip(Exception.class)` — masks real bugs\n- Retry without backoff — retry storms compound the original failure\n- Retrying on non-idempotent processors — duplicate side effects\n- The same policy for transient and permanent errors\n\n**The ambiguous case:**\n- `DataIntegrityViolationException` — UNIQUE constraint may be a permanent duplicate (skip) or a transient race (retry)\n- Inspect the cause or message and route accordingly\n\nIn an interview I'd emphasize that the retry-vs-skip choice starts with exception classification, and that production-grade policies often need custom implementations to capture business risk tolerance."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you ensure a custom SkipPolicy works correctly in a multi-threaded step?",
+        "What happens to skip and retry counters when a step is restarted from a checkpoint?",
+        "Why might `DataIntegrityViolationException` need different handling for UNIQUE vs FOREIGN KEY violations?",
+        "How would you implement a per-business-key retry limit so the same broken record doesn't waste 100 retry attempts?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Retry vs Skip Policy Design Guide",
+        "metaDescription": "How to design retry and skip policies in Spring Batch by exception class, with custom RetryPolicy, PercentageSkipPolicy, and circuit-breaker patterns."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "The retry-vs-skip choice is driven by exception class semantics, not by a single tunable.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "In production batch jobs the retry-vs-skip decision is the most consequential fault-tolerance design choice. Get it wrong and you either silently corrupt data (overly permissive skip) or waste hours retrying real bugs (overly aggressive retry). The exception taxonomy that drives the decision: Transient infrastructure (deadlock, timeout, brief 503, network blip) — retry with backoff Permanent data defects (parse error, validation, schema mismatch, business rule violation) — skip with audit Fatal."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Map the exception class to the right policy and the rest follows",
+              "| Exception Class | Action | Why | |---|---|---| | DeadlockLoserDataAccessException | Retry with exponential backoff | Transient; resolves on retry | | FlatFileParseException | Skip with SkipListener | Permanent data defect; record to dead-letter | | ValidationException | Skip with SkipListener | Permanent business rule violation | | DataIntegrityViolationException | Inspect cause; skip on UNIQUE, fail otherwise | Ambiguous; needs business judgment | | NullPointerException | Fail fast | Bug; investigate immediately | | OutOfMemoryError | Fail fast | JVM in unrecoverable state | | KafkaTimeoutException | Retry with backoff | Transient broker issue |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When custom RetryPolicy helps: Different exception classes need different retry limits You need circuit-breaker behavior to bail out after N total failures Per-business-key retry counting (avoid retrying the same broken record forever) When custom RetryPolicy hurts: The default SimpleRetryPolicy already meets the requirement Stateful policies that break under multi-threaded steps without atomic counters Configuration drift — the policy ends up in code review for every behavior tweak When custom SkipPolicy helps: Percentage-based tolerance better captures risk than absolute counts Per-exception-class limits (parse common, integrity rare) Circuit-breaker behavior — fail step."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "In production batch jobs the retry-vs-skip decision is the most consequential fault-tolerance design choice. Get it wrong and you either silently corrupt data (overly permissive skip) or waste hours retrying real bugs (overly aggressive retry). The exception taxonomy that drives the decision: Transient infrastructure (deadlock, timeout, brief 503, network blip) — retry with backoff Permanent data defects (parse error, validation."
+          }
+        ],
+        "cap": "Map exceptions to actions: Transient infrastructure (deadlock, 503, timeout) → retry with exponential backoff Permanent data defects (parse, validation, business rule violation) → skip with SkipListen",
+        "familiarity_anchors": [
+          "NullPointerException",
+          "IllegalStateException",
+          "RetryPolicy"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you ensure a custom SkipPolicy works correctly in a multi-threaded step?",
+          "What happens to skip and retry counters when a step is restarted from a checkpoint?",
+          "Why might `DataIntegrityViolationException` need different handling for UNIQUE vs FOREIGN KEY violations?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    }
+  ]
+}

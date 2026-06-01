@@ -1,0 +1,411 @@
+{
+  "topic": "Webhooks",
+  "topicSlug": "webhooks",
+  "questions": [
+    {
+      "id": "msg-wh-001",
+      "slug": "webhooks-design-reliability-security",
+      "question": "How do you design a reliable, secure webhooks system — delivery, retries, signing, and receiver patterns?",
+      "title": "Webhooks: Design, Reliability, and Security",
+      "direct_answer": "Webhooks are HTTP callbacks from your service to third-party URLs when an event occurs (e.g., Stripe calling your server on `payment_succeeded`). Design concerns: **delivery reliability** (retry with exponential backoff + jitter, dead-letter queue), **security** (HMAC signatures with shared secret, timestamp to prevent replay, mTLS for sensitive webhooks), **idempotency** (receivers must be idempotent; include event ID), **ordering** (don't assume; if critical, version events), and **consumer control** (per-consumer rate limits, circuit breakers so one slow receiver doesn't block others). For receivers: verify signature, return 2xx fast (ack), process async. For senders: queue events, worker pool sends, persistent retry log, observable delivery metrics.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Practical API-design thinking; reliability patterns; security at HTTP layer",
+        "common_mistake": "Synchronous processing in webhook handler (times out); no signature verification (security hole); no retry logic on sender; assuming ordering",
+        "to_stand_out": "Discuss HMAC signing with timestamp, replay prevention, consumer isolation, 'webhook as async message' architecture, and alternative of polling / server-sent events / WebSockets"
+      },
+      "company_tags": [
+        "stripe",
+        "github",
+        "shopify",
+        "twilio",
+        "LinkedIn",
+        "Uber"
+      ],
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Webhooks: HTTP Callbacks for Event Delivery",
+            "content": "Webhooks are the industry-standard way to notify third-party systems of events in real time over HTTP. Stripe calls your `/stripe/webhooks` URL when a payment succeeds; GitHub calls your CI server when code is pushed; Shopify calls your app when an order is placed.\n\nCompared to alternatives:\n- **Polling**: client polls your API every N seconds; wasteful, high latency\n- **Webhooks**: you push event to client; low latency, efficient\n- **WebSockets / SSE**: persistent connection; good for client-side browsers, less for server-to-server\n- **Message queues**: Kafka/SQS/etc; better for internal use, but third parties usually can't consume them directly\n\nWebhooks win for server-to-server event delivery across trust boundaries because HTTP is universal. But they come with real engineering challenges:\n\n1. **Delivery reliability**. The receiver may be down, slow, or broken. Your sender must retry without amplifying outages or losing events.\n\n2. **Security**. The receiver URL is public. Anyone can POST to it. Signatures + timestamps + secrets prevent forgery and replay.\n\n3. **Idempotency**. Retries cause duplicates. Receivers must dedupe or be naturally idempotent.\n\n4. **Ordering**. HTTP delivers in arbitrary order, especially after retries. If order matters, design for it (sequence numbers, event versioning).\n\n5. **Consumer isolation**. One slow receiver shouldn't block others. Per-consumer queues, rate limits, and circuit breakers.\n\n6. **Observability**. Delivery logs, retry counts, signature failures, receiver error rates — all visible and alertable.\n\nWell-designed webhook systems (Stripe's is the canonical reference) treat outbound webhooks as **async message delivery over HTTP**, with the same patterns as Kafka consumers: durable queue, idempotent consumer, at-least-once delivery, dead-letter queue for poison messages."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Webhook Sender + Receiver Architecture",
+            "content": "```mermaid\nflowchart TB\n    subgraph Sender[Webhook Sender]\n        App[App emits event] --> Q[Durable queue<br/>per subscription]\n        Q --> Worker[Worker pool]\n        Worker -->|sign + POST| HTTP{Response?}\n        HTTP -->|2xx| Ack[Mark delivered]\n        HTTP -->|4xx non-retryable| Fail[Mark failed<br/>alert customer]\n        HTTP -->|5xx or timeout| Retry[Increment retry counter]\n        Retry --> Backoff[Exponential backoff<br/>+ jitter]\n        Backoff -->|next attempt| Q\n        Retry -->|max retries| DLQ[Dead Letter Queue]\n        DLQ --> Dash[Customer dashboard<br/>+ alerting]\n    end\n    Worker --> Customer[Customer endpoint<br/>https://customer.com/webhook]\n    subgraph Receiver[Webhook Receiver]\n        Customer --> Verify[Verify HMAC signature<br/>+ timestamp]\n        Verify -->|invalid| Reject[401 Unauthorized]\n        Verify -->|valid| Dedupe{Event ID<br/>seen?}\n        Dedupe -->|yes| Skip[204 No Content<br/>skip processing]\n        Dedupe -->|no| Enqueue[Enqueue for async<br/>processing]\n        Enqueue --> Return[200 OK immediately]\n        Enqueue --> Async[Background worker<br/>processes event]\n    end\n    style Q fill:#fff9c4\n    style DLQ fill:#ff8a80\n    style Verify fill:#90caf9\n    style Dedupe fill:#e1bee7\n```"
+          },
+          {
+            "type": "step",
+            "title": "Sender Side: Delivery and Retry",
+            "content": "**Step 1: Durable queue per subscription**\n\nWhen an event occurs, fan out to all active subscriptions:\n\n```java\n@Service\npublic class WebhookDispatcher {\n    @Autowired WebhookQueueProducer queueProducer;\n    @Autowired WebhookSubscriptionRepo subscriptionRepo;\n\n    @EventListener\n    public void onDomainEvent(PaymentSucceededEvent event) {\n        List<WebhookSubscription> subs = subscriptionRepo\n            .findActiveByEventType(\"payment.succeeded\");\n        for (WebhookSubscription sub : subs) {\n            WebhookDelivery delivery = new WebhookDelivery(\n                UUID.randomUUID().toString(),  // event_id\n                sub.getId(),\n                sub.getUrl(),\n                event.toJsonPayload(),\n                sub.getSecret(),\n                0,                               // attempt\n                Instant.now()\n            );\n            queueProducer.enqueue(delivery);\n        }\n    }\n}\n```\n\nDurable queue (Kafka topic or outbox table) per subscription or per tenant; if one customer is slow, others aren't blocked.\n\n**Step 2: Worker sends and handles response**\n\n```java\n@Service\npublic class WebhookDeliveryWorker {\n    private final WebClient webClient = WebClient.builder()\n        .clientConnector(new ReactorClientHttpConnector(\n            HttpClient.create()\n                .responseTimeout(Duration.ofSeconds(10))\n                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)))\n        .build();\n\n    public DeliveryResult deliver(WebhookDelivery d) {\n        long timestamp = Instant.now().getEpochSecond();\n        String signingString = timestamp + \".\" + d.getPayload();\n        String signature = hmacSha256(signingString, d.getSecret());\n\n        try {\n            ResponseEntity<Void> response = webClient.post()\n                .uri(d.getUrl())\n                .header(\"Content-Type\", \"application/json\")\n                .header(\"X-Webhook-ID\", d.getId())\n                .header(\"X-Webhook-Timestamp\", String.valueOf(timestamp))\n                .header(\"X-Webhook-Signature\", \"v1=\" + signature)\n                .bodyValue(d.getPayload())\n                .retrieve()\n                .toBodilessEntity()\n                .block(Duration.ofSeconds(15));\n\n            if (response.getStatusCode().is2xxSuccessful()) {\n                deliveryRepo.markDelivered(d.getId(), Instant.now());\n                return DeliveryResult.SUCCESS;\n            } else if (response.getStatusCode().is4xxClientError()\n                       && response.getStatusCode() != TOO_MANY_REQUESTS) {\n                deliveryRepo.markFailed(d.getId(), response.getStatusCode().value());\n                alertCustomer(d.getSubscriptionId(), response);\n                return DeliveryResult.PERMANENT_FAILURE;\n            }\n        } catch (Exception e) {\n            log.warn(\"Delivery attempt {} failed for {}: {}\",\n                d.getAttempt(), d.getId(), e.getMessage());\n        }\n        return DeliveryResult.RETRY;\n    }\n}\n```\n\n**Step 3: Retry with exponential backoff + jitter**\n\n```java\nDuration computeRetryDelay(int attempt) {\n    long baseMs = (long) (Math.pow(2, attempt) * 1000);     // 1s, 2s, 4s, 8s, ...\n    long cappedMs = Math.min(baseMs, TimeUnit.HOURS.toMillis(6));\n    double jitter = ThreadLocalRandom.current().nextDouble(0.5, 1.5);\n    return Duration.ofMillis((long) (cappedMs * jitter));\n}\n\n// Retry schedule (Stripe-like): 1s, 5s, 30s, 1m, 5m, 30m, 1h, 6h, 12h...\n// Total retry window: 3–7 days typically\n```\n\n**Step 4: Dead-letter queue after max retries**\n\n```java\nif (d.getAttempt() >= MAX_ATTEMPTS) {\n    dlqProducer.send(d);\n    subscriptionRepo.markDegraded(d.getSubscriptionId());\n    alertCustomer(d.getSubscriptionId(), \"max retries exceeded\");\n    metrics.incrementCounter(\"webhook.dlq\", \"subscription\", d.getSubscriptionId());\n    return;\n}\n```\n\n**Step 5: Customer-visible delivery dashboard**\n\nExpose to customers:\n- Per-event delivery history (status, response code, timestamps)\n- Failed deliveries list\n- Replay button (re-queue a failed event manually)\n- Signing secret rotation\n- Endpoint URL update\n\nStripe, GitHub, Twilio all do this well — copy the pattern."
+          },
+          {
+            "type": "step",
+            "title": "Receiver Side: Verify, Dedupe, Ack Fast",
+            "content": "**Step 1: Verify signature and timestamp**\n\n```java\n@PostMapping(\"/webhooks/stripe\")\npublic ResponseEntity<Void> handle(\n        @RequestHeader(\"X-Webhook-Signature\") String sigHeader,\n        @RequestHeader(\"X-Webhook-Timestamp\") long timestamp,\n        @RequestHeader(\"X-Webhook-ID\") String eventId,\n        @RequestBody String body) {\n\n    // 1. Reject if timestamp is stale (replay prevention)\n    long now = Instant.now().getEpochSecond();\n    if (Math.abs(now - timestamp) > 300) {  // 5 min tolerance\n        return ResponseEntity.status(400).build();\n    }\n\n    // 2. Compute expected signature\n    String signingString = timestamp + \".\" + body;\n    String expected = \"v1=\" + hmacSha256(signingString, webhookSecret);\n\n    // 3. Constant-time comparison to prevent timing attacks\n    if (!MessageDigest.isEqual(expected.getBytes(), sigHeader.getBytes())) {\n        return ResponseEntity.status(401).build();\n    }\n\n    // 4. Dedupe by event ID\n    if (processedWebhooksRepo.existsById(eventId)) {\n        return ResponseEntity.ok().build();  // already processed; idempotent ack\n    }\n\n    // 5. Enqueue for async processing; ack fast\n    asyncProcessor.enqueue(eventId, body);\n    return ResponseEntity.ok().build();\n}\n```\n\n**Key rules:**\n\n- **Ack within 2–5 seconds.** Most senders timeout at 10–30s. Don't process synchronously inside the handler; enqueue and process asynchronously.\n- **Constant-time signature comparison.** `MessageDigest.isEqual` or `TimingSafeEqual`; not `equals()` — timing attacks are real.\n- **Reject old timestamps.** Without timestamp + expiry, attacker who captured a valid signed request can replay it indefinitely. 5-minute tolerance is common.\n- **Dedupe on event ID.** Senders retry; you'll see duplicates. Store event IDs with TTL (72 hours is safe).\n- **Return 2xx for dupes.** Not an error; sender should consider it delivered.\n\n**Step 2: Async processing with idempotency**\n\n```java\n@Component\npublic class WebhookProcessor {\n    @Transactional\n    public void process(String eventId, String body) {\n        if (processedWebhooksRepo.existsById(eventId)) return;  // double-check\n\n        StripeEvent event = objectMapper.readValue(body, StripeEvent.class);\n        switch (event.getType()) {\n            case \"payment_intent.succeeded\" -> paymentService.handleSuccess(event);\n            case \"invoice.payment_failed\"  -> paymentService.handleFailure(event);\n            default -> log.info(\"Ignored event type: {}\", event.getType());\n        }\n\n        processedWebhooksRepo.save(new ProcessedWebhook(eventId, Instant.now()));\n    }\n}\n```\n\n**Step 3: Observability**\n\n- Log every webhook received (event ID, event type, received time)\n- Metric: webhook.received by type, webhook.signature_failure, webhook.dedupe_hit\n- Alert on spike in signature failures (attempted attack or misconfigured secret)\n- Alert on processing lag (queue backing up)\n\n**Step 4: Receiver best practices**\n\n- **Separate webhook handler from business logic** — handler only validates, enqueues, and acks\n- **Don't call external services inline** — process async\n- **Be tolerant of unknown event types** — log and ack, don't reject\n- **Be tolerant of schema evolution** — sender may add fields; use `@JsonIgnoreProperties(ignoreUnknown = true)`\n- **Rotate secrets periodically** — support two active secrets during transition"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs, Edge Cases, and Webhook Alternatives",
+            "content": "**At-least-once delivery is the norm.** Retries mean duplicates. Receivers must be idempotent. Senders can't guarantee exactly-once over HTTP; no amount of engineering will fix this at the HTTP layer.\n\n**Ordering is not guaranteed.** Event A arrives, times out, retried. Event B arrives, succeeds. Receiver sees B before A. Don't assume order.\n- If order matters: include sequence numbers, have consumer maintain 'last processed seq'; or use a single retryable queue per subscription (not parallel workers).\n\n**Stripe's retry schedule.** 1s, 5s, 30s, 1m, 5m, 30m, 1h, 6h, 12h, then daily for 3 days. Total window: 3 days. Long window accommodates customer downtimes.\n\n**Dead-letter handling.** After max retries, mark delivery failed, alert customer (email, dashboard), and optionally disable subscription (auto-pause). Subscription auto-resume on next valid delivery or manual customer action.\n\n**Signature schemes.** - **HMAC-SHA256**: industry standard.\n- Stripe uses this.\n- **HMAC-SHA1**: older (GitHub historically).\n- Still secure but SHA256 preferred.\n- **Ed25519 / asymmetric**: for high-security webhooks (GitHub apps).\n- Sender signs with private key; receiver verifies with public key.\n- No shared secret.\n- **mTLS**: both sides present certs. Very strong but operationally complex.\n\n**Timestamp in the signature prevents replay.** Without it, a captured valid signed request is valid forever. Include timestamp in the signing string (`timestamp.body`), reject if timestamp is old.\n\n**Secret rotation.** Receivers should accept two active secrets during transition (old + new). Sender rotates; waits until all old-signed events are processed or expired; deactivates old.\n\n**IP whitelisting.** Some webhook senders publish static IP ranges (Stripe, GitHub). Receivers can firewall to those. Works, but IP ranges change; sender needs to announce changes.\n\n**Per-consumer isolation.** If customer A's endpoint is slow, customer B's webhooks must still deliver. Separate queues/worker pools per subscription or per tenant. Critical at scale.\n\n**Rate limiting outgoing.** Don't DDoS the customer. Limit per-URL concurrent requests (e.g., 10 max). Back off if customer returns 429.\n\n**Webhooks vs polling vs streams.**\n- **Webhooks**: push; low latency; requires public endpoint on receiver\n- **Polling**: pull; wasteful but simple; no endpoint required\n- **SSE / WebSockets**: persistent connection; great for browsers, less for server-server\n- **Message queue subscription**: best for internal; not usable across trust boundaries without broker access\n\n**Webhooks don't work behind NAT / firewall.** If receiver can't accept incoming HTTP, webhooks fail. Polling or queue-based becomes the fallback.\n\n**WebSub / RSS hubs.** Pub-sub for RSS-style content; niche but worth knowing.\n\n**Webhook platforms.** Svix, Hookdeck, Ngrok (for dev), WebhookRelay — SaaS that handles signing, retries, DLQ. Build-vs-buy calculus; buying saves months.\n\n**Webhook as 'async message over HTTP'.** Architect your sender as a message-driven system: event → queue → worker → HTTP. Same patterns as Kafka consumers. Treat it with the same care.\n\n**Replay capability.** Customers sometimes lose events. Offer 'replay this event' button in dashboard. Re-enqueues the event; receiver dedupes (or not, depending on customer choice).\n\n**Sender-side observability.** Per-subscription metrics: delivery success rate, p95 latency, retry count, DLQ count. Customer dashboard and internal dashboards.\n\n**Receiver-side observability.** Signature failure rate (should be near 0), dedupe hit rate (expected > 0 with retries), processing lag.\n\n**Legal and contract.** Document webhook SLA: retry window, max payload size, expected 2xx within 5 seconds. Customers expecting realtime often over-promise on their end.\n\n**Testing.** Ngrok for local development receiver. Webhook.site for quick inspection. Good CI tests use a real embedded server to verify sender behavior.\n\n**The strategic default:**\n- HMAC-SHA256 signing with timestamp\n- Exponential backoff + jitter, ~3-day retry window\n- Per-subscription queue for isolation\n- Dead-letter queue with customer alerting\n- Idempotent receivers with event-ID dedupe\n- Customer dashboard for delivery history and replays"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Webhooks = HTTP push callbacks**: Stripe/GitHub-style event delivery across trust boundaries\n- **At-least-once is the norm** — retries cause duplicates; receivers must be idempotent with event-ID dedupe\n- **HMAC-SHA256 signature + timestamp** — prevents forgery and replay; constant-time comparison\n- **Ack fast (under 5s), process async** — receivers enqueue and return 2xx immediately\n- **Exponential backoff + jitter** — 3–7 day retry window; Stripe's schedule is the reference\n- **Per-subscription queue** for consumer isolation — one slow customer can't block others\n- **Dead-letter queue after max retries** — alert customer, auto-pause if chronic\n- **Customer dashboard** for delivery history, replay, secret rotation\n- **Don't assume ordering** — include sequence numbers if order matters\n- **Webhooks are async messaging over HTTP** — treat sender as message-driven system"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Webhooks are HTTP callbacks from your service to third-party URLs when an event occurs. Stripe calls your webhook URL when a payment succeeds; GitHub calls your CI server on code push.\n\nThey're the industry-standard way to notify third-party systems of events in real time, winning over polling (wasteful) and message queues (can't cross trust boundaries).\n\n**Design concerns**\n\n*Delivery reliability*\n- Receivers go down, become slow, get deployed\n- Sender must retry; exponential backoff with jitter\n- Stripe's schedule: 1s, 5s, 30s, 1m, 5m, 30m, 1h, 6h, 12h, daily for 3 days\n- 3 to 7 day retry window is standard\n- Dead-letter queue after max retries; alert customer\n\n*Security*\n- Receiver URL is public; anyone can POST\n- HMAC-SHA256 signature with shared secret\n- Include timestamp in signing string to prevent replay attacks\n- 5-minute tolerance for clock skew\n- Constant-time signature comparison to prevent timing attacks\n- Optionally IP allowlist (Stripe, GitHub publish ranges)\n\n*Idempotency*\n- Retries cause duplicates\n- Receivers must dedupe on event ID\n- Store processed event IDs with TTL (72 hours typical)\n- Return 2xx for duplicates; not an error\n\n*Ordering*\n- HTTP delivers in arbitrary order, especially after retries\n- Don't assume order; include sequence numbers if order matters\n- Or use single retryable queue per subscription (no parallel workers)\n\n*Consumer isolation*\n- One slow receiver must not block others\n- Per-subscription or per-tenant queues\n- Separate worker pools\n- Rate limit outgoing per URL (10 concurrent max typical)\n\n**Sender architecture**\n- Event fires; fan out to all active subscriptions\n- Durable queue per subscription\n- Worker pool signs and POSTs; 10 second timeout\n- On 2xx: mark delivered\n- On 4xx non-retryable: mark failed, alert customer\n- On 5xx or timeout: increment retry, exponential backoff + jitter\n- After max retries: DLQ, alert, optionally auto-pause subscription\n- Customer dashboard with delivery history, replay button, secret rotation\n\n**Receiver pattern**\n- Verify signature and timestamp; reject if invalid\n- Dedupe on event ID; return 2xx if already processed\n- Enqueue for async processing\n- Return 200 immediately; ack within 5 seconds\n- Never process inline; senders timeout at 10 to 30 seconds\n- Separate background worker does actual work with idempotent logic\n- Be tolerant of unknown event types (ack and log, don't reject)\n- Be tolerant of schema evolution (ignore unknown JSON fields)\n\n**Common mistakes**\n- Synchronous processing in handler (times out; sender retries; duplicates everywhere)\n- No signature verification (security hole)\n- No timestamp in signature (replay attacks)\n- Using equals() to compare signatures (timing attack)\n- No dedupe (duplicate side effects)\n- Shared worker pool across customers (one slow customer blocks all)\n- No retry window (transient failures become permanent)\n- No DLQ visibility (customer never knows events were lost)\n\n**Signature schemes**\n- HMAC-SHA256 is industry standard (Stripe)\n- HMAC-SHA1 older (GitHub historical); still secure but SHA256 preferred\n- Ed25519 asymmetric for high-security (GitHub apps): sender signs with private key, receiver verifies with public\n- mTLS: both sides present certs; operationally complex but very strong\n\n**Secret rotation**\n- Receivers should accept two active secrets during transition\n- Sender rotates; waits for old-signed events to drain; deactivates old\n\n**Observability**\n- Sender: per-subscription success rate, p95 latency, retry count, DLQ count\n- Receiver: signature failure rate (should be near zero), dedupe hit rate (expected with retries), processing lag\n- Dashboards and alerts on both sides\n\n**Webhook alternatives**\n- Polling: pull; wasteful but no endpoint required; works behind NAT\n- SSE or WebSockets: persistent; best for browsers, not server-server\n- Message queues: best for internal; not usable across trust boundaries\n- Webhook platforms (Svix, Hookdeck, Ngrok): SaaS handles signing, retries, DLQ; build-vs-buy\n\n**Replay capability**\n- Offer customer a 'replay this event' button\n- Re-enqueues; receiver dedupes or not depending on customer preference\n- Critical for customer trust\n\n**The strategic answer**\n- Treat webhooks as async message delivery over HTTP\n- Same patterns as Kafka consumers: durable queue, idempotent consumer, at-least-once, DLQ\n- Sender: queue, worker pool, retry with backoff, DLQ, customer dashboard\n- Receiver: verify signature, dedupe, ack fast, process async\n- HMAC-SHA256 + timestamp; constant-time compare; idempotent processing\n- Observability on both sides; SLAs documented and monitored"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Stripe's webhook retry schedule compare to GitHub's?",
+        "What is the difference between HMAC signing and mTLS for webhook authentication?",
+        "How do you handle webhook delivery when the receiver's endpoint IP changes?",
+        "What are the trade-offs of using Svix or Hookdeck vs building your own webhook infrastructure?"
+      ],
+      "seo": {
+        "meta_title": "Webhook Design: Reliable Delivery, HMAC Signing, Idempotent Receivers",
+        "meta_description": "Build a reliable, secure webhooks system. HMAC-SHA256 signing, retry with backoff, dead-letter queues, idempotent receivers, customer dashboards.",
+        "keywords": [
+          "webhook design",
+          "webhook security",
+          "hmac signing",
+          "webhook retry",
+          "idempotent webhook"
+        ],
+        "metaDescription": "Webhooks are HTTP callbacks from your service to third-party URLs when an event occurs (e.g., Stripe calling your server on payment_succeeded).",
+        "metaTitle": "Webhooks: Design, Reliability, and Security"
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Webhooks are HTTP callbacks from your service to third-party URLs when an event occurs.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Webhooks are the industry-standard way to notify third-party systems of events in real time over HTTP. Stripe calls your /stripe/webhooks URL when a payment succeeds; GitHub calls your CI server when code is pushed; Shopify calls your app when an order is placed. Compared to alternatives: Polling: client polls your API every N seconds; wasteful, high latency Webhooks: you push event to client; low latency, efficient WebSockets / SSE: persistent connection; good for client-side browsers, less for server-to-server Message queues."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical API-design thinking; reliability patterns; security at HTTP layer"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Webhooks = HTTP push callbacks: Stripe/GitHub-style event delivery across trust boundaries At-least-once is the norm — retries cause duplicates",
+              "receivers must be idempotent with event-ID dedupe HMAC-SHA256 signature + timestamp — prevents forgery and replay",
+              "constant-time comparison Ack fast (under 5s), process async — receivers enqueue and return 2xx immediately Exponential backoff + jitter — 3–7 day retry window",
+              "Stripe's schedule is the reference Per-subscription queue for consumer isolation — one slow customer can't block others Dead-letter queue after max retries — alert customer, auto-pause if chronic Customer dashboard for delivery history, replay, secret rotation Don't assume ordering — include sequence numbers if order matters Webhooks are async messaging over HTTP — treat sender as message-driven system"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Webhooks are the industry-standard way to notify third-party systems of events in real time over HTTP. Stripe calls your /stripe/webhooks URL when a payment succeeds; GitHub calls your CI server when code is pushed; Shopify calls your app when an order is placed. Compared to alternatives: Polling: client polls your API every N seconds; wasteful, high latency Webhooks: you push event to client; low latency, efficient WebSockets / SSE: persistent connection; good for client-side browsers, less for server-to-server Message queues: Kafka/SQS/etc; better for internal use, but third parties usually can't consume them directly Webhooks win for server-to-server event delivery across trust boundaries because HTTP is universal. But they come with real engineering challenges: 1. Delivery reliability. The receiver may be."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Synchronous processing in webhook handler (times out)",
+              "no signature verification (security hole)",
+              "no retry logic on sender",
+              "assuming ordering"
+            ]
+          }
+        ],
+        "cap": "Design concerns Delivery reliability Receivers go down, become slow, get deployed Sender must retry; exponential backoff with jitter Stripe's schedule: 1s, 5s, 30s, 1m, 5m, 30m, 1h, 6h, 12h, daily for",
+        "familiarity_anchors": [
+          "Webhooks",
+          "Stripe",
+          "Design"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Stripe's webhook retry schedule compare to GitHub's?",
+          "What is the difference between HMAC signing and mTLS for webhook authentication?",
+          "How do you handle webhook delivery when the receiver's endpoint IP changes?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "msg-webhook-002",
+      "slug": "webhook-reliability-retry-exponential-backoff",
+      "question": "How do you make outbound webhook delivery reliable with retries, idempotency keys, and dead-letter handling?",
+      "title": "Reliable Webhook Delivery: Retries, Idempotency, and DLQ",
+      "direct_answer": "Reliable outbound webhooks need three things: **retries with exponential backoff and jitter** for transient failures, an **idempotency key** header so the receiver can dedupe redeliveries, and a **dead-letter queue** for permanently failed deliveries that human operators can inspect and replay. Stripe, GitHub, and Slack all converge on this pattern: persist every webhook in a `webhook_deliveries` table, retry up to ~24 hours with backoff like 1m / 5m / 30m / 2h / 6h / 12h, send a unique `Idempotency-Key` (or `X-Event-Id`) header, and after final failure mark the delivery `dead` and surface it on a dashboard for replay.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can design a production webhook publisher that handles network flakiness, receiver outages, and duplicate delivery without losing events or hammering the receiver",
+        "common_mistake": "Relying on synchronous in-process retries with `Thread.sleep` — this blocks the request thread and loses webhooks if the publisher restarts mid-retry",
+        "to_stand_out": "Discuss jitter to prevent thundering herd, distinguishing 4xx (don't retry) vs 5xx (retry) vs 429 (respect Retry-After), and why receivers need an idempotency key even with at-least-once delivery"
+      },
+      "company_tags": [
+        "Stripe",
+        "GitHub",
+        "Slack",
+        "Shopify",
+        "Twilio",
+        "LinkedIn"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Webhooks Are At-Least-Once HTTP — Build the Publisher Like a Message Queue",
+            "content": "A webhook is an outbound HTTP POST that fires when something happens in your system.\n- The receiver might be down, slow, behind a flaky proxy, or being deployed at exactly the wrong moment.\n- If you treat the webhook like a normal HTTP call — fire it from the request thread, hope it returns 2xx — you will lose webhooks during every receiver hiccup, and your customers will discover it by missing notifications.\n\nThe production pattern is to treat outbound webhooks as **persistent messages**.\n- Every webhook gets written to a `webhook_deliveries` table inside the same database transaction as the business event that produced it.\n- A separate worker reads pending deliveries and POSTs them to the receiver, with an explicit retry schedule that survives publisher restarts.\n- This is structurally identical to the Outbox pattern for Kafka — the only difference is the destination is HTTP instead of a broker.\n\nThree properties define a reliable webhook publisher:\n- **Retries with exponential backoff and jitter** so a recovering receiver isn't crushed by every publisher synchronizing on the same retry schedule.\n- **An idempotency key** in the request header so the receiver — which has no way to tell a real new delivery from a redelivery on the same event — can dedupe.\n- **A dead-letter state** for deliveries that exhaust retries, so operators can investigate, fix the receiver, and trigger a manual replay.\n\nStripe documents these explicitly: 8 retries over 24 hours with exponential backoff, an `idempotency-key` header, and a Dashboard view for failed webhooks. GitHub, Slack, Twilio, and Shopify converge on the same shape because the constraints are identical."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Webhook Delivery State Machine",
+            "diagram_format": "mermaid",
+            "content": "```mermaid\nstateDiagram-v2\n    [*] --> pending\n    pending --> delivering: worker picks up\n    delivering --> delivered: 2xx response\n    delivering --> failed_retryable: 5xx, timeout, 429, network error\n    delivering --> failed_permanent: 4xx (except 408, 429)\n    failed_retryable --> pending: schedule next attempt\\nwith jitter + backoff\n    failed_retryable --> dead: attempts exceeded\\nor age > 24h\n    failed_permanent --> dead: do not retry 4xx\n    delivered --> [*]\n    dead --> pending: manual replay from\\nadmin dashboard\n```"
+          },
+          {
+            "type": "step",
+            "title": "The Backoff Schedule and Why Jitter Matters",
+            "content": "Pure exponential backoff sends every retry at predictable times. Stripe's published schedule, slightly simplified, is:\n\n| Attempt | Delay from previous | Wall-clock from event |\n|---|---|---|\n| 1 | immediate | 0s |\n| 2 | 1 min | ~1 min |\n| 3 | 5 min | ~6 min |\n| 4 | 30 min | ~36 min |\n| 5 | 2 hours | ~2.5 h |\n| 6 | 6 hours | ~8.5 h |\n| 7 | 12 hours | ~20.5 h |\n| 8 | (cap at 24h since first attempt) | ≤24 h |\n\nWithout jitter, every webhook publisher in your fleet that tried delivering at 12:00 will retry simultaneously at 12:01, 12:06, 12:36 — perfectly synchronized. When the receiver comes back online it gets hit by every publisher at the same instant, often pushing it back over. **Apply randomized jitter** to each scheduled delay — typical implementations multiply the delay by a uniform random factor between 0.5 and 1.5, or pick the actual sleep uniformly between 0 and the computed delay (the AWS-recommended 'full jitter' algorithm). This decorrelates retries across publishers.\n\n**Status code handling** decides whether to retry at all:\n- `2xx` → success, mark delivered.\n- `408 Request Timeout`, `429 Too Many Requests`, `5xx` → retryable; for `429` honor the `Retry-After` header instead of the schedule.\n- Other `4xx` (`400`, `401`, `403`, `404`, `410`, `422`) → the receiver said the request is wrong; retrying produces the same error. Mark `failed_permanent` and move to dead.\n- Network timeouts, connection resets, TLS errors → retryable; same as 5xx.\n\n**An overall age cap** like 24 hours is essential. A webhook from yesterday is rarely useful — receivers expect near-real-time. Set an absolute deadline from the event creation time and dead-letter anything that crosses it regardless of attempt count."
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Boot Worker: Persisted Deliveries, Backoff, Jitter, Idempotency Key",
+            "content": "```java\n@Entity @Table(name = \"webhook_deliveries\")\npublic class WebhookDelivery {\n    @Id @GeneratedValue UUID id;\n    String endpointUrl;\n    String eventType;\n    @Column(columnDefinition = \"jsonb\") String payload;\n\n    @Enumerated(EnumType.STRING) Status status;\n    int attempts;\n    Instant nextAttemptAt;\n    Instant createdAt;\n    Instant lastAttemptAt;\n    Integer lastResponseStatus;\n    String lastError;\n\n    enum Status { PENDING, DELIVERING, DELIVERED, DEAD }\n}\n\n@Component\npublic class WebhookDeliveryWorker {\n\n    private static final List<Duration> SCHEDULE = List.of(\n        Duration.ZERO, Duration.ofMinutes(1), Duration.ofMinutes(5),\n        Duration.ofMinutes(30), Duration.ofHours(2), Duration.ofHours(6),\n        Duration.ofHours(12));\n    private static final Duration MAX_AGE = Duration.ofHours(24);\n    private static final Random JITTER = new Random();\n\n    private final WebhookDeliveryRepository repo;\n    private final RestClient http;     // configured with sane connect/read timeouts\n\n    @Scheduled(fixedDelay = 1_000)     // poll every 1s for due deliveries\n    public void drain() {\n        List<WebhookDelivery> due = repo.findTop100ByStatusAndNextAttemptAtBefore(\n            Status.PENDING, Instant.now());\n        due.forEach(this::attempt);\n    }\n\n    private void attempt(WebhookDelivery d) {\n        d.status = Status.DELIVERING;\n        d.attempts += 1;\n        d.lastAttemptAt = Instant.now();\n        repo.save(d);\n\n        try {\n            ResponseEntity<Void> resp = http.post()\n                .uri(d.endpointUrl)\n                .header(\"Content-Type\", \"application/json\")\n                .header(\"Idempotency-Key\", d.id.toString())  // stable per delivery\n                .header(\"X-Event-Id\", d.id.toString())\n                .header(\"X-Event-Type\", d.eventType)\n                .header(\"X-Attempt\", String.valueOf(d.attempts))\n                .body(d.payload)\n                .retrieve()\n                .toBodilessEntity();\n            handleResponse(d, resp.getStatusCode().value(), null);\n        } catch (HttpClientErrorException e) {\n            handleResponse(d, e.getStatusCode().value(), e.getMessage());\n        } catch (HttpServerErrorException e) {\n            handleResponse(d, e.getStatusCode().value(), e.getMessage());\n        } catch (ResourceAccessException e) {\n            handleResponse(d, 0, \"network: \" + e.getMessage());\n        }\n    }\n\n    private void handleResponse(WebhookDelivery d, int status, String err) {\n        d.lastResponseStatus = status == 0 ? null : status;\n        d.lastError = err;\n\n        boolean ok = status >= 200 && status < 300;\n        boolean retryable = status == 0 || status == 408 || status == 429 || status >= 500;\n        boolean ageExceeded = Duration.between(d.createdAt, Instant.now()).compareTo(MAX_AGE) > 0;\n\n        if (ok) {\n            d.status = Status.DELIVERED;\n        } else if (!retryable || ageExceeded || d.attempts >= SCHEDULE.size()) {\n            d.status = Status.DEAD;       // permanent 4xx, too old, or out of attempts\n        } else {\n            Duration base = SCHEDULE.get(d.attempts);\n            // Full-jitter: sleep is uniform between 0 and base.\n            long jitterMs = (long) (JITTER.nextDouble() * base.toMillis());\n            d.nextAttemptAt = Instant.now().plusMillis(jitterMs);\n            d.status = Status.PENDING;\n        }\n        repo.save(d);\n    }\n}\n```\n\n**Notes on this implementation:**\n- The `Idempotency-Key` is the delivery row's UUID, so every retry of the same delivery sends the same key and the receiver dedupes naturally.\n- The 1-second polling loop reads up to 100 due rows per cycle; for higher throughput, partition the work across N workers using `SELECT ... FOR UPDATE SKIP LOCKED`.\n- Network exceptions are treated as status `0` and retried — these dominate transient failures in practice.\n- The age cap is checked alongside the attempt cap so a slow receiver that returns 5xx for 24 hours is dead-lettered even if it hasn't burned all attempts.\n- Producing the row should happen in the same DB transaction as the business event that triggered it — same Outbox pattern as Kafka."
+          },
+          {
+            "type": "step",
+            "title": "Dead Letters, Monitoring, and Operator UX",
+            "content": "Once deliveries land in the `dead` state, they need somewhere to live and someone to act on them. Three operational hooks turn dead-letters from a hidden problem into a manageable operational surface:\n\n**Per-endpoint failure metrics.** Track `webhook_failures_total{endpoint, status_class}` and `webhook_dead_total{endpoint}` as Prometheus counters. Alert when an endpoint's `dead` rate exceeds 1% of attempts over 15 minutes — it almost always means the receiver is broken, the URL changed, or the receiver auth rotated.\n\n**Operator dashboard.** Stripe, GitHub, and Shopify all expose a 'failed webhooks' view in their dashboards: list of dead deliveries with payload, last response, and a 'replay' button that re-queues the delivery.\n- Build the same thing — even a simple admin page is enough.\n- Operators triage failed webhooks by endpoint owner and fix the underlying problem (re-issue the secret, update the URL, contact the partner).\n\n**Auto-disable runaway endpoints.** If an endpoint has produced 50+ consecutive failures or 1000+ failures in 24 hours, mark the endpoint `disabled` and stop scheduling new deliveries to it.\n- This prevents the publisher from continuously retrying a known-broken receiver and saturating the worker pool.\n- The endpoint owner gets an email (or webhook!) saying their endpoint is disabled and how to re-enable it.\n\n**Track per-attempt latency.** A receiver that returns 200 in 50ms vs one that returns 200 in 25 seconds are very different.\n- The slow receiver will eventually time out and burn retries.\n- Set a per-request timeout (typically 10-30 seconds) and treat timeouts as retryable failures — but track the timeout rate per endpoint so you can detect a degrading receiver before it goes fully dark."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Persist every webhook in a `webhook_deliveries` table** in the same DB transaction as the business event — same Outbox pattern as Kafka.\n- **Exponential backoff with jitter** prevents thundering-herd retries when a receiver recovers; the AWS full-jitter algorithm (uniform between 0 and computed delay) is the simplest correct approach.\n- **`Idempotency-Key` header per delivery** — receivers dedupe by key because at-least-once HTTP guarantees redeliveries.\n- **Status-code policy: `2xx` succeed, `5xx`/`408`/`429` retry, other `4xx` go straight to dead-letter** — do not retry permanent client errors.\n- **Dashboard + auto-disable for broken endpoints** — operators replay dead deliveries; endpoints with 50+ consecutive failures auto-disable to protect the worker pool."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Webhooks are at-least-once HTTP, so you build the publisher like a message queue rather than a normal HTTP call.\n\n**Persistence:**\n- Every webhook gets written to a `webhook_deliveries` table in the same DB transaction as the business event that produced it — exactly the Outbox pattern\n- A separate worker polls the table for due deliveries and POSTs them, so the publisher can restart safely without losing webhooks mid-retry\n\n**Retry policy:**\n- Exponential backoff with explicit schedule — Stripe-style 1m, 5m, 30m, 2h, 6h, 12h, 24h\n- Jitter on every scheduled delay so a recovering receiver isn't crushed by every publisher synchronizing on the same retry time — full-jitter, uniform between 0 and the computed delay, is the simplest correct algorithm\n- Status-code policy: 2xx is success, 5xx and 408 and 429 are retryable, every other 4xx goes straight to dead-letter because retrying a 401 or 422 produces the same error\n- For 429 responses honor the `Retry-After` header instead of the default schedule\n- An age cap of 24 hours from the event time so a stuck delivery doesn't retry forever\n\n**Idempotency:**\n- Send an `Idempotency-Key` header equal to the delivery row's UUID — every retry of the same delivery sends the same key, so the receiver can dedupe\n- This is essential because the receiver has no other way to tell a genuine retry from a duplicate event\n\n**Dead-letter handling:**\n- Deliveries that exhaust retries or hit the age cap land in a `dead` state\n- Expose them on an operator dashboard with a replay button — same UX Stripe and GitHub have\n- Auto-disable endpoints that produce 50+ consecutive failures so a permanently broken receiver doesn't saturate the worker pool\n- Track per-endpoint failure rate and per-attempt latency so degrading receivers can be detected before they go fully dark\n\nIn Spring Boot the worker is a `@Scheduled` job using `SELECT ... FOR UPDATE SKIP LOCKED` for safe horizontal scaling, with `RestClient` configured for sane connect and read timeouts."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is jitter required for backoff to work correctly?",
+        "How do you distinguish a duplicate webhook from a genuine new event on the receiver side?",
+        "What's the difference between an idempotency key per request vs per logical operation?",
+        "When would you auto-disable a webhook endpoint, and how do you re-enable it?"
+      ],
+      "seo": {
+        "metaTitle": "Reliable Webhook Delivery — Retries, Idempotency, DLQ | InterviewExplainer",
+        "metaDescription": "Build a production webhook publisher in Spring Boot. Exponential backoff with jitter, idempotency-key header, dead-letter queue, Stripe/GitHub-style patterns."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Webhooks are at-least-once HTTP, so you build the publisher like a message queue rather than a normal HTTP call.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A webhook is an outbound HTTP POST that fires when something happens in your system. The receiver might be down, slow, behind a flaky proxy, or being deployed at exactly the wrong moment. If you treat the webhook like a normal HTTP call — fire it from the request thread, hope it returns 2xx — you will lose webhooks during every receiver hiccup, and your customers will discover it by missing notifications. The production pattern is to treat outbound webhooks."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can design a production webhook publisher that handles network flakiness, receiver outages, and duplicate delivery without losing events or hammering the receiver"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Persist every webhook in a webhook_deliveries table in the same DB transaction as the business event — same Outbox pattern as Kafka",
+              "Exponential backoff with jitter prevents thundering-herd retries when a receiver recovers; the AWS full-jitter algorithm (uniform between 0 and computed delay) is the simplest correct approach",
+              "Idempotency-Key header per delivery — receivers dedupe by key because at-least-once HTTP guarantees redeliveries",
+              "Status-code policy: 2xx succeed, 5xx/408/429 retry, other 4xx go straight to dead-letter — do not retry permanent client errors",
+              "Dashboard + auto-disable for broken endpoints — operators replay dead deliveries; endpoints with 50+ consecutive failures auto-disable to protect the worker pool"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "``java @Entity @Table(name = \"webhook_deliveries\") public class WebhookDelivery { @Id @GeneratedValue UUID id; String endpointUrl; String eventType; @Column(columnDefinition = \"jsonb\") String payload; @Enumerated(EnumType.STRING) Status status; int attempts; Instant nextAttemptAt; Instant createdAt; Instant lastAttemptAt; Integer lastResponseStatus; String lastError; enum Status { PENDING, DELIVERING, DELIVERED, DEAD } } @Component public class WebhookDeliveryWorker { private static final List<Duration> SCHEDULE = List.of( Duration.ZERO, Duration.ofMinutes(1), Duration.ofMinutes(5), Duration.ofMinutes(30), Duration.ofHours(2), Duration.ofHours(6), Duration.ofHours(12)); private static final Duration MAX_AGE = Duration.ofHours(24); private static final Random JITTER = new Random(); private final WebhookDeliveryRepository repo; private final RestClient http; // configured with sane connect/read timeouts @Scheduled(fixedDelay = 1_000) // poll every 1s for due deliveries public void drain() { List<WebhookDelivery> due = repo.findTop100ByStatusAndNextAttemptAtBefore( Status.PENDING, Instant.now()); due.forEach(this::attempt); } private void attempt(WebhookDelivery d)."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Relying on synchronous in-process retries with Thread",
+              "sleep — this blocks the request thread and loses webhooks if the publisher restarts mid-retry"
+            ]
+          }
+        ],
+        "cap": "FOR UPDATE SKIP LOCKED for safe horizontal scaling, with RestClient configured for sane connect and read timeouts.",
+        "familiarity_anchors": [
+          "Reliable",
+          "Stripe",
+          "GitHub"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why is jitter required for backoff to work correctly?",
+          "How do you distinguish a duplicate webhook from a genuine new event on the receiver side?",
+          "What's the difference between an idempotency key per request vs per logical operation?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "msg-webhook-003",
+      "slug": "webhook-security-hmac-signature-verification",
+      "question": "How do you verify webhook authenticity with HMAC signatures and prevent replay attacks?",
+      "title": "Webhook Security: HMAC-SHA256 Signatures and Replay Protection",
+      "direct_answer": "Sign every outbound webhook with **HMAC-SHA256** over `timestamp + \".\" + raw_body` using a shared secret, send the result in an `X-Signature` header along with the timestamp, and have the receiver recompute and **constant-time compare**. To prevent replay attacks, include the signing timestamp in the signature and have the receiver reject anything older than a tolerance window (Stripe uses 5 minutes). HMAC verification + a tight tolerance window is the standard pattern used by Stripe, GitHub, Slack, and Shopify; in Spring Boot it's a small `OncePerRequestFilter` that wraps the request to read the raw body without consuming it.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand why webhooks need authentication, how HMAC works, why the timestamp matters, and how to verify signatures correctly in Java",
+        "common_mistake": "Using `String.equals()` to compare signatures (timing-attack vulnerable) or computing HMAC over the parsed JSON instead of the raw bytes the sender signed",
+        "to_stand_out": "Discuss replay protection via timestamp tolerance, secret rotation by sending two signatures, and reading the raw body in Spring without breaking `@RequestBody` deserialization"
+      },
+      "company_tags": [
+        "Stripe",
+        "GitHub",
+        "Slack",
+        "Shopify",
+        "Twilio",
+        "LinkedIn"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Webhook URL Is Public — HMAC Is How the Receiver Knows the Sender Is Real",
+            "content": "An incoming webhook is just an HTTP POST to a URL the receiver published.\n- Anyone on the internet can send a request to that URL.\n- Without authentication, an attacker who knows the URL can submit a forged payment-success webhook, a fake GitHub push event, or a Slack message that looks like it came from your tenant.\n- TLS prevents tampering and eavesdropping in flight, but it doesn't prove the sender is who they claim to be — TLS only authenticates the endpoint, not the request body.\n\nThe industry-standard answer is **HMAC over the request payload with a shared secret**.\n- The sender computes `HMAC-SHA256(secret, message)` where `message` includes the request body and a timestamp, sends the hex-encoded result in a header (typically `X-Signature` or `Stripe-Signature`), and the receiver recomputes the same hash with the same secret and compares.\n- Because the secret is never on the wire, an attacker can't forge a valid signature even if they can read the headers.\n\nTwo concerns push the design beyond plain HMAC.\n- First, **timing attacks**: comparing the recomputed hash with `String.equals` exits early on the first mismatched byte, leaking timing information that lets a determined attacker guess one byte at a time.\n- Use `MessageDigest.isEqual` or `Arrays.equals` after both arrays are the same length — Java's `MessageDigest.isEqual` is constant-time.\n- Second, **replay attacks**: an attacker who captures a legitimately signed webhook can resubmit it later.\n- Bind a timestamp into the signed message and have the receiver reject anything outside a tolerance window (Stripe uses 5 minutes; GitHub doesn't include a timestamp but their guidance is to track `X-GitHub-Delivery` IDs instead).\n\nSecret rotation is the other operational concern. To rotate without downtime the sender publishes both signatures during the rotation window — `X-Signature: t=...,v1=newSig,v0=oldSig` in Stripe-style — and the receiver accepts either. After all consumers have switched, the old secret is removed."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "HMAC Signing and Verification Flow",
+            "diagram_format": "mermaid",
+            "content": "```mermaid\nsequenceDiagram\n    autonumber\n    participant Sender as Sender (Stripe, GitHub, your service)\n    participant Receiver as Receiver (Spring Boot)\n    Sender->>Sender: ts = current epoch seconds\n    Sender->>Sender: signedPayload = ts + \".\" + raw_body\n    Sender->>Sender: sig = hex(HMAC_SHA256(secret, signedPayload))\n    Sender->>Receiver: POST /webhook\\nX-Timestamp: ts\\nX-Signature: sig\\nbody: raw_body\n    Receiver->>Receiver: read raw_body bytes (NOT parsed JSON)\n    Receiver->>Receiver: |now - ts| <= 5 min ? else REJECT\n    Receiver->>Receiver: expected = hex(HMAC_SHA256(secret, ts + \".\" + raw_body))\n    Receiver->>Receiver: constant-time compare(expected, sig)\n    alt match\n        Receiver-->>Sender: 200 OK\n    else mismatch\n        Receiver-->>Sender: 401 Unauthorized\n    end\n```"
+          },
+          {
+            "type": "step",
+            "title": "Sign the Raw Bytes, Not the Parsed JSON",
+            "content": "The most common implementation bug is computing HMAC over the **deserialized** request body. Two senders with the same JSON object can produce different bytes — different field ordering, different whitespace, different float precision. The signature is over what was sent on the wire, not what your JSON parser reconstructs.\n\nIn Spring Boot, the request input stream is normally consumed by Jackson when you bind `@RequestBody`. To verify the signature you need the raw bytes **and** still let Jackson deserialize. Two clean approaches:\n\n**Option A — `ContentCachingRequestWrapper` in a filter.** Wrap the request once at the filter chain entry, read the cached body in your verification filter, and Spring's MVC layer can still deserialize from the cache.\n\n**Option B — Custom `HttpMessageConverter` or `@RequestBody byte[]`.** Bind the body as `byte[]` in the controller, verify against those bytes, then explicitly deserialize with `ObjectMapper`. This is the most explicit and avoids any wrapper-related surprises.\n\nThe filter or interceptor must run **before** any other body consumer.\n- Spring Security filters that read the body (rare) or the multipart resolver can consume the input stream before yours does — wrap or order your filter at the very beginning.\n- Verify the signature **before** any business logic; rejecting an unsigned or invalid request must short-circuit the filter chain with a 401.\n\nFor the timestamp tolerance window, 5 minutes is a sensible default.\n- Tighter (e.g., 30 seconds) makes replay attacks harder but starts dropping legitimate deliveries when receiver clock drifts or NTP hiccups happen.\n- Looser windows (e.g., 1 hour) leave a long replay window.\n- Match the sender's documented tolerance — Stripe is 5 minutes, Shopify accepts the request at any time but recommends checking the `X-Shopify-Hmac-Sha256` only."
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Boot: HMAC Verification Filter with Timestamp Tolerance",
+            "content": "```java\n@Component\npublic class WebhookSignatureFilter extends OncePerRequestFilter {\n\n    private static final String HEADER_TIMESTAMP = \"X-Timestamp\";\n    private static final String HEADER_SIGNATURE = \"X-Signature\";\n    private static final Duration TOLERANCE = Duration.ofMinutes(5);\n    private static final String ALGO = \"HmacSHA256\";\n\n    private final SecretKeySpec currentKey;\n    private final SecretKeySpec previousKey;   // null unless mid-rotation\n\n    public WebhookSignatureFilter(@Value(\"${webhook.secret.current}\") String current,\n                                  @Value(\"${webhook.secret.previous:}\") String previous) {\n        this.currentKey = new SecretKeySpec(current.getBytes(StandardCharsets.UTF_8), ALGO);\n        this.previousKey = previous.isBlank() ? null\n            : new SecretKeySpec(previous.getBytes(StandardCharsets.UTF_8), ALGO);\n    }\n\n    @Override\n    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,\n                                    FilterChain chain) throws IOException, ServletException {\n        if (!req.getRequestURI().startsWith(\"/webhooks/\")) {\n            chain.doFilter(req, res);\n            return;\n        }\n        String ts = req.getHeader(HEADER_TIMESTAMP);\n        String sig = req.getHeader(HEADER_SIGNATURE);\n        if (ts == null || sig == null) { res.sendError(401, \"missing signature\"); return; }\n\n        long sentAt;\n        try { sentAt = Long.parseLong(ts); }\n        catch (NumberFormatException e) { res.sendError(401, \"bad timestamp\"); return; }\n\n        if (Math.abs(Instant.now().getEpochSecond() - sentAt) > TOLERANCE.getSeconds()) {\n            res.sendError(401, \"timestamp outside tolerance window\");\n            return;\n        }\n\n        // Wrap so downstream @RequestBody can still read the body.\n        ContentCachingRequestWrapper wrapped = new ContentCachingRequestWrapper(req);\n        // Force the wrapper to consume the input stream so getContentAsByteArray() is populated.\n        StreamUtils.copy(wrapped.getInputStream(), OutputStream.nullOutputStream());\n        byte[] raw = wrapped.getContentAsByteArray();\n\n        byte[] signed = (ts + \".\" + new String(raw, StandardCharsets.UTF_8))\n            .getBytes(StandardCharsets.UTF_8);\n\n        if (!verify(signed, sig, currentKey) &&\n            (previousKey == null || !verify(signed, sig, previousKey))) {\n            res.sendError(401, \"signature mismatch\");\n            return;\n        }\n        chain.doFilter(wrapped, res);\n    }\n\n    private boolean verify(byte[] signedPayload, String hexSignature, SecretKeySpec key) {\n        try {\n            Mac mac = Mac.getInstance(ALGO);\n            mac.init(key);\n            byte[] expected = mac.doFinal(signedPayload);\n            byte[] given = HexFormat.of().parseHex(hexSignature);\n            return MessageDigest.isEqual(expected, given);  // constant-time\n        } catch (GeneralSecurityException | IllegalArgumentException e) {\n            return false;\n        }\n    }\n}\n\n@RestController\n@RequestMapping(\"/webhooks\")\npublic class StripeWebhookController {\n\n    private final OrderService orders;\n\n    @PostMapping(\"/stripe\")\n    public ResponseEntity<Void> handle(@RequestBody StripeEvent event) {\n        // Filter already verified the signature; safe to process.\n        orders.applyStripeEvent(event);\n        return ResponseEntity.ok().build();\n    }\n}\n```\n\n**Critical points in this implementation:**\n- `MessageDigest.isEqual` is the constant-time comparison; **never** use `Arrays.equals` for a security-sensitive byte compare and never use `String.equals` for the hex strings.\n- The signed message includes the timestamp so the same body sent later produces a different signature — that's what protects against replay.\n- During rotation we accept either the current or the previous secret; once all senders are on the new key, drop the previous from configuration.\n- `ContentCachingRequestWrapper` lets the controller still bind `@RequestBody`; without this, Jackson would find an empty input stream because the filter consumed it.\n- The filter is `OncePerRequestFilter` and short-circuits on any failure — the controller is never invoked for an unverified request."
+          },
+          {
+            "type": "step",
+            "title": "Operational Details: Secret Storage, Per-Tenant Secrets, and Replay Protection at Scale",
+            "content": "**Where the secret lives.** Never check the secret into source.\n- Store it in a secrets manager (AWS Secrets Manager, HashiCorp Vault, Spring Cloud Config Server's encrypted properties), inject it as an environment variable, or read it from a mounted Kubernetes Secret.\n- Secret rotation is part of your deployment story from day one — even if you never rotate, knowing exactly where the secret would change makes incident response possible.\n\n**Per-tenant secrets.** Multi-tenant SaaS applications give each customer their own secret so a leaked secret only compromises one tenant's webhooks.\n- The lookup is a database hit per request — keep it cached behind a short TTL (e.g., 5 minutes via Caffeine) so verification stays fast, but invalidate on rotation.\n- Stripe gives every connected account a unique webhook signing secret for exactly this reason.\n\n**Replay protection beyond the timestamp window.** A 5-minute window still allows replay within those 5 minutes.\n- For the strongest guarantee, also dedupe by an event-ID header — Stripe sends `Stripe-Signature` plus a unique event ID; GitHub sends `X-GitHub-Delivery` (a UUID per delivery).\n- Maintain a cache of recent event IDs (Redis with a 10-minute TTL) and reject any event ID seen before.\n- The combination — timestamp window plus event-ID cache — closes the replay window completely.\n\n**Reject quickly on auth failure.** A 401 with no further information is correct: don't leak whether the timestamp, the signature, or the body parsing failed. An attacker probing your verification logic learns nothing from a uniform error response.\n\n**Test the verification path explicitly.** Tests for the happy path are easy; tests for forged signatures, expired timestamps, missing headers, and rotation windows are what catch regressions. A signature filter is the kind of code that almost never executes during local development but runs on every production request — make sure it can't silently accept invalid requests after a refactor."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **HMAC-SHA256 over `timestamp + \".\" + raw_body`** — the timestamp inside the signature is what prevents replay.\n- **Sign the raw bytes, not the parsed JSON** — different serializers produce different bytes for equivalent objects.\n- **Constant-time compare with `MessageDigest.isEqual`** — `String.equals` and `Arrays.equals` leak timing information.\n- **Tolerance window of ~5 minutes** — tighter drops legitimate traffic during clock drift; looser leaves a longer replay window. Pair with an event-ID dedupe cache for full replay protection.\n- **Secret rotation by accepting two signatures** — Stripe-style `v1=new,v0=old`; switch to single-secret after all senders rotate."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The webhook URL is public, so the receiver needs to prove the sender is real. TLS authenticates the endpoint but not the request, so we use HMAC over the body with a shared secret.\n\n**Signing:**\n- The sender computes `HMAC-SHA256(secret, timestamp + \".\" + raw_body)`, hex-encodes it, and sends both the signature and the timestamp as headers — Stripe-style `Stripe-Signature: t=...,v1=...`\n- Including the timestamp in the signed payload is what prevents replay attacks — the same body sent later produces a different signature\n\n**Verification on the receiver:**\n- Parse the timestamp and reject anything outside a tolerance window — Stripe uses 5 minutes, which balances clock-drift tolerance against replay window\n- Recompute the HMAC using the **raw request bytes**, not the parsed JSON — different serializers produce different bytes for equivalent objects, so signing the parsed body is the most common bug\n- Compare with `MessageDigest.isEqual` for constant-time comparison — `String.equals` and `Arrays.equals` leak timing information that lets an attacker guess one byte at a time\n\n**In Spring Boot:**\n- Implement as a `OncePerRequestFilter` that uses `ContentCachingRequestWrapper` so the controller can still bind `@RequestBody` after the filter consumed the body for verification\n- Short-circuit with 401 on any failure — missing headers, expired timestamp, or signature mismatch\n- Don't include any detail in the error response so probing attackers learn nothing\n\n**Operational concerns:**\n- Secret in a secrets manager or Kubernetes Secret, never in source\n- Multi-tenant systems give each tenant their own secret so a leak compromises only one customer\n- Rotation by accepting two signatures during the rotation window — the receiver tries the new key first and falls back to the old\n- For full replay protection, pair the timestamp window with an event-ID dedupe cache (Redis, 10-minute TTL) so the same event ID can't be replayed within the tolerance window\n\nMy production default is HMAC-SHA256 with 5-minute tolerance, raw-byte verification via `ContentCachingRequestWrapper`, constant-time compare, and Redis-backed event-ID dedupe."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why must HMAC be computed over the raw request bytes instead of the parsed JSON?",
+        "What's the difference between `MessageDigest.isEqual` and `Arrays.equals` for signature comparison?",
+        "How would you rotate a webhook signing secret without downtime?",
+        "What additional protection does an event-ID cache provide on top of the timestamp tolerance window?"
+      ],
+      "seo": {
+        "metaTitle": "Webhook HMAC-SHA256 Signature Verification in Spring Boot | InterviewExplainer",
+        "metaDescription": "Verify webhook authenticity with HMAC-SHA256 in Spring Boot. Stripe-style signing, X-Signature header, timestamp tolerance, replay protection, secret rotation."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "The webhook URL is public, so the receiver needs to prove the sender is real.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "An incoming webhook is just an HTTP POST to a URL the receiver published. Anyone on the internet can send a request to that URL. Without authentication, an attacker who knows the URL can submit a forged payment-success webhook, a fake GitHub push event, or a Slack message that looks like it came from your tenant. TLS prevents tampering and eavesdropping in flight, but it doesn't prove the sender is who they claim to be — TLS only authenticates the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand why webhooks need authentication, how HMAC works, why the timestamp matters, and how to verify signatures correctly in Java"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "HMAC-SHA256 over timestamp + \"",
+              "\" + raw_body — the timestamp inside the signature is what prevents replay",
+              "Sign the raw bytes, not the parsed JSON — different serializers produce different bytes for equivalent objects",
+              "Constant-time compare with MessageDigest",
+              "isEqual — String"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "``java @Component public class WebhookSignatureFilter extends OncePerRequestFilter { private static final String HEADER_TIMESTAMP = \"X-Timestamp\"; private static final String HEADER_SIGNATURE = \"X-Signature\"; private static final Duration TOLERANCE = Duration.ofMinutes(5); private static final String ALGO = \"HmacSHA256\"; private final SecretKeySpec currentKey; private final SecretKeySpec previousKey; // null unless mid-rotation public WebhookSignatureFilter(@Value(\"${webhook.secret.current}\") String current, @Value(\"${webhook.secret.previous:}\") String previous) { this.currentKey = new SecretKeySpec(current.getBytes(StandardCharsets.UTF_8), ALGO); this.previousKey = previous.isBlank() ? null : new SecretKeySpec(previous.getBytes(StandardCharsets.UTF_8), ALGO); } @Override protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws IOException, ServletException { if (!req.getRequestURI().startsWith(\"/webhooks/\")) { chain.doFilter(req, res); return; } String ts = req.getHeader(HEADER_TIMESTAMP); String sig = req.getHeader(HEADER_SIGNATURE); if (ts == null || sig == null) { res.sendError(401, \"missing signature\"); return; } long sentAt; try { sentAt = Long.parseLong(ts)."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using String",
+              "equals() to compare signatures (timing-attack vulnerable) or computing HMAC over the parsed JSON instead of the raw bytes the sender signed"
+            ]
+          }
+        ],
+        "cap": "Including the timestamp in the signed payload is what prevents replay attacks — the same body sent later produces a different signature Verification on the receiver: Parse the timestamp and reject any",
+        "familiarity_anchors": [
+          "Signature",
+          "Stripe",
+          "GitHub"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why must HMAC be computed over the raw request bytes instead of the parsed JSON?",
+          "What's the difference between `MessageDigest.isEqual` and `Arrays.equals` for signature comparison?",
+          "How would you rotate a webhook signing secret without downtime?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    }
+  ]
+}

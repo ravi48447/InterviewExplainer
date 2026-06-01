@@ -1,0 +1,657 @@
+{
+  "topic": "Auto Configuration",
+  "topicSlug": "auto-configuration",
+  "questions": [
+    {
+      "id": "sbo-001",
+      "slug": "spring-boot-auto-configuration-internals",
+      "question": "How does Spring Boot auto-configuration work internally?",
+      "title": "Spring Boot Auto-Configuration — How It Works Internally",
+      "direct_answer": "Spring Boot auto-configuration uses **`@EnableAutoConfiguration`** to scan `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` (or `spring.factories` in pre-2.7) for candidate configuration classes. Each candidate is conditionally applied using **`@ConditionalOn*` annotations** that check for the presence of classes, beans, or properties. This lets Spring Boot configure sensible defaults without requiring explicit XML or Java configuration. **There is no scanning, no guessing** — every auto-configuration class is a regular `@Configuration` guarded by conditions; activation is deterministic given the same classpath, properties, and user-defined beans.",
+      "layout_type": "internals-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the mechanism behind Spring Boot's 'magic' rather than just using it as a black box",
+        "common_mistake": "Saying 'Spring Boot just auto-configures things' without explaining how conditions and the imports file drive the process",
+        "to_stand_out": "Mention the difference between `spring.factories` (pre-2.7) and `AutoConfiguration.imports` (2.7+), and how `@AutoConfigureAfter`/`@AutoConfigureBefore` control ordering"
+      },
+      "company_tags": [
+        "Amazon",
+        "Google",
+        "Netflix",
+        "Pivotal",
+        "ThoughtWorks"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Auto-Configuration Isn't Magic — It's a Pipeline of Conditional @Configuration Classes",
+            "content": "Most developers describe Spring Boot auto-configuration as 'it just figures out what you need.\n- That's the experience, not the mechanism.\n- Under the hood, auto-configuration is a **deterministic pipeline**: Boot discovers a list of candidate `@Configuration` classes from a well-known file on the classpath, evaluates a set of `@Conditional` annotations on each one, and only registers the beans from classes whose conditions all pass.\n\n**There is no scanning, no guessing, no AI.** Every auto-configuration class is a regular `@Configuration` class with `@Bean` methods — the same kind you'd write yourself. The only difference is that each one is guarded by conditions like `@ConditionalOnClass`, `@ConditionalOnMissingBean`, and `@ConditionalOnProperty`.\n\nWhen you add `spring-boot-starter-data-jpa` to your POM, Boot doesn't 'detect' that you want JPA — it finds `DataSourceAutoConfiguration` in its imports file, checks that `javax.sql.DataSource` is on the classpath, confirms you haven't defined your own, and wires one with HikariCP defaults. **Same classpath, same properties, same user beans = same context, every time**."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Auto-Configuration Pipeline — From @EnableAutoConfiguration to Wired Beans",
+            "content": "```mermaid\nflowchart TB\n    BootApp[\"@SpringBootApplication\"]\n    EnableAuto[\"@EnableAutoConfiguration\"]\n    Selector[\"AutoConfigurationImportSelector\"]\n    Imports[\"AutoConfiguration.imports file\"]\n    Candidates[\"~150 candidate auto-config classes\"]\n    ClassCheck{\"@ConditionalOnClass\"}\n    PropCheck{\"@ConditionalOnProperty\"}\n    BeanCheck{\"@ConditionalOnMissingBean\"}\n    OrderApply[\"Apply @AutoConfigureBefore / After\"]\n    BeanReg[\"Register beans into ApplicationContext\"]\n    Skipped[\"Skipped (negative match)\"]\n    Report[\"Conditions Evaluation Report\"]\n\n    BootApp --> EnableAuto\n    EnableAuto --> Selector\n    Selector --> Imports\n    Imports --> Candidates\n    Candidates --> ClassCheck\n    ClassCheck -->|present| PropCheck\n    ClassCheck -->|absent| Skipped\n    PropCheck -->|matches| BeanCheck\n    PropCheck -->|no match| Skipped\n    BeanCheck -->|user bean absent| OrderApply\n    BeanCheck -->|user bean present| Skipped\n    OrderApply --> BeanReg\n    BeanReg --> Report\n    Skipped --> Report\n```"
+          },
+          {
+            "type": "step",
+            "title": "Phase 1 — Discovery: How Boot Finds 150+ Candidate Configuration Classes",
+            "content": "**The trigger**\n- `@SpringBootApplication` includes `@EnableAutoConfiguration`\n- `@EnableAutoConfiguration` imports `AutoConfigurationImportSelector`\n- The selector reads a file that lists every auto-configuration class Boot ships\n\n**The imports file**\n- Spring Boot 2.7+: `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`\n- Pre-2.7: `META-INF/spring.factories` under the `EnableAutoConfiguration` key\n- One fully-qualified class name per line in the new format\n- Boot 3.x ships ~150 candidate classes\n\n**Why the format change**\n- `spring.factories` was overloaded — handled auto-configuration, listeners, initializers, failure analyzers all in one file\n- The dedicated imports file is faster to parse and makes auto-config candidates obvious\n- Both formats still work in Boot 3.x for backward compatibility\n\n**Discovery is exhaustive — filtering is selective**\n- All ~150 candidates are loaded as candidates\n- Loading the class doesn't mean its beans get registered\n- Condition evaluation in the next phase decides what activates"
+          },
+          {
+            "type": "step",
+            "title": "Phase 2 — Condition Evaluation: The @ConditionalOn* Chain That Decides Everything",
+            "content": "**Evaluation order — cheap checks first**\n- `@ConditionalOnClass` evaluated first; cheapest filter\n- `@ConditionalOnProperty` next; reads the `Environment`\n- `@ConditionalOnMissingBean` last; requires partial bean inspection\n\n**The most common conditions**\n- `@ConditionalOnClass(SomeLib.class)` — checks classpath without loading; if absent, the auto-config is skipped before any bean definitions are read\n- `@ConditionalOnProperty(name = \"...\", havingValue = \"...\", matchIfMissing = true)` — toggles activation by property; supports opt-out by default\n- `@ConditionalOnMissingBean(DataSource.class)` — backs off when the user defined their own bean; the foundation of override-friendliness\n- `@ConditionalOnWebApplication` / `@ConditionalOnNotWebApplication` — servlet vs reactive vs CLI\n- `@ConditionalOnBean(MeterRegistry.class)` — depends on another bean already in the context\n\n**Why `@ConditionalOnMissingBean` matters most**\n- It's the mechanism behind 'convention over configuration'\n- Boot provides the default; your explicit bean overrides it silently\n- Without it, the user gets `BeanDefinitionOverrideException` on customization\n\n**Tracing what happened**\n\n```properties\nlogging.level.org.springframework.boot.autoconfigure=DEBUG\nmanagement.endpoints.web.exposure.include=conditions\n```\n\n- Run with `--debug` or hit `/actuator/conditions`\n- Three sections: positive matches (applied), negative matches (skipped + reason), exclusions\n- The single most useful tool for debugging auto-config issues"
+          },
+          {
+            "type": "step",
+            "title": "Phase 3 — Ordering and Exclusion",
+            "content": "**Ordering with @AutoConfigureAfter / @AutoConfigureBefore**\n- Auto-configuration classes don't run in random order\n- Declare dependencies on each other explicitly\n- `JpaRepositoriesAutoConfiguration` declares `@AutoConfigureAfter(DataSourceAutoConfiguration.class)` because JPA needs a DataSource\n\n**Why ordering matters**\n- Getting it wrong in a custom auto-config is a common source of `BeanCreationException` at startup\n- If your auto-config creates a bean that depends on another auto-configured bean, declare the ordering explicitly\n- Spring won't infer it from the bean dependency graph at the auto-configuration level\n\n**Excluding an auto-configuration entirely**\n\n```java\n@SpringBootApplication(exclude = { DataSourceAutoConfiguration.class })\npublic class App { }\n```\n\n```yaml\nspring.autoconfigure.exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration\n```\n\n- Cleaner than fighting conditions with dummy beans\n- Type-safe at the annotation site (Java) vs string-based (property)\n- Useful when a starter pulls in something you don't want\n\n**Determinism guarantee**\n- Same classpath + same properties + same user beans → same `ApplicationContext`, every time\n- When something changes, `/actuator/conditions` shows exactly which condition flipped"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Auto-Configuration Trade-offs",
+            "content": "**When auto-configuration helps:**\n- Greenfield apps where defaults match the desired setup\n- Reusable starters that consumers can drop in without manual wiring\n- Standardizing baseline configuration (logging, metrics, security) across many services\n\n**When auto-configuration hurts:**\n- Specialized configurations where defaults conflict with custom setup\n- Multi-DataSource scenarios where Boot's single-DataSource auto-config gets in the way\n- Debugging unexpected bean wiring without consulting `/actuator/conditions`\n\n**Watch for:**\n- Multiple starters defining beans of the same type — `@ConditionalOnMissingBean` decides which wins\n- Auto-config classes activated unintentionally via transitive dependencies — exclude explicitly\n- Conditional evaluation cost at startup — Boot 3 AOT can pre-evaluate conditions for native images\n- Ordering cycles between custom auto-configs — Spring detects and throws `IllegalStateException` at startup\n- `@Configuration` instead of `@AutoConfiguration` for custom auto-configs — loses ordering guarantees"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@EnableAutoConfiguration` loads candidate classes from `AutoConfiguration.imports`** — Spring Boot 2.7+ uses `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`; pre-2.7 used `META-INF/spring.factories`.\n- **Every auto-config class is `@Conditional` — never truly unconditional** — `@ConditionalOnClass` checks the classpath; `@ConditionalOnMissingBean` checks the registry; user-defined beans always take precedence.\n- **Auto-configuration runs after user configuration** — `@Configuration` classes from your packages are processed first; auto-config is effectively the fallback.\n- **`--debug` prints the Conditions Evaluation Report** — three sections: positive (matched and applied), negative (checked and skipped), exclusions; the only reliable way to know why an auto-config fired or did not.\n- **`spring.autoconfigure.exclude` removes a class entirely** — prevents an auto-config from being evaluated even if its conditions would match; useful when a starter pulls in something you do not want.\n- **`@AutoConfigureAfter` / `@AutoConfigureBefore` for ordering** — declare dependencies between auto-configs explicitly; Spring won't infer ordering from bean dependencies.\n- **Discovery is exhaustive; filtering is selective** — all ~150 candidates load, then conditions decide which register beans."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "When Spring Boot 'just works' without any configuration, auto-configuration is what is happening behind the scenes. It is not magic — it is conditional bean registration driven by what is on your classpath and what beans you have already defined.\n\n**How it is discovered**\n- `@SpringBootApplication` includes `@EnableAutoConfiguration`, which reads `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` (Spring Boot 2.7+) listing hundreds of candidate auto-configuration classes\n- Each class is evaluated for its `@Conditional` annotations before any beans are created\n\n**How conditions decide what registers**\n- `@ConditionalOnClass(HikariDataSource.class)` — only apply this config if HikariCP is on the classpath\n- `@ConditionalOnMissingBean(DataSource.class)` — only apply if you have not already defined a `DataSource`; this is how your custom bean overrides the default\n- Your `@Configuration` classes are processed before auto-configuration — auto-config is always the fallback, never the override\n\n**Ordering**\n- `@AutoConfigureAfter` / `@AutoConfigureBefore` declare dependencies between auto-configurations\n- Without explicit ordering, beans depending on auto-configured collaborators may fail at startup\n\n**Debugging**\n- Add `--debug` to the JVM arguments and Spring prints the Conditions Evaluation Report at startup\n- Three sections: positive matches (auto-config that ran), negative matches (auto-config that was skipped and why), and exclusions\n- `spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration` removes a class entirely when a starter pulls in something unwanted\n\nIn an interview, the strong answer is: **auto-configuration is a deterministic pipeline of conditional `@Configuration` classes discovered from a registration file; the same inputs always produce the same context**."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you debug which auto-configurations are being applied at startup?",
+        "How do you write and register your own auto-configuration for an internal library?",
+        "What is the difference between `@Configuration` and `@AutoConfiguration`?",
+        "Why did Spring Boot 2.7 introduce `AutoConfiguration.imports` instead of continuing with `spring.factories`?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Boot Auto-Configuration Internals | Java Intermediate Interview",
+        "metaDescription": "Deep dive into how Spring Boot auto-configuration works: AutoConfiguration.imports, @ConditionalOn* annotations, ordering, and user-bean priority — explained for intermediate Java interviews."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "When Spring Boot 'just works' without any configuration, auto-configuration is what is happening behind the scenes.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most developers describe Spring Boot auto-configuration as 'it just figures out what you need. That's the experience, not the mechanism. Under the hood, auto-configuration is a deterministic pipeline: Boot discovers a list of candidate @Configuration classes from a well-known file on the classpath, evaluates a set of @Conditional annotations on each one, and only registers the beans from classes whose conditions all pass. There is no scanning, no guessing, no AI. Every auto-configuration class is a regular @Configuration class with."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the mechanism behind Spring Boot's 'magic' rather than just using it as a black box"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@EnableAutoConfiguration loads candidate classes from AutoConfiguration",
+              "imports — Spring Boot 2",
+              "7+ uses META-INF/spring/org",
+              "springframework",
+              "autoconfigure"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Most developers describe Spring Boot auto-configuration as 'it just figures out what you need. That's the experience, not the mechanism. Under the hood, auto-configuration is a deterministic pipeline: Boot discovers a list of candidate @Configuration classes from a well-known file on the classpath, evaluates a set of @Conditional annotations on each one, and only registers the beans from classes whose conditions all pass. There is no scanning, no guessing, no AI. Every auto-configuration class is a regular @Configuration class with @Bean methods — the same kind you'd write yourself. The only difference is that each one is guarded by conditions like @ConditionalOnClass, @ConditionalOnMissingBean, and @ConditionalOnProperty. When you add spring-boot-starter-data-jpa to your POM, Boot doesn't 'detect' that you want JPA —."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Saying 'Spring Boot just auto-configures things' without explaining how conditions and the imports file drive the process"
+            ]
+          }
+        ],
+        "cap": "How it is discovered @SpringBootApplication includes @EnableAutoConfiguration, which reads META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports (Spring Boot 2.7+) listing h",
+        "familiarity_anchors": [
+          "Spring",
+          "EnableAutoConfiguration",
+          "AutoConfiguration"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you debug which auto-configurations are being applied at startup?",
+          "How do you write and register your own auto-configuration for an internal library?",
+          "What is the difference between `@Configuration` and `@AutoConfiguration`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JPA repository"
+      }
+    },
+    {
+      "id": "sbo-002",
+      "slug": "spring-boot-startup-sequence",
+      "question": "What are the key phases of the Spring Boot startup sequence when SpringApplication.run() is called?",
+      "title": "Spring Boot Startup Sequence (SpringApplication.run Phases)",
+      "direct_answer": "`SpringApplication.run()` orchestrates a multi-phase startup: it **prepares the environment**, **creates and refreshes the `ApplicationContext`**, then **calls runners** and **publishes a final `ApplicationReadyEvent`**. Each phase is observable via `SpringApplicationRunListeners` and typed `ApplicationEvent`s. The order matters for your custom logic: `@PostConstruct` runs during bean initialization inside refresh; `CommandLineRunner` and `ApplicationRunner` run after refresh and the embedded server has bound its port; `ApplicationReadyEvent` fires when the app is ready to accept traffic.",
+      "layout_type": "lifecycle-timeline",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can trace the lifecycle beyond 'the context starts' and explain where things like property loading and bean initialization happen",
+        "common_mistake": "Confusing `ApplicationRunner`/`CommandLineRunner` (called after context is ready) with `@PostConstruct` (called during bean initialization inside context refresh)",
+        "to_stand_out": "Mention `SpringApplicationRunListeners` and the exact `ApplicationEvent` types (`ApplicationStartingEvent`, `ApplicationEnvironmentPreparedEvent`, etc.) and where to hook custom logic safely"
+      },
+      "company_tags": [
+        "Spotify",
+        "LinkedIn",
+        "Zalando",
+        "Booking.com",
+        "Atlassian"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Knowing the Startup Sequence Matters More Than Memorizing Event Names",
+            "content": "Most developers think of `SpringApplication.run()` as 'it starts the app.\n- But this single method orchestrates a multi-phase lifecycle where **the order of operations determines where your custom logic can safely run**.\n- The most common bug from misunderstanding this sequence is putting initialization code in `@PostConstruct` that depends on the full application context being ready — it isn't. `@PostConstruct` runs during bean initialization inside context refresh, before runners, before the server port is bound, and before `ApplicationReadyEvent` fires.\n\nThe startup sequence is observable through `SpringApplicationRunListeners`, which broadcast typed events at each phase boundary. These aren't just debugging aids — they're the **hook points** where you can inject custom behavior: registering metrics before the context exists, modifying the environment before property binding, or running migration scripts after the context is fully wired but before the app accepts traffic.\n\nUnderstanding the sequence also explains why startup is slow. Each phase has a measurable cost, and Spring Boot 3.x added startup tracking via `ApplicationStartup` to let you pinpoint exactly which phase is consuming time."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Spring Boot Startup Sequence",
+            "content": "```mermaid\nsequenceDiagram\n    participant Main\n    participant SpringApp as SpringApplication\n    participant Listeners as RunListeners\n    participant Env as Environment\n    participant Ctx as ApplicationContext\n    participant Server as Embedded Server\n\n    Main->>SpringApp: run(App.class, args)\n    SpringApp->>Listeners: ApplicationStartingEvent\n    SpringApp->>Env: prepareEnvironment\n    Env->>Listeners: ApplicationEnvironmentPreparedEvent\n    SpringApp->>Ctx: createApplicationContext\n    Ctx->>Listeners: ApplicationContextInitializedEvent\n    SpringApp->>Ctx: load bean definitions\n    Ctx->>Listeners: ApplicationPreparedEvent\n    SpringApp->>Ctx: refresh\n    Ctx->>Ctx: instantiate beans, inject deps, run PostConstruct\n    Ctx->>Server: start embedded server, bind port\n    SpringApp->>Listeners: ApplicationStartedEvent\n    SpringApp->>Ctx: callRunners (CommandLineRunner, ApplicationRunner)\n    SpringApp->>Listeners: ApplicationReadyEvent\n```"
+          },
+          {
+            "type": "step",
+            "title": "Phase 1 — Environment Preparation and Context Creation",
+            "content": "**Bootstrap and listeners**\n- `SpringApplication.run()` creates a `DefaultBootstrapContext`\n- `SpringApplicationRunListeners` notified with `ApplicationStartingEvent`\n- No beans, no properties, no `ApplicationContext` exists yet\n- This is where logging framework initialization happens\n\n**Environment preparation**\n- Spring builds the `Environment` by layering property sources in precedence order\n- System properties override `application.yml`, which overrides `application.properties`, which overrides defaults\n- `ApplicationEnvironmentPreparedEvent` fires here\n- The last safe point to programmatically add or modify property sources before anything reads them\n- The hook for vault secret injection (Spring Cloud Vault uses this)\n\n**Context creation**\n- Spring picks the context type based on the classpath\n- `AnnotationConfigServletWebServerApplicationContext` for servlet web apps\n- `AnnotationConfigReactiveWebServerApplicationContext` for WebFlux\n- `AnnotationConfigApplicationContext` for non-web\n- `ApplicationContextInitializedEvent` fires after creation but before refresh\n\n**Failure surface**\n- Exception before refresh produces `ApplicationFailedEvent` and the JVM exits\n- Exception in a runner aborts startup *after* the server bound the port\n- Exception after `ApplicationReadyEvent` is just a normal runtime error"
+          },
+          {
+            "type": "step",
+            "title": "Phase 2 — Context Refresh: Bean Instantiation and @PostConstruct",
+            "content": "**Where most startup time is spent**\n- `ApplicationPreparedEvent` fires just before refresh begins\n- The context exists, the main configuration class is registered, but no beans are instantiated\n\n**Refresh sequence**\n- Spring processes all `@Configuration` classes (including auto-configurations filtered by `@Conditional` annotations)\n- Creates bean definitions, then instantiates singletons\n- Dependency injection wires collaborators\n- `@PostConstruct` methods run during individual bean initialization\n- `BeanPostProcessor`s wrap beans (e.g., AOP proxies for `@Transactional`)\n\n**A common @PostConstruct mistake**\n- Assuming `@PostConstruct` has access to the complete application context\n- Other singletons may not have been created yet — initialization order is unpredictable for parallel branches\n- The web server hasn't started; the port isn't bound\n- Use a runner instead when you need 'all beans ready and server bound'\n\n**Embedded server startup**\n- For web applications, refresh creates and starts the embedded server\n- The server binds to its port during refresh\n- A port conflict causes `ApplicationContext` refresh failure, not a separate error\n\n**Context refreshed**\n- `ContextRefreshedEvent` fires when refresh completes\n- All singleton beans are instantiated, all `@PostConstruct` methods have run, the server is listening\n- But the application is not yet considered 'started' — that's the next phase"
+          },
+          {
+            "type": "step",
+            "title": "Phase 3 — Runners and Ready: The Safe Zone for Application-Level Initialization",
+            "content": "**ApplicationStartedEvent**\n- Fires after context refresh completes\n- Boot calls all `CommandLineRunner` and `ApplicationRunner` beans\n- First point where every singleton bean is guaranteed to exist, every `@PostConstruct` has completed, and the server is bound\n\n**Runner types and ordering**\n- `CommandLineRunner` receives raw `String[] args`\n- `ApplicationRunner` receives an `ApplicationArguments` object that parses option arguments (like `--server.port=8081`)\n- `@Order` (lower value = higher priority) controls execution sequence when multiple runners exist\n\n**Runner code example**\n\n```java\n@Component\n@Order(1)\nclass DataSeedingRunner implements ApplicationRunner {\n    private final OrderRepository orders;\n\n    DataSeedingRunner(OrderRepository orders) { this.orders = orders; }\n\n    @Override\n    public void run(ApplicationArguments args) {\n        if (args.containsOption(\"seed\")) {\n            orders.seedDefaultData();\n        }\n    }\n}\n```\n\n**ApplicationReadyEvent**\n- The signal that the application is fully initialized\n- Health check endpoints like `/actuator/health/readiness` should return UP only after this event\n- Maps to the Kubernetes readiness probe contract\n\n**Failure semantics**\n- If any runner throws, startup fails and `ApplicationFailedEvent` fires instead of `ApplicationReadyEvent`\n- `ApplicationStartedEvent` = 'context is refreshed'\n- `ApplicationReadyEvent` = 'everything succeeded; accept traffic'"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Hook Selection Trade-offs",
+            "content": "**When `@PostConstruct` helps:**\n- Per-bean initialization that depends only on injected collaborators\n- Validating constructor-injected configuration\n- Building per-bean caches\n\n**When `@PostConstruct` hurts:**\n- Logic that depends on every bean being ready — order is unpredictable\n- Anything needing the embedded server bound\n- Cross-bean coordination — use a runner or `@EventListener(ApplicationReadyEvent.class)`\n\n**When runners help:**\n- One-time data seeding, migration validation, or external service ping checks\n- Logic that should run after `@PostConstruct` but before traffic\n- Multiple ordered initialization steps via `@Order`\n\n**Watch for:**\n- Long-running runners delaying `ApplicationReadyEvent` and the readiness probe\n- Runners that depend on external services that might be down at startup — fail fast or retry?\n- Confusing `ApplicationStartedEvent` with `ApplicationReadyEvent` — runners haven't run at the former\n- `SpringApplicationRunListeners` registered via `spring.factories` for early events vs `@EventListener` beans for post-context events"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@PostConstruct` fires before runners; runners fire after the context is fully ready** — the order is: instantiate beans → inject → `@PostConstruct` → `ApplicationStartedEvent` → runners → `ApplicationReadyEvent`.\n- **`CommandLineRunner` and `ApplicationRunner` execute after all beans are created** — safe to call any injected service; `@PostConstruct` is not safe for logic that depends on the full context being operational.\n- **Multiple runners use `@Order` or `Ordered`** — lower value = higher priority; unordered runners execute in registration order.\n- **`SpringApplicationRunListeners` vs `ApplicationListener`** — `SpringApplicationRunListeners` fire before the `ApplicationContext` is created (too early for `@Bean`); `ApplicationListener` or `@EventListener` fires after.\n- **`ApplicationFailedEvent` fires if startup fails** — use it to emit metrics or alerts before the JVM exits; not fired on graceful shutdown, only on exception during startup.\n- **Embedded server binds during refresh** — port conflicts surface as `ApplicationContext` refresh failures, not separate errors.\n- **`ApplicationReadyEvent` is the readiness probe contract** — Kubernetes should not route traffic before this fires."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Boot's startup follows a precise sequence that determines when each hook is safe to use. Getting the order wrong means initialization code runs before its dependencies are ready.\n\n**The sequence**\n- `ApplicationStartingEvent` → environment prep → `ApplicationEnvironmentPreparedEvent` → context creation → bean definition load → `ApplicationPreparedEvent` → refresh\n- During refresh: bean instantiation, dependency injection, `@PostConstruct`, `BeanPostProcessor`s, embedded server start\n- `ApplicationStartedEvent` fires after refresh\n- Runners (`CommandLineRunner`, `ApplicationRunner`) execute next\n- `ApplicationReadyEvent` marks the application as ready for traffic\n\n**What goes where**\n- `@PostConstruct`: initialization that depends only on injected collaborators — cache warmup, connection validation\n- Runners: startup logic that should run after the full context is ready — data seeding, integration checks, feature flag registration\n- `@EventListener(ApplicationReadyEvent.class)`: same timing as runners but declared as an event listener rather than implementing an interface\n- `EnvironmentPostProcessor`: add property sources from external systems (Vault, AWS Secrets Manager) before any bean reads the environment\n\n**Multiple runners**\n- Execute in `@Order` sequence — lower value runs first\n- `CommandLineRunner` receives raw `String[] args`; `ApplicationRunner` receives a typed `ApplicationArguments` object — the only practical difference\n\n**Failure semantics**\n- Exception during refresh → `ApplicationFailedEvent` and JVM exits\n- Exception in a runner → `ApplicationFailedEvent`; server already bound the port (load balancer briefly sees an open port that immediately closes)\n\nIn an interview, the strong answer is: **`@PostConstruct` for per-bean init, runners or `ApplicationReadyEvent` for context-wide init, `EnvironmentPostProcessor` for early property injection — pick the hook by what state must already exist when it fires**."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Where is the best place to run logic that needs the full application context wired but should complete before the app accepts traffic?",
+        "How would you measure which beans are slowest to initialize during startup?",
+        "What is the difference between `ApplicationStartedEvent` and `ApplicationReadyEvent`?",
+        "How does the readiness probe in Kubernetes use `ApplicationReadyEvent`?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Boot Startup Sequence Explained | Java Intermediate Interview",
+        "metaDescription": "Trace every phase of SpringApplication.run(): environment prep, context refresh, ApplicationRunner, and ApplicationReadyEvent — with lifecycle diagram for Java intermediate interviews."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Boot's startup follows a precise sequence that determines when each hook is safe to use.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most developers think of SpringApplication.run() as 'it starts the app. But this single method orchestrates a multi-phase lifecycle where the order of operations determines where your custom logic can safely run. The most common bug from misunderstanding this sequence is putting initialization code in @PostConstruct that depends on the full application context being ready — it isn't. @PostConstruct runs during bean initialization inside context refresh, before runners, before the server port is bound, and before ApplicationReadyEvent fires. The startup sequence."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate can trace the lifecycle beyond 'the context starts' and explain where things like property loading and bean initialization happen"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@PostConstruct fires before runners; runners fire after the context is fully ready — the order is: instantiate beans → inject → @PostConstruct → ApplicationStartedEvent → runners → ApplicationReadyEvent",
+              "CommandLineRunner and ApplicationRunner execute after all beans are created — safe to call any injected service; @PostConstruct is not safe for logic that depends on the full context being operational",
+              "Multiple runners use @Order or Ordered — lower value = higher priority; unordered runners execute in registration order",
+              "SpringApplicationRunListeners vs ApplicationListener — SpringApplicationRunListeners fire before the ApplicationContext is created (too early for @Bean); ApplicationListener or @EventListener fires after",
+              "ApplicationFailedEvent fires if startup fails — use it to emit metrics or alerts before the JVM exits; not fired on graceful shutdown, only on exception during startup"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Most developers think of SpringApplication.run() as 'it starts the app. But this single method orchestrates a multi-phase lifecycle where the order of operations determines where your custom logic can safely run. The most common bug from misunderstanding this sequence is putting initialization code in @PostConstruct that depends on the full application context being ready — it isn't. @PostConstruct runs during bean initialization inside context refresh, before runners, before the server port is bound, and before ApplicationReadyEvent fires. The startup sequence is observable through SpringApplicationRunListeners, which broadcast typed events at each phase boundary. These aren't just debugging aids — they're the hook points where you can inject custom behavior: registering metrics before the context exists, modifying the environment before property binding."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing ApplicationRunner/CommandLineRunner (called after context is ready) with @PostConstruct (called during bean initialization inside context refresh)"
+            ]
+          }
+        ],
+        "cap": "The sequence ApplicationStartingEvent → environment prep → ApplicationEnvironmentPreparedEvent → context creation → bean definition load → ApplicationPreparedEvent → refresh During refresh: bean insta",
+        "familiarity_anchors": [
+          "SpringApplication",
+          "ApplicationContext",
+          "ApplicationReadyEvent"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Where is the best place to run logic that needs the full application context wired but should complete before the app accepts traffic?",
+          "How would you measure which beans are slowest to initialize during startup?",
+          "What is the difference between `ApplicationStartedEvent` and `ApplicationReadyEvent`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JPA repository"
+      }
+    },
+    {
+      "id": "sbo-003",
+      "slug": "spring-boot-application-annotation",
+      "question": "What does @SpringBootApplication do and what three annotations does it combine?",
+      "title": "@SpringBootApplication — What It Combines",
+      "direct_answer": "`@SpringBootApplication` is a convenience meta-annotation that combines **`@SpringBootConfiguration`** (a specialised `@Configuration` enforced as singleton per context), **`@EnableAutoConfiguration`** (triggers auto-configuration scanning), and **`@ComponentScan`** (scans the package of the annotated class and all sub-packages for Spring components). The component scan boundary is the **package containing the annotated class** — sibling packages are invisible. Use `scanBasePackageClasses` for refactoring-safe explicit scan paths and `exclude = {...}` to prevent unwanted auto-configurations.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands component scanning scope and can explain why placing the main class in the root package matters",
+        "common_mistake": "Placing the main class inside a sub-package so that sibling packages are missed by `@ComponentScan`, causing beans not to be found",
+        "to_stand_out": "Explain that you can narrow or widen the scan with `scanBasePackages`/`scanBasePackageClasses`, and that `@SpringBootConfiguration` differs from `@Configuration` because only one is allowed per application context"
+      },
+      "company_tags": [
+        "Amazon",
+        "Adobe",
+        "Infosys",
+        "Capgemini",
+        "Salesforce"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Annotations in a Trenchcoat — and Package Placement Is the Hidden Gotcha",
+            "content": "`@SpringBootApplication` is a meta-annotation that combines three annotations into one. Knowing the three names is the easy part — understanding **what each one actually triggers and the subtle constraint that catches most teams** is what interviewers are really testing.\n\nThe three annotations are **`@SpringBootConfiguration`** (a specialized `@Configuration` that marks this class as the application's primary configuration source), **`@EnableAutoConfiguration`** (triggers the auto-configuration pipeline that scans `AutoConfiguration.imports` for conditional configuration classes), and **`@ComponentScan`** (scans the package of the annotated class and all sub-packages for `@Component`, `@Service`, `@Repository`, and `@Controller` beans).\n\nThe critical detail is `@ComponentScan`'s default behavior.\n- It scans **from the package of the annotated class downward**.\n- If your main class lives in `com.example.app.config` and your controllers are in `com.example.app.web`, both get scanned.\n- But if your main class is in `com.example.app.config` and your service is in `com.example.service`, **that service package is a sibling, not a child — it will never be found**.\n- This is the most common reason for 'bean not found' errors in new Spring Boot projects."
+          },
+          {
+            "type": "step",
+            "title": "What Each Annotation Controls",
+            "content": "**`@SpringBootConfiguration`**\n- A specialized `@Configuration`\n- Spring Boot enforces that **only one** `@SpringBootConfiguration` exists per application context\n- Prevents accidental duplicate context creation in tests\n- `@SpringBootTest` walks up the package hierarchy looking for exactly one — two would cause an ambiguous configuration error\n\n**`@EnableAutoConfiguration`**\n- The trigger for Boot's auto-configuration pipeline\n- Selectively disable auto-configurations using the `exclude` attribute\n- Type-safe and visible at the annotation site\n\n```java\n@SpringBootApplication(exclude = {\n    DataSourceAutoConfiguration.class,\n    HibernateJpaAutoConfiguration.class\n})\npublic class App { }\n```\n\n**`@ComponentScan`**\n- The one you'll customize most\n- Defaults to scanning the package of the annotated class and all sub-packages\n- `scanBasePackages` (string-based) or `scanBasePackageClasses` (type-safe) explicitly declare scan roots\n\n**Refactoring-safe scan configuration**\n\n```java\n@SpringBootApplication(scanBasePackageClasses = {\n    CoreMarker.class,\n    WebMarker.class\n})\npublic class App { }\n```\n\n- `CoreMarker` and `WebMarker` are placeholder interfaces in the packages you want scanned\n- Renaming the package fails at compile time — strings would silently break"
+          },
+          {
+            "type": "step",
+            "title": "When to Override Scan Defaults — Multi-Module Projects and the Test Discovery Rule",
+            "content": "**Single-module convention**\n- Place the main class in the root package (e.g., `com.example.app`)\n- Let `@ComponentScan` discover everything beneath it\n- Path of least resistance; any deviation requires explicit configuration\n\n**Multi-module project pattern**\n- `core` module at `com.example.core`; `web` module at `com.example.web`\n- If the main class lives in `com.example.web`, beans from `com.example.core` are in a sibling package — not scanned\n- Fix 1: `scanBasePackages = {\"com.example\"}` (scan the shared parent)\n- Fix 2: `@Import(CoreConfiguration.class)` (explicit import; more surgical)\n\n**The test discovery rule**\n- `@SpringBootTest` walks up the package tree from the test class to find the nearest `@SpringBootConfiguration`\n- If the test is in `com.example.web.controller` and the main class is in `com.example.web`, it's found correctly\n- If the main class is in a different hierarchy, `@SpringBootTest` fails with `Unable to find a @SpringBootConfiguration`\n- Safest: keep test classes in the same root or use `@SpringBootTest(classes = Application.class)`\n\n**`scanBasePackageClasses` is strictly better than `scanBasePackages`**\n- Marker class reference fails at compile time when the package is renamed\n- String-based references silently become wrong with no startup error\n- Pay the small cost of creating an empty interface per package; gain refactoring safety\n\n**Excluding beans from scan**\n\n```java\n@SpringBootApplication\n@ComponentScan(excludeFilters = @ComponentScan.Filter(\n    type = FilterType.ASSIGNABLE_TYPE,\n    classes = LegacyService.class\n))\npublic class App { }\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "@SpringBootApplication Trade-offs",
+            "content": "**When the meta-annotation helps:**\n- Standard single-module application with the main class at the root package\n- Clear convention; new team members understand it immediately\n- One annotation instead of three on the entry point\n\n**When the meta-annotation hurts:**\n- Multi-module projects where the scan boundary doesn't match package layout\n- Library code that needs `@Configuration` without auto-configuration triggering\n- Tests that need only part of the behavior — decompose into the three constituent annotations\n\n**Watch for:**\n- Main class buried in a sub-package — sibling packages are invisible\n- Two `@SpringBootConfiguration` classes — ambiguous configuration error in `@SpringBootTest`\n- `scanBasePackages` strings that go stale after a package rename — use `scanBasePackageClasses`\n- Forgetting `exclude` and getting database auto-config in a CLI app — wastes startup time\n- Putting `@SpringBootApplication` on a non-entry-point class — works but confuses readers"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@SpringBootApplication` = `@SpringBootConfiguration` + `@EnableAutoConfiguration` + `@ComponentScan`** — decompose it when you only need part of the behavior.\n- **Main class package determines the default scan boundary** — classes in `com.example.common` are invisible if the main class is in `com.example.app`; move the main class to the root package or use `scanBasePackages`.\n- **`scanBasePackageClasses` is refactoring-safe; `scanBasePackages` (strings) is not** — renaming a package breaks the string reference silently; referencing a marker class fails at compile time.\n- **`exclude = {DataSourceAutoConfiguration.class}` prevents unwanted auto-config** — cleaner than `spring.autoconfigure.exclude` property because it is type-safe and visible at the annotation site.\n- **Do not place `@SpringBootApplication` inside a sub-package** — the scan covers the annotated class's package and all sub-packages; a main class in `com.example.app.main` will not scan `com.example.app.service` if it is a sibling, not a descendant.\n- **`@SpringBootConfiguration` is enforced as singleton per context** — `@SpringBootTest` finds exactly one or fails with ambiguous configuration.\n- **`@SpringBootTest(classes = App.class)` bypasses auto-discovery** — useful when test class hierarchy doesn't align with main class package."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@SpringBootApplication` is a single annotation that composes three: `@SpringBootConfiguration` (this class is a primary bean source enforced as singleton per context), `@EnableAutoConfiguration` (activate Spring Boot's auto-configuration), and `@ComponentScan` (scan from this class's package downward).\n\n**The scan boundary rule**\n- The component scan starts from the package containing the `@SpringBootApplication` class\n- Place the main class in the root package (`com.example`) so every sub-package (`com.example.service`, `com.example.repository`) is automatically discovered\n- A main class buried inside a sub-package means sibling packages are outside the scan boundary — beans there are invisible\n\n**Customizing the scan**\n- `@SpringBootApplication(scanBasePackages = \"com.example\")` extends the boundary, but string-based — renaming the package breaks it silently\n- `scanBasePackageClasses = {ServiceMarker.class}` is refactoring-safe — a compile error tells you immediately when the marker class moves\n\n**Excluding auto-configurations**\n- `@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})` prevents that auto-config from running — useful when a starter pulls in database config you do not want\n- Type-safe and visible at the annotation site; prefer this over the string-based property approach\n\n**Test discovery**\n- `@SpringBootTest` walks up from the test class to find one `@SpringBootConfiguration`\n- Two configurations cause ambiguous configuration errors\n- `@SpringBootTest(classes = App.class)` bypasses auto-discovery when class hierarchies don't align\n\nIn an interview, the strong answer is: **the three annotations are easy; the test is whether you understand the scan boundary, the singleton constraint, and refactoring-safe scan configuration**."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens if you have two classes annotated with `@SpringBootConfiguration` in the same context?",
+        "How would you configure component scanning to include a package outside the main application package?",
+        "Can you use `@SpringBootApplication` on a class that is not the entry point main class?",
+        "When would you decompose `@SpringBootApplication` into its three constituent annotations?"
+      ],
+      "seo": {
+        "metaTitle": "@SpringBootApplication Explained | Java Intermediate Interview",
+        "metaDescription": "Learn what @SpringBootApplication combines — @SpringBootConfiguration, @EnableAutoConfiguration, and @ComponentScan — and why it matters for component scanning scope."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "@SpringBootApplication is a single annotation that composes three: @SpringBootConfiguration (this class is a primary bean source enforced as singleton per context), @EnableAutoConfiguration (activate Spring Boot's auto-configuration), and @ComponentScan (scan from this class's package downward).",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "@SpringBootApplication is a meta-annotation that combines three annotations into one. Knowing the three names is the easy part — understanding what each one actually triggers and the subtle constraint that catches most teams is what interviewers are really testing. The three annotations are @SpringBootConfiguration (a specialized @Configuration that marks this class as the application's primary configuration source), @EnableAutoConfiguration (triggers the auto-configuration pipeline that scans AutoConfiguration.imports for conditional configuration classes), and @ComponentScan (scans the package of the annotated class and all."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands component scanning scope and can explain why placing the main class in the root package matters"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@SpringBootApplication = @SpringBootConfiguration + @EnableAutoConfiguration + @ComponentScan — decompose it when you only need part of the behavior",
+              "Main class package determines the default scan boundary — classes in com",
+              "common are invisible if the main class is in com",
+              "app; move the main class to the root package or use scanBasePackages",
+              "scanBasePackageClasses is refactoring-safe; scanBasePackages (strings) is not — renaming a package breaks the string reference silently; referencing a marker class fails at compile time"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "@SpringBootApplication is a meta-annotation that combines three annotations into one. Knowing the three names is the easy part — understanding what each one actually triggers and the subtle constraint that catches most teams is what interviewers are really testing. The three annotations are @SpringBootConfiguration (a specialized @Configuration that marks this class as the application's primary configuration source), @EnableAutoConfiguration (triggers the auto-configuration pipeline that scans AutoConfiguration.imports for conditional configuration classes), and @ComponentScan (scans the package of the annotated class and all sub-packages for @Component, @Service, @Repository, and @Controller beans). The critical detail is @ComponentScan's default behavior. It scans from the package of the annotated class downward. If your main class lives in com.example.app.config and your controllers are in com.example.app.web, both get."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Placing the main class inside a sub-package so that sibling packages are missed by @ComponentScan, causing beans not to be found"
+            ]
+          }
+        ],
+        "cap": "The scan boundary rule The component scan starts from the package containing the @SpringBootApplication class Place the main class in the root package (com.example) so every sub-package (com.example.s",
+        "familiarity_anchors": [
+          "SpringBootApplication",
+          "SpringBootConfiguration",
+          "Configuration"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens if you have two classes annotated with `@SpringBootConfiguration` in the same context?",
+          "How would you configure component scanning to include a package outside the main application package?",
+          "Can you use `@SpringBootApplication` on a class that is not the entry point main class?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JPA repository"
+      }
+    },
+    {
+      "id": "sbo-009",
+      "slug": "custom-auto-configuration-spring-factories",
+      "question": "How do you write and register a custom Spring Boot auto-configuration?",
+      "title": "Custom Auto-Configuration (spring.factories / AutoConfiguration.imports)",
+      "direct_answer": "Create an **`@AutoConfiguration` class** with `@ConditionalOn*` guards, implement your `@Bean` methods, then register the class in **`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`** (Spring Boot 2.7+) so Spring Boot discovers it at startup. Use the **two-module starter pattern** — an `autoconfigure` module containing the `@AutoConfiguration` class plus a thin `starter` POM that aggregates dependencies. Always annotate `@Bean` methods with `@ConditionalOnMissingBean` so consumers can override defaults. Test with `ApplicationContextRunner` for fast assertions on bean presence and override behavior.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the registration mechanism and knows how to write safe conditions so the auto-configuration backs off correctly",
+        "common_mistake": "Forgetting to add the registration file (the `@AutoConfiguration` class is never discovered), or using `@Configuration` instead of `@AutoConfiguration` which bypasses ordering guarantees",
+        "to_stand_out": "Describe the full starter module layout (autoconfigure JAR + starter POM), explain how `@AutoConfigureAfter`/`@AutoConfigureBefore` work, and show how `spring-boot-configuration-processor` generates IDE metadata from `@ConfigurationProperties`"
+      },
+      "company_tags": [
+        "Pivotal",
+        "Red Hat",
+        "Netflix",
+        "Zalando",
+        "Confluent"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Registration File Most Developers Forget — and Why Their Auto-Configuration Silently Does Nothing",
+            "content": "The number one mistake when writing custom auto-configuration is forgetting the registration file.\n- You create a perfectly valid `@AutoConfiguration` class with all the right conditions, but Spring Boot never discovers it because **auto-configuration classes are not found by component scanning**.\n- They must be explicitly listed in `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` (Boot 2.7+) or `META-INF/spring.factories` (pre-2.7).\n\nThis is intentional. Auto-configuration classes live in shared libraries — JARs consumed by other applications. Component scanning would only find them if the consumer happened to scan the right package, making the behavior dependent on the consumer's package structure. The registration file makes discovery **explicit and package-independent**.\n\nThe standard pattern for production library auto-configuration is a **two-module layout**: an `autoconfigure` module containing the `@AutoConfiguration` class, its `@ConfigurationProperties` POJO, and the registration file; and a `starter` module that depends on the autoconfigure module plus all required transitive dependencies.\n- **The starter POM has no Java code** — it's a dependency aggregator.\n- Spring's own starters follow this exact pattern."
+          },
+          {
+            "type": "step",
+            "title": "Writing the @AutoConfiguration Class",
+            "content": "**Use `@AutoConfiguration` (Boot 2.7+) over `@Configuration`**\n- Dedicated annotation that signals participation in auto-configuration ordering\n- Supports `after` and `before` attributes directly\n- `@Configuration` works but loses these guarantees\n\n**Always guard with `@ConditionalOnClass`**\n- Without it, your auto-config throws `NoClassDefFoundError` in apps that don't use your library\n- The cheapest filter — evaluated first by Spring's condition machinery\n\n**Always guard `@Bean` methods with `@ConditionalOnMissingBean`**\n- Lets consumers override your default by defining their own bean\n- Without it, consumers get `BeanDefinitionOverrideException` on customization\n\n**Pair with `@EnableConfigurationProperties` for typed config**\n- Explicit binding: consumers see exactly which properties your auto-configuration activates\n- Avoids accidental binding via `@ConfigurationPropertiesScan` on the consumer side\n\n**Complete example**\n\n```java\n@AutoConfiguration(after = DataSourceAutoConfiguration.class)\n@ConditionalOnClass(MetricsService.class)\n@EnableConfigurationProperties(MetricsProperties.class)\npublic class MetricsAutoConfiguration {\n\n    @Bean\n    @ConditionalOnMissingBean\n    public MetricsService metricsService(MetricsProperties props) {\n        return new MetricsService(props.endpoint(), props.interval());\n    }\n\n    @Bean\n    @ConditionalOnMissingBean\n    @ConditionalOnProperty(value = \"metrics.scheduler.enabled\",\n                           havingValue = \"true\", matchIfMissing = true)\n    public MetricsScheduler metricsScheduler(MetricsService svc) {\n        return new MetricsScheduler(svc);\n    }\n}\n```\n\n**Ordering pitfalls**\n- Two auto-configs with circular `after`/`before` declarations → `IllegalStateException: cycle detected` at startup\n- Declare ordering only where there's a genuine dependency, not defensively"
+          },
+          {
+            "type": "step",
+            "title": "The Two-Module Starter Layout",
+            "content": "**Module structure**\n\n```\nmetrics-parent (pom)\nmetrics-spring-boot-autoconfigure\n  src/main/java/com/example/metrics/\n    MetricsAutoConfiguration.java\n    MetricsProperties.java\n    MetricsService.java\n  src/main/resources/META-INF/spring/\n    org.springframework.boot.autoconfigure.AutoConfiguration.imports\nmetrics-spring-boot-starter\n  pom.xml (depends on metrics-spring-boot-autoconfigure)\n```\n\n**The registration file**\n\n```\ncom.example.metrics.MetricsAutoConfiguration\n```\n\n- One fully-qualified class name per line\n- No comments, no blank lines at the end\n- Lives at `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`\n\n**The starter POM is empty**\n\n```xml\n<artifactId>metrics-spring-boot-starter</artifactId>\n<dependencies>\n    <dependency>\n        <groupId>com.example</groupId>\n        <artifactId>metrics-spring-boot-autoconfigure</artifactId>\n    </dependency>\n</dependencies>\n```\n\n**`@ConfigurationProperties` (record-based)**\n\n```java\n@ConfigurationProperties(\"metrics\")\npublic record MetricsProperties(String endpoint, Duration interval) {\n    public MetricsProperties {\n        endpoint = endpoint != null ? endpoint : \"http://localhost:9090\";\n        interval = interval != null ? interval : Duration.ofSeconds(30);\n    }\n}\n```\n\n**Why two modules**\n- Consumers add only the starter — get all transitive dependencies\n- Advanced consumers can depend on `autoconfigure` directly, bypassing transitive deps\n- Mirrors how Spring's own starters are structured"
+          },
+          {
+            "type": "step",
+            "title": "Testing with ApplicationContextRunner and IDE Metadata",
+            "content": "**Why `ApplicationContextRunner`**\n- Builds a minimal context with just your auto-config — no full app startup\n- Lets you simulate different classpath and property combinations\n- Tests run in milliseconds\n\n**Three tests every auto-config needs**\n\n```java\nclass MetricsAutoConfigurationTest {\n\n    private final ApplicationContextRunner runner =\n        new ApplicationContextRunner()\n            .withConfiguration(AutoConfigurations.of(MetricsAutoConfiguration.class));\n\n    @Test\n    void registersServiceWithDefaults() {\n        runner.run(ctx -> {\n            assertThat(ctx).hasSingleBean(MetricsService.class);\n            assertThat(ctx.getBean(MetricsProperties.class).endpoint())\n                .isEqualTo(\"http://localhost:9090\");\n        });\n    }\n\n    @Test\n    void userOverrideWins() {\n        runner.withBean(MetricsService.class,\n                () -> new MetricsService(\"custom\", Duration.ofSeconds(5)))\n            .run(ctx -> assertThat(ctx.getBean(MetricsService.class).endpoint())\n                .isEqualTo(\"custom\"));\n    }\n\n    @Test\n    void backsOffWhenClassMissing() {\n        runner.withClassLoader(new FilteredClassLoader(MetricsService.class))\n            .run(ctx -> assertThat(ctx).doesNotHaveBean(MetricsService.class));\n    }\n}\n```\n\n**Why test number 3 matters**\n- Proves `@ConditionalOnClass` is wired to the right class\n- Confirms the auto-config truly does not activate for consumers without your library\n- The contract you make with consumers: 'we won't break your app if you don't use us'\n\n**IDE metadata via the configuration processor**\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-configuration-processor</artifactId>\n    <optional>true</optional>\n</dependency>\n```\n\n- Generates `META-INF/spring-configuration-metadata.json` at compile time\n- Consumers typing `metrics.` in `application.yml` see `endpoint` and `interval` suggested with type and Javadoc\n- Without the processor, consumer IDEs show 'unknown property' warnings"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Custom Auto-Configuration Trade-offs",
+            "content": "**When custom auto-configuration helps:**\n- Reusable libraries with optional Spring integration\n- Internal platform starters that bundle observability, security, logging baselines\n- Standardizing configuration across many services\n\n**When custom auto-configuration hurts:**\n- One-off configuration shared between two services in the same repo — `@Import` is lighter\n- Libraries with significant logic that consumers always customize — provide a `Customizer<T>` interface instead\n- Teams unfamiliar with `/actuator/conditions` debugging\n\n**Watch for:**\n- Forgetting the registration file — silent no-op\n- `@Configuration` instead of `@AutoConfiguration` — loses ordering machinery\n- Missing `@ConditionalOnMissingBean` — consumer can't override; reports as 'duplicate bean' instead of 'override applied'\n- Business classes inside the starter JAR — should live in autoconfigure or a core lib\n- Forcing dependency versions that conflict with the Boot BOM — consumers can't override\n- Skipping the negative-case test (`FilteredClassLoader`) — silent NoClassDefFoundError in consumer apps"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Auto-configuration class must be registered to be discovered** — Spring Boot 2.7+: list in `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`; pre-2.7: list in `META-INF/spring.factories` under `EnableAutoConfiguration`.\n- **Starter layout: two modules** — `my-feature-autoconfigure` (contains `@AutoConfiguration` + `@Conditional` logic); `my-feature-spring-boot-starter` (POM-only, depends on autoconfigure + feature library).\n- **User beans always win — put `@ConditionalOnMissingBean` on every auto-configured bean** — this lets users override any default by defining their own bean of that type.\n- **`@AutoConfiguration(after = DataSourceAutoConfiguration.class)` controls ordering** — if your auto-config depends on a `DataSource` bean existing first, declare the dependency explicitly.\n- **Test auto-configuration with `ApplicationContextRunner`** — creates a minimal application context without starting Spring Boot; assert which beans are registered, override behavior, and negative cases.\n- **Always test the negative case** — use `FilteredClassLoader` to simulate the class not being on the classpath; proves `@ConditionalOnClass` is wired correctly.\n- **`spring-boot-configuration-processor` generates IDE metadata** — consumer IDEs auto-complete your custom properties without warnings."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Writing a custom auto-configuration is how you package reusable Spring Boot behavior into a library that others use by simply adding the dependency — no manual bean registration required.\n\n**The registration file**\n- Spring Boot 2.7+: create `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` listing the fully-qualified class name of your `@AutoConfiguration` class\n- Without this file, Spring Boot never discovers your class — the most common mistake when writing the first custom auto-configuration\n\n**Starter module layout**\n- `my-feature-autoconfigure` JAR: contains the `@AutoConfiguration` class with `@Conditional` logic and bean definitions\n- `my-feature-spring-boot-starter` POM: depends on `autoconfigure` + the feature library; users add only the starter dependency and get everything\n\n**The override contract**\n- Every auto-configured bean must have `@ConditionalOnMissingBean` — if the user defines their own bean of that type, yours is skipped\n- Use `@AutoConfiguration(after = DataSourceAutoConfiguration.class)` when your beans depend on a `DataSource` being available\n\n**Testing**\n- `ApplicationContextRunner` is the standard testing tool — creates a minimal context, applies your auto-configuration, and lets you assert which beans registered\n- Three tests every auto-config needs: defaults, user override, negative case (`FilteredClassLoader`)\n- No need to start the full application; tests run in milliseconds\n\n**IDE metadata**\n- Add `spring-boot-configuration-processor` as `optional`\n- Generates `spring-configuration-metadata.json` so consumer IDEs auto-complete `myprefix.*` properties\n\nIn an interview, the strong answer is: **two modules, `@AutoConfiguration` + `@ConditionalOnClass` + `@ConditionalOnMissingBean`, registration file, three tests including the negative case, and the configuration processor for IDE support**."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a Spring Boot starter and the autoconfigure module?",
+        "How do you test that your auto-configuration backs off correctly when the user defines their own bean?",
+        "How do `@AutoConfigureAfter` and `@AutoConfigureBefore` prevent ordering problems between auto-configurations?",
+        "Why is `@AutoConfiguration` preferred over `@Configuration` for custom auto-configurations?"
+      ],
+      "seo": {
+        "metaTitle": "Custom Spring Boot Auto-Configuration Guide | Java Intermediate Interview",
+        "metaDescription": "Step-by-step guide to writing and registering custom Spring Boot auto-configuration with @AutoConfiguration, @ConditionalOn*, AutoConfiguration.imports, and ApplicationContextRunner tests."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Writing a custom auto-configuration is how you package reusable Spring Boot behavior into a library that others use by simply adding the dependency — no manual bean registration required.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The number one mistake when writing custom auto-configuration is forgetting the registration file. You create a perfectly valid @AutoConfiguration class with all the right conditions, but Spring Boot never discovers it because auto-configuration classes are not found by component scanning. They must be explicitly listed in META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports (Boot 2.7+) or META-INF/spring.factories (pre-2.7). This is intentional. Auto-configuration classes live in shared libraries — JARs consumed by other applications. Component scanning would only find them if the consumer happened to scan the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the registration mechanism and knows how to write safe conditions so the auto-configuration backs off correctly"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Auto-configuration class must be registered to be discovered — Spring Boot 2",
+              "7+: list in META-INF/spring/org",
+              "springframework",
+              "autoconfigure",
+              "AutoConfiguration"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The number one mistake when writing custom auto-configuration is forgetting the registration file. You create a perfectly valid @AutoConfiguration class with all the right conditions, but Spring Boot never discovers it because auto-configuration classes are not found by component scanning. They must be explicitly listed in META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports (Boot 2.7+) or META-INF/spring.factories (pre-2.7). This is intentional. Auto-configuration classes live in shared libraries — JARs consumed by other applications. Component scanning would only find them if the consumer happened to scan the right package, making the behavior dependent on the consumer's package structure. The registration file makes discovery explicit and package-independent. The standard pattern for production library auto-configuration is a two-module layout: an autoconfigure module containing the @AutoConfiguration class, its @ConfigurationProperties POJO."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Forgetting to add the registration file (the @AutoConfiguration class is never discovered), or using @Configuration instead of @AutoConfiguration which bypasses ordering guarantees"
+            ]
+          }
+        ],
+        "cap": "The registration file Spring Boot 2.7+: create META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports listing the fully-qualified class name of your @AutoConfiguration class",
+        "familiarity_anchors": [
+          "Create",
+          "AutoConfiguration",
+          "ConditionalOn"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a Spring Boot starter and the autoconfigure module?",
+          "How do you test that your auto-configuration backs off correctly when the user defines their own bean?",
+          "How do `@AutoConfigureAfter` and `@AutoConfigureBefore` prevent ordering problems between auto-configurations?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JPA repository"
+      }
+    },
+    {
+      "id": "sbo-banner-startup",
+      "slug": "spring-boot-startup-customization",
+      "question": "How do you customize Spring Boot startup — banners, listeners, and FailureAnalyzer?",
+      "title": "Customizing Spring Boot Startup — Banner, Listeners, and FailureAnalyzer",
+      "direct_answer": "Spring Boot's startup is customizable at three levels: the **banner** (visual branding via `banner.txt` or a `Banner` bean), **application listeners** (reacting to lifecycle events before the context exists, registered via `spring.factories`), and **`FailureAnalyzer`** (converting cryptic startup exceptions into human-readable messages with fix suggestions). `FailureAnalyzer` is the most production-relevant — it turns a 200-line stack trace into a clear message like 'Port 8080 is already in use' with an actionable next step. Use `EnvironmentPostProcessor` for early property injection (vault secrets) before any bean reads the `Environment`.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows about startup hooks beyond basic configuration and can explain `FailureAnalyzer`",
+        "common_mistake": "Confusing `ApplicationListener` with `@EventListener` — `ApplicationListener` registered via `spring.factories` works before the context exists; `@EventListener` requires a bean and only works after context creation",
+        "to_stand_out": "Explain writing a custom `FailureAnalyzer` to provide team-specific error messages for common deployment issues like missing environment variables"
+      },
+      "company_tags": [
+        "Pivotal",
+        "Atlassian",
+        "Klarna",
+        "Netflix",
+        "Spotify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Startup Hooks Most Developers Never Use",
+            "content": "Most Spring Boot developers know `application.yml` and `@SpringBootApplication`. But the startup sequence has three customization points that solve real problems: **banner customization** for identifying which version is running in logs, **application listeners** for reacting to lifecycle events before the `ApplicationContext` exists, and **`FailureAnalyzer`** for turning cryptic startup exceptions into human-readable messages.\n\nOf these three, **`FailureAnalyzer` is the most production-relevant but least known**.\n- When Spring Boot fails to start, the default behavior is a 200-line stack trace that buries the actual cause. `FailureAnalyzer`s intercept specific exceptions and produce clear messages like 'Port 8080 is already in use' with a suggested action.\n- **You can write custom `FailureAnalyzer`s** for your team's common deployment issues — missing environment variables, incompatible database schemas, unreachable configuration servers.\n\nThe key distinction with listeners is that **`ApplicationListener` registered via `spring.factories` works before the `ApplicationContext` exists** — unlike `@EventListener`, which requires a bean in the context. This makes listeners the only way to react to early startup events like `ApplicationEnvironmentPreparedEvent`."
+          },
+          {
+            "type": "step",
+            "title": "Writing a Custom FailureAnalyzer",
+            "content": "**The contract**\n- Extend `AbstractFailureAnalyzer<T>` where `T` is the exception type to handle\n- Return a `FailureAnalysis` with description, action, and the cause\n- Spring's exception chain walking finds the cause type anywhere in the chain (not just the immediate cause)\n\n**Implementation example**\n\n```java\npublic class MissingApiKeyAnalyzer\n        extends AbstractFailureAnalyzer<ApiKeyMissingException> {\n\n    @Override\n    protected FailureAnalysis analyze(Throwable rootFailure,\n                                       ApiKeyMissingException cause) {\n        return new FailureAnalysis(\n            \"Required API key 'payment.gateway.key' is not configured.\",\n            \"Set PAYMENT_GATEWAY_KEY environment variable or add \" +\n            \"payment.gateway.key to application.yml\",\n            cause\n        );\n    }\n}\n```\n\n**Registration (Boot 3.x)**\n- Create `META-INF/spring/org.springframework.boot.diagnostics.FailureAnalyzer`\n- One fully-qualified class name per line\n- Pre-2.7: register in `META-INF/spring.factories` under the `FailureAnalyzer` key\n\n**Why this matters in production**\n- Instead of a stack trace, developers see a formatted message with the exact property name and how to set it\n- New team members get actionable error messages instead of debugging stack traces\n- Especially valuable for shared platform starters where consumers can't read the library code\n\n**The `rootFailure` vs `cause` parameters**\n- `rootFailure` — the outermost exception (usually `BeanCreationException`)\n- `cause` — the specific typed exception you declared as `T`\n- Spring's machinery walks the exception chain so your analyzer fires even when wrapped several layers deep"
+          },
+          {
+            "type": "step",
+            "title": "Application Listeners and EnvironmentPostProcessor",
+            "content": "**`ApplicationListener` vs `@EventListener`**\n- `ApplicationListener<E>` registered as a bean fires for events after the context is created\n- `SpringApplication.addListeners(...)` or registration via `spring.factories` fires for events before the context exists\n- `@EventListener` is bean-based — requires the context, can't see early events\n\n**Pre-context registration**\n\n```\n# META-INF/spring.factories\norg.springframework.context.ApplicationListener=\\\n  com.example.startup.EarlyConfigListener\n```\n\n```java\npublic class EarlyConfigListener implements ApplicationListener<ApplicationEnvironmentPreparedEvent> {\n    @Override\n    public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {\n        ConfigurableEnvironment env = event.getEnvironment();\n        env.getPropertySources().addFirst(\n            new MapPropertySource(\"vault\", fetchSecretsFromVault())\n        );\n    }\n}\n```\n\n**`EnvironmentPostProcessor` — the cleaner alternative**\n\n```java\npublic class VaultSecretsEnvironmentPostProcessor implements EnvironmentPostProcessor {\n    @Override\n    public void postProcessEnvironment(ConfigurableEnvironment environment,\n                                         SpringApplication application) {\n        environment.getPropertySources().addFirst(\n            new MapPropertySource(\"vault-secrets\", loadSecrets())\n        );\n    }\n}\n```\n\n```\n# META-INF/spring.factories\norg.springframework.boot.env.EnvironmentPostProcessor=\\\n  com.example.startup.VaultSecretsEnvironmentPostProcessor\n```\n\n**Use cases**\n- Vault secret injection before any bean reads the environment\n- Custom property formats (encrypted values, remote config)\n- Conditional profile activation based on external state\n- Slack/PagerDuty alerts on `ApplicationFailedEvent` before JVM exits"
+          },
+          {
+            "type": "step",
+            "title": "Banners and ApplicationContextInitializer",
+            "content": "**Banner customization**\n- Place `banner.txt` in `src/main/resources` — replaces the default Spring Boot ASCII art\n- Placeholders: `${spring-boot.version}`, `${application.title}`, `${application.version}`, `${spring.application.name}`\n- For dynamic content, implement `Banner` and pass via `SpringApplication.setBanner(...)`\n- Disable entirely with `spring.main.banner-mode=off` for cleaner CI logs\n\n**Operational value of the banner**\n- Identifies the application name and version in aggregated logs\n- Useful when many services log to the same aggregator and you need to spot which produced what\n\n**`ApplicationContextInitializer`**\n- Runs before the context is refreshed but after creation\n- Used for adding property sources, setting active profiles programmatically, registering bean definitions early\n- Registered via `spring.factories` under `ApplicationContextInitializer`\n\n```java\npublic class ProfileFromEnvInitializer\n        implements ApplicationContextInitializer<ConfigurableApplicationContext> {\n    @Override\n    public void initialize(ConfigurableApplicationContext ctx) {\n        String region = System.getenv(\"AWS_REGION\");\n        if (region != null) {\n            ctx.getEnvironment().addActiveProfile(\"region-\" + region);\n        }\n    }\n}\n```\n\n**Registration**\n\n```\n# META-INF/spring.factories\norg.springframework.context.ApplicationContextInitializer=\\\n  com.example.startup.ProfileFromEnvInitializer\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Startup Customization Trade-offs",
+            "content": "**When `FailureAnalyzer` helps:**\n- Common deployment failures (missing env vars, port conflicts, schema mismatch)\n- Onboarding — actionable messages instead of stack traces\n- Shared platform starters where consumers can't read library code\n\n**When `EnvironmentPostProcessor` helps:**\n- Secret injection from Vault, AWS Secrets Manager, GCP Secret Manager\n- Custom property source formats not supported by Boot natively\n- Property values that must be available before any bean reads the environment\n\n**Watch for:**\n- Confusing `ApplicationListener` (pre-context) with `@EventListener` (post-context)\n- `EnvironmentPostProcessor` that throws — propagates as a startup failure with no context\n- Custom banners with secrets or deployment metadata that shouldn't appear in logs\n- `FailureAnalyzer` that swallows the underlying exception — always pass `cause` to the analysis\n- Long-running listeners delaying startup measurably\n- `spring.factories` typos — silently no-op (no class loaded)"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`ApplicationListener` vs `@EventListener`** — `ApplicationListener<E>` registered as a bean fires for events after the `ApplicationContext` is created; `SpringApplication.addListeners()` or `spring.factories` registration fires for events before the context exists (e.g., `ApplicationStartingEvent`).\n- **`ApplicationContextInitializer` runs before bean refresh** — modify the `ConfigurableApplicationContext` before any beans are created; used for adding property sources, setting active profiles programmatically.\n- **`EnvironmentPostProcessor` adds properties before the context starts** — loads external secrets, vault config, or custom property formats before `@Value` injection; registered in `spring.factories`.\n- **`FailureAnalyzer` produces human-readable startup failure messages** — implement to replace cryptic stack traces with actionable diagnostics; Spring Boot ships 20+ built-in analyzers for common errors.\n- **`Banner` customization is cosmetic but has log value** — `banner.txt` placeholders display app name and version on every startup; `spring.main.banner-mode=off` for CI.\n- **Boot 3.x registration files** — `META-INF/spring/org.springframework.boot.diagnostics.FailureAnalyzer` (one class per line); `spring.factories` still works for backward compatibility."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Boot's startup pipeline has extension points at every phase — before the context exists, before beans are created, after everything is ready, and when startup fails. Knowing which hook fires when determines which customization goes where.\n\n**Before the context is created**\n- `SpringApplication.addListeners(new MyListener())` registers listeners that fire for early events like `ApplicationStartingEvent` and `ApplicationEnvironmentPreparedEvent`\n- `EnvironmentPostProcessor` — add property sources from external systems (Vault, AWS Secrets Manager) before `@Value` injection evaluates them\n- `ApplicationContextInitializer` — set active profiles, add property sources, or modify the context before beans are registered\n\n**After the context is ready**\n- `@EventListener(ApplicationReadyEvent.class)` — fires when the application is fully started; the same timing as `CommandLineRunner` and `ApplicationRunner`\n- `@EventListener(ApplicationStartedEvent.class)` — fires after context refresh but before runners\n\n**When startup fails**\n- `FailureAnalyzer` — implement this interface to produce a human-readable message explaining a startup failure; Spring Boot ships analyzers for port-in-use, missing beans, and failed conditions\n- Your analyzer catches a specific exception type and returns an explanation with a suggested action — replace stack traces with actionable diagnostics for your team\n- Register in `META-INF/spring/org.springframework.boot.diagnostics.FailureAnalyzer` (Boot 3.x) or `spring.factories` (older)\n\n**Banner**\n- Cosmetic but has operational value — identifies the app name and version in aggregated logs\n- Disable with `spring.main.banner-mode=off` if CI logs need to stay clean\n\nIn an interview, the strong answer is: **`FailureAnalyzer` for actionable error messages, `EnvironmentPostProcessor` for early property injection, listeners via `spring.factories` for pre-context events — three hooks for three different timing requirements**."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you write a custom `FailureAnalyzer` for missing environment variables?",
+        "What is the difference between `EnvironmentPostProcessor` and `ApplicationContextInitializer`?",
+        "How do you inject secrets from Vault before any bean reads the environment?",
+        "Why does `@EventListener` not fire for `ApplicationStartingEvent`?"
+      ],
+      "seo": {
+        "metaTitle": "Customizing Spring Boot Startup — Banner, Listeners, and FailureAnalyzer",
+        "metaDescription": "Customize Spring Boot startup with banners, application listeners, EnvironmentPostProcessor, and FailureAnalyzer for actionable error messages."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Boot's startup pipeline has extension points at every phase — before the context exists, before beans are created, after everything is ready, and when startup fails.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most Spring Boot developers know application.yml and @SpringBootApplication. But the startup sequence has three customization points that solve real problems: banner customization for identifying which version is running in logs, application listeners for reacting to lifecycle events before the ApplicationContext exists, and FailureAnalyzer for turning cryptic startup exceptions into human-readable messages. Of these three, FailureAnalyzer is the most production-relevant but least known. When Spring Boot fails to start, the default behavior is a 200-line stack trace that buries the actual."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows about startup hooks beyond basic configuration and can explain FailureAnalyzer"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "ApplicationListener vs @EventListener — ApplicationListener<E> registered as a bean fires for events after the ApplicationContext is created; SpringApplication",
+              "addListeners() or spring",
+              "factories registration fires for events before the context exists (e",
+              ", ApplicationStartingEvent)",
+              "ApplicationContextInitializer runs before bean refresh — modify the ConfigurableApplicationContext before any beans are created; used for adding property sources, setting active profiles programmatically"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Most Spring Boot developers know application.yml and @SpringBootApplication. But the startup sequence has three customization points that solve real problems: banner customization for identifying which version is running in logs, application listeners for reacting to lifecycle events before the ApplicationContext exists, and FailureAnalyzer for turning cryptic startup exceptions into human-readable messages. Of these three, FailureAnalyzer is the most production-relevant but least known. When Spring Boot fails to start, the default behavior is a 200-line stack trace that buries the actual cause. FailureAnalyzers intercept specific exceptions and produce clear messages like 'Port 8080 is already in use' with a suggested action. You can write custom FailureAnalyzers for your team's common deployment issues — missing environment variables, incompatible database schemas, unreachable configuration."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing ApplicationListener with @EventListener — ApplicationListener registered via spring",
+              "factories works before the context exists; @EventListener requires a bean and only works after context creation"
+            ]
+          }
+        ],
+        "cap": "Before the context is created SpringApplication.addListeners(new MyListener()) registers listeners that fire for early events like ApplicationStartingEvent and ApplicationEnvironmentPreparedEvent Envi",
+        "familiarity_anchors": [
+          "Spring",
+          "Banner",
+          "FailureAnalyzer"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you write a custom `FailureAnalyzer` for missing environment variables?",
+          "What is the difference between `EnvironmentPostProcessor` and `ApplicationContextInitializer`?",
+          "How do you inject secrets from Vault before any bean reads the environment?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JPA repository"
+      }
+    }
+  ]
+}

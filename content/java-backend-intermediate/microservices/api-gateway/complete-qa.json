@@ -1,0 +1,260 @@
+{
+  "topic": "Api Gateway",
+  "topicSlug": "api-gateway",
+  "questions": [
+    {
+      "id": "ms-003",
+      "slug": "api-gateway-spring-cloud-gateway",
+      "question": "What is an API Gateway and how do you implement one with Spring Cloud Gateway?",
+      "title": "API Gateway with Spring Cloud Gateway",
+      "direct_answer": "An **API gateway** is a single entry point that handles cross-cutting concerns (routing, auth, **rate limiting**, SSL termination) across all microservices. **Spring Cloud Gateway** uses reactive WebFlux and replaces the deprecated Netflix Zuul.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand the gateway's role as a cross-cutting-concern handler",
+        "common_mistake": "Implementing business logic in the gateway — it should be a thin routing layer",
+        "to_stand_out": "Mention Circuit Breaker filter and the risk of the gateway becoming a single point of failure"
+      },
+      "company_tags": [
+        "Amazon",
+        "Stripe",
+        "Cloudflare",
+        "Netflix",
+        "Uber",
+        "Airbnb"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Every Microservices Architecture Needs a Front Door",
+            "content": "Without an API gateway, a mobile app calling your microservices needs to know the addresses of every service — orders at `10.0.1.5:8080`, users at `10.0.2.3:8081`, payments at `10.0.3.7:8082`. Every time you add, remove, or scale a service, every client needs updating. That's the **N-endpoint problem**, and it gets worse fast.\n\nThe API gateway is a reverse proxy that sits between clients and your service fleet.\n- Clients call one URL.\n- The gateway routes each request to the right backend based on the path, applies cross-cutting concerns — authentication, rate limiting, SSL termination, request logging — and returns the response.\n- This centralizes concerns that would otherwise be duplicated in every service: token validation, CORS headers, request throttling.\n\n**Spring Cloud Gateway** replaced Netflix Zuul as the Spring ecosystem's gateway.\n- The architectural difference matters: Zuul 1 was servlet-based (one thread per request), which meant 200 concurrent connections needed 200 threads.\n- Spring Cloud Gateway is built on **Project Reactor and Netty** — it's fully non-blocking.\n- A single thread can handle thousands of concurrent connections because it never blocks waiting for a downstream response.\n- For a gateway that terminates all external traffic, this concurrency model is the right choice.\n\nThe critical design principle: keep the gateway **thin**.\n- Authentication, rate limiting, circuit breaking, and routing belong here.\n- Business logic does not.\n- A gateway that calls multiple downstream services, aggregates responses, and applies business rules becomes a bottleneck monolith at the edge.\n- For response aggregation, use the BFF (Backend-for-Frontend) pattern with dedicated composition services behind the gateway.\n\nAn analogy: the API gateway is the **airport check-in counter**.\n- Every passenger passes through one place — tickets verified, bags tagged, security instructions given — before reaching the gates.\n- Without the counter, each airline would run its own passport check, its own bag drop, its own security pat-down.\n- With it, the airport enforces one consistent policy and the airlines focus on flying planes."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Request Path Through the Gateway — Filters and Routing",
+            "content": "```mermaid\nflowchart LR\n    Client[Client - web/mobile] --> LB[Cloud LB/ALB]\n    LB --> GW1[Gateway instance 1]\n    LB --> GW2[Gateway instance 2]\n    LB --> GW3[Gateway instance 3]\n    GW1 --> PreChain{Pre-filter chain}\n    PreChain --> Auth[JWT GlobalFilter<br/>validate token<br/>extract claims]\n    Auth --> RL[RequestRateLimiter<br/>Redis token bucket]\n    RL --> Retry[Retry filter<br/>N attempts]\n    Retry --> CB[CircuitBreaker filter<br/>ordersCB]\n    CB --> Predicate{Route predicate<br/>Path / Method}\n    Predicate -->|/api/orders/*| Orders[(order-service)]\n    Predicate -->|/api/payments/*| Payments[(payment-service)]\n    Predicate -->|/api/catalog/*| Catalog[(catalog-service)]\n    CB -. open .-> Fallback[forward:/fallback/...<br/>degraded controller]\n    Fallback --> PostChain{Post-filter chain}\n    Orders --> PostChain\n    PostChain --> Client\n```"
+          },
+          {
+            "type": "step",
+            "title": "Route Configuration — How Requests Find Their Service",
+            "content": "Spring Cloud Gateway routes are defined by three things: a **predicate** (which requests match), a **URI** (where to forward them), and **filters** (what to do in transit). The YAML configuration is the most common approach for straightforward routing.\n\n```yaml\nspring:\n  cloud:\n    gateway:\n      routes:\n        - id: order-service\n          uri: lb://ORDER-SERVICE          # lb:// = load-balanced via service discovery\n          predicates:\n            - Path=/api/orders/**\n            - Method=GET,POST,PUT\n          filters:\n            - StripPrefix=1                # removes /api before forwarding\n            - AddRequestHeader=X-Gateway-Source, spring-cloud-gateway\n        - id: user-service\n          uri: lb://USER-SERVICE\n          predicates:\n            - Path=/api/users/**\n          filters:\n            - StripPrefix=1\n```\n\nThe `lb://` prefix is doing real work here — it resolves the logical service name (`ORDER-SERVICE`) through the service registry (Eureka, Consul, or Kubernetes DNS) and load-balances across healthy instances. Without it, you'd hardcode IPs that break every time an instance scales or restarts.\n\nPredicates can match on path, method, headers, query parameters, cookies, or time windows. For programmatic routing — when the logic is more complex than YAML can express — use the fluent Java DSL, which gives you the same capabilities with compile-time safety.\n\n```java\n@Bean\npublic RouteLocator customRoutes(RouteLocatorBuilder builder) {\n    return builder.routes()\n        .route(\"order-service\", r -> r\n            .path(\"/api/orders/**\")\n            .and().method(HttpMethod.GET, HttpMethod.POST)\n            .filters(f -> f.stripPrefix(1)\n                          .addRequestHeader(\"X-Request-Start\",\n                              String.valueOf(System.currentTimeMillis())))\n            .uri(\"lb://ORDER-SERVICE\"))\n        .build();\n}\n```\n\nUse YAML for simple, static routes. Use Java DSL when routing depends on runtime conditions or when you want refactoring support from the IDE."
+          },
+          {
+            "type": "step",
+            "title": "Cross-Cutting Filters — Auth, Rate Limiting, and Circuit Breaking",
+            "content": "Filters are where the gateway earns its keep. A `GlobalFilter` applies to every route; a `GatewayFilter` applies to specific routes. The most common production filters are JWT authentication, rate limiting, and circuit breaking.\n\nA JWT authentication filter validates the token before the request reaches any backend service. This means your downstream services never see unauthenticated traffic — they can trust that if a request arrives, it has a valid identity attached.\n\n```java\n@Component\npublic class JwtAuthFilter implements GlobalFilter, Ordered {\n\n    private final JwtUtil jwtUtil;\n\n    @Override\n    public Mono<Void> filter(ServerWebExchange exchange,\n                             GatewayFilterChain chain) {\n        String path = exchange.getRequest().getPath().value();\n        if (path.startsWith(\"/api/public/\")) {\n            return chain.filter(exchange);  // skip auth for public endpoints\n        }\n        String token = exchange.getRequest()\n            .getHeaders().getFirst(\"Authorization\");\n        if (token == null || !token.startsWith(\"Bearer \")) {\n            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);\n            return exchange.getResponse().setComplete();\n        }\n        Claims claims = jwtUtil.validate(token.substring(7));\n        // Forward user identity to downstream services\n        ServerHttpRequest mutated = exchange.getRequest().mutate()\n            .header(\"X-User-Id\", claims.getSubject())\n            .header(\"X-User-Roles\", claims.get(\"roles\", String.class))\n            .build();\n        return chain.filter(exchange.mutate().request(mutated).build());\n    }\n\n    @Override\n    public int getOrder() { return -1; } // run before routing filters\n}\n```\n\nRate limiting and circuit breaking are configured as route-level filters. The rate limiter uses Redis to track request counts across gateway instances. The circuit breaker prevents a failing backend from blocking the gateway's event loop.\n\n```yaml\nspring:\n  cloud:\n    gateway:\n      routes:\n        - id: order-service\n          uri: lb://ORDER-SERVICE\n          predicates:\n            - Path=/api/orders/**\n          filters:\n            - name: RequestRateLimiter\n              args:\n                redis-rate-limiter.replenishRate: 10   # 10 req/sec steady state\n                redis-rate-limiter.burstCapacity: 20    # allow bursts up to 20\n                key-resolver: \"#{@userKeyResolver}\"     # rate limit per user, not globally\n            - name: CircuitBreaker\n              args:\n                name: orderCB\n                fallbackUri: forward:/fallback/orders   # serve degraded response\n```\n\nThe circuit breaker filter is critical for gateway resilience. Without it, a single slow backend (order service responding in 30 seconds instead of 200ms) ties up Netty's event loop threads. With 50 concurrent requests to the slow service, the gateway stops responding to all traffic — including healthy services. The circuit breaker trips after a failure threshold and returns the fallback immediately, protecting the gateway's ability to route to healthy backends."
+          },
+          {
+            "type": "step",
+            "title": "The Gateway as a Single Point of Failure — And How to Prevent It",
+            "content": "The gateway terminates all external traffic. If it goes down, every service is unreachable — it's the most critical single point of failure in the architecture. Production deployments must address this.\n\nRun **at least three gateway instances** behind a cloud load balancer (AWS ALB, GCP Cloud Load Balancer, or an Nginx ingress controller in Kubernetes). The load balancer health-checks each gateway instance and removes unhealthy ones. In Kubernetes, the deployment looks straightforward.\n\n```yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api-gateway\nspec:\n  replicas: 3                        # minimum for production\n  strategy:\n    rollingUpdate:\n      maxUnavailable: 1              # at most 1 down during deploys\n  template:\n    spec:\n      containers:\n      - name: gateway\n        image: myregistry/api-gateway:2.1\n        resources:\n          requests:\n            memory: \"512Mi\"\n            cpu: \"500m\"\n          limits:\n            memory: \"1Gi\"\n        readinessProbe:\n          httpGet:\n            path: /actuator/health/readiness\n            port: 8080\n          periodSeconds: 5\n```\n\nThe readiness probe ensures Kubernetes only routes traffic to gateway instances that have completed startup and registered with the service registry. Without it, requests hit instances that haven't loaded route configurations yet, returning 404s during rolling deployments.\n\nMonitor three gateway metrics: **request rate** (baseline for capacity planning), **error rate by route** (detects backend failures before users notice), and **p99 latency** (catches slow backends before they cascade). Alert when the gateway's own latency — excluding downstream time — exceeds 10ms, because that means the gateway itself is under resource pressure."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`lb://` + service discovery** — logical service names resolve through Eureka/Consul/K8s DNS; hardcoded IPs break on every scale event.\n- **Non-blocking reactor model** — Spring Cloud Gateway uses Netty + Project Reactor; Zuul 1's thread-per-request exhausted pools under load.\n- **Thin gateway discipline** — auth, rate limiting, and routing belong here; business logic belongs in BFF services behind the gateway.\n- **Circuit breaker per route** — one slow backend (30s responses) blocks the event loop and starves healthy routes without it.\n- **SPOF mitigation** — run ≥3 instances behind a load balancer; alert when gateway-internal latency exceeds 10ms."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "An API gateway solves the N-endpoint problem — without it, every client needs to know the address of every microservice, handle auth tokens per service, and update when services scale or move. The gateway is a single front door that handles routing, JWT validation, rate limiting, and TLS termination centrally for all downstream services.\n\n**Spring Cloud Gateway internals:**\n- Built on Project Reactor and Netty — fully non-blocking, one thread handles thousands of concurrent connections; this is the key difference from old Netflix Zuul's thread-per-request model that exhausted pools under load\n- Routes are defined with predicates (path, method, headers) and filters (strip prefix, add headers, rate limit); the `lb://` URI scheme integrates with service discovery so routes use logical service names instead of hardcoded IPs\n- A `GlobalFilter` applies to every request — implement JWT validation here so downstream services never see unauthenticated traffic\n\n**The pitfalls:**\n- The gateway is a single point of failure — if it crashes, every service is unreachable; run at least three instances behind a load balancer with readiness probes\n- Keep the gateway thin — authentication and rate limiting belong here, but business orchestration does not; a gateway that calls five services and merges their responses is a monolith at the edge\n- Circuit breaker per route prevents one slow backend from blocking the event loop and starving healthy routes\n\nI recommend Spring Cloud Gateway over Zuul for any new setup, and keeping the gateway strictly thin — cross-cutting concerns only, no business logic."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How is Spring Cloud Gateway different from Netflix Zuul?",
+        "How do you implement request tracing through the gateway?",
+        "What happens if the API gateway goes down?"
+      ],
+      "seo": {
+        "metaTitle": "API Gateway Spring Cloud Gateway — Java Microservices Interview",
+        "metaDescription": "API Gateway pattern implementation with Spring Cloud Gateway. JWT auth filter, rate limiting, circuit breaker with Spring Boot examples."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "An API gateway solves the N-endpoint problem — without it, every client needs to know the address of every microservice, handle auth tokens per service, and update when services scale or move.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Without an API gateway, a mobile app calling your microservices needs to know the addresses of every service — orders at 10.0.1.5:8080, users at 10.0.2.3:8081, payments at 10.0.3.7:8082. Every time you add, remove, or scale a service, every client needs updating. That's the N-endpoint problem, and it gets worse fast. The API gateway is a reverse proxy that sits between clients and your service fleet. Clients call one URL. The gateway routes each request to the right backend based on."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the gateway's role as a cross-cutting-concern handler"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "lb:// + service discovery — logical service names resolve through Eureka/Consul/K8s DNS; hardcoded IPs break on every scale event",
+              "Non-blocking reactor model — Spring Cloud Gateway uses Netty + Project Reactor; Zuul 1's thread-per-request exhausted pools under load",
+              "Thin gateway discipline — auth, rate limiting, and routing belong here; business logic belongs in BFF services behind the gateway",
+              "Circuit breaker per route — one slow backend (30s responses) blocks the event loop and starves healthy routes without it",
+              "SPOF mitigation — run ≥3 instances behind a load balancer; alert when gateway-internal latency exceeds 10ms"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Without an API gateway, a mobile app calling your microservices needs to know the addresses of every service — orders at 10.0.1.5:8080, users at 10.0.2.3:8081, payments at 10.0.3.7:8082. Every time you add, remove, or scale a service, every client needs updating. That's the N-endpoint problem, and it gets worse fast. The API gateway is a reverse proxy that sits between clients and your service fleet. Clients call one URL. The gateway routes each request to the right backend based on the path, applies cross-cutting concerns — authentication, rate limiting, SSL termination, request logging — and returns the response. This centralizes concerns that would otherwise be duplicated in every service: token validation, CORS headers, request throttling. Spring Cloud Gateway replaced Netflix."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Implementing business logic in the gateway",
+              "it should be a thin routing layer"
+            ]
+          }
+        ],
+        "cap": "Spring Cloud Gateway internals: Built on Project Reactor and Netty — fully non-blocking, one thread handles thousands of concurrent connections; this is the key difference from old Netflix Zuul's thre",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "Gateway"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How is Spring Cloud Gateway different from Netflix Zuul?",
+          "How do you implement request tracing through the gateway?",
+          "What happens if the API gateway goes down?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    },
+    {
+      "id": "scc-001",
+      "slug": "spring-cloud-gateway-routing-filters",
+      "question": "How does Spring Cloud Gateway work and how do you configure routes and filters?",
+      "title": "Spring Cloud Gateway: Routing and Filters",
+      "direct_answer": "**Spring Cloud Gateway** is a non-blocking, reactive **API gateway** built on Spring WebFlux. You define routes using predicates (path, host, header matching) and filters (modify request/response, rate-limit, circuit-break). It replaces Zuul and runs on Netty — not a servlet container.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether you understand reactive vs blocking gateways, how predicates and filters compose, and whether you can write a production gateway config with auth, rate limiting, and circuit breaking",
+        "common_mistake": "Confusing Spring Cloud Gateway with Zuul 1 (blocking, thread-per-request) or trying to deploy it in a traditional servlet container — Gateway requires a reactive runtime",
+        "to_stand_out": "Explain the filter chain execution order (pre-filters run in ascending order, post-filters run in descending), demonstrate a custom GlobalFilter for JWT validation, and discuss how lb:// URIs integrate with Eureka or Spring Cloud LoadBalancer"
+      },
+      "company_tags": [
+        "netflix",
+        "booking.com",
+        "zalando",
+        "deutsche-telekom",
+        "bmw-group"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Gateway Replaced Zuul Because Zuul 1's Thread-Per-Request Model Became the Bottleneck — Not the Services Behind It",
+            "content": "Netflix Zuul 1 was the standard Spring Cloud gateway.\n- Its design mirrored the servlet model: **one thread per request**, blocking I/O, a familiar programming style.\n- Under moderate load it worked fine.\n- Under high concurrency, thread pools exhausted and the gateway became the system bottleneck — downstream services sat idle while Zuul ran out of threads to forward requests.\n\nSpring Cloud Gateway replaced Zuul with a fundamentally different model: **non-blocking I/O on Netty, driven by Project Reactor.** The same hardware handles an order of magnitude more concurrent connections because threads are not blocked waiting for responses. A handful of event-loop threads handle thousands of in-flight requests simultaneously.\n\nThe mistake most candidates make: treating Gateway like a smarter servlet filter.\n- **Gateway requires a reactive runtime — Netty.** If your project also imports `spring-boot-starter-web` (which pulls in Tomcat), the two runtimes conflict and the application fails to start with a confusing error.\n- Gateway is an entirely reactive stack: `spring-boot-starter-webflux`, not `spring-boot-starter-web`.\n\nEvery request enters a **filter chain**, not a dispatcher.\n- A route consists of three parts: a predicate (which requests match this route), a URI (where to forward), and an ordered list of filters (what to transform).\n- Filters run in two phases — pre (before forwarding) and post (after receiving the downstream response).\n- This two-phase pipeline is the core mechanism, and understanding it explains most gateway debugging problems."
+          },
+          {
+            "type": "step",
+            "title": "Configuring Routes — Predicates Select Requests, Filters Transform Them, lb:// Connects to Service Discovery",
+            "content": "Routes can be defined declaratively in YAML or programmatically with `RouteLocatorBuilder`. YAML is clearer for static routes; the Java DSL enables conditions based on runtime state or database lookups.\n\nA YAML route has four fields: `id` (for logging), `uri` (target), `predicates` (match rules), and `filters` (transformations). The `lb://` URI scheme is the integration point with Spring Cloud LoadBalancer — it resolves the service name to a live instance from the registry (Eureka, Consul, or Kubernetes). Without `lb://`, the URI must be a concrete host and port; the gateway bypasses service discovery entirely.\n\n```yaml\nspring:\n  cloud:\n    gateway:\n      routes:\n        - id: order-route\n          uri: lb://order-service        # lb:// triggers client-side load balancing\n          predicates:\n            - Path=/api/orders/**\n          filters:\n            - StripPrefix=1              # removes /api before forwarding\n            - name: CircuitBreaker\n              args:\n                name: orderCircuitBreaker\n                fallbackUri: forward:/fallback/orders\n            - name: RequestRateLimiter\n              args:\n                redis-rate-limiter.replenishRate: 100\n                redis-rate-limiter.burstCapacity: 200\n```\n\n`StripPrefix=1` removes the first path segment, so `/api/orders/123` becomes `/orders/123` at the downstream service. Miscounting here is a silent bug — `StripPrefix=2` on `/api/orders/123` forwards `/123`, and the downstream service returns 404 with no obvious error on the gateway side.\n\nThe programmatic `RouteLocatorBuilder` is preferable when routes need to be constructed from database configuration or when predicates depend on Spring beans. Dynamic routing — changing routes without restarting — requires a custom `RouteDefinitionRepository` backed by Redis or a database."
+          },
+          {
+            "type": "phase",
+            "title": "Pre-Filters Run Ascending, Post-Filters Run Descending — Mis-ordering Causes Auth Checks to Run After Business Filters",
+            "content": "This is the execution detail that separates candidates who have operated a Gateway in production from those who only configured one. Every filter implements `Ordered` or is annotated with `@Order` to declare its position in the chain. But the execution direction **flips between the pre-phase and post-phase.**\n\n**Pre-filters** (before forwarding to downstream) execute in **ascending order** — lower order number runs first. An auth filter at `order=-1` runs before a logging filter at `order=1`. The downstream service only sees requests that cleared every pre-filter ahead of it.\n\n**Post-filters** (after receiving the downstream response) execute in **descending order** — higher order number runs first. The logging filter at `order=1` runs in post *after* the auth filter at `order=-1`. The outermost pre-filter is also the outermost post-filter — like nested parentheses.\n\nThis matters concretely: if you add a response-header filter that injects security headers, and your logging filter captures the response headers for audit, the logging filter must have a **lower** order than the header filter to capture the injected headers. Developers who miss the descending post-order write their log and see headers missing — the log runs before the headers are added in the post chain.\n\n`GlobalFilter` applies to all routes automatically — implement it for cross-cutting concerns like authentication, request ID injection, and logging. `GatewayFilter` (created via `GatewayFilterFactory`) applies only to routes that explicitly list it — use it for route-specific concerns like path rewriting, rate limiting, or circuit breaking. Keep the distinction clean: everything that must run for every request goes into a `GlobalFilter`."
+          },
+          {
+            "type": "step",
+            "title": "Writing a JWT GlobalFilter — and Why Any Blocking Operation in Gateway Code Destroys Throughput",
+            "content": "A `GlobalFilter` for JWT validation inspects the `Authorization` header before forwarding. If the token is missing or invalid, it short-circuits the filter chain and returns 401 immediately — the downstream service never receives the unauthorized request.\n\n```java\n@Component\npublic class JwtAuthFilter implements GlobalFilter, Ordered {\n\n    @Override\n    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {\n        String token = exchange.getRequest()\n            .getHeaders().getFirst(HttpHeaders.AUTHORIZATION);\n\n        if (token == null || !isValidJwt(token)) {\n            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);\n            return exchange.getResponse().setComplete(); // stops the chain\n        }\n\n        // Add extracted claims as headers for downstream services\n        ServerHttpRequest mutated = exchange.getRequest().mutate()\n            .header(\"X-User-Id\", extractUserId(token))\n            .build();\n        return chain.filter(exchange.mutate().request(mutated).build());\n    }\n\n    @Override\n    public int getOrder() { return -1; } // run before all other filters\n}\n```\n\n`isValidJwt()` must be **non-blocking**. JWT signature verification (using a public key cached in memory) is CPU-only — non-blocking by nature. If you instead validate by calling an auth service via JDBC or a synchronous `RestTemplate`, you block the Netty event-loop thread. That thread handles I/O for hundreds of concurrent connections. One blocking call per request means the event loop stalls, connection queues grow, and throughput collapses.\n\nThe fix for any I/O-dependent validation: return a `Mono` from the validation step and use reactive operators (`flatMap`, `switchIfEmpty`) to chain the filter logic. The Gateway stays non-blocking end-to-end, and the event loop thread is never held."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Why Spring Cloud Gateway replaced Zuul**\n- Zuul 1 was blocking — one thread per request; thread pools exhausted under load\n- Gateway runs on Netty and Project Reactor — non-blocking, a small thread pool handles thousands of concurrent connections\n- Critical: Gateway requires a reactive runtime; do not add spring-boot-starter-web alongside webflux or the app fails to start\n\n**How routes are defined**\n- Each route has an id, a URI, predicates (match rules), and filters (transformations)\n- Predicates match on path, method, headers, query params, cookies, or time windows\n- `lb://order-service` triggers Spring Cloud LoadBalancer resolution via the service registry\n- `StripPrefix=1` removes path segments before forwarding — miscounting silently routes to wrong downstream paths\n- YAML for static routes; programmatic RouteLocatorBuilder when logic depends on runtime state\n\n**Pre-filter and post-filter execution order**\n- Pre-filters run in ascending order number — lower order runs first\n- Post-filters run in descending order — higher order runs first\n- The outermost pre-filter is also the outermost post-filter, like nested parentheses\n- Auth filter at order -1 runs before logging at order 1 in the pre-phase; in post-phase the logging runs first\n\n**GlobalFilter vs GatewayFilter**\n- GlobalFilter applies to every route automatically — use for auth, request-id injection, tracing setup\n- GatewayFilter applies to routes that list it — use for route-specific path rewriting, rate limiting, circuit breaking\n- Custom GatewayFilterFactory classes become reusable filter names referenced from YAML\n\n**Writing a JWT GlobalFilter**\n- Read the Authorization header, validate signature, short-circuit with 401 if invalid\n- Mutate the request with extracted claims as X-User-Id / X-User-Roles headers for downstream services\n- Validation must be non-blocking — JWT signature check is CPU-only; a JDBC lookup in the filter blocks the Netty event loop and destroys throughput\n- For I/O-dependent validation, return a Mono and chain with flatMap/switchIfEmpty\n\n**The event-loop trap**\n- Any blocking call inside a filter holds a Netty thread handling hundreds of connections\n- Symptoms: throughput collapses, connection queues grow, p99 latency balloons\n- Use BlockHound or Reactor checkpoint() in dev to catch accidental blocks\n- Prefer WebClient over RestTemplate inside filters\n\n**Production essentials**\n- Always chain with CircuitBreaker filter — one slow backend otherwise blocks the event loop and starves healthy routes\n- Rate limit with RedisRateLimiter for distributed fleets; local rate limiters per pod don't coordinate\n- Run at least three gateway instances behind a cloud load balancer with readiness probes\n- Monitor gateway-internal latency separately from downstream latency — above 10ms means the gateway itself is under resource pressure\n\n**The strategic answer**\n- Spring Cloud Gateway is non-blocking; Netty event loop handles thousands of concurrent connections\n- Routes compose predicates and filters; lb:// integrates service discovery\n- Pre-filters ascend, post-filters descend — order bugs cause auth to fire after business logic\n- Keep the gateway thin — auth, rate limit, route — business logic stays downstream\n- Never block inside a filter; the event loop is the throughput\n"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Spring Cloud Gateway is non-blocking on Netty** — handles thousands of concurrent connections with a small fixed thread pool; Zuul 1.x used blocking I/O with one thread per request.\n- **lb:// prefix triggers client-side load balancing** — `uri: lb://order-service` resolves via Spring Cloud LoadBalancer to a registered instance; without `lb://`, the gateway routes to a fixed host.\n- **Global filters apply to all routes, route filters to matched routes only** — filter execution order is controlled by `Ordered` interface; incorrect ordering causes auth checks to run after business filters.\n- **Gateway runs on WebFlux, not Spring MVC** — Servlet filters, blocking JDBC, and synchronous HTTP clients block the Netty event loop and destroy throughput; use reactive alternatives.\n- **StripPrefix removes path segments before forwarding** — `StripPrefix=1` on path `/api/orders/123` forwards `/orders/123` to the downstream service; miscounting strips too much or too little."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you implement per-user rate limiting instead of per-IP rate limiting in Spring Cloud Gateway?",
+        "What is the difference between a GlobalFilter and a GatewayFilter, and when would you use each?",
+        "How does Spring Cloud Gateway integrate with Resilience4j for circuit breaking?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Cloud Gateway Routing and Filters | Java Intermediate Interview | InterviewExplainer",
+        "metaDescription": "Spring Cloud Gateway routing, predicates, filters, JWT GlobalFilter, Redis rate limiting, and CircuitBreaker fallback — Java intermediate interview guide."
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Why Spring Cloud Gateway replaced Zuul Zuul 1 was blocking — one thread per request; thread pools exhausted under load Gateway runs on Netty and Project Reactor — non-blocking, a small thread pool han",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Netflix Zuul 1 was the standard Spring Cloud gateway. Its design mirrored the servlet model: one thread per request, blocking I/O, a familiar programming style. Under moderate load it worked fine. Under high concurrency, thread pools exhausted and the gateway became the system bottleneck — downstream services sat idle while Zuul ran out of threads to forward requests. Spring Cloud Gateway replaced Zuul with a fundamentally different model: non-blocking I/O on Netty, driven by Project Reactor. The same hardware handles."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand reactive vs blocking gateways, how predicates and filters compose, and whether you can write a production gateway config with auth, rate limiting, and circuit breaking"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Spring Cloud Gateway is non-blocking on Netty — handles thousands of concurrent connections with a small fixed thread pool; Zuul 1",
+              "x used blocking I/O with one thread per request",
+              "lb:// prefix triggers client-side load balancing — uri: lb://order-service resolves via Spring Cloud LoadBalancer to a registered instance; without lb://, the gateway routes to a fixed host",
+              "Global filters apply to all routes, route filters to matched routes only — filter execution order is controlled by Ordered interface; incorrect ordering causes auth checks to run after business filters",
+              "Gateway runs on WebFlux, not Spring MVC — Servlet filters, blocking JDBC, and synchronous HTTP clients block the Netty event loop and destroy throughput; use reactive alternatives"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Netflix Zuul 1 was the standard Spring Cloud gateway. Its design mirrored the servlet model: one thread per request, blocking I/O, a familiar programming style. Under moderate load it worked fine. Under high concurrency, thread pools exhausted and the gateway became the system bottleneck — downstream services sat idle while Zuul ran out of threads to forward requests. Spring Cloud Gateway replaced Zuul with a fundamentally different model: non-blocking I/O on Netty, driven by Project Reactor. The same hardware handles an order of magnitude more concurrent connections because threads are not blocked waiting for responses. A handful of event-loop threads handle thousands of in-flight requests simultaneously. The mistake most candidates make: treating Gateway like a smarter servlet filter. Gateway requires."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing Spring Cloud Gateway with Zuul 1 (blocking, thread-per-request) or trying to deploy it in a traditional servlet container",
+              "Gateway requires a reactive runtime"
+            ]
+          }
+        ],
+        "cap": "Why Spring Cloud Gateway replaced Zuul Zuul 1 was blocking — one thread per request; thread pools exhausted under load Gateway runs on Netty and Project Reactor — non-blocking, a small thread pool han",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "Gateway"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you implement per-user rate limiting instead of per-IP rate limiting in Spring Cloud Gateway?",
+          "What is the difference between a GlobalFilter and a GatewayFilter, and when would you use each?",
+          "How does Spring Cloud Gateway integrate with Resilience4j for circuit breaking?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    }
+  ]
+}

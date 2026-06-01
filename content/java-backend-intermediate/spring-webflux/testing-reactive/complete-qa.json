@@ -1,0 +1,266 @@
+{
+  "topic": "Testing Reactive",
+  "topicSlug": "testing-reactive",
+  "questions": [
+    {
+      "id": "wf-test-001",
+      "slug": "testing-reactive-stepverifier-webtestclient",
+      "question": "How do you test reactive Spring code with StepVerifier and WebTestClient?",
+      "title": "Testing Reactive Code — StepVerifier, WebTestClient, BlockHound",
+      "direct_answer": "Reactive testing uses specialized tools because regular JUnit assertions don't wait for async signals. **`StepVerifier`** (from `reactor-test`) is the primary tool for verifying `Mono` / `Flux` sequences — chain expectations like `expectNext`, `expectError`, `thenRequest`, then call `.verify()`. **`WebTestClient`** is the reactive alternative to MockMvc — slice-level via `@WebFluxTest` or full-stack via `@SpringBootTest(webEnvironment = RANDOM_PORT)`. Use **MockWebServer** to fake `WebClient` upstreams, **Testcontainers** for real R2DBC / Kafka, and enable **BlockHound** to catch accidental blocking on event-loop threads. Always end `StepVerifier` chains with `.verify()` — without it the test passes trivially because nothing subscribed.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Reactive-specific testing tools, virtual time, slice vs integration patterns, and pitfalls",
+        "common_mistake": "Calling .block() in tests; missing .verify(); not using virtual time for delays; mocking with default null returns",
+        "to_stand_out": "Discuss StepVerifier backpressure testing, Hooks.onOperatorDebug, BlockHound integration, TestPublisher, and Testcontainers reuse"
+      },
+      "company_tags": [
+        "Spring",
+        "Pivotal",
+        "VMware",
+        "Netflix",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Reactive Testing Toolkit",
+            "content": "Reactive code can't be tested with plain `assertEquals` because results come asynchronously. You need tools that subscribe, collect signals, and let you assert on them.\n\n**Core tools you'll use:**\n- **`StepVerifier`** (from `io.projectreactor:reactor-test`) — verifies `Mono` / `Flux` signals step by step; the workhorse for unit-testing reactive chains\n- **`TestPublisher`** — creates controllable `Mono` / `Flux` for feeding custom sequences into code under test\n- **`WebTestClient`** — end-to-end HTTP testing for WebFlux endpoints; either against a running server or in-memory mock mode\n- **MockWebServer (okhttp)** — simulates upstream services for `WebClient` testing\n- **`BlockHound`** — JVM agent that throws on blocking calls inside Reactor's non-blocking schedulers\n- **Testcontainers** — real PostgreSQL / Mongo / Redis / Kafka in Docker for integration tests\n- **Spring Boot test slices** — `@SpringBootTest`, `@DataR2dbcTest`, `@WebFluxTest`\n\n**Test layers:**\n- **Unit** — pure Reactor chains with `StepVerifier` and in-memory data\n- **Slice** — `@WebFluxTest` for controllers with mocked services; `@DataR2dbcTest` for repositories\n- **Integration** — `@SpringBootTest` plus `WebTestClient` plus Testcontainers\n\nThe single most important rule: every reactive test needs a subscriber. Without `.verify()` (`StepVerifier`) or `.exchange()` (`WebTestClient`) the chain never runs and the test passes trivially."
+          },
+          {
+            "type": "step",
+            "title": "StepVerifier Patterns",
+            "content": "**Basic happy-path assertions**\n- `expectNextMatches(predicate)` for value checks\n- `expectNextCount(n)` when counts matter more than values\n- Always call `.verify(Duration)` to bound CI time\n\n```java\n@Test\nvoid findByIdReturnsOrder() {\n    StepVerifier.create(orderService.findById(\"abc\"))\n        .expectNextMatches(o -> o.id().equals(\"abc\"))\n        .expectComplete()\n        .verify(Duration.ofSeconds(2));\n}\n\n@Test\nvoid listReturnsTenItems() {\n    StepVerifier.create(orderService.list())\n        .expectNextCount(10)\n        .verifyComplete();\n}\n```\n\n**Error assertions**\n- Either match by predicate or by class\n\n```java\n@Test\nvoid missingOrderEmitsNotFound() {\n    StepVerifier.create(orderService.findById(\"missing\"))\n        .expectErrorMatches(t -> t instanceof OrderNotFound\n            && t.getMessage().contains(\"missing\"))\n        .verify();\n}\n\n.expectError(OrderNotFound.class);\n```\n\n**Backpressure-controlled tests**\n- `initialRequest(0)` means the subscriber requests nothing at first\n- `thenRequest(n)` advances demand; reveals operator behavior under controlled pressure\n\n```java\n@Test\nvoid backpressureRespected() {\n    StepVerifier.create(\n            orderService.streamAll(),\n            StepVerifierOptions.create().initialRequest(0))\n        .expectSubscription()\n        .thenRequest(2)\n        .expectNextCount(2)\n        .thenRequest(3)\n        .expectNextCount(3)\n        .thenCancel()\n        .verify();\n}\n```\n\n**`TestPublisher` for controlled input**\n- Use when you want to drive specific sequences (next, error, complete) into code under test\n\n```java\n@Test\nvoid processingHandlesError() {\n    TestPublisher<Event> source = TestPublisher.create();\n    Flux<Result> results = processor.process(source.flux());\n\n    StepVerifier.create(results)\n        .then(() -> source.next(new Event(\"ok\")))\n        .expectNextMatches(r -> r.status() == OK)\n        .then(() -> source.error(new RuntimeException(\"boom\")))\n        .expectErrorMessage(\"boom\")\n        .verify();\n}\n```\n\n**Specific assertions per element**\n- `assertNext` runs an arbitrary block on one element\n- `thenConsumeWhile(predicate)` skips elements matching a predicate\n\n```java\n.assertNext(order -> assertThat(order.amount()).isEqualByComparingTo(\"99.99\"))\n.thenConsumeWhile(o -> o.status().equals(\"PAID\"))\n.expectComplete()\n.verify();\n```\n\n**The `.verify()` rule**\n- Without `.verify()` / `.verifyComplete()` / `.verify(Duration)` the test passes trivially because nothing subscribed\n- Always set a Duration bound to keep CI fast"
+          },
+          {
+            "type": "step",
+            "title": "WebTestClient and Controller Slices",
+            "content": "**Slice test with `@WebFluxTest`**\n- Boots only the WebFlux infrastructure plus the listed controller\n- `@MockitoBean` mocks downstream services\n\n```java\n@WebFluxTest(OrderController.class)\n@Import(ErrorConfig.class)\nclass OrderControllerTest {\n\n    @Autowired WebTestClient client;\n\n    @MockitoBean OrderService service;\n\n    @Test\n    void get200() {\n        when(service.findById(\"abc\"))\n            .thenReturn(Mono.just(new OrderDto(\"abc\", \"PAID\", BigDecimal.TEN)));\n\n        client.get().uri(\"/orders/abc\")\n            .exchange()\n            .expectStatus().isOk()\n            .expectBody(OrderDto.class)\n            .value(o -> assertThat(o.id()).isEqualTo(\"abc\"));\n    }\n\n    @Test\n    void get404() {\n        when(service.findById(\"missing\"))\n            .thenReturn(Mono.error(new OrderNotFound(\"missing\")));\n\n        client.get().uri(\"/orders/missing\")\n            .exchange()\n            .expectStatus().isNotFound();\n    }\n\n    @Test\n    void validationFailure() {\n        client.post().uri(\"/orders\")\n            .contentType(APPLICATION_JSON)\n            .bodyValue(\"{\\\"amount\\\": -1}\")\n            .exchange()\n            .expectStatus().isBadRequest()\n            .expectBody(ProblemDetail.class)\n            .value(pd -> assertThat(pd.getDetail()).contains(\"must be positive\"));\n    }\n}\n```\n\n**Streaming response (SSE)**\n- `returnResult` plus a `ParameterizedTypeReference` extracts the streamed body\n- `StepVerifier` then asserts on the `Flux`\n\n```java\n@Test\nvoid streamsSSE() {\n    Flux<ServerSentEvent<OrderEvent>> responseBody = client.get().uri(\"/orders/events\")\n        .accept(MediaType.TEXT_EVENT_STREAM)\n        .exchange()\n        .expectStatus().isOk()\n        .returnResult(new ParameterizedTypeReference<ServerSentEvent<OrderEvent>>() {})\n        .getResponseBody();\n\n    StepVerifier.create(responseBody)\n        .expectNextCount(3)\n        .thenCancel()\n        .verify(Duration.ofSeconds(5));\n}\n```\n\n**Full integration test with Testcontainers**\n- `@SpringBootTest(webEnvironment = RANDOM_PORT)` boots the real app\n- `@DynamicPropertySource` wires Testcontainers URLs into Spring properties\n\n```java\n@SpringBootTest(webEnvironment = RANDOM_PORT)\n@Testcontainers\nclass OrderIT {\n\n    @Container\n    static PostgreSQLContainer<?> pg = new PostgreSQLContainer<>(\"postgres:16\");\n\n    @DynamicPropertySource\n    static void registerPgProperties(DynamicPropertyRegistry reg) {\n        reg.add(\"spring.r2dbc.url\", () ->\n            \"r2dbc:postgresql://%s:%d/%s\".formatted(\n                pg.getHost(), pg.getMappedPort(5432), pg.getDatabaseName()));\n        reg.add(\"spring.r2dbc.username\", pg::getUsername);\n        reg.add(\"spring.r2dbc.password\", pg::getPassword);\n        reg.add(\"spring.flyway.url\", pg::getJdbcUrl);\n        reg.add(\"spring.flyway.user\", pg::getUsername);\n        reg.add(\"spring.flyway.password\", pg::getPassword);\n    }\n\n    @Autowired WebTestClient client;\n\n    @Test\n    void createAndFetch() {\n        OrderDto created = client.post().uri(\"/orders\")\n            .bodyValue(new CreateOrder(\"cust-1\", BigDecimal.TEN))\n            .exchange()\n            .expectStatus().isCreated()\n            .expectBody(OrderDto.class)\n            .returnResult().getResponseBody();\n\n        client.get().uri(\"/orders/\" + created.id())\n            .exchange()\n            .expectStatus().isOk()\n            .expectBody(OrderDto.class)\n            .value(o -> assertThat(o.amount()).isEqualByComparingTo(\"10\"));\n    }\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "Mocking Upstream WebClient Calls",
+            "content": "**MockWebServer (okhttp) for `WebClient` tests**\n- Lighter-weight than WireMock for simple cases\n- Set up before each test, shut down after\n\n```java\nclass PaymentClientTest {\n    private MockWebServer server;\n    private PaymentClient client;\n\n    @BeforeEach\n    void setUp() throws IOException {\n        server = new MockWebServer();\n        server.start();\n        WebClient wc = WebClient.builder()\n            .baseUrl(server.url(\"/\").toString())\n            .build();\n        client = new PaymentClient(wc);\n    }\n\n    @AfterEach\n    void tearDown() throws IOException { server.shutdown(); }\n\n    @Test\n    void retriesOn503ThenSucceeds() {\n        server.enqueue(new MockResponse().setResponseCode(503));\n        server.enqueue(new MockResponse().setResponseCode(503));\n        server.enqueue(new MockResponse()\n            .setResponseCode(200)\n            .setBody(\"{\\\"status\\\": \\\"CAPTURED\\\"}\")\n            .addHeader(\"Content-Type\", \"application/json\"));\n\n        StepVerifier.create(client.charge(new Charge(\"ord-1\", BigDecimal.TEN)))\n            .expectNextMatches(r -> r.status() == CAPTURED)\n            .verifyComplete();\n\n        assertThat(server.getRequestCount()).isEqualTo(3);\n    }\n\n    @Test\n    void propagatesTimeout() {\n        server.enqueue(new MockResponse()\n            .setBody(\"{}\")\n            .setBodyDelay(10, TimeUnit.SECONDS));\n\n        StepVerifier.create(client.charge(new Charge(\"ord-1\", BigDecimal.TEN)))\n            .expectError(TimeoutException.class)\n            .verify(Duration.ofSeconds(6));\n    }\n}\n```\n\n**WireMock** is the other popular option — richer features (request matching, recording), heavier setup."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "BlockHound, Debug Hooks, Pyramids, and Common Pitfalls",
+            "content": "**When BlockHound helps:**\n- Detects blocking calls on Reactor's non-blocking schedulers (event loop, `parallel`)\n- Catches accidental `Thread.sleep`, blocking JDBC, blocking file I/O on the wrong scheduler\n- Should be enabled for every reactive test class\n\n**When BlockHound hurts:**\n- Throws on legitimate blocking inside `boundedElastic` if misconfigured\n- Whitelist known-blocking legacy methods if necessary\n\n```java\n@TestInstance(PER_CLASS)\nclass BlockHoundSetup {\n    @BeforeAll\n    static void install() {\n        BlockHound.install();\n    }\n}\n```\n\nWhitelist explicitly when needed:\n\n```java\nBlockHound.install(builder ->\n    builder.allowBlockingCallsInside(\n        \"com.acme.LegacyService\", \"blockingMethod\"));\n```\n\n**`Hooks.onOperatorDebug()` in tests**\n- Adds operator-assembly stack frames to error traces\n- Slow — enable in test or dev only, never in production\n\n```java\n@BeforeAll\nstatic void enableDebug() {\n    Hooks.onOperatorDebug();\n}\n```\n\n**Common testing pitfalls — watch for:**\n- **Forgetting `.verify()`** — `StepVerifier.create(flux).expectNext(\"a\")` without `.verify()` does nothing; the test passes trivially\n- **`.block()` in tests** — can deadlock on event-loop; use `StepVerifier`\n- **No timeout on `verify()`** — default is infinite; slow tests hang CI; always `verify(Duration.ofSeconds(5))`\n- **Cold vs hot publishers** — `TestPublisher` defaults to cold; `createCold` vs `createHot` if semantics matter\n- **Virtual time** doesn't virtualize subscribers' real threads — only the scheduled clock\n- **`@MockitoBean` returns null stubs** — reactive code throws; always `when(svc.find(...)).thenReturn(Mono.just(...))`\n- **Reactive transactions** — `@Transactional` with R2DBC needs `R2dbcTransactionManager`; plain `@Transactional` doesn't help in reactive chains\n- **Slow integration tests** — Testcontainers startup is seconds; reuse containers across tests with the singleton pattern\n- **Port conflicts** — `webEnvironment = RANDOM_PORT` prevents collisions in parallel runs\n- **Context propagation** — MDC and tracing context need explicit `contextWrite` or Micrometer Context Propagation\n\n**Performance tuning for tests:**\n- Use test slices (`@WebFluxTest`, `@DataR2dbcTest`) instead of full `@SpringBootTest` when possible\n- Reuse Testcontainers across test classes (singleton pattern)\n- Parallelize at class level — JUnit 5 supports parallel execution\n- Avoid `@DirtiesContext` unless necessary — it's expensive\n\n**Coverage strategy / pyramid for a reactive service:**\n\n| Layer | Count (approx) | Purpose |\n|---|---|---|\n| Unit (`StepVerifier`) | 100 | Service logic, mappers, validation |\n| Slice (`@WebFluxTest`) | 30 | Controller mapping, validation, error handling |\n| Integration (`@SpringBootTest` + Testcontainers) | 10 | Full happy path through real DB |\n| Contract (Pact, Spring Cloud Contract) | 3 | Cross-service boundaries |\n\n**The mental model:**\n- Every reactive test needs a subscriber (`.verify()`, `.exchange()`)\n- Every time-based test should use virtual time\n- Every integration test should cleanly tear down async resources\n- BlockHound on for all tests catches 90% of \"reactive slowness\" bugs\n- Test the contract, not the implementation — `WebTestClient` over unit-mocked WebFlux internals"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`StepVerifier`** is the primary tool; always end with `.verify()` / `.verifyComplete()` / `.verify(Duration)`\n- **`TestPublisher`** for controllable input sequences with explicit `next` / `error` / `complete`\n- **`WebTestClient`** for WebFlux endpoints; slice mode (`@WebFluxTest`) or real server (`RANDOM_PORT`)\n- **MockWebServer / WireMock** for mocking upstream `WebClient` calls\n- **Testcontainers** for real Postgres / Mongo / Kafka integration\n- **BlockHound** catches accidental blocking on event-loop threads — install for every reactive test class\n- **`Hooks.onOperatorDebug()`** for readable stack traces in tests (slow; test-only)\n- **Slice tests** are much faster than full context\n- **Never `.block()` in tests** — always use `StepVerifier` or `WebTestClient`\n- **Pyramid** — many unit, some slice, few integration, selective contract"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Reactive testing uses specialized tools because regular JUnit assertions don't wait for async signals.\n\n**Core tools**\n- `StepVerifier` — primary for `Mono` / `Flux`; chain expectations, end with `.verify()` / `.verifyComplete()` / `.verify(Duration)`\n- `TestPublisher` — controllable input with explicit `next` / `error` / `complete`\n- `WebTestClient` — endpoint testing; slice mode `@WebFluxTest` or real server `RANDOM_PORT`\n- MockWebServer (okhttp) — fake upstream `WebClient` calls; WireMock alternative\n- BlockHound — catches accidental blocking on non-blocking schedulers\n- Testcontainers — real Postgres / Mongo / Kafka in Docker\n- Spring Boot test slices — `@SpringBootTest`, `@DataR2dbcTest`, `@WebFluxTest`\n\n**Test layers**\n- Unit — pure Reactor chains with `StepVerifier`\n- Slice — `@WebFluxTest` controller + mocked service\n- Integration — `@SpringBootTest` + `WebTestClient` + Testcontainers\n\n**StepVerifier patterns**\n- Basic — `expectNextMatches`, `expectComplete`, `verify(Duration)`\n- Counts — `expectNextCount(N).verifyComplete()`\n- Errors — `expectError(Type.class)` or `expectErrorMatches(predicate)`\n- Backpressure — `initialRequest(0)`, `thenRequest(N)`, `expectNextCount`, `thenCancel`\n- Custom — `assertNext(block)`, `thenConsumeWhile(predicate)`\n\n**WebTestClient patterns**\n- Slice — `@WebFluxTest(Controller.class)` + `@MockitoBean Service`\n- `client.get().uri().exchange().expectStatus().isOk().expectBody(Type).value(...)`\n- Validation — `expectStatus().isBadRequest()` plus `ProblemDetail` body\n- Streaming SSE — `returnResult(ParameterizedTypeReference)` plus `StepVerifier` on body\n- Integration — `@SpringBootTest(webEnvironment = RANDOM_PORT)` plus Testcontainers\n\n**Mocking upstream**\n- MockWebServer — enqueue responses, assert request count, body delay for timeouts\n- WireMock — richer, heavier\n\n**BlockHound and debug hooks**\n- `BlockHound.install()` in `@BeforeAll`\n- Whitelist legacy blocking with `allowBlockingCallsInside`\n- `Hooks.onOperatorDebug()` for readable stack traces (slow; test-only)\n\n**Common pitfalls**\n- Forgetting `.verify()` — passes trivially\n- `.block()` in tests — deadlock risk\n- No timeout on `verify()` — tests hang CI\n- `@MockitoBean` returns null — reactive throws; always `when().thenReturn(Mono.just(...))`\n- Reactive transactions need `R2dbcTransactionManager`\n- Slow integration tests — reuse Testcontainers as singletons\n- Context propagation — MDC and tracing need explicit `contextWrite`\n\n**Pyramid for a reactive service**\n- 100 unit, 30 slice, 10 integration, 3 contract\n\n**Strategic answer**\n- `StepVerifier` for reactive chains; `.verify()` is mandatory\n- Virtual time for delay-based operators (separate question)\n- `WebTestClient` for endpoints; slice fast, real server for integration\n- MockWebServer for upstream; Testcontainers for real DB / Kafka\n- BlockHound catches accidental blocking\n- Slice tests over full context where possible"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you test time-based operators like delayElements with virtual time?",
+        "What's the difference between @WebFluxTest and @SpringBootTest?",
+        "How do you test that backpressure is respected in a Flux chain?",
+        "Why is BlockHound useful and how do you whitelist allowed blocking?"
+      ],
+      "seo": {
+        "metaTitle": "Testing Reactive Spring Code — StepVerifier, WebTestClient, BlockHound",
+        "metaDescription": "Complete reactive testing guide: StepVerifier patterns, WebTestClient slices, MockWebServer, Testcontainers, BlockHound, and the test pyramid for WebFlux."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Reactive testing uses specialized tools because regular JUnit assertions don't wait for async signals.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Reactive code can't be tested with plain assertEquals because results come asynchronously. You need tools that subscribe, collect signals, and let you assert on them. Core tools you'll use: StepVerifier (from io.projectreactor:reactor-test) — verifies Mono / Flux signals step by step; the workhorse for unit-testing reactive chains TestPublisher — creates controllable Mono / Flux for feeding custom sequences into code under test WebTestClient — end-to-end HTTP testing for WebFlux endpoints; either against a running server or in-memory mock mode MockWebServer."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Reactive-specific testing tools, virtual time, slice vs integration patterns, and pitfalls"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "StepVerifier is the primary tool; always end with",
+              "verifyComplete() /",
+              "verify(Duration) TestPublisher for controllable input sequences with explicit next / error / complete WebTestClient for WebFlux endpoints; slice mode (@WebFluxTest) or real server (RANDOM_PORT) MockWebServer / WireMock for mocking upstream WebClient calls Testcontainers for real Postgres / Mongo / Kafka integration BlockHound catches accidental blocking on event-loop threads — install for every reactive test class Hooks",
+              "onOperatorDebug() for readable stack traces in tests (slow; test-only) Slice tests are much faster than full context Never",
+              "block() in tests — always use StepVerifier or WebTestClient Pyramid — many unit, some slice, few integration, selective contract"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Reactive code can't be tested with plain assertEquals because results come asynchronously. You need tools that subscribe, collect signals, and let you assert on them. Core tools you'll use: StepVerifier (from io.projectreactor:reactor-test) — verifies Mono / Flux signals step by step; the workhorse for unit-testing reactive chains TestPublisher — creates controllable Mono / Flux for feeding custom sequences into code under test WebTestClient — end-to-end HTTP testing for WebFlux endpoints; either against a running server or in-memory mock mode MockWebServer (okhttp) — simulates upstream services for WebClient testing BlockHound — JVM agent that throws on blocking calls inside Reactor's non-blocking schedulers Testcontainers — real PostgreSQL / Mongo / Redis / Kafka in Docker for integration tests Spring Boot test slices."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "block() in tests; missing",
+              "verify(); not using virtual time for delays; mocking with default null returns"
+            ]
+          }
+        ],
+        "cap": "Core tools StepVerifier — primary for Mono / Flux; chain expectations, end with .verify() / .verifyComplete() / .verify(Duration) TestPublisher — controllable input with explicit next / error / comple",
+        "familiarity_anchors": [
+          "Reactive",
+          "JUnit",
+          "StepVerifier"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you test time-based operators like delayElements with virtual time?",
+          "What's the difference between @WebFluxTest and @SpringBootTest?",
+          "How do you test that backpressure is respected in a Flux chain?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring WebFlux reactive API with Reactor"
+      }
+    },
+    {
+      "id": "wf-test-002",
+      "slug": "stepverifier-virtual-time-testing",
+      "question": "How do you test time-based reactive operators using StepVerifier virtual time?",
+      "title": "StepVerifier Virtual Time — Testing Delay-Based Operators",
+      "direct_answer": "Time-based operators like `interval`, `delayElements`, `delaySubscription`, and `timeout` would make tests slow if they ran in real time. **`StepVerifier.withVirtualTime(supplier)`** swaps Reactor's default scheduler for a `VirtualTimeScheduler` so emissions can be advanced instantly. You construct the `Mono` / `Flux` *inside* the supplier (so it picks up the virtual scheduler), then assert with `expectNoEvent(Duration)` to verify nothing fires before its time, `thenAwait(Duration)` to advance the clock, and `expectNext` to consume emissions. The test completes in milliseconds even when the pipeline simulates hours of behavior.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows how to test delay-based reactive code without slowing tests, and the constraints of VirtualTimeScheduler",
+        "common_mistake": "Building the publisher outside the supplier (it captures the real scheduler); confusing thenAwait with expectNoEvent; expecting virtual time to virtualize subscriber threads",
+        "to_stand_out": "Discuss expectNoEvent vs thenAwait semantics, scheduler factory replacement, retry-with-backoff testing, and when virtual time can't help"
+      },
+      "company_tags": [
+        "Spring",
+        "Pivotal",
+        "VMware",
+        "Netflix",
+        "Cloudflare"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Virtual Time Exists",
+            "content": "Reactor has many time-based operators — `Flux.interval`, `Mono.delay`, `delayElements`, `delaySubscription`, `timeout`, `Retry.backoff`, `take(Duration)`. Tested in real time, they make CI painfully slow: a test of \"emit every 100 ms for 10 seconds\" actually takes 10 seconds.\n\n**`StepVerifier.withVirtualTime`** replaces Reactor's default scheduler with a **`VirtualTimeScheduler`** — a controllable clock. Emissions scheduled for some future moment fire only when you advance the clock with `thenAwait(Duration)`. Tests of long-duration behavior complete in milliseconds.\n\n**The contract**\n- Build the `Mono` / `Flux` *inside* the supplier passed to `withVirtualTime`\n- This ensures operators capture the virtual scheduler instead of the real one\n- Use `expectNoEvent(Duration)` to verify nothing fires before its time\n- Use `thenAwait(Duration)` to advance the clock\n- Use `expectNext` / `expectComplete` / `expectError` as in normal `StepVerifier`\n\n**What virtual time does NOT do**\n- It does not virtualize subscriber threads or arbitrary concurrent code\n- It does not affect non-Reactor schedulers (your own `ExecutorService`)\n- It only controls the Reactor `Schedulers` clock — `Schedulers.parallel()`, `Schedulers.boundedElastic()`, etc."
+          },
+          {
+            "type": "step",
+            "title": "Basic Patterns",
+            "content": "**Test `Flux.interval`**\n- Verify nothing emits before the first 100 ms\n- Advance the clock and consume the next two emissions\n\n```java\n@Test\nvoid intervalEmitsEvery100ms() {\n    StepVerifier.withVirtualTime(() ->\n            Flux.interval(Duration.ofMillis(100)).take(3))\n        .expectSubscription()\n        .expectNoEvent(Duration.ofMillis(100))\n        .expectNext(0L)\n        .thenAwait(Duration.ofMillis(200))\n        .expectNext(1L, 2L)\n        .verifyComplete();\n}\n```\n\n**Test `Mono.delay`**\n\n```java\n@Test\nvoid monoDelayFiresAfterDelay() {\n    StepVerifier.withVirtualTime(() ->\n            Mono.delay(Duration.ofSeconds(5)).map(i -> \"done\"))\n        .expectSubscription()\n        .expectNoEvent(Duration.ofSeconds(5))\n        .expectNext(\"done\")\n        .verifyComplete();\n}\n```\n\n**Test `delayElements`**\n\n```java\n@Test\nvoid delayElementsBetweenItems() {\n    StepVerifier.withVirtualTime(() ->\n            Flux.just(\"a\", \"b\", \"c\").delayElements(Duration.ofSeconds(1)))\n        .expectSubscription()\n        .thenAwait(Duration.ofSeconds(1)).expectNext(\"a\")\n        .thenAwait(Duration.ofSeconds(1)).expectNext(\"b\")\n        .thenAwait(Duration.ofSeconds(1)).expectNext(\"c\")\n        .verifyComplete();\n}\n```\n\n**Test `timeout` triggers correctly**\n\n```java\n@Test\nvoid timeoutFiresWhenSlow() {\n    StepVerifier.withVirtualTime(() ->\n            Mono.delay(Duration.ofSeconds(10))\n                .timeout(Duration.ofSeconds(2)))\n        .expectSubscription()\n        .thenAwait(Duration.ofSeconds(2))\n        .expectError(TimeoutException.class)\n        .verify();\n}\n```\n\n**Test `Retry.backoff`**\n- Each retry waits an increasing delay; virtual time lets you assert exhaustion in milliseconds\n\n```java\n@Test\nvoid retryWithBackoffExhausts() {\n    AtomicInteger calls = new AtomicInteger();\n\n    StepVerifier.withVirtualTime(() ->\n            Mono.fromCallable(() -> {\n                    calls.incrementAndGet();\n                    throw new RuntimeException(\"fail\");\n                })\n                .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))))\n        .expectSubscription()\n        .thenAwait(Duration.ofMinutes(1))\n        .expectError()\n        .verify();\n\n    assertThat(calls.get()).isEqualTo(4);\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "expectNoEvent vs thenAwait — the Subtle Difference",
+            "content": "Both advance virtual time, but they assert different things.\n\n**`expectNoEvent(Duration)`**\n- Advances the clock by `Duration` *and* asserts that no event arrives during that window\n- Use to verify timing — \"nothing should fire before 100 ms\"\n- Fails if any signal arrives in the window\n\n**`thenAwait(Duration)`**\n- Advances the clock by `Duration` without asserting anything about events\n- Use to fast-forward to the moment when you expect a signal\n- Doesn't care what happens during the wait\n\n**Example contrasting the two**\n\n```java\n// Asserts NO event before 100ms, then exactly the first emission\nStepVerifier.withVirtualTime(() ->\n        Flux.interval(Duration.ofMillis(100)).take(3))\n    .expectSubscription()\n    .expectNoEvent(Duration.ofMillis(100))\n    .expectNext(0L)\n    .thenAwait(Duration.ofMillis(200))\n    .expectNext(1L, 2L)\n    .verifyComplete();\n```\n\n**Common mistake — building the publisher outside the supplier**\n\n```java\n// WRONG — Flux captured the real scheduler before withVirtualTime swapped it\nFlux<Long> ticks = Flux.interval(Duration.ofMillis(100)).take(3);\nStepVerifier.withVirtualTime(() -> ticks)\n    .expectNext(0L, 1L, 2L)\n    .verifyComplete();\n```\n\nThe `Flux.interval` was created on the real scheduler — virtual time can't control it. The test will block waiting for real-time emissions. Always construct inside the supplier:\n\n```java\nStepVerifier.withVirtualTime(() ->\n    Flux.interval(Duration.ofMillis(100)).take(3))\n```"
+          },
+          {
+            "type": "step",
+            "title": "Configuring Custom Virtual Time",
+            "content": "**Custom `VirtualTimeScheduler` with options**\n- Useful when you want a specific scheduler instance\n\n```java\nVirtualTimeScheduler scheduler = VirtualTimeScheduler.create();\n\nStepVerifier.withVirtualTime(\n        () -> Flux.interval(Duration.ofSeconds(1), scheduler).take(3),\n        () -> scheduler,\n        Long.MAX_VALUE)\n    .expectSubscription()\n    .thenAwait(Duration.ofSeconds(3))\n    .expectNextCount(3)\n    .verifyComplete();\n```\n\n**Replacing Reactor schedulers globally for a test**\n- Heavier hammer; rarely needed if you build inside the supplier\n\n```java\n@BeforeEach\nvoid useVirtualScheduler() {\n    VirtualTimeScheduler.set(VirtualTimeScheduler.create());\n}\n\n@AfterEach\nvoid resetSchedulers() {\n    VirtualTimeScheduler.reset();\n}\n```\n\nThis swaps every Reactor scheduler with the virtual one. Use sparingly — it can hide bugs that depend on real scheduler behavior."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When Virtual Time Helps, When It Doesn't, and Pitfalls",
+            "content": "**When virtual time helps:**\n- Testing `interval`, `delayElements`, `delaySubscription`, `timeout`\n- Testing `Retry.backoff` exhaustion without waiting minutes\n- Testing scheduled emissions (cron-like flows)\n- Testing rate-limiting / throttling operators\n- Long-duration behavior compressed into a fast test\n\n**When virtual time doesn't help:**\n- Network or DB I/O — virtual time can't speed up real-world operations\n- `CompletableFuture` or other non-Reactor async — virtual time only controls Reactor schedulers\n- Tests where the actual elapsed wall-clock matters (rare)\n- Multi-threaded race conditions — virtual time runs single-threaded internally\n\n**Watch for — common pitfalls:**\n- **Building the publisher outside the supplier** — the operator captures the real scheduler; the test hangs or fails\n- **Using `expectNoEvent` when you mean `thenAwait`** — `expectNoEvent` will fail if any signal fires; pick the one that matches your intent\n- **Mixing real and virtual schedulers** — if your code uses `Schedulers.boundedElastic()` for one branch and the chain has time-based ops, the virtual clock won't apply uniformly\n- **Forgetting `expectSubscription`** — some chains emit immediately; including `expectSubscription` first avoids ordering surprises\n- **Long `thenAwait` durations** — passing `Duration.ofDays(7)` is fine; just don't follow it with extra real-time operators\n- **`VirtualTimeScheduler.reset()`** if you set it globally — leaking state across tests\n\n**Testing `Retry.backoff` — a worked example**\n- Three retries with 1-second base backoff and exponential growth\n- Without virtual time the test runs for ~7 seconds\n- With virtual time it runs instantly\n\n```java\n@Test\nvoid retryBackoffWithJitter() {\n    AtomicInteger calls = new AtomicInteger();\n\n    StepVerifier.withVirtualTime(() ->\n            Mono.fromCallable(() -> {\n                    int n = calls.incrementAndGet();\n                    if (n < 4) throw new RuntimeException(\"fail \" + n);\n                    return \"ok\";\n                })\n                .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))\n                    .maxBackoff(Duration.ofSeconds(10))))\n        .expectSubscription()\n        .thenAwait(Duration.ofMinutes(1))\n        .expectNext(\"ok\")\n        .verifyComplete();\n\n    assertThat(calls.get()).isEqualTo(4);\n}\n```\n\n**Strategic guidance:**\n- Use virtual time for any test that includes `interval`, `delay`, `timeout`, or `Retry.backoff`\n- Construct publishers inside the supplier — never outside\n- Pick `expectNoEvent` vs `thenAwait` based on whether you want to assert silence or just advance\n- For multi-second pipelines, prefer virtual time over `Awaitility` or sleep-based polling\n- Combine with `TestPublisher` when you want to control both timing and input signals"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`StepVerifier.withVirtualTime(supplier)`** swaps Reactor's scheduler for a controllable virtual clock\n- **Build the publisher inside the supplier** — outside, it captures the real scheduler\n- **`expectNoEvent(Duration)`** advances the clock and asserts no signal during the window\n- **`thenAwait(Duration)`** advances the clock without asserting events\n- **Use for `interval`, `delayElements`, `delaySubscription`, `timeout`, `Retry.backoff`**\n- **Doesn't help** real network / DB I/O or non-Reactor async\n- **Always start with `expectSubscription`** for predictable ordering\n- **`VirtualTimeScheduler.set` / `.reset`** for global tests; use sparingly\n- **Combine with `TestPublisher`** for full control of timing and input\n- **Tests of long-duration behavior** complete in milliseconds"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Time-based operators like `interval`, `delayElements`, `timeout`, and `Retry.backoff` would make tests slow in real time. `StepVerifier.withVirtualTime(supplier)` swaps Reactor's scheduler for a `VirtualTimeScheduler` so emissions advance instantly when you advance the clock.\n\n**The contract**\n- Build the publisher inside the supplier so operators pick up the virtual scheduler\n- Use `expectNoEvent(Duration)` to verify nothing fires during a window\n- Use `thenAwait(Duration)` to advance the clock without asserting\n- Use `expectNext` / `expectComplete` / `expectError` as normal\n\n**Basic patterns**\n- `Flux.interval` — `expectNoEvent` for the first window, `expectNext`, then `thenAwait` for further emissions\n- `Mono.delay` — `expectNoEvent` for the delay, then `expectNext`\n- `delayElements` — `thenAwait` between each `expectNext`\n- `timeout` — `thenAwait` past the timeout, then `expectError(TimeoutException.class)`\n- `Retry.backoff` — `thenAwait` past the cumulative backoff, then assert success or error\n\n**`expectNoEvent` vs `thenAwait` — the subtle difference**\n- `expectNoEvent(Duration)` advances the clock and asserts no signal in that window\n- `thenAwait(Duration)` advances the clock without asserting\n- Pick the one that matches your intent\n\n**Common mistake**\n- Building the publisher outside the supplier — captures the real scheduler — test hangs\n- Always build inside `() -> Flux.interval(...)`\n\n**When virtual time helps**\n- `interval`, `delayElements`, `delaySubscription`, `timeout`, `Retry.backoff`\n- Long-duration pipelines compressed into milliseconds\n\n**When it doesn't help**\n- Real network / DB I/O — only Reactor schedulers are virtualized\n- Non-Reactor async like `CompletableFuture`\n- Multi-threaded race conditions — virtual time runs single-threaded\n\n**Strategic answer**\n- Use virtual time for any time-based operator test\n- Construct publishers inside the supplier\n- Pick `expectNoEvent` vs `thenAwait` based on whether you want to assert silence or just advance\n- Combine with `TestPublisher` for full control of timing and input\n- Tests of multi-minute behavior complete in milliseconds, keeping CI fast"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between expectNoEvent and thenAwait in StepVerifier?",
+        "How do you test Retry.backoff without waiting in real time?",
+        "Why must the publisher be built inside the supplier passed to withVirtualTime?",
+        "When can virtual time NOT help you test reactive code?"
+      ],
+      "seo": {
+        "metaTitle": "StepVerifier Virtual Time — Testing Reactor Time-Based Operators",
+        "metaDescription": "Test interval, delay, timeout, and Retry.backoff operators instantly with StepVerifier.withVirtualTime — patterns, pitfalls, and worked examples."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Time-based operators like interval, delayElements, timeout, and Retry.backoff would make tests slow in real time.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Reactor has many time-based operators — Flux.interval, Mono.delay, delayElements, delaySubscription, timeout, Retry.backoff, take(Duration). Tested in real time, they make CI painfully slow: a test of \"emit every 100 ms for 10 seconds\" actually takes 10 seconds. StepVerifier.withVirtualTime replaces Reactor's default scheduler with a VirtualTimeScheduler — a controllable clock. Emissions scheduled for some future moment fire only when you advance the clock with thenAwait(Duration). Tests of long-duration behavior complete in milliseconds. The contract Build the Mono / Flux inside the supplier."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows how to test delay-based reactive code without slowing tests, and the constraints of VirtualTimeScheduler"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "StepVerifier",
+              "withVirtualTime(supplier) swaps Reactor's scheduler for a controllable virtual clock Build the publisher inside the supplier — outside, it captures the real scheduler expectNoEvent(Duration) advances the clock and asserts no signal during the window thenAwait(Duration) advances the clock without asserting events Use for interval, delayElements, delaySubscription, timeout, Retry",
+              "backoff Doesn't help real network / DB I/O or non-Reactor async Always start with expectSubscription for predictable ordering VirtualTimeScheduler",
+              "reset for global tests; use sparingly Combine with TestPublisher for full control of timing and input Tests of long-duration behavior complete in milliseconds"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Reactor has many time-based operators — Flux.interval, Mono.delay, delayElements, delaySubscription, timeout, Retry.backoff, take(Duration). Tested in real time, they make CI painfully slow: a test of \"emit every 100 ms for 10 seconds\" actually takes 10 seconds. StepVerifier.withVirtualTime replaces Reactor's default scheduler with a VirtualTimeScheduler — a controllable clock. Emissions scheduled for some future moment fire only when you advance the clock with thenAwait(Duration). Tests of long-duration behavior complete in milliseconds. The contract Build the Mono / Flux inside the supplier passed to withVirtualTime This ensures operators capture the virtual scheduler instead of the real one Use expectNoEvent(Duration) to verify nothing fires before its time Use thenAwait(Duration) to advance the clock Use expectNext / expectComplete / expectError as in normal StepVerifier."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Building the publisher outside the supplier (it captures the real scheduler)",
+              "confusing thenAwait with expectNoEvent",
+              "expecting virtual time to virtualize subscriber threads"
+            ]
+          }
+        ],
+        "cap": "The contract Build the publisher inside the supplier so operators pick up the virtual scheduler Use expectNoEvent(Duration) to verify nothing fires during a window Use thenAwait(Duration) to advance t",
+        "familiarity_anchors": [
+          "StepVerifier",
+          "Reactor",
+          "VirtualTimeScheduler"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between expectNoEvent and thenAwait in StepVerifier?",
+          "How do you test Retry.backoff without waiting in real time?",
+          "Why must the publisher be built inside the supplier passed to withVirtualTime?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring WebFlux reactive API with Reactor"
+      }
+    }
+  ]
+}

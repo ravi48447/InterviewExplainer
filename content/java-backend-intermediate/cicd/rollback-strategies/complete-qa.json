@@ -1,0 +1,253 @@
+{
+  "topic": "Rollback Strategies",
+  "topicSlug": "rollback-strategies",
+  "questions": [
+    {
+      "id": "cicd-rb-001",
+      "slug": "kubernetes-rollback-strategies",
+      "question": "What rollback strategies work for Kubernetes deployments, and when do you use each?",
+      "title": "Kubernetes Rollback: kubectl undo, Helm rollback, GitOps revert",
+      "direct_answer": "Three options ordered by safety and audit quality: (1) `kubectl rollout undo` reverts to the previous ReplicaSet — fastest, no rebuild, but only the deployment object; (2) `helm rollback <release> <revision>` restores the entire release manifest — covers ConfigMaps, Services, Secrets together; (3) `git revert` in the manifest repo, let ArgoCD/Flux re-apply — fully audited and consistent with all other changes. Pick #1 for speed in incidents, #2 for chart-based deployments, #3 as the long-term standard.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Practical incident-response knowledge for K8s deployments",
+        "common_mistake": "Forgetting that kubectl rollout undo only restores the Deployment, not associated ConfigMaps/Secrets that may have changed in the same release",
+        "to_stand_out": "Discuss why GitOps (revert + auto-sync) is the audited best practice, mention the database migration backward-incompatibility trap, and explain rollback drills"
+      },
+      "company_tags": [
+        "kubernetes",
+        "weaveworks",
+        "argocd",
+        "spotify"
+      ],
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Three Rollback Levels and Why They Exist",
+            "content": "When a deploy goes bad, the goal is to restore the previous working state as quickly and cleanly as possible. Kubernetes gives you three rollback mechanisms, each operating at a different abstraction level.\n\n**`kubectl rollout undo`** operates on a single Deployment object. Kubernetes retains old ReplicaSets (default `revisionHistoryLimit: 10`), so undo simply scales the previous ReplicaSet up and the current one down. Fastest and zero-cost — no rebuild, no registry pull. But it only knows about the Deployment; if your release also changed a ConfigMap or Service, those don't roll back.\n\n**`helm rollback`** operates on a Helm release — a logical unit grouping the Deployment, ConfigMap, Service, Ingress, and any other resources in the chart. Helm tracks each release in cluster-stored history and can restore any previous revision. Covers more than `kubectl undo` but requires Helm-managed deployments.\n\n**`git revert` in the manifest repo** is the GitOps approach. The cluster watches a git repo (via ArgoCD or Flux); reverting a commit and pushing it triggers a re-sync that restores the previous state. Slower than the other two (commit, push, sync wait) but provides full audit trail and consistency with all other change management.\n\nMature teams use all three: GitOps as the standard, Helm rollback for chart-specific situations, and `kubectl rollout undo` only as the in-the-moment incident escape hatch."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Three Rollback Paths Side by Side",
+            "content": "```mermaid\nflowchart TB\n    Inc[Incident: deploy v2 broken] --> Choice{Rollback method}\n    Choice -->|fastest| KU[kubectl rollout undo<br/>deploy/payment-svc]\n    Choice -->|chart-aware| HR[helm rollback<br/>payment-svc 7]\n    Choice -->|audited| GR[git revert HEAD<br/>git push]\n    KU --> KUDo[kubectl scales prev ReplicaSet up<br/>scales current down]\n    KUDo --> KUFast[Done in 30s; only Deployment reverted]\n    HR --> HRDo[Helm restores manifest<br/>from release history]\n    HRDo --> HRMid[Done in 60s; all release resources reverted]\n    GR --> GRDo[ArgoCD/Flux detects change<br/>re-applies prior manifest]\n    GRDo --> GRSlow[Done in 2-5 min; fully audited]\n    style KU fill:#ffe0b2\n    style HR fill:#fff9c4\n    style GR fill:#c8e6c9\n```\n\nGitOps is the slowest but the only one that leaves a clean audit trail and aligns with how every other change to the cluster is tracked."
+          },
+          {
+            "type": "step",
+            "title": "When Each Method Wins",
+            "content": "**Use `kubectl rollout undo` for in-the-moment incidents.** A bad deploy is causing 5xx errors right now. The on-call SRE runs:\n\n```bash\nkubectl rollout undo deployment/payment-service\nkubectl rollout status deployment/payment-service\n```\n\nDone in 30 seconds. The incident is over. **Then** the team goes back, identifies what was wrong, fixes it in git, and lets the normal process re-deploy properly. The rollout undo is the emergency brake; it should not be the standard release-management tool.\n\n**Use `helm rollback` for chart-managed services.** If your service ships as a Helm chart, `helm rollback payment-service 7` restores release 7 in full — Deployment, ConfigMap, Service, everything. Lists previous revisions with `helm history`. Survives ConfigMap changes that `kubectl undo` misses.\n\n**Use `git revert` in the GitOps repo for the standard path.** ArgoCD and Flux watch a manifest repo. Reverting the bad commit and pushing triggers a sync. The cluster reconciles to the reverted manifest. This is the only method that leaves a clean audit trail, ties rollback to the same review process as forward changes, and stays consistent with the cluster's source of truth.\n\nMature production: GitOps is the rule; the others are exceptions for incident-response speed."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and the Database Migration Trap",
+            "content": "**Database migrations break naive rollback.** Your v2 deploy ran a Flyway migration that added a column. Rolling back to v1 leaves the column in place — v1 doesn't know about it but isn't broken. Now imagine v2 *dropped* a column. Rolling back to v1, which expects that column, breaks immediately. The general rule: code rollback is only safe if migrations are backward-compatible (expand-contract pattern — add columns are safe; drop columns require a separate later migration).\n\n**ConfigMap-only changes don't trigger pod restart.** Kubernetes does not automatically restart pods when a referenced ConfigMap changes. If your release changed a ConfigMap and you `kubectl rollout undo` the Deployment, the new ConfigMap is still in place and the rolled-back pods read it. Use `kubectl rollout restart` or annotation-based hash to force restart.\n\n**Image registry availability.** A rollback that requires re-pulling the previous image needs the image still in the registry. If your retention policy deleted v1's image, rollback fails with `ImagePullBackOff`. Set retention to keep at least 10 prior versions. SHA-tagged images make this explicit.\n\n**Atomic vs partial rollback.** Helm's `--atomic` flag rolls back automatically on apply failure. ArgoCD has similar pruning behavior. Use these to prevent half-deployed states that are harder to fix than either fully-old or fully-new.\n\n**Rollback drills.** A team that's never rolled back doesn't know if it works. Schedule monthly rollback drills in staging — deploy a known-bad version, roll back, verify recovery. The first time you do this in a real incident is the worst possible time to discover the rollback path is broken.\n\n**`revisionHistoryLimit` matters.** Default is 10. Lower values save etcd space but limit how far back you can roll. Raise to 20–50 for high-deploy-frequency services so you have history when you need it."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Three levels: kubectl undo, helm rollback, git revert** — each operates at a different scope; mature teams use all three for different situations\n- **`kubectl rollout undo` is the emergency brake** — 30s to recover; only reverts the Deployment, not associated ConfigMaps/Secrets\n- **`helm rollback` for chart-managed releases** — reverts the full release manifest atomically; tracks history in cluster\n- **GitOps revert is the audited standard** — commit, push, ArgoCD/Flux re-syncs; fully audited; aligns with all other change management\n- **Database migrations break naive rollback** — only expand-contract migrations (add column, deploy reading new, deploy writing new, drop old) are safe to roll back; never drop columns in same release as code\n- **Rollback drills monthly** — a never-tested rollback path is broken when you need it; staging drills catch broken paths before incidents do"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Three rollback methods, each suited for a different situation — and one trap that breaks all of them.\n\n**The fastest — `kubectl rollout undo`**\n- Reverts a Deployment to its previous ReplicaSet; takes 30 seconds; no rebuild, no registry pull, no commit\n- Use during an active incident when speed matters most; the SRE on-call rolls back, the incident is resolved, then the team fixes it properly in code\n- Limitation: only the Deployment object is reverted; if the release also changed a ConfigMap or Service, those changes remain\n\n**The chart-aware — `helm rollback`**\n- Reverts an entire Helm release to a previous revision; Deployment, ConfigMap, Service, Ingress all revert atomically\n- `helm history payment-service` shows previous revisions; `helm rollback payment-service 7` restores revision 7\n- Use for Helm-managed services; covers the multi-resource case that `kubectl undo` misses\n\n**The audited standard — GitOps revert**\n- ArgoCD or Flux watches a manifest repo; reverting the bad commit and pushing triggers a re-sync; cluster reconciles to the previous manifest\n- Slower than the other two (2–5 minutes) but the only one with a clean audit trail and consistency with the cluster's source of truth\n- The right standard for any team running GitOps; the others become emergency tools used only during incidents\n\n**The trap — database migrations**\n- Code rollback only works if database migrations are backward-compatible; adding a column is safe (old code ignores it); dropping a column breaks rollback\n- Use the expand-contract pattern: add new column, deploy code that writes both, deploy code that reads new, only later drop the old column — each step independently revertible\n- Never combine a code change and a destructive migration in the same release; you've made rollback impossible without data loss\n\n**Operational discipline**\n- Run rollback drills in staging monthly; a never-tested rollback is broken; the first test should never be a real incident\n- Set `revisionHistoryLimit` to 20–50 for active services so you have rollback targets; keep image registry retention long enough that pull-back works"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the expand-contract pattern for backward-compatible database migrations?",
+        "Why doesn't Kubernetes restart pods when a referenced ConfigMap changes?",
+        "How does ArgoCD's auto-sync detect and apply rollback commits?",
+        "What is `helm upgrade --atomic` and how does it differ from `helm rollback`?"
+      ],
+      "seo": {
+        "metaTitle": "Kubernetes Rollback Strategies: kubectl undo, Helm, GitOps | InterviewExplainer",
+        "metaDescription": "Three rollback methods for Kubernetes: kubectl rollout undo, helm rollback, GitOps revert. Trade-offs, database migration traps, and rollback drill discipline."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "Three rollback methods, each suited for a different situation — and one trap that breaks all of them.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When a deploy goes bad, the goal is to restore the previous working state as quickly and cleanly as possible. Kubernetes gives you three rollback mechanisms, each operating at a different abstraction level. kubectl rollout undo operates on a single Deployment object. Kubernetes retains old ReplicaSets (default revisionHistoryLimit: 10), so undo simply scales the previous ReplicaSet up and the current one down. Fastest and zero-cost — no rebuild, no registry pull. But it only knows about the Deployment; if your."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical incident-response knowledge for K8s deployments"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Three levels: kubectl undo, helm rollback, git revert — each operates at a different scope",
+              "mature teams use all three for different situations kubectl rollout undo is the emergency brake — 30s to recover",
+              "only reverts the Deployment, not associated ConfigMaps/Secrets helm rollback for chart-managed releases — reverts the full release manifest atomically",
+              "tracks history in cluster GitOps revert is the audited standard — commit, push, ArgoCD/Flux re-syncs",
+              "fully audited",
+              "aligns with all other change management Database migrations break naive rollback — only expand-contract migrations (add column, deploy reading new, deploy writing new, drop old) are safe to roll back",
+              "never drop columns in same release as code Rollback drills monthly — a never-tested rollback path is broken when you need it",
+              "staging drills catch broken paths before incidents do"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "When a deploy goes bad, the goal is to restore the previous working state as quickly and cleanly as possible. Kubernetes gives you three rollback mechanisms, each operating at a different abstraction level. kubectl rollout undo operates on a single Deployment object. Kubernetes retains old ReplicaSets (default revisionHistoryLimit: 10), so undo simply scales the previous ReplicaSet up and the current one down. Fastest and zero-cost — no rebuild, no registry pull. But it only knows about the Deployment; if your release also changed a ConfigMap or Service, those don't roll back. helm rollback operates on a Helm release — a logical unit grouping the Deployment, ConfigMap, Service, Ingress, and any other resources in the chart. Helm tracks each release in."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Forgetting that kubectl rollout undo only restores the Deployment, not associated ConfigMaps/Secrets that may have changed in the same release"
+            ]
+          }
+        ],
+        "cap": "The fastest — kubectl rollout undo Reverts a Deployment to its previous ReplicaSet; takes 30 seconds; no rebuild, no registry pull, no commit Use during an active incident when speed matters most; the",
+        "familiarity_anchors": [
+          "Three",
+          "ReplicaSet",
+          "ConfigMaps"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the expand-contract pattern for backward-compatible database migrations?",
+          "Why doesn't Kubernetes restart pods when a referenced ConfigMap changes?",
+          "How does ArgoCD's auto-sync detect and apply rollback commits?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    },
+    {
+      "id": "cicd-rb-002",
+      "slug": "automated-rollback-on-slo-regression",
+      "question": "How do you implement automated rollback when a deploy regresses SLOs?",
+      "title": "Automated Rollback on SLO Regression: Argo Rollouts + Prometheus",
+      "direct_answer": "Use a progressive delivery controller (Argo Rollouts or Flagger) that drives a canary expansion based on Prometheus metrics. Define SLO queries (error rate, p95 latency) as analysis templates; the controller checks them at each promotion step; if metrics regress beyond thresholds, it auto-rolls back without human intervention. Pair with synthetic monitoring (Datadog, Pingdom) for end-to-end signals.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Modern progressive delivery practice and SLO-driven operations",
+        "common_mistake": "Defining 'rollback on error rate > 5%' without specifying time window or comparison baseline — leads to false rollbacks from transient spikes",
+        "to_stand_out": "Discuss multi-window multi-burn-rate SLO checks, comparison against baseline (canary vs stable) rather than absolute thresholds, and the role of synthetic checks alongside RUM"
+      },
+      "company_tags": [
+        "weaveworks",
+        "intuit",
+        "google",
+        "netflix"
+      ],
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-22",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Manual Rollback Is Always Too Slow When You Need It Most",
+            "content": "When a deploy regresses, every second counts. A bad release that doubled p95 latency is silently degrading user experience while the on-call SRE notices the dashboard, opens Slack, asks for confirmation, runs `kubectl rollout undo`, and waits for it to complete. Total time: 3–10 minutes. With automated rollback driven by SLO checks: 30–60 seconds.\n\nProgressive delivery tools (Argo Rollouts, Flagger) implement this by combining canary deployments with metric analysis. The deploy starts as a canary at 5% traffic. The controller queries Prometheus for error rate and latency on the canary pods, compares against the stable version, and either promotes (5% → 25% → 50% → 100%) or rolls back automatically.\n\nThe critical part is **SLO definition quality**. \"Roll back if errors > 5%\" sounds reasonable but produces false rollbacks from transient spikes. Modern SLO analysis uses **multi-window multi-burn-rate** logic from the Google SRE book: a fast-burn alert on a short window for severe regressions, a slow-burn alert on a longer window for sustained degradation."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Argo Rollouts SLO-Driven Promotion Loop",
+            "content": "```mermaid\nflowchart LR\n    Push[Image push] --> AR[Argo Rollouts<br/>controller]\n    AR --> Step1[Step 1: 5% canary traffic]\n    Step1 --> Wait1[wait 5 min]\n    Wait1 --> Q1[AnalysisRun:<br/>query Prometheus]\n    Q1 --> Comp{Compare canary<br/>vs stable<br/>error rate, latency}\n    Comp -->|metrics OK| Step2[Step 2: 25%]\n    Comp -->|regression| RB[Auto rollback to 0%]\n    Step2 --> Wait2[wait 5 min]\n    Wait2 --> Q2[AnalysisRun]\n    Q2 -->|OK| Step3[Step 3: 50%]\n    Q2 -->|fail| RB\n    Step3 --> Step4[Step 4: 100%<br/>full promotion]\n    Step4 --> Done[Stable v2]\n    RB --> Pre[Stable v1 unchanged]\n    style Comp fill:#fff9c4\n    style RB fill:#ff8a80\n    style Done fill:#c8e6c9\n```\n\n**The controller is the rollback decider** — no human needed for the rollback itself, just to investigate after."
+          },
+          {
+            "type": "step",
+            "title": "Defining the SLO Analysis Template",
+            "content": "An Argo Rollouts AnalysisTemplate that compares canary error rate to stable error rate. The check fails if canary errors are >50% higher than stable.\n\n```yaml\napiVersion: argoproj.io/v1alpha1\nkind: AnalysisTemplate\nmetadata:\n  name: error-rate-comparison\nspec:\n  args:\n    - name: service-name\n  metrics:\n    - name: canary-error-rate-vs-stable\n      interval: 1m\n      successCondition: result < 1.5\n      failureLimit: 3\n      provider:\n        prometheus:\n          address: http://prometheus:9090\n          query: |\n            (\n              sum(irate(http_requests_total{service=\"{{args.service-name}}\",version=\"canary\",code=~\"5..\"}[2m]))\n              /\n              sum(irate(http_requests_total{service=\"{{args.service-name}}\",version=\"canary\"}[2m]))\n            )\n            /\n            (\n              sum(irate(http_requests_total{service=\"{{args.service-name}}\",version=\"stable\",code=~\"5..\"}[2m]))\n              /\n              sum(irate(http_requests_total{service=\"{{args.service-name}}\",version=\"stable\"}[2m]))\n            )\n```\n\n**Comparison-based threshold (canary vs stable) avoids false alarms** during traffic spikes when both versions see elevated errors. Absolute thresholds (\"error rate > 5%\") fire on legitimate traffic spikes; comparison fires only when the canary is actually worse than stable.\n\nReference the template in the Rollout spec:\n\n```yaml\nspec:\n  strategy:\n    canary:\n      steps:\n        - setWeight: 5\n        - pause: { duration: 5m }\n        - analysis:\n            templates:\n              - templateName: error-rate-comparison\n            args:\n              - name: service-name\n                value: payment-service\n        - setWeight: 25\n        - pause: { duration: 5m }\n        - analysis:\n            templates:\n              - templateName: error-rate-comparison\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and SLO Design Pitfalls",
+            "content": "**Comparison vs absolute thresholds.** Comparing canary to stable is more robust to traffic spikes (both versions see them) but doesn't catch regressions that exist in both versions — e.g., a downstream service degraded equally affecting both. Combine with absolute thresholds as a safety net.\n\n**Sample size matters.** A canary at 5% traffic for 5 minutes might see 100 requests. Statistical noise is huge — 1 error is 1% error rate. Wait longer or analyze on a smarter time window. Argo Rollouts' `failureLimit: 3` means it tolerates 3 transient failures before rolling back.\n\n**Multi-window multi-burn-rate.** Google SRE's recommendation: detect both fast burn (high error rate over 5 minutes — acute issue) and slow burn (moderate error rate over 1 hour — sustained degradation). Single-window checks miss one or the other.\n\n**Latency percentiles.** p95 and p99 latency are noisier than p50. A few slow requests skew the percentile. Compare with a wider buffer for tail metrics. Don't trigger rollback on single 10-second spikes in p99.\n\n**Synthetic monitoring as backup.** RUM (real-user monitoring) and Prometheus see what users see during the canary, but synthetic checks (Datadog Synthetic, Pingdom) detect broken happy paths even at low canary traffic. Run both.\n\n**Rollback storms.** A regression that causes auto-rollback also affects subsequent deploys (the next push hits the same regression). Rate-limit auto-rollbacks to avoid thrashing — after one rollback, hold the canary at 0% until human review.\n\n**Manual override.** Argo Rollouts supports `kubectl argo rollouts pause` and `promote` for human override. Auto-rollback should not block humans from promoting if they have evidence the rollback was a false positive."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Argo Rollouts and Flagger are the standard tools** — they drive canary promotion based on Prometheus or Datadog metric analysis\n- **AnalysisTemplate defines the SLO query** — compares canary vs stable for robustness; absolute thresholds as safety net for cases stable is also bad\n- **Multi-window multi-burn-rate SLO** — fast burn (5m window, severe) + slow burn (1h window, sustained); single-window misses one class of regression\n- **Sample size and statistical noise** — 5% canary may see too few requests for reliable error-rate measurement; tune analysis interval and failureLimit accordingly\n- **Pair with synthetic monitoring** — RUM sees what users see, but synthetic checks catch broken happy paths even at low canary traffic"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Manual rollback is too slow when it matters most. Automated rollback driven by SLO checks gets you from regression to recovery in under a minute, vs 5–10 minutes for human-driven rollback.\n\n**The architecture**\n- Use Argo Rollouts or Flagger — progressive delivery controllers that drive a canary expansion based on metric analysis; both query Prometheus or Datadog at each promotion step\n- The deploy starts as a canary at 5% traffic; the controller queries metrics; if healthy, promotes to 25%, then 50%, then 100%; if unhealthy, automatically rolls back\n- The controller is the decider; no human approves the rollback itself — humans investigate after the rollback has already happened\n\n**SLO definition is where most teams get this wrong**\n- A naive threshold like \"error rate > 5%\" produces false rollbacks from transient spikes; modern practice compares canary vs stable, so the rollback fires only when the canary is actually worse than the stable version\n- Multi-window multi-burn-rate from the Google SRE book: a fast-burn check on a 5-minute window for severe regressions, plus a slow-burn check on a 1-hour window for sustained degradation; catches both acute and chronic issues\n- Statistical sample size matters — a 5% canary may see only 100 requests in 5 minutes; one error is 1% error rate; tune analysis interval and failure tolerance accordingly\n\n**Implementation — Argo Rollouts AnalysisTemplate**\n- Define a Prometheus query in an AnalysisTemplate that returns canary error rate divided by stable error rate; success condition is `result < 1.5` meaning canary is no more than 50% worse than stable\n- Reference the template in the Rollout spec at each step; controller waits the pause duration, runs the analysis, promotes or rolls back based on result\n\n**Belt-and-suspenders monitoring**\n- Real-user monitoring sees what users actually experience but only at the volumes the canary serves; synthetic monitoring (Datadog Synthetics, Pingdom) hits the canary with known requests and catches broken happy paths at low traffic\n- Run both — they detect different classes of regression\n\n**Operational guardrails**\n- Rate-limit auto-rollbacks to prevent thrashing — after one rollback, hold the canary at 0% until human review approves the next attempt\n- Always provide a manual override path; humans should be able to promote when they have evidence a rollback was a false positive"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the multi-window multi-burn-rate SLO methodology from the Google SRE book?",
+        "How does Flagger differ from Argo Rollouts for progressive delivery?",
+        "How do you avoid statistical noise when analyzing metrics on a low-traffic canary?",
+        "What is the role of synthetic monitoring vs RUM in canary analysis?"
+      ],
+      "seo": {
+        "metaTitle": "Automated Rollback on SLO Regression: Argo Rollouts + Prometheus | InterviewExplainer",
+        "metaDescription": "Implement automated rollback driven by SLO checks. Argo Rollouts AnalysisTemplate, comparison vs absolute thresholds, multi-window burn rates, synthetic backup."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "Manual rollback is too slow when it matters most.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When a deploy regresses, every second counts. A bad release that doubled p95 latency is silently degrading user experience while the on-call SRE notices the dashboard, opens Slack, asks for confirmation, runs kubectl rollout undo, and waits for it to complete. Total time: 3–10 minutes. With automated rollback driven by SLO checks: 30–60 seconds. Progressive delivery tools (Argo Rollouts, Flagger) implement this by combining canary deployments with metric analysis. The deploy starts as a canary at 5% traffic. The controller."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Modern progressive delivery practice and SLO-driven operations"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Argo Rollouts and Flagger are the standard tools — they drive canary promotion based on Prometheus or Datadog metric analysis AnalysisTemplate defines the SLO query — compares canary vs stable for robustness",
+              "absolute thresholds as safety net for cases stable is also bad Multi-window multi-burn-rate SLO — fast burn (5m window, severe) + slow burn (1h window, sustained)",
+              "single-window misses one class of regression Sample size and statistical noise — 5% canary may see too few requests for reliable error-rate measurement",
+              "tune analysis interval and failureLimit accordingly Pair with synthetic monitoring — RUM sees what users see, but synthetic checks catch broken happy paths even at low canary traffic"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "When a deploy regresses, every second counts. A bad release that doubled p95 latency is silently degrading user experience while the on-call SRE notices the dashboard, opens Slack, asks for confirmation, runs kubectl rollout undo, and waits for it to complete. Total time: 3–10 minutes. With automated rollback driven by SLO checks: 30–60 seconds. Progressive delivery tools (Argo Rollouts, Flagger) implement this by combining canary deployments with metric analysis. The deploy starts as a canary at 5% traffic. The controller queries Prometheus for error rate and latency on the canary pods, compares against the stable version, and either promotes (5% → 25% → 50% → 100%) or rolls back automatically. The critical part is SLO definition quality. \"Roll back if."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Defining 'rollback on error rate > 5%' without specifying time window or comparison baseline",
+              "leads to false rollbacks from transient spikes"
+            ]
+          }
+        ],
+        "cap": "The architecture Use Argo Rollouts or Flagger — progressive delivery controllers that drive a canary expansion based on metric analysis; both query Prometheus or Datadog at each promotion step The dep",
+        "familiarity_anchors": [
+          "Rollouts",
+          "Flagger",
+          "Prometheus"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the multi-window multi-burn-rate SLO methodology from the Google SRE book?",
+          "How does Flagger differ from Argo Rollouts for progressive delivery?",
+          "How do you avoid statistical noise when analyzing metrics on a low-traffic canary?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    }
+  ]
+}

@@ -1,0 +1,361 @@
+{
+  "topic": "Iam And Security",
+  "topicSlug": "iam-and-security",
+  "questions": [
+    {
+      "id": "aws-007",
+      "slug": "iam-roles-least-privilege",
+      "question": "How does IAM work in AWS, and what is the least privilege principle?",
+      "title": "IAM Roles and Policies — Least Privilege Principle",
+      "direct_answer": "IAM (Identity and Access Management) controls who can do what on which AWS resources. Least privilege means granting only the permissions required to perform a specific task — nothing more. Spring Boot apps should use IAM roles attached to their compute (EC2 instance profile, ECS task role) rather than hardcoded access keys.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Security awareness and understanding of AWS authentication/authorisation model",
+        "common_mistake": "Using IAM user access keys in application code or environment variables instead of IAM roles, and using wildcard (*) actions in policies",
+        "to_stand_out": "Explain the difference between the task execution role (pulls image, writes logs) and the task role (what the app itself can do), and mention IAM policy conditions to restrict by resource ARN or tag"
+      },
+      "company_tags": [
+        "amazon",
+        "netflix",
+        "stripe",
+        "github",
+        "cloudflare"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Mistake That Turns a Minor Vulnerability Into a Full Account Compromise",
+            "content": "Every AWS API call — whether from the console, CLI, or your Spring Boot application — is authenticated and authorized by IAM. The authentication part determines **who** is making the call. The authorization part determines **whether they're allowed to**. Getting this wrong doesn't just break functionality — it determines the blast radius when something goes wrong.\n\nThe most dangerous IAM anti-pattern in Java applications is using **long-lived access keys** — `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in environment variables, properties files, or Docker images. These keys never expire, can't be rotated without application changes, and grant whatever permissions are attached to that IAM user. A leaked key (in a Git commit, a log dump, a CI artifact) gives an attacker persistent access until the key is manually revoked.\n\nThe solution is **IAM roles attached to compute**: EC2 instance profiles, ECS task roles, Lambda execution roles. The AWS SDK's default credential chain discovers these credentials automatically — no keys in code, no environment variables, and credentials rotate every few hours without any application awareness.\n\nLeast privilege means each role has **exactly the permissions needed, on exactly the resources needed, and nothing more**. Not `s3:*` on `*` — but `s3:GetObject` on `arn:aws:s3:::my-bucket/uploads/*`."
+          },
+          {
+            "type": "step",
+            "title": "The Two-Role Model: Execution Role vs Task Role in ECS",
+            "content": "The most common IAM confusion in containerized deployments is the distinction between the **execution role** and the **task role**. Both are IAM roles, both are referenced in the task definition, and both produce similar-looking permission errors — but they serve completely different purposes.\n\nThe **execution role** (`executionRoleArn`) is what **ECS itself** uses. It needs permissions to pull the container image from ECR and write container logs to CloudWatch Logs. This role has nothing to do with what your application code does.\n\nThe **task role** (`taskRoleArn`) is what **your Spring Boot code** assumes at runtime. When your code calls `s3Client.putObject()` or `sqsClient.sendMessage()`, the SDK authenticates using the task role's credentials. This role should have only the specific permissions your application needs.\n\n```json\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": [\"s3:GetObject\", \"s3:PutObject\"],\n      \"Resource\": \"arn:aws:s3:::order-uploads/*\"\n    },\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": [\"sqs:SendMessage\", \"sqs:ReceiveMessage\", \"sqs:DeleteMessage\"],\n      \"Resource\": \"arn:aws:sqs:us-east-1:123456789:order-processing-queue\"\n    },\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": \"secretsmanager:GetSecretValue\",\n      \"Resource\": \"arn:aws:secretsmanager:us-east-1:123456789:secret:order-db-*\"\n    }\n  ]\n}\n```\n\nNotice the resource ARNs are specific — not `*`. The S3 permission is scoped to a single bucket and prefix. The SQS permission is scoped to a single queue. The Secrets Manager permission uses a prefix pattern to allow access to all secrets starting with `order-db-`. If this service is compromised, the attacker can access only these specific resources, not the entire AWS account."
+          },
+          {
+            "type": "step",
+            "title": "Policy Conditions: The Advanced Constraint Most Developers Never Use",
+            "content": "IAM policy conditions add a second layer of restriction beyond actions and resources. They evaluate context about the request — the source IP, the VPC, the encryption status, or the tags on the resource — and deny the request if the condition isn't met.\n\nThe most practical condition for production: **VPC endpoint restriction**. This ensures your application can only access S3 from within your VPC, not from a developer's laptop using the same role.\n\n```json\n{\n  \"Effect\": \"Allow\",\n  \"Action\": [\"s3:GetObject\", \"s3:PutObject\"],\n  \"Resource\": \"arn:aws:s3:::order-uploads/*\",\n  \"Condition\": {\n    \"StringEquals\": {\n      \"aws:SourceVpce\": \"vpce-1234567890abcdef0\"\n    }\n  }\n}\n```\n\nOther useful conditions for Java applications: `aws:RequestedRegion` restricts calls to specific regions (prevents accidental cross-region operations), `s3:x-amz-server-side-encryption` requires encryption on uploaded objects, and `aws:PrincipalTag` restricts access based on tags attached to the calling role — useful for multi-tenant environments.\n\nFor auditing, AWS CloudTrail records every API call made by every IAM identity. IAM Access Analyzer can scan your policies and identify resources shared outside your account. And **IAM Access Advisor** shows which permissions each role has actually used in the last 90 days — the gap between granted and used permissions is your least-privilege improvement opportunity."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **IAM roles over IAM users for compute resources** — roles provide temporary credentials rotated automatically; IAM user access keys are permanent and must be rotated manually; never store access keys in environment variables or code\n- **Least privilege: specific actions on specific ARNs** — `s3:PutObject` on `arn:aws:s3:::my-bucket/*` instead of `s3:*` on `*`; scope every permission to the exact resource the service uses\n- **ECS task role provides credentials automatically** — the AWS SDK resolves credentials from the ECS metadata endpoint without any configuration; no AWS keys in application.properties\n- **IAM conditions narrow permissions further** — `aws:SourceVpc`, `s3:prefix`, and `aws:RequestedRegion` add context-based restrictions that prevent credentials from being used outside expected boundaries\n- **IAM Access Analyzer validates policies** — use AWS IAM Access Analyzer to identify overly permissive policies, unused permissions, and external access before deploying to production"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "IAM controls every API call in AWS — it handles both authentication (proving who you are) and authorization (determining what you're allowed to do). Understanding least-privilege IAM is essential because overly permissive roles are the most common AWS security finding.\n\n**IAM roles vs IAM users**\n- An IAM user has permanent credentials (access key + secret); an IAM role is assumed by a resource and provides temporary credentials via STS\n- For ECS tasks, Lambda functions, and EC2 instances: always use IAM roles, never IAM users; the platform automatically rotates the temporary credentials, which means you don't store or manage long-lived secrets in the environment\n\n**Least privilege — the principle**\n- Least privilege means granting only the exact permissions a service needs and nothing more — which means an ECS task that writes to one S3 bucket should have `s3:PutObject` on that specific bucket ARN, not `s3:*` on `*`\n- Over-permissive roles are the single most exploited attack vector in AWS breaches; a compromised task with `s3:*` exposes all your buckets; a compromised task with `s3:PutObject` on one bucket exposes only that\n\n**IAM policy structure**\n- Policies have Effect (Allow/Deny), Action (the API operations), Resource (the specific ARN), and optional Condition — `aws:SourceIp`, `aws:RequestedRegion`, and `s3:prefix` are common conditions that narrow access further\n- Start with AWS managed policies for common roles (e.g., `AmazonECSTaskExecutionRolePolicy`) and add custom policies for your specific resource ARNs\n\n**In Spring Boot on ECS**\n- Assign the IAM task role in the task definition; the AWS SDK automatically calls the ECS metadata endpoint to retrieve temporary credentials — no AWS key configuration in environment variables or application.properties\n- Use `@Value(\"${aws.region}\")` from the ECS metadata, not hardcoded; the SDK's DefaultCredentialsProvider chain resolves credentials automatically"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you audit which IAM permissions your application is actually using?",
+        "What is the difference between an IAM role's trust policy and its permission policy?",
+        "How would you use IAM conditions to restrict S3 access to requests from your VPC only?"
+      ],
+      "seo": {
+        "meta_title": "AWS IAM Roles and Least Privilege for Java Developers",
+        "meta_description": "Learn how AWS IAM roles, policies, and least privilege work for Spring Boot applications. Covers ECS task roles, policy examples, and security best practices.",
+        "keywords": [
+          "aws iam spring boot",
+          "iam roles java",
+          "least privilege aws",
+          "ecs task role spring boot"
+        ],
+        "metaDescription": "IAM (Identity and Access Management) controls who can do what on which AWS resources.",
+        "metaTitle": "IAM Roles and Policies — Least Privilege Principle"
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P10",
+        "hook": "IAM controls every API call in AWS — it handles both authentication (proving who you are) and authorization (determining what you're allowed to do).",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Every AWS API call — whether from the console, CLI, or your Spring Boot application — is authenticated and authorized by IAM. The authentication part determines who is making the call. The authorization part determines whether they're allowed to. Getting this wrong doesn't just break functionality — it determines the blast radius when something goes wrong. The most dangerous IAM anti-pattern in Java applications is using long-lived access keys —."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "IAM roles over IAM users for compute resources — roles provide temporary credentials rotated automatically; IAM user access keys are permanent and must be rotated manually; never store access keys in environment variables or code Least privilege: specific actions on specific ARNs — s3:PutObject on arn:aws:s3:::my-bucket/ instead of s3: on *; scope every permission to the exact resource the service uses ECS task role provides credentials automatically — the AWS SDK resolves credentials from the ECS metadata endpoint without any configuration; no AWS keys in application",
+              "properties IAM conditions narrow permissions further — aws:SourceVpc, s3:prefix, and aws:RequestedRegion add context-based restrictions that prevent credentials from being used outside expected boundaries IAM Access Analyzer validates policies — use AWS IAM Access Analyzer to identify overly permissive policies, unused permissions, and external access before deploying to production"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Every AWS API call — whether from the console, CLI, or your Spring Boot application — is authenticated and authorized by IAM. The authentication part determines who is making the call. The authorization part determines whether they're allowed to. Getting this wrong doesn't just break functionality — it determines the blast radius when something goes wrong. The most dangerous IAM anti-pattern in Java applications is using long-lived access keys — AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in environment variables, properties files, or Docker images. These keys never expire, can't be rotated without application."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Every AWS API call — whether from the console, CLI, or your Spring Boot application — is authenticated and authorized by IAM. The authentication part determines who is making the call. The authorization part determines whether they're allowed to. Getting this wrong doesn't just break functionality — it determines the blast radius when something goes wrong. The most dangerous IAM."
+          }
+        ],
+        "cap": "IAM roles vs IAM users An IAM user has permanent credentials (access key + secret); an IAM role is assumed by a resource and provides temporary credentials via STS For ECS tasks, Lambda functions, and",
+        "familiarity_anchors": [
+          "Identity",
+          "Access",
+          "Management"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you audit which IAM permissions your application is actually using?",
+          "What is the difference between an IAM role's trust policy and its permission policy?",
+          "How would you use IAM conditions to restrict S3 access to requests from your VPC only?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed on AWS ECS with RDS"
+      }
+    },
+    {
+      "id": "aws-008",
+      "slug": "secrets-manager-vs-parameter-store",
+      "question": "What is the difference between AWS Secrets Manager and AWS Systems Manager Parameter Store, and when do you use each?",
+      "title": "AWS Secrets Manager vs Parameter Store",
+      "direct_answer": "Secrets Manager is purpose-built for secrets (database passwords, API keys) with automatic rotation and higher cost. Parameter Store is a general-purpose hierarchical configuration store — free for standard parameters, lower cost for advanced. Use Secrets Manager for credentials requiring rotation; use Parameter Store for non-secret configuration and lower-volume secret storage.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Configuration management security practices in cloud environments",
+        "common_mistake": "Storing secrets in environment variables in the task definition in plaintext, or in application.properties committed to Git",
+        "to_stand_out": "Describe how Spring Boot can load both Secrets Manager and Parameter Store values at startup using Spring Cloud AWS, with automatic refresh"
+      },
+      "company_tags": [
+        "amazon",
+        "netflix",
+        "github",
+        "hashicorp",
+        "datadog"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Cost-vs-Capability Trade-Off Most Teams Get Wrong",
+            "content": "Both services store configuration, both support encryption, and both integrate with Spring Boot through Spring Cloud AWS. The confusion is understandable — they overlap significantly. The difference becomes clear when you ask: **does this value need to rotate automatically, and how much am I willing to pay for that capability?**\n\nSecrets Manager costs **$0.40 per secret per month** plus $0.05 per 10,000 API calls. It provides built-in automatic rotation through Lambda functions — you can rotate an RDS password every 30 days without any application changes. Parameter Store's standard tier is **free** (up to 10,000 parameters), and the advanced tier costs $0.05 per parameter per month.\n\nThe practical consequence: if you store 50 configuration values (database URLs, feature flags, timeout settings) in Secrets Manager, you're paying $20/month for capability you don't use. Store them in Parameter Store for free, and keep Secrets Manager for the 5 values that actually need rotation — database passwords, API keys, OAuth client secrets."
+          },
+          {
+            "type": "comparison_table",
+            "title": "When to Use Each: The Decision Matrix",
+            "content": "| Dimension | Secrets Manager | Parameter Store (Standard) | Parameter Store (Advanced) |\n|---|---|---|---|\n| **Cost per value** | $0.40/month | Free | $0.05/month |\n| **Auto-rotation** | ✅ Built-in via Lambda | ❌ | ❌ |\n| **Max size** | 64 KB | 4 KB | 8 KB |\n| **Encryption** | ✅ AWS KMS (mandatory) | ✅ AWS KMS (optional) | ✅ AWS KMS (optional) |\n| **Versioning** | ✅ Automatic | ✅ Manual labels (prod, staging) | ✅ Manual labels |\n| **Hierarchical paths** | ❌ Flat names | ✅ `/app/prod/db-url` | ✅ `/app/prod/db-url` |\n| **Cross-account sharing** | ✅ Via resource policy | ❌ | ✅ |\n| **Throughput** | 10,000 TPS | 40 TPS standard | 1,000 TPS |\n| **Spring Cloud AWS** | ✅ Property source | ✅ Property source | ✅ Property source |\n| **Best for** | DB passwords, API keys, OAuth secrets | Feature flags, URLs, timeouts, environment config | High-throughput config reads |"
+          },
+          {
+            "type": "step",
+            "title": "Spring Cloud AWS Integration: Loading Both Sources as Spring Properties",
+            "content": "Spring Cloud AWS provides property source integration for both services, letting you reference secrets and parameters in `application.yml` as standard Spring properties. The separation is clean: Secrets Manager values are prefixed differently from Parameter Store values, and both resolve before the application context initializes.\n\nThe configuration uses Spring profiles and a hierarchical path convention. Parameter Store parameters follow a path like `/order-service/prod/db-url`, and Spring Cloud AWS maps the path to Spring property names automatically.\n\n```yaml\n# application.yml\nspring:\n  config:\n    import:\n      - aws-parameterstore:/order-service/  # loads all params under this prefix\n      - aws-secretsmanager:order-db-password  # loads specific secret\n\n# Then reference them as normal properties\nspring.datasource.url: ${db-url}  # from Parameter Store\nspring.datasource.password: ${order-db-password}  # from Secrets Manager\nfeature.new-checkout: ${new-checkout-enabled}  # from Parameter Store\n```\n\nThe hierarchical path convention means `/order-service/prod/db-url` maps to the Spring property `db-url` when the application is running with the `prod` profile. This keeps environment-specific configuration in Parameter Store without any code changes between environments.\n\nFor automatic refresh (picking up Parameter Store changes without restart), enable Spring Cloud's `@RefreshScope` on beans that read configuration properties. Secrets Manager values typically require a restart because they're injected during DataSource initialization, but Parameter Store values used for feature flags or timeouts can refresh dynamically."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Secrets Manager: use for credentials that rotate** — database passwords, API keys; automatic rotation Lambda updates both the secret and the resource; running tasks pick up the new version without redeployment\n- **Parameter Store: use for configuration and non-rotating encrypted values** — feature flags, environment config, SecureString for non-rotating sensitive values; free for standard parameters\n- **Spring Cloud AWS integrates both as PropertySource** — `@Value(\"${/myapp/prod/db-password}\")` resolves from Parameter Store at startup; `spring-cloud-aws-starter-secretsmanager` does the same for Secrets Manager\n- **Never store secrets in environment variables or `application.properties`** — environment variables appear in ECS task definition logs and `ps aux` output; Secrets Manager/Parameter Store keeps them out of the code and config files\n- **Secrets Manager costs more but provides rotation** — ~$0.40/secret/month; Parameter Store SecureString costs ~$0.05/parameter/month for advanced tier; use Secrets Manager only when rotation is a requirement"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "AWS Secrets Manager and Systems Manager Parameter Store both securely store configuration, but they serve different purposes — Secrets Manager is for credentials that must rotate; Parameter Store is for configuration that changes infrequently.\n\n**Secrets Manager — for credentials with rotation**\n- Secrets Manager stores secrets (database passwords, API keys, OAuth tokens) and can automatically rotate them on a schedule — which means your RDS password rotates every 30 days and the Lambda or ECS task that reads it at runtime gets the current version, without a deployment\n- Automatic rotation uses a Lambda function that updates both Secrets Manager and the underlying resource (e.g., the RDS password) atomically; if the update fails, the old secret remains valid\n\n**Parameter Store — for configuration and non-secret values**\n- Parameter Store stores both plain-text and encrypted (SecureString) parameters; it's free for standard parameters and supports hierarchical paths — `/myapp/prod/database-url`, `/myapp/prod/feature-flag-enabled`\n- SecureString parameters use KMS for encryption and cost the same as Secrets Manager at much lower usage, but without automatic rotation\n- Use Parameter Store for: feature flags, environment-specific config, non-rotating encrypted values, and anything you'd otherwise put in a properties file\n\n**Integration with Spring Boot**\n- Spring Cloud AWS provides `spring-cloud-aws-starter-secretsmanager` and `spring-cloud-aws-starter-parameter-store` — both integrate as Spring `PropertySource` implementations, which means you reference secrets with `@Value(\"${my-secret-key}\")` and Spring resolves them at startup from AWS\n- Cache the resolved values to avoid fetching from AWS on every property access; configure `spring.cloud.aws.secretsmanager.reload.strategy` for runtime rotation pickup without restarts"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you load AWS Secrets Manager values into Spring Boot application properties at startup?",
+        "How does Secrets Manager automatic rotation work for an RDS database password?",
+        "What happens if Secrets Manager is unavailable when your Spring Boot app starts?"
+      ],
+      "seo": {
+        "meta_title": "AWS Secrets Manager vs Parameter Store — Spring Boot Guide",
+        "meta_description": "Compare AWS Secrets Manager and Parameter Store for Spring Boot configuration management. Learn when to use each and how to integrate with Spring Cloud AWS.",
+        "keywords": [
+          "secrets manager vs parameter store",
+          "spring boot aws secrets",
+          "spring cloud aws secrets manager",
+          "aws configuration management java"
+        ],
+        "metaDescription": "Secrets Manager is purpose-built for secrets (database passwords, API keys) with automatic rotation and higher cost.",
+        "metaTitle": "AWS Secrets Manager vs Parameter Store"
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P10",
+        "hook": "AWS Secrets Manager and Systems Manager Parameter Store both securely store configuration, but they serve different purposes — Secrets Manager is for credentials that must rotate; Parameter Store is for configuration that changes infrequently.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Both services store configuration, both support encryption, and both integrate with Spring Boot through Spring Cloud AWS. The confusion is understandable — they overlap significantly. The difference becomes clear when you ask: does this value need to rotate automatically, and how much am I willing to pay for that capability? Secrets Manager costs $0.40 per secret per month plus $0.05 per 10,000 API calls. It provides built-in automatic rotation through."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "| Dimension | Secrets Manager | Parameter Store (Standard) | Parameter Store (Advanced) | |---|---|---|---| | Cost per value | $0",
+              "40/month | Free | $0",
+              "05/month | | Auto-rotation | ✅ Built-in via Lambda | ❌ | ❌ | | Max size | 64 KB | 4 KB | 8 KB | | Encryption | ✅ AWS KMS (mandatory) | ✅ AWS KMS (optional) | ✅ AWS KMS (optional) | | Versioning | ✅ Automatic | ✅ Manual labels (prod, staging) | ✅ Manual labels | | Hierarchical paths | ❌ Flat names | ✅ /app/prod/db-url | ✅ /app/prod/db-url | | Cross-account sharing | ✅ Via resource policy | ❌ | ✅ | | Throughput | 10,000 TPS | 40 TPS standard | 1,000 TPS | | Spring Cloud AWS | ✅ Property source | ✅ Property source | ✅ Property source | | Best for | DB passwords, API keys, OAuth secrets | Feature flags, URLs, timeouts, environment config | High-throughput config reads |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Both services store configuration, both support encryption, and both integrate with Spring Boot through Spring Cloud AWS. The confusion is understandable — they overlap significantly. The difference becomes clear when you ask: does this value need to rotate automatically, and how much am I willing to pay for that capability? Secrets Manager costs $0.40 per secret per month plus $0.05 per 10,000 API calls. It provides built-in automatic rotation through Lambda functions — you can rotate an RDS password every 30 days without any application changes. Parameter Store's standard tier."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Both services store configuration, both support encryption, and both integrate with Spring Boot through Spring Cloud AWS. The confusion is understandable — they overlap significantly. The difference becomes clear when you ask: does this value need to rotate automatically, and how much am I willing to pay for that capability? Secrets Manager costs $0.40 per secret per month plus $0.05."
+          }
+        ],
+        "cap": "Secrets Manager — for credentials with rotation Secrets Manager stores secrets (database passwords, API keys, OAuth tokens) and can automatically rotate them on a schedule — which means your RDS passw",
+        "familiarity_anchors": [
+          "Secrets",
+          "Manager",
+          "Parameter"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you load AWS Secrets Manager values into Spring Boot application properties at startup?",
+          "How does Secrets Manager automatic rotation work for an RDS database password?",
+          "What happens if Secrets Manager is unavailable when your Spring Boot app starts?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed on AWS ECS with RDS"
+      }
+    },
+    {
+      "id": "aws-iam-003",
+      "slug": "iam-role-vs-user-best-practices",
+      "question": "IAM users vs roles vs instance profiles — what's the difference and which to use when?",
+      "title": "IAM Users vs Roles vs Instance Profiles: Best Practices",
+      "direct_answer": "**IAM Users** are for humans or legacy CI (static access keys) — avoid except for emergency break-glass. **IAM Roles** are temporary credentials assumed by a principal (EC2, Lambda, ECS task, federated user from SSO) — the correct default for workloads. **Instance profiles** are the glue that attaches an IAM role to an EC2 instance (one-to-one with role). The 2026 best practice: humans access AWS via SSO (IAM Identity Center) assuming roles; workloads use task/service roles; no long-lived access keys anywhere.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Understanding of IAM primitives and modern access management",
+        "common_mistake": "Creating IAM users with long-lived access keys for workloads (EC2, Lambda) instead of using roles; or confusing 'role' with 'permission'",
+        "to_stand_out": "Discuss IAM Identity Center (SSO), OIDC federation from GitHub Actions, the principle of least privilege via permission boundaries, and ABAC tags for scalable access control"
+      },
+      "company_tags": [
+        "aws",
+        "okta",
+        "atlassian",
+        "stripe"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three IAM Primitives, One Correct Default",
+            "content": "AWS IAM has three core identity primitives, and they serve different purposes. Confusing them leads to the single most common security mistake: using IAM users with static access keys for workloads.\n\n**IAM User** — a persistent identity with optional password (console) and/or access keys (API). Long-lived credentials. In 2026, IAM users are appropriate only for: (a) emergency break-glass access if SSO breaks, (b) legacy systems that can't federate. Every other use case is better served by roles.\n\n**IAM Role** — a set of permissions with no credentials of its own. Principals (users, services, federated identities) **assume** the role, receiving temporary credentials (15 minutes to 12 hours). No static keys to leak. The role's trust policy defines who can assume it. Use for: EC2 instances, Lambda functions, ECS tasks, EKS pods (via IRSA), cross-account access, SSO users, CI/CD (via OIDC).\n\n**Instance Profile** — a container for an IAM role that can be attached to an EC2 instance. One instance profile ↔ one role. The EC2 instance automatically gets credentials from the attached role via the instance metadata service (IMDS). Think of it as the EC2-specific plumbing for role assumption.\n\nThe modern architecture: humans access AWS via IAM Identity Center (SSO); they log in with their corporate identity, assume a role scoped to their team and environment. Workloads run with task/service roles; code reads credentials from environment or metadata service — no static keys anywhere. CI/CD authenticates via OIDC federation — GitHub Actions, GitLab CI present a signed token, AWS exchanges it for role credentials."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Modern IAM Access Patterns",
+            "content": "```mermaid\nflowchart TB\n    subgraph H[Humans]\n        Hu[Employee] --> SSO[IAM Identity Center<br/>SAML/OIDC]\n        SSO --> AssumeH[AssumeRole via SSO]\n        AssumeH --> TempCredH[Temp creds<br/>1-12 hour]\n        TempCredH --> AWS_H[AWS APIs]\n    end\n    subgraph W[Workloads]\n        EC2inst[EC2 instance] --> InstProf[Instance Profile]\n        InstProf --> RoleE[IAM Role<br/>EC2TaskRole]\n        RoleE --> IMDS[IMDSv2 credentials]\n        IMDS --> AWS_E[AWS APIs]\n        Lambda[Lambda function] --> RoleL[Execution role]\n        RoleL --> LambdaEnv[Env credentials]\n        LambdaEnv --> AWS_L[AWS APIs]\n        ECSTask[ECS task] --> TaskRole[Task role]\n        TaskRole --> ECSmeta[Task metadata creds]\n        ECSmeta --> AWS_T[AWS APIs]\n    end\n    subgraph CI[CI/CD]\n        GHA[GitHub Actions] --> OIDC[OIDC token]\n        OIDC --> STS[AWS STS<br/>AssumeRoleWithWebIdentity]\n        STS --> RoleCI[IAM Role<br/>deploy-role]\n        RoleCI --> TempCI[Temp creds<br/>1 hour]\n        TempCI --> AWS_CI[AWS APIs]\n    end\n    style AssumeH fill:#c8e6c9\n    style RoleE fill:#fff9c4\n    style RoleCI fill:#e3f2fd\n```\n\nNo IAM users needed. No static access keys. Every credential is short-lived and scoped to its use."
+          },
+          {
+            "type": "step",
+            "title": "Applying Each Pattern",
+            "content": "**EC2: Instance Profile + Role**\n\n```bash\n# Create role with trust policy for EC2\naws iam create-role --role-name my-ec2-role \\\n  --assume-role-policy-document '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ec2.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}'\n\n# Attach policies\naws iam attach-role-policy --role-name my-ec2-role \\\n  --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess\n\n# Create instance profile and add role\naws iam create-instance-profile --instance-profile-name my-ec2-profile\naws iam add-role-to-instance-profile --role-name my-ec2-role \\\n  --instance-profile-name my-ec2-profile\n\n# Attach to EC2 at launch\naws ec2 run-instances --iam-instance-profile Name=my-ec2-profile ...\n```\n\nOn the EC2, the AWS SDK finds credentials via IMDSv2 automatically. No config needed. Rotating the role's permissions updates instantly; no credential distribution.\n\n**Lambda: Execution Role**\n\n```yaml\n# SAM template\nResources:\n  MyFunction:\n    Type: AWS::Serverless::Function\n    Properties:\n      Role: !GetAtt MyFunctionRole.Arn\n  MyFunctionRole:\n    Type: AWS::IAM::Role\n    Properties:\n      AssumeRolePolicyDocument:\n        Statement:\n          - Effect: Allow\n            Principal: { Service: lambda.amazonaws.com }\n            Action: sts:AssumeRole\n      Policies:\n        - PolicyName: s3-read\n          PolicyDocument:\n            Statement:\n              - Effect: Allow\n                Action: s3:GetObject\n                Resource: arn:aws:s3:::my-bucket/*\n```\n\n**ECS Task Role (per-task credentials)**\n\n```yaml\n# Task definition\ntaskRoleArn: arn:aws:iam::123456789012:role/ecs-task-role\nexecutionRoleArn: arn:aws:iam::123456789012:role/ecs-execution-role\n```\n\nTwo roles:\n- **Task role**: the application's credentials (reads S3, calls DynamoDB)\n- **Execution role**: for ECS agent (pull image, write logs)\n\n**EKS: IRSA (IAM Roles for Service Accounts)**\n\n```yaml\napiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: my-sa\n  annotations:\n    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/my-pod-role\n---\napiVersion: apps/v1\nkind: Deployment\nspec:\n  template:\n    spec:\n      serviceAccountName: my-sa\n```\n\nPods using this service account get temporary credentials for the specified role. Per-pod IAM without node-level credentials.\n\n**CI/CD: OIDC Federation (no long-lived secrets)**\n\n```yaml\n# GitHub Actions workflow\njobs:\n  deploy:\n    permissions:\n      id-token: write\n      contents: read\n    steps:\n      - uses: aws-actions/configure-aws-credentials@v4\n        with:\n          role-to-assume: arn:aws:iam::123456789012:role/github-deploy\n          aws-region: us-east-1\n```\n\nThe role's trust policy allows the GitHub OIDC provider, scoped to specific repo and branch. No AWS access keys in GitHub secrets.\n\n**Humans: IAM Identity Center (SSO)**\n\nEnable IAM Identity Center; connect to your corporate IdP (Okta, Azure AD, Google Workspace). Define permission sets (role templates). Users log in with SSO, pick an account + role, get a session. Access keys via `aws configure sso`."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Best Practices",
+            "content": "**Never use IAM users for workloads.** It's the cardinal sin. Long-lived access keys leak in logs, configs, repos. Rotation is painful. Use roles for everything.\n\n**Even for humans, IAM users are outdated.** IAM Identity Center (SSO) is the modern answer. Corporate IdP → federated to AWS → assume role → time-bounded credentials. Any off-boarding flows through the IdP automatically.\n\n**The \"break-glass\" exception.** Keep 1–2 IAM users for emergency access if SSO breaks. Strong passwords, MFA, access keys stored offline in a sealed envelope. Never used for anything else.\n\n**Permission boundaries for scale.** When you delegate role creation (platform team lets product teams create roles), permission boundaries cap the maximum permissions the created roles can have. Prevents privilege escalation.\n\n**ABAC (tag-based access control) scales better than RBAC.** Instead of creating a role per team, create one role with a policy like \"allow action on resources tagged `team=${aws:PrincipalTag/team}`.\" Humans assume the role with their team tag; they access only their team's resources. Fewer roles to manage.\n\n**IMDSv2 is mandatory in 2026.** IMDSv1 had a vulnerability where SSRF could exfiltrate EC2 credentials. IMDSv2 requires a session token (PUT + GET). Enforce via `MetadataOptions.HttpTokens: required`. Never allow IMDSv1.\n\n**STS temporary credentials are always preferable.** Temporary = leaked credentials expire. Short TTL (1 hour default) limits blast radius. Most AWS SDKs refresh automatically.\n\n**Service-linked roles.** Some services (Auto Scaling, Lambda) create service-linked roles automatically. Don't delete them — the service fails.\n\n**Trust policies matter more than permission policies for security.** Who can assume the role? An overly permissive trust policy (`Principal: *`) means anyone can assume. Common mistake: copying a cross-account trust policy and forgetting to change the account ID.\n\n**Deny overrides allow.** An explicit `Deny` in any attached policy blocks the action, even if another policy allows. Use deny for guardrails (e.g., SCP denies actions on production tags except for prod-admin role).\n\n**Audit with AWS IAM Access Analyzer.** Identifies roles with overly broad trust policies, unused permissions, external access. Run monthly; tighten permissions based on findings."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **IAM Users — mostly obsolete**: only for emergency break-glass; use SSO (IAM Identity Center) for humans, roles for workloads\n- **IAM Roles are the default for workloads** — EC2 (via instance profile), Lambda (execution role), ECS (task role), EKS (IRSA), CI/CD (OIDC)\n- **Instance Profile** is the EC2-specific wrapper around a role — attached to instance; SDK finds credentials via IMDSv2\n- **OIDC federation eliminates CI secrets** — GitHub Actions, GitLab CI assume AWS role via signed token; no long-lived access keys\n- **IMDSv2 mandatory** — IMDSv1 had SSRF-exfiltration vulnerability; enforce v2 everywhere\n- **Trust policies are the security boundary** — who can assume the role matters more than the role's permissions\n- **IAM Access Analyzer** finds overly broad permissions and external access; run monthly to tighten"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "AWS IAM has three core identity primitives, and confusing them leads to the single most common security mistake: using IAM users with static access keys for workloads.\n\n**IAM User — mostly obsolete in 2026**\n- Persistent identity with passwords or access keys; long-lived credentials\n- Appropriate only for emergency break-glass access if SSO breaks, or legacy systems that can't federate\n- Every other use case is better served by roles\n\n**IAM Role — the default for workloads and humans**\n- A set of permissions with no credentials of its own; principals assume the role to receive temporary credentials (15 minutes to 12 hours)\n- No static keys to leak; trust policy defines who can assume\n- Used for: EC2 instances via instance profile, Lambda execution role, ECS task role, EKS pods via IRSA, cross-account access, SSO users, CI/CD via OIDC\n\n**Instance Profile — the EC2-specific plumbing**\n- A container that attaches one IAM role to an EC2 instance\n- The SDK finds credentials via the instance metadata service automatically; no config needed\n- Rotating the role's permissions updates instantly with no credential distribution\n\n**The modern architecture**\n- Humans: IAM Identity Center (SSO); corporate IdP federates to AWS; users assume roles scoped to their team and environment; credentials are time-bounded\n- Workloads: task/service roles; code reads credentials from the SDK's default chain; no static keys anywhere\n- CI/CD: OIDC federation; GitHub Actions or GitLab CI present a signed token, AWS exchanges for role credentials; no access keys in secrets\n- Break-glass: 1-2 IAM users for emergency only, strong passwords, MFA, keys stored offline\n\n**The decision rules**\n- EC2 workload: instance profile with role\n- Lambda: execution role\n- ECS: task role (app) + execution role (ECS agent)\n- EKS pods: IRSA (service account annotation)\n- Human access: IAM Identity Center\n- CI/CD: OIDC federation\n- Never: long-lived IAM user access keys for workloads\n\n**The best practices**\n- Never use IAM users for workloads — the cardinal sin; keys leak in logs, configs, repos\n- Enforce IMDSv2 everywhere — v1 had an SSRF-exfiltration vulnerability; v2 requires session tokens\n- Trust policies are the security boundary — who can assume the role matters more than permissions; overly permissive trust policies like `Principal: *` are critical bugs\n- Deny overrides allow — use explicit deny in SCPs or policies for guardrails\n- Permission boundaries cap what delegated roles can do — essential when letting teams create their own roles\n- ABAC (tag-based) scales better than RBAC at large orgs — tag resources and principals, write policies matching tags\n- IAM Access Analyzer finds overly broad permissions and external access; run monthly\n\n**The cultural piece**\n- Every team member logging in via SSO means offboarding happens automatically via the IdP\n- Every workload on roles means no secrets to rotate, no keys to leak\n- Every CI on OIDC means no AWS keys in GitHub/GitLab secrets\n- The goal: zero long-lived AWS credentials in the entire organization; achievable in 2026"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is IRSA (IAM Roles for Service Accounts) in EKS and why is it preferred over node-level IAM?",
+        "How does OIDC federation between GitHub Actions and AWS work end-to-end?",
+        "What are permission boundaries and when do you need them?",
+        "Why is IMDSv2 mandatory and what vulnerability did v1 have?"
+      ],
+      "seo": {
+        "meta_title": "IAM Users vs Roles vs Instance Profiles: AWS Best Practices",
+        "meta_description": "When to use IAM users, roles, and instance profiles. Modern patterns: IAM Identity Center (SSO), IRSA for EKS, OIDC federation for CI/CD, zero long-lived keys.",
+        "keywords": [
+          "iam role vs user",
+          "iam instance profile",
+          "iam identity center",
+          "irsa eks",
+          "github actions oidc aws"
+        ],
+        "metaDescription": "IAM Users are for humans or legacy CI (static access keys) — avoid except for emergency break-glass.",
+        "metaTitle": "IAM Users vs Roles vs Instance Profiles: Best Practices"
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P10",
+        "hook": "AWS IAM has three core identity primitives, and confusing them leads to the single most common security mistake: using IAM users with static access keys for workloads.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "AWS IAM has three core identity primitives, and they serve different purposes. Confusing them leads to the single most common security mistake: using IAM users with static access keys for workloads. IAM User — a persistent identity with optional password (console) and/or access keys (API). Long-lived credentials. In 2026, IAM users are appropriate only for: (a) emergency break-glass access if SSO breaks, (b) legacy systems that can't federate. Every other."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Never use IAM users for workloads",
+              "It's the cardinal sin",
+              "Long-lived access keys leak in logs, configs, repos",
+              "Rotation is painful",
+              "Use roles for everything"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Never use IAM users for workloads. It's the cardinal sin. Long-lived access keys leak in logs, configs, repos. Rotation is painful. Use roles for everything. Even for humans, IAM users are outdated. IAM Identity Center (SSO) is the modern answer. Corporate IdP → federated to AWS → assume role → time-bounded credentials. Any off-boarding flows through the IdP automatically. The \"break-glass\" exception. Keep 1–2 IAM users for emergency access if SSO breaks. Strong passwords, MFA, access keys stored offline in a sealed envelope. Never used for anything else. Permission boundaries."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "AWS IAM has three core identity primitives, and they serve different purposes. Confusing them leads to the single most common security mistake: using IAM users with static access keys for workloads. IAM User — a persistent identity with optional password (console) and/or access keys (API). Long-lived credentials. In 2026, IAM users are appropriate only for: (a) emergency break-glass access if."
+          }
+        ],
+        "cap": "IAM User — mostly obsolete in 2026 Persistent identity with passwords or access keys; long-lived credentials Appropriate only for emergency break-glass access if SSO breaks, or legacy systems that can",
+        "familiarity_anchors": [
+          "Users",
+          "Roles",
+          "Lambda"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is IRSA (IAM Roles for Service Accounts) in EKS and why is it preferred over node-level IAM?",
+          "How does OIDC federation between GitHub Actions and AWS work end-to-end?",
+          "What are permission boundaries and when do you need them?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed on AWS ECS with RDS"
+      }
+    }
+  ]
+}

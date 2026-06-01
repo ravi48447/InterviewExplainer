@@ -1,0 +1,124 @@
+{
+  "topic": "Service Design",
+  "topicSlug": "service-design",
+  "questions": [
+    {
+      "id": "ms-009",
+      "slug": "database-per-microservice-patterns",
+      "question": "Should each microservice have its own database? What are the patterns for managing shared data?",
+      "title": "Database-per-Service Pattern in Microservices",
+      "direct_answer": "Yes — each **microservice** should own its database schema exclusively. Shared databases create tight coupling. Data access across services happens via APIs or events, not direct DB queries.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of why shared databases violate microservices boundaries",
+        "common_mistake": "Thinking 'database per service' means literally separate DB instances — schemas work too",
+        "to_stand_out": "Explain the CQRS pattern for cross-service reads and the Outbox pattern for consistency"
+      },
+      "company_tags": [
+        "Amazon",
+        "Booking.com",
+        "Shopify",
+        "Zalando",
+        "Netflix",
+        "Uber"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why a Shared Database Turns Microservices Back Into a Monolith",
+            "content": "The most common way teams accidentally rebuild a monolith is by sharing a database. The order service and the inventory service both connect to the same PostgreSQL instance. The order service runs `SELECT p.name FROM inventory.products p JOIN orders o ON ...` — a direct cross-schema join. It works, it's fast, and it's a trap.\n\nThe moment the inventory team needs to rename `products.name` to `products.display_name`, they can't — the order service's query will break.\n- They have to coordinate the migration across both teams.\n- Schema changes require synchronized deployments.\n- The inventory team can't switch to MongoDB for catalog search without rewriting the order service.\n- The services are independently deployable in theory but coupled at the data layer in practice.\n\n**Database-per-service** means each service is the exclusive owner of its tables.\n- No other service reads or writes them directly.\n- Cross-service data access happens through APIs (REST/gRPC) or events (Kafka).\n- This gives each team full control over their schema, storage technology, and migration schedule.\n\nThe common misconception is that \"database per service\" means separate physical database instances from day one.\n- It doesn't have to.\n- **Separate schemas within the same PostgreSQL cluster** work fine as a starting point — as long as you enforce access control.\n- Each service gets its own database user that can only access its own schema.\n- Network policies block direct cross-service database connections.\n- The key is the ownership boundary, not the physical infrastructure."
+          },
+          {
+            "type": "step",
+            "title": "Cross-Service Data Access — Three Patterns, Three Trade-offs",
+            "content": "When the order service needs product names from inventory, you have three options. Each has a different latency, consistency, and resilience profile.\n\n**Option 1: Synchronous API call.** The order service calls the inventory service's API at read time. Simple, always fresh, but creates a runtime dependency — if inventory is down, the order service can't display product names.\n\n```java\n@Service\npublic class OrderDetailService {\n    private final InventoryClient inventoryClient;\n\n    public OrderDetail getOrderDetail(String orderId) {\n        Order order = orderRepo.findById(orderId).orElseThrow();\n        ProductInfo product = inventoryClient\n            .getProduct(order.getProductId());  // runtime coupling\n        return new OrderDetail(order, product);\n    }\n}\n```\n\n**Option 2: Event-driven denormalization (CQRS read model).** The order service maintains a local copy of product data, updated by consuming events from the inventory service. Fast reads, resilient to inventory downtime, but the data can be stale by the event propagation delay (typically 100ms–5s).\n\n```java\n@KafkaListener(topics = \"product-events\",\n               groupId = \"order-service-product-sync\")\npublic void onProductChanged(ProductEvent event) {\n    productReadModelRepo.save(new ProductSnapshot(\n        event.getId(),\n        event.getDisplayName(),\n        event.getPrice(),\n        event.getLastUpdated()\n    ));\n}\n\npublic OrderDetail getOrderDetail(String orderId) {\n    Order order = orderRepo.findById(orderId).orElseThrow();\n    ProductSnapshot product = productReadModelRepo\n        .findById(order.getProductId()).orElseThrow();\n    return new OrderDetail(order, product);\n}\n```\n\n**Option 3: API Gateway composition (BFF pattern).** Neither service knows about the other. A Backend-for-Frontend service calls both APIs and merges the results for the client. Clean separation, but adds a network hop and another service to maintain.\n\nMy default: use API calls for writes and low-volume reads where freshness matters. Use event-driven denormalization for high-traffic read paths where stale data is acceptable (product catalog, user profiles). Use BFF composition only when the client needs data from 3+ services in a single response."
+          },
+          {
+            "type": "step",
+            "title": "The Outbox Pattern — Atomic State + Event Publishing",
+            "content": "The fundamental consistency problem with database-per-service: when the order service creates an order, it needs to both save to its database and publish an event to Kafka. These are two separate operations. If the database write succeeds but the Kafka publish fails (broker down, network timeout), the order exists but no downstream service knows about it.\n\nThe Outbox pattern solves this by writing the event to an **outbox table** in the same database transaction as the business data. A separate process reads the outbox table and publishes to Kafka. Since the business write and the outbox write are in the same transaction, they either both commit or both roll back.\n\n```java\n@Transactional\npublic Order createOrder(OrderRequest request) {\n    Order order = orderRepo.save(new Order(request));\n    outboxRepo.save(new OutboxEvent(\n        UUID.randomUUID().toString(),\n        \"OrderCreated\",\n        order.getId(),\n        objectMapper.writeValueAsString(order),\n        Instant.now()\n    ));\n    return order;\n}\n```\n\nThe outbox relay has two implementation strategies. **Polling** is simpler — a scheduled job reads unpublished rows every 500ms and publishes them to Kafka, then marks them as published. **Change Data Capture (CDC)** with Debezium is more efficient — it reads the PostgreSQL WAL (write-ahead log) and streams outbox inserts directly to Kafka with sub-second latency, without polling overhead.\n\nDebezium is the production-grade choice for high-throughput systems because it doesn't add query load to the database and captures events in the exact commit order. The polling approach is fine for lower throughput (< 1000 events/second) and is simpler to operate because it doesn't require a Kafka Connect cluster."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Separate schemas, strict grants** — database-per-service doesn't require separate clusters on day one; schema-level isolation enforces the boundary.\n- **Cross-schema JOINs recreate monolith coupling** — order-service querying `inventory.products` means schema changes require coordinated deployments.\n- **API calls for fresh writes, events for read replicas** — synchronous for consistency-critical writes.\n- **Outbox pattern eliminates dual-write risk** — write business data and event in the same transaction; relay to Kafka via polling or Debezium.\n- **Foreign keys can't span databases** — store referenced entity's ID and validate via API or event sync; handle deletions via domain events."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Each microservice should own its database exclusively.\n- The moment two services share a database, schema changes require coordination, storage technology choices are coupled, and you've recreated the monolith at the data layer.\n- In practice, separate schemas with strict access grants enforce the boundary without requiring separate database instances on day one.\n\n**Cross-service data access patterns:**\n- Synchronous API call — gives you fresh data but creates a runtime dependency; if inventory is down, the order service can't display product names\n- Event-driven denormalization — the order service maintains a local read replica updated by consuming inventory events; fast and resilient, but data can lag by 100ms to a few seconds\n- Choose by consistency requirement: synchronous for writes and low-volume fresh reads, event-driven for high-traffic read paths where slight staleness is acceptable\n\n**The dual-write problem:**\n- Saving to the database and then publishing to Kafka creates a crash window — if the application crashes between those two operations, the event is lost forever\n- The Outbox pattern solves this: write the event to an outbox table in the same database transaction as the business entity; a separate process relays outbox rows to Kafka\n- Polling is simpler (a `@Scheduled` method); Debezium WAL tailing delivers in under 100ms but requires a Kafka Connect cluster\n\nI recommend the Outbox pattern at every point where state changes need reliable event publishing — it's the only way to guarantee atomicity between the database write and the event."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle referential integrity across service databases?",
+        "What is polyglot persistence and when is it worth the complexity?",
+        "How does the CQRS pattern enable cross-service queries?"
+      ],
+      "seo": {
+        "metaTitle": "Database Per Microservice Pattern — Java Interview Guide",
+        "metaDescription": "Database-per-service pattern in microservices. Why shared databases break isolation, cross-service data access patterns, and CQRS for reads."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Each microservice should own its database exclusively.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The most common way teams accidentally rebuild a monolith is by sharing a database. The order service and the inventory service both connect to the same PostgreSQL instance. The order service runs SELECT p.name FROM inventory.products p JOIN orders o ON ... — a direct cross-schema join. It works, it's fast, and it's a trap. The moment the inventory team needs to rename products.name to products.display_name, they can't — the order service's query will break. They have to coordinate the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of why shared databases violate microservices boundaries"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Separate schemas, strict grants — database-per-service doesn't require separate clusters on day one; schema-level isolation enforces the boundary",
+              "Cross-schema JOINs recreate monolith coupling — order-service querying inventory",
+              "products means schema changes require coordinated deployments",
+              "API calls for fresh writes, events for read replicas — synchronous for consistency-critical writes",
+              "Outbox pattern eliminates dual-write risk — write business data and event in the same transaction; relay to Kafka via polling or Debezium"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The most common way teams accidentally rebuild a monolith is by sharing a database. The order service and the inventory service both connect to the same PostgreSQL instance. The order service runs SELECT p.name FROM inventory.products p JOIN orders o ON ... — a direct cross-schema join. It works, it's fast, and it's a trap. The moment the inventory team needs to rename products.name to products.display_name, they can't — the order service's query will break. They have to coordinate the migration across both teams. Schema changes require synchronized deployments. The inventory team can't switch to MongoDB for catalog search without rewriting the order service. The services are independently deployable in theory but coupled at the data layer in practice. Database-per-service."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking 'database per service' means literally separate DB instances",
+              "schemas work too"
+            ]
+          }
+        ],
+        "cap": "Cross-service data access patterns: Synchronous API call — gives you fresh data but creates a runtime dependency; if inventory is down, the order service can't display product names Event-driven denor",
+        "familiarity_anchors": [
+          "Shared"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle referential integrity across service databases?",
+          "What is polyglot persistence and when is it worth the complexity?",
+          "How does the CQRS pattern enable cross-service queries?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    }
+  ]
+}

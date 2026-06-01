@@ -1,0 +1,248 @@
+{
+  "topic": "Spring Events",
+  "topicSlug": "spring-events",
+  "questions": [
+    {
+      "id": "sc-009",
+      "slug": "spring-events-eventlistener-applicationeventpublisher",
+      "question": "How do Spring Events work? Explain @EventListener and ApplicationEventPublisher.",
+      "title": "Spring Events (@EventListener, ApplicationEventPublisher)",
+      "direct_answer": "**Spring's event system** implements the **Observer pattern** within the container. A component publishes an event by calling **`ApplicationEventPublisher.publishEvent()`**, and any method annotated with **`@EventListener`** that accepts that event type is invoked **synchronously in the same thread**, in the same transaction, by default. Listeners can be made async with **`@Async`** (separate thread pool, full execution decoupling), and ordered with **`@Order`**. Since Spring 4.2, events can be plain POJOs (no need to extend `ApplicationEvent`). For post-commit side effects (emails, notifications), use **`@TransactionalEventListener`** with a phase like `AFTER_COMMIT`.",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Knowledge of decoupled communication patterns within a Spring application and how to avoid direct coupling between services.",
+        "common_mistake": "Not knowing that events are synchronous by default — a slow listener blocks the publisher — or missing that a transaction-committed event requires @TransactionalEventListener.",
+        "to_stand_out": "Explain @TransactionalEventListener with its transaction phases (AFTER_COMMIT, AFTER_ROLLBACK, BEFORE_COMMIT) for reliable post-transaction actions like sending emails only after a successful save."
+      },
+      "company_tags": [
+        "Klarna",
+        "Zalando",
+        "Shopify",
+        "HubSpot",
+        "Atlassian",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Spring Events Are Synchronous by Default — and Why That Catches Everyone",
+            "content": "**The biggest misconception about Spring Events is that they're asynchronous.** They're not.\n- By default, when you call `applicationEventPublisher.publishEvent(event)`, every `@EventListener` for that event type runs **synchronously on the same thread**, in the same transaction. A slow listener blocks the publisher.\n- An exception in a listener kills the publisher's flow.\n\n**This matters because developers reach for events to 'decouple' components** — send an email after an order is placed, update a cache after a record changes.\n- But synchronous events don't decouple execution — they only decouple the **compile-time dependency**.\n- The publisher doesn't import the listener class, but they still share the same thread and transaction at runtime.\n\n**True decoupling requires** either `@Async` on the listener (separate thread pool) or `@TransactionalEventListener` (fires after the transaction commits/rolls back). Understanding this distinction — compile-time decoupling vs runtime decoupling — is what separates a surface-level answer from a production-aware one."
+          },
+          {
+            "type": "step",
+            "title": "The Event Publishing Pipeline — Publisher, Multicaster, Listeners",
+            "content": "Spring's event system has three components that work together to deliver every event.\n\n**The three components**\n- **Publisher** — calls `applicationEventPublisher.publishEvent(event)`\n- **`ApplicationEventMulticaster`** — discovers all listeners registered for that event type\n- **Listeners** — methods annotated with `@EventListener` that receive and process the event\n\n**Modern simplifications (Spring 4.2+)**\n- Events can be any object — no need to extend `ApplicationEvent`\n- Listeners are just methods annotated with `@EventListener`\n- Zero-boilerplate wiring\n\n**Complete example**\n\n```java\npublic record OrderPlaced(String orderId, BigDecimal total) {}\n\n@Service\npublic class OrderService {\n    private final ApplicationEventPublisher publisher;\n    public OrderService(ApplicationEventPublisher publisher) {\n        this.publisher = publisher;\n    }\n    @Transactional\n    public void placeOrder(Order order) {\n        repository.save(order);\n        publisher.publishEvent(new OrderPlaced(order.getId(), order.getTotal()));\n    }\n}\n\n@Component\npublic class InventoryListener {\n    @EventListener\n    public void onOrderPlaced(OrderPlaced event) {\n        inventoryService.reserve(event.orderId());\n    }\n}\n```\n\n**The runtime behavior**\n- The listener runs on the **same thread** and in the **same transaction** as `placeOrder()`\n- If `reserve()` throws an exception, the entire transaction rolls back — including the `repository.save()`\n- This is often not what developers intended"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Sync vs Async vs Transactional — Three Listener Modes Visualized",
+            "content": "The diagram below shows the same `OrderPlaced` event consumed by three different listener styles. Notice where each one sits in the timeline relative to the database `COMMIT` — this determines the failure semantics.\n\n```mermaid\nsequenceDiagram\n    participant TX as TransactionalMethod\n    participant DB as Database\n    participant Pub as ApplicationEventPublisher\n    participant Sync as SyncEventListener\n    participant TxL as TransactionalEventListener\n    participant Async as AsyncEventListener\n\n    TX->>DB: INSERT order\n    TX->>Pub: publishEvent(OrderPlaced)\n    Pub->>Sync: invoke listener (same thread, in TX)\n    Note over Sync: any exception rolls back the order\n    Sync-->>Pub: return\n    Pub->>Async: enqueue on TaskExecutor\n    Note over Async: runs in parallel<br/>cannot affect TX\n    Pub-->>TX: return\n    TX->>DB: COMMIT\n    DB-->>TxL: trigger AFTER_COMMIT phase\n    TxL->>TxL: send email / notification\n    Note over TxL: skipped if rollback\n```\n\n**Why listener choice equals failure semantics**\n- **Plain `@EventListener`** runs *inside* the transaction — its exception rolls the order back\n- **`@TransactionalEventListener(AFTER_COMMIT)`** runs only after the commit succeeds — safe for user-visible side effects\n- **`@Async`** runs on a different thread pool entirely — decoupled, but you lose ordering guarantees and the security context unless you propagate it explicitly"
+          },
+          {
+            "type": "step",
+            "title": "@TransactionalEventListener — The Pattern for Post-Commit Side Effects",
+            "content": "**The production pattern for events that should only fire after a successful commit** is `@TransactionalEventListener`. It binds the listener to a specific transaction phase — most commonly `AFTER_COMMIT` — so the event processing only happens if the transaction succeeds.\n\n**The motivating problem — email after order**\n- You don't want to send an 'Order Confirmed' email if the order transaction later rolls back due to a payment failure\n- With `@TransactionalEventListener(phase = AFTER_COMMIT)`, the email only sends after the commit is final\n\n```java\n@Component\npublic class NotificationListener {\n    @TransactionalEventListener(phase = AFTER_COMMIT)\n    public void sendConfirmation(OrderPlaced event) {\n        emailService.send(event.orderId());\n    }\n}\n```\n\n**The four transaction phases**\n- **`BEFORE_COMMIT`** — add work to the ongoing transaction (e.g., write an outbox table row so the event survives restart)\n- **`AFTER_COMMIT`** (default) — fires after successful commit; correct for user-visible side effects\n- **`AFTER_ROLLBACK`** — handles compensating actions when the transaction fails\n- **`AFTER_COMPLETION`** — fires whether the transaction committed or rolled back; useful for cleanup\n\n**The silent-discard trap**\n- If you use `@TransactionalEventListener` and **no transaction is active** when the event is published, the listener never fires — silently\n- Spring doesn't throw an error; it just discards the event\n- Add `fallbackExecution = true` if you need the listener to fire even outside a transaction context\n\n**Outbox pattern with `BEFORE_COMMIT`**\n- Write the event row to an outbox table in `BEFORE_COMMIT`\n- The event row and the business rows share the same transactional fate\n- A separate poller or CDC publishes the outbox rows to Kafka after commit"
+          },
+          {
+            "type": "step",
+            "title": "Listener Ordering, Generic Events, and When to Reach for Kafka",
+            "content": "Two nuances come up once you have more than a handful of listeners.\n\n**Ordering — `@Order` is required for deterministic order**\n- Multiple listeners for the same event type fire in deterministic order **only if** you annotate each with `@Order(n)`\n- Without it, order is undefined and can change between Spring versions\n- Classic symptom: a listener that works in dev and misfires in prod because the Spring upgrade reshuffled invocation order\n\n```java\n@EventListener @Order(1)\npublic void validate(OrderPlaced e) { }\n\n@EventListener @Order(2)\npublic void reserveInventory(OrderPlaced e) { }\n```\n\n**Generic events (Spring 4.2+)**\n- Publish parameterized payloads using `PayloadApplicationEvent<T>` or a custom generic event\n- Spring resolves type erasure at registration time and only fires listeners whose generic parameter actually matches the published type\n- One listener can distinguish `OrderEvent<Created>` from `OrderEvent<Cancelled>` without runtime type checks\n\n**The architectural boundary — when to use a real broker instead**\n- Spring Events are **in-process, single-JVM, best-effort** even with `@TransactionalEventListener` and `@Async`\n- They **do not survive a crash**, do not cross service boundaries, give no at-least-once guarantee\n- For cross-service events, durable retry, or replay — use Kafka, RabbitMQ, or a database-backed outbox pattern with CDC\n- Spring Events are the right tool for decoupling **inside** a service; the wrong tool for decoupling **between** services or for workflows that must survive a pod restart"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Events are synchronous by default** — `publishEvent()` blocks until every listener completes on the same thread; a slow listener blocks the publisher; an exception in a listener kills the publisher's flow.\n- **`@TransactionalEventListener(phase=AFTER_COMMIT)` for post-commit side effects** — fires the listener only after the transaction commits; the standard pattern for emails and notifications that must not fire on rollback.\n- **`BEFORE_COMMIT` for outbox pattern** — write the event to an outbox table before commit so event row and business rows share the same transactional fate; CDC or a poller publishes to Kafka later.\n- **`@TransactionalEventListener` with no active transaction means the listener never fires (silently)** — if the event is published outside a transaction and `fallbackExecution=true` is not set, the event is discarded without error.\n- **`@Async` on listener = separate thread pool** — decouples execution timing; requires `@EnableAsync` and a properly sized `ThreadPoolTaskExecutor`; the default `SimpleAsyncTaskExecutor` creates unbounded threads and will take the JVM down under load.\n- **Use `@Order` when multiple listeners subscribe to the same event** — without it, invocation order is undefined and can change between Spring versions; classic dev-vs-prod reproducibility bug.\n- **Generic events since 4.2** — `PayloadApplicationEvent<T>` and custom generic events let one listener differentiate `OrderEvent<Created>` from `OrderEvent<Cancelled>` without runtime type checks.\n- **Events since Spring 4.2 are plain POJOs** — no need to extend `ApplicationEvent`; any object can be published and any `@EventListener` method that accepts that type is invoked.\n- **In-process, single-JVM, best-effort — not a replacement for a broker** — Spring Events do not survive crashes, do not cross service boundaries, and give no at-least-once guarantee; for cross-service or durable workflows, use Kafka/RabbitMQ or a durable outbox."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring's event system implements the Observer pattern within the container. A service publishes an event; listeners react without any direct compile-time coupling. But the most important thing to understand is what decoupling does and does not mean here — and when Spring Events are the wrong tool entirely.\n\n**Events are synchronous by default**\n- `publishEvent(event)` runs every matching `@EventListener` method synchronously on the same thread\n- Events decouple the compile-time dependency — the publisher does not import the listener — but they do not decouple execution at runtime\n- A slow listener blocks the publisher; an exception in a listener propagates back and rolls back the publisher's transaction\n\n**`@TransactionalEventListener` — for post-commit actions**\n- The production pattern for notifications, emails, and cache updates that must only happen after a successful commit\n- `@TransactionalEventListener(phase = AFTER_COMMIT)` — the listener fires only if the transaction committed; on rollback, it is skipped\n- Trap: if no transaction is active when the event is published, the listener never fires silently; add `fallbackExecution = true` if you need the listener to fire outside a transaction context\n- Four phases cover the lifecycle: `BEFORE_COMMIT` (add work to the active transaction — outbox pattern writes here), `AFTER_COMMIT` (default for side effects), `AFTER_ROLLBACK` (compensating action), `AFTER_COMPLETION` (cleanup either way)\n\n**True async decoupling**\n- Add `@Async` to the listener method — runs on a separate thread pool, fully decoupling execution timing\n- Requires `@EnableAsync` and an explicit `ThreadPoolTaskExecutor` with bounded core/max pool sizes and a bounded queue\n- Without a custom executor, `SimpleAsyncTaskExecutor` creates an unbounded number of threads and will take the JVM down under a traffic spike\n\n**Ordering and generics**\n- Multiple listeners on the same event type fire in undefined order without `@Order(n)` — classic dev-vs-prod reproducibility bug after a Spring upgrade\n- Generic events since 4.2 let one listener distinguish `OrderEvent<Created>` from `OrderEvent<Cancelled>` without runtime type checks; Spring resolves type parameters at registration time\n\n**When to reach for a real broker instead**\n- Spring Events are in-process, single-JVM, best-effort — they do not survive a crash, do not cross service boundaries, and give no at-least-once guarantee\n- For cross-service events, durable retry, or replay, use Kafka, RabbitMQ, or a transactional outbox with CDC\n- Spring Events are the right tool for decoupling inside a service; wrong tool for decoupling between services or for workflows that must survive a pod restart\n\nEvents since 4.2 are plain POJOs — no need to extend `ApplicationEvent`. Publish any object; any `@EventListener` method that accepts that type is invoked."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why would you use @TransactionalEventListener instead of publishing the event after the transaction commits manually?",
+        "What happens to an @Async @EventListener if the thread pool is exhausted?",
+        "How do Spring events compare to an in-process message bus like Guava EventBus?",
+        "How do you propagate the security context to an @Async @EventListener?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Events with @EventListener and ApplicationEventPublisher | Java Guide",
+        "metaDescription": "Learn how Spring's event system works — @EventListener, ApplicationEventPublisher, @Async listeners, and @TransactionalEventListener for post-commit side effects."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "Spring's event system implements the Observer pattern within the container.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The biggest misconception about Spring Events is that they're asynchronous. They're not. By default, when you call applicationEventPublisher.publishEvent(event), every @EventListener for that event type runs synchronously on the same thread, in the same transaction. A slow listener blocks the publisher. An exception in a listener kills the publisher's flow. This matters because developers reach for events to 'decouple' components — send an email after an order is placed, update a."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Events are synchronous by default — publishEvent() blocks until every listener completes on the same thread; a slow listener blocks the publisher; an exception in a listener kills the publisher's flow",
+              "@TransactionalEventListener(phase=AFTER_COMMIT) for post-commit side effects — fires the listener only after the transaction commits; the standard pattern for emails and notifications that must not fire on rollback",
+              "BEFORE_COMMIT for outbox pattern — write the event to an outbox table before commit so event row and business rows share the same transactional fate; CDC or a poller publishes to Kafka later",
+              "@TransactionalEventListener with no active transaction means the listener never fires (silently) — if the event is published outside a transaction and fallbackExecution=true is not set, the event is discarded without error",
+              "@Async on listener = separate thread pool — decouples execution timing; requires @EnableAsync and a properly sized ThreadPoolTaskExecutor; the default SimpleAsyncTaskExecutor creates unbounded threads and will take the JVM down under load"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "The biggest misconception about Spring Events is that they're asynchronous. They're not. By default, when you call applicationEventPublisher.publishEvent(event), every @EventListener for that event type runs synchronously on the same thread, in the same transaction. A slow listener blocks the publisher. An exception in a listener kills the publisher's flow. This matters because developers reach for events to 'decouple' components — send an email after an order is placed, update a cache after a record changes. But synchronous events don't decouple execution — they only decouple the compile-time dependency. The publisher."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The biggest misconception about Spring Events is that they're asynchronous. They're not. By default, when you call applicationEventPublisher.publishEvent(event), every @EventListener for that event type runs synchronously on the same thread, in the same transaction. A slow listener blocks the publisher. An exception in a listener kills the publisher's flow. This matters because developers reach for events to 'decouple' components —."
+          }
+        ],
+        "cap": "Publish any object; any @EventListener method that accepts that type is invoked.",
+        "familiarity_anchors": [
+          "Spring",
+          "Observer",
+          "ApplicationEventPublisher"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why would you use @TransactionalEventListener instead of publishing the event after the transaction commits manually?",
+          "What happens to an @Async @EventListener if the thread pool is exhausted?",
+          "How do Spring events compare to an in-process message bus like Guava EventBus?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "sc-events-002",
+      "slug": "transactional-event-listener-and-async-events",
+      "question": "How do @TransactionalEventListener and @Async event listeners differ — and when do you use each?",
+      "title": "@TransactionalEventListener vs @Async Event Listeners",
+      "direct_answer": "**`@TransactionalEventListener`** binds a listener to a specific **transaction phase** (`AFTER_COMMIT`, `BEFORE_COMMIT`, `AFTER_ROLLBACK`, `AFTER_COMPLETION`) so the listener only runs at that point relative to the publisher's transaction. **`@Async`** runs the listener on a **separate thread pool**, fully decoupling execution timing from the publisher. They solve different problems: `@TransactionalEventListener` is about **when** the listener fires (must be after commit); `@Async` is about **where** it fires (different thread). You can combine both: an `@Async @TransactionalEventListener(AFTER_COMMIT)` that sends an email asynchronously only after the order commits successfully — the standard production pattern for non-critical side effects.",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "advanced",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the difference between transaction-phase binding and thread-pool decoupling — two orthogonal concerns that are commonly conflated.",
+        "common_mistake": "Assuming @Async alone is enough to safely send an email after a save — without @TransactionalEventListener, an @Async listener can fire before the transaction commits and email about an order that later rolls back.",
+        "to_stand_out": "Discuss the silent-discard trap of @TransactionalEventListener with no active transaction, the SimpleAsyncTaskExecutor default thread-pool danger, and the outbox pattern as the durable alternative for cross-service events."
+      },
+      "company_tags": [
+        "Stripe",
+        "Shopify",
+        "Klarna",
+        "Adyen",
+        "Square",
+        "PayPal"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Orthogonal Concerns — Timing vs Thread",
+            "content": "**`@TransactionalEventListener` and `@Async` solve different problems** but are often conflated in interviews. Understanding the distinction is what separates an answer that works in dev from one that works in production.\n\n**`@TransactionalEventListener` controls *when* the listener fires** relative to the publisher's transaction. The listener is suspended until the transaction reaches the configured phase (`AFTER_COMMIT` is the default). It still runs on the same thread by default.\n\n**`@Async` controls *where* the listener fires** — it runs on a separate thread pool, fully decoupling execution from the publisher. But it has no awareness of transaction phase: an `@Async` listener can start executing before the publisher's transaction commits.\n\n**The combination is the production pattern**: `@Async @TransactionalEventListener(AFTER_COMMIT)` sends the email asynchronously *only after* the order commits successfully. If the transaction rolls back, no email; if the email service is slow, the order request still returns immediately."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Publish, Phase, Thread — How the Two Annotations Compose",
+            "content": "The diagram shows the same `OrderPlaced` event consumed by four listener configurations. The vertical position shows which thread it runs on; the horizontal position shows when (relative to commit).\n\n```mermaid\nsequenceDiagram\n    participant Caller as Caller thread\n    participant TX as TransactionalMethod\n    participant DB as Database\n    participant Plain as PlainListener\n    participant Async as AsyncListener\n    participant TxL as TxAfterCommit\n    participant Both as AsyncTxAfterCommit\n    participant Pool as TaskExecutorPool\n\n    Caller->>TX: place(order)\n    TX->>DB: INSERT order\n    TX->>Plain: invoke (caller thread, in TX)\n    Note over Plain: exception rolls back order\n    TX->>Async: enqueue\n    Async->>Pool: run on pool thread<br/>BEFORE commit\n    Note over Pool: dangerous: order may rollback after\n    TX->>DB: COMMIT\n    DB-->>TxL: trigger AFTER_COMMIT (caller thread)\n    TxL->>TxL: send email synchronously\n    Note over TxL: blocks the response\n    DB-->>Both: trigger AFTER_COMMIT\n    Both->>Pool: enqueue on pool thread\n    Pool->>Pool: send email asynchronously\n    Note over Pool: production pattern:<br/>safe + non-blocking\n    TX-->>Caller: return response\n```\n\n**Reading the diagram — what each row teaches**\n- **Plain `@EventListener`** runs in-line on the caller thread, inside the transaction — exception rolls back the order\n- **Plain `@Async`** runs on a pool thread but *before* commit — risky for side effects that depend on the transaction\n- **`@TransactionalEventListener(AFTER_COMMIT)`** runs after commit but *blocks* the caller thread — slow email service slows down the API\n- **`@Async @TransactionalEventListener(AFTER_COMMIT)`** runs on a pool thread *after* commit — safe and non-blocking; this is the production default for non-critical side effects"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Side-by-Side — When to Reach for Each",
+            "content": "Each row below maps a real situation to the listener configuration that fits.\n\n| Need | Annotation(s) | Why |\n|---|---|---|\n| Inline business validation that must fail the transaction | `@EventListener` (default) | Exception correctly rolls back the publisher's transaction |\n| Send email after order commits | `@Async @TransactionalEventListener(AFTER_COMMIT)` | Only fires on success; doesn't block the API response |\n| Write outbox row that survives commit/rollback as one unit | `@TransactionalEventListener(BEFORE_COMMIT)` | Outbox row participates in the same transaction as the business rows |\n| Compensating action after rollback (refund a hold) | `@TransactionalEventListener(AFTER_ROLLBACK)` | Triggers only on failure; no need for try/catch in publisher |\n| Cleanup work either way (release lock, log audit) | `@TransactionalEventListener(AFTER_COMPLETION)` | Fires regardless of commit or rollback outcome |\n| CPU-intensive analytics from a non-transactional command | `@Async @EventListener` | No transaction context to bind to; just need a worker thread |\n| Cross-service event with durability requirement | Use Kafka / outbox + CDC | Spring Events are in-process and best-effort only |\n\n**The combination column is the most important** — the four phases of `@TransactionalEventListener` cover all the timing needs, and adding `@Async` to any of them lifts the work off the caller thread."
+          },
+          {
+            "type": "step",
+            "title": "Configuring @Async Safely — the SimpleAsyncTaskExecutor Trap",
+            "content": "**`@Async` looks harmless until you read what runs underneath.**\n\n**The default executor problem**\n- Without an explicit `TaskExecutor` bean, Spring uses `SimpleAsyncTaskExecutor`\n- This executor creates a **new thread for every task** with no upper bound\n- Under a traffic spike, threads accumulate until the JVM runs out of native memory and crashes\n- This is the most common production failure mode for naive `@Async` adoption\n\n**Production-grade configuration**\n\n```java\n@Configuration\n@EnableAsync\npublic class AsyncConfig {\n    @Bean(name = \"eventExecutor\")\n    public TaskExecutor eventExecutor() {\n        ThreadPoolTaskExecutor exec = new ThreadPoolTaskExecutor();\n        exec.setCorePoolSize(8);\n        exec.setMaxPoolSize(32);\n        exec.setQueueCapacity(500);\n        exec.setThreadNamePrefix(\"event-\");\n        exec.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());\n        exec.initialize();\n        return exec;\n    }\n}\n\n@Component\npublic class NotificationListener {\n    @Async(\"eventExecutor\")\n    @TransactionalEventListener(phase = AFTER_COMMIT)\n    public void sendConfirmation(OrderPlaced event) {\n        emailService.send(event.orderId());\n    }\n}\n```\n\n**What the configuration buys you**\n- **Bounded threads** — `maxPoolSize` caps memory growth\n- **Bounded queue** — `queueCapacity` caps memory of pending tasks\n- **Backpressure** — `CallerRunsPolicy` makes the publisher run the task itself when the pool is saturated, preventing infinite buffering\n- **Observability** — named threads (`event-1`, `event-2`) appear clearly in stack traces and metrics\n\n**Context propagation pitfalls**\n- `SecurityContextHolder` is `ThreadLocal` — it does **not** propagate to async threads automatically\n- Use `DelegatingSecurityContextAsyncTaskExecutor` to wrap the executor\n- Same for MDC logging context — wrap with a custom `TaskDecorator` to copy MDC across threads\n- Without these, audit logs lose user identity and security checks fail in async listeners"
+          },
+          {
+            "type": "step",
+            "title": "The Silent-Discard Trap and the Outbox Pattern",
+            "content": "**Two production gotchas** that catch teams using `@TransactionalEventListener` for the first time.\n\n**Silent discard when no transaction is active**\n- `@TransactionalEventListener` requires an active transaction at publish time\n- If you publish the event **outside** a `@Transactional` method, the listener is silently discarded\n- No exception, no log warning by default — just nothing happens\n- Common cause: a scheduled job or async pre-processing path that publishes events\n\n**Fix — `fallbackExecution = true`**\n\n```java\n@TransactionalEventListener(\n    phase = AFTER_COMMIT,\n    fallbackExecution = true\n)\npublic void onOrderPlaced(OrderPlaced event) { }\n```\n\n- Now the listener fires immediately if no transaction is active, in addition to firing after commit when one is\n- Use only when both modes are safe; not always the right default\n\n**The outbox pattern — when in-process events aren't durable enough**\n- `@TransactionalEventListener` is in-process — if the JVM crashes between commit and email send, the email is lost\n- For at-least-once delivery, write an outbox row in `BEFORE_COMMIT` (so it shares the transaction)\n- A separate poller (or CDC tool like Debezium) reads the outbox and publishes to Kafka\n- Mark rows as published only after broker ack\n\n```java\n@TransactionalEventListener(phase = BEFORE_COMMIT)\npublic void writeOutbox(OrderPlaced event) {\n    outboxRepo.save(new OutboxRow(\n        event.orderId(),\n        \"OrderPlaced\",\n        toJson(event),\n        Instant.now()\n    ));\n}\n```\n\n**When to choose outbox over `@Async`**\n- Cross-service events (downstream microservice needs to know)\n- At-least-once delivery requirement\n- Event must survive pod restart between commit and broker publish\n- Replay/debug capability needed (the outbox table is a queryable history)\n\n**When to stay with `@Async @TransactionalEventListener`**\n- In-process side effects (cache invalidation, in-memory metrics, local notifications)\n- Best-effort delivery is acceptable\n- The downstream consumer is in the same JVM"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@TransactionalEventListener` controls *when***, **`@Async` controls *where*** — two orthogonal concerns; you almost always want both for non-critical post-commit side effects.\n- **`AFTER_COMMIT` (default) is the right phase for emails and notifications** — only fires if the transaction commits; on rollback, the listener is skipped without firing.\n- **`BEFORE_COMMIT` is the outbox pattern** — write the event row before commit so event and business data share the same transaction; a separate process publishes to Kafka.\n- **`SimpleAsyncTaskExecutor` is unbounded** — using `@Async` without an explicit `ThreadPoolTaskExecutor` creates a new thread per task with no cap; takes the JVM down under a traffic spike.\n- **`fallbackExecution = true` rescues the silent-discard trap** — if you publish a `@TransactionalEventListener` event outside a transaction, it's discarded silently unless this flag is set.\n- **Async loses ThreadLocal context** — `SecurityContextHolder` and MDC don't propagate; use `DelegatingSecurityContextAsyncTaskExecutor` and a `TaskDecorator` for MDC.\n- **Outbox + CDC for cross-service durability** — Spring Events are in-process best-effort; for at-least-once cross-service delivery, write an outbox row in `BEFORE_COMMIT` and have Debezium/Kafka Connect publish it.\n- **`CallerRunsPolicy` provides backpressure** — when the pool is saturated, the publisher runs the task itself; prevents infinite queue growth and gives natural throughput limiting."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "These two annotations solve different problems and are often conflated. The cleanest mental model is: `@TransactionalEventListener` controls *when* a listener runs relative to the publisher's transaction; `@Async` controls *where* it runs, on which thread.\n\n**`@TransactionalEventListener`**\n- Binds the listener to a specific transaction phase: `AFTER_COMMIT` (default), `BEFORE_COMMIT`, `AFTER_ROLLBACK`, or `AFTER_COMPLETION`\n- Same thread by default — does not give you concurrency, just timing\n- Trap: if published outside a transaction, the listener is silently discarded; add `fallbackExecution = true` if both modes are safe\n\n**`@Async`**\n- Runs the listener on a separate thread pool, decoupling execution from the publisher's thread\n- No awareness of transaction phase — an `@Async` listener can start before the publisher's transaction commits, which is dangerous for side effects\n- Default `SimpleAsyncTaskExecutor` creates unbounded threads — must be replaced with a bounded `ThreadPoolTaskExecutor`\n\n**The production combination**\n- `@Async @TransactionalEventListener(AFTER_COMMIT)` — fires only after commit, on a worker thread\n- The standard pattern for emails, notifications, and cache invalidation\n- Doesn't block the API response; doesn't fire on rollback\n\n**Outbox for durability across services**\n- Spring Events are in-process best-effort — they don't survive a JVM crash between commit and broker publish\n- For cross-service or at-least-once delivery, write an outbox row in `BEFORE_COMMIT` so it shares the transaction; CDC or a poller publishes to Kafka\n\nIf the interviewer pushes on context propagation, mention that `SecurityContextHolder` and MDC don't cross thread boundaries — use `DelegatingSecurityContextAsyncTaskExecutor` and a `TaskDecorator` for MDC. This is the gap that breaks audit logs in async listeners."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens if you put @Async on a @TransactionalEventListener but no executor bean is configured?",
+        "How do you propagate the security context and MDC to an @Async event listener?",
+        "Why does fallbackExecution=true exist on @TransactionalEventListener?",
+        "When would you choose the outbox pattern over @Async @TransactionalEventListener?"
+      ],
+      "seo": {
+        "metaTitle": "@TransactionalEventListener vs @Async Event Listeners | Spring Production Patterns",
+        "metaDescription": "Master Spring's @TransactionalEventListener phases (AFTER_COMMIT, BEFORE_COMMIT) and @Async listeners — when to use each, the SimpleAsyncTaskExecutor trap, and the outbox pattern."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "These two annotations solve different problems and are often conflated.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "@TransactionalEventListener and @Async solve different problems but are often conflated in interviews. Understanding the distinction is what separates an answer that works in dev from one that works in production. @TransactionalEventListener controls when the listener fires relative to the publisher's transaction. The listener is suspended until the transaction reaches the configured phase (AFTER_COMMIT is the default). It still runs on the same thread by default. @Async controls where the listener."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Each row below maps a real situation to the listener configuration that fits",
+              "| Need | Annotation(s) | Why | |---|---|---| | Inline business validation that must fail the transaction | @EventListener (default) | Exception correctly rolls back the publisher's transaction | | Send email after order commits | @Async @TransactionalEventListener(AFTER_COMMIT) | Only fires on success; doesn't block the API response | | Write outbox row that survives commit/rollback as one unit | @TransactionalEventListener(BEFORE_COMMIT) | Outbox row participates in the same transaction as the business rows | | Compensating action after rollback (refund a hold) | @TransactionalEventListener(AFTER_ROLLBACK) | Triggers only on failure; no need for try/catch in publisher | | Cleanup work either way (release lock, log audit) | @TransactionalEventListener(AFTER_COMPLETION) | Fires regardless of commit or rollback outcome | | CPU-intensive analytics from a non-transactional command | @Async @EventListener | No transaction context to bind to; just need a worker thread | | Cross-service event with durability requirement | Use Kafka / outbox + CDC | Spring Events are in-process and best-effort only | The combination column is the most important — the four phases of @TransactionalEventListener cover all the timing needs, and adding @Async to any of them lifts the work off the caller thread"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "@TransactionalEventListener and @Async solve different problems but are often conflated in interviews. Understanding the distinction is what separates an answer that works in dev from one that works in production. @TransactionalEventListener controls when the listener fires relative to the publisher's transaction. The listener is suspended until the transaction reaches the configured phase (AFTER_COMMIT is the default). It still runs on the same thread by default. @Async controls where the listener fires — it runs on a separate thread pool, fully decoupling execution from the publisher. But it has no awareness."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "@TransactionalEventListener and @Async solve different problems but are often conflated in interviews. Understanding the distinction is what separates an answer that works in dev from one that works in production. @TransactionalEventListener controls when the listener fires relative to the publisher's transaction. The listener is suspended until the transaction reaches the configured phase (AFTER_COMMIT is the default). It still runs on."
+          }
+        ],
+        "cap": "This is the gap that breaks audit logs in async listeners.",
+        "familiarity_anchors": [
+          "TransactionalEventListener",
+          "Async"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens if you put @Async on a @TransactionalEventListener but no executor bean is configured?",
+          "How do you propagate the security context and MDC to an @Async event listener?",
+          "Why does fallbackExecution=true exist on @TransactionalEventListener?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    }
+  ]
+}

@@ -1,0 +1,397 @@
+{
+  "topic": "Api Design",
+  "topicSlug": "api-design",
+  "questions": [
+    {
+      "id": "rest-request-response-dto",
+      "slug": "dto-pattern-request-response",
+      "question": "Why should you use DTOs for request and response objects instead of exposing JPA entities directly?",
+      "title": "DTO Pattern — Why Never Expose Entities Directly in REST APIs",
+      "direct_answer": "Exposing **JPA entities** directly in API responses couples your database schema to your API contract, leaks internal fields (like password hashes), triggers lazy loading exceptions, and makes API evolution impossible without database migration. DTOs create a boundary between internal representation and external contract, letting each evolve independently.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the coupling problems of exposing entities and can explain the separation of concerns.",
+        "common_mistake": "Exposing JPA entities directly and hitting LazyInitializationException when Jackson serializes a lazy collection outside the persistence context.",
+        "to_stand_out": "Mention MapStruct for compile-time mapping, explain record classes as DTOs, and discuss the difference between request DTOs and response DTOs."
+      },
+      "company_tags": [
+        "Netflix",
+        "Amazon",
+        "Google",
+        "Stripe",
+        "GitHub",
+        "Shopify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Exposing JPA Entities Directly Is a Ticking Time Bomb — Here's What Breaks",
+            "content": "Returning a JPA entity from a controller feels efficient — one class serves the database, the API, and the business logic. In practice, it creates three problems that get worse as the application grows.\n\n**Problem one: `LazyInitializationException`.** JPA loads `@OneToMany` and `@ManyToMany` relationships lazily by default.\n- When Jackson tries to serialize the entity outside the persistence context (which is closed by the time the response is written), it triggers a `LazyInitializationException`.\n- Developers work around this with `FetchType.EAGER` or `@Transactional` on the controller — both are worse than the original problem.\n- Eager loading pulls the entire object graph on every query. `@Transactional` on the controller keeps the database connection open during serialization, wasting connection pool resources.\n\n**Problem two: API coupling.** Every database schema change — renaming a column, adding a field, restructuring a relationship — changes the API response. Clients break on every migration. With DTOs, the API contract and the database schema evolve independently.\n\n**Problem three: security leaks.** Entities often contain fields that should never reach the client — password hashes, internal IDs, audit timestamps, soft-delete flags. `@JsonIgnore` works until someone forgets it on a new field."
+          },
+          {
+            "type": "step",
+            "title": "Request DTOs vs Response DTOs — Why They Should Be Different Classes",
+            "content": "A common shortcut is using one DTO for both request and response. This creates a different coupling problem: the fields a client sends to create a resource are rarely the same fields they need in the response.\n\nA `CreateUserRequest` has `name`, `email`, `password`. A `UserResponse` has `id`, `name`, `email`, `createdAt` — no password, and includes server-generated fields the client never sends. Using one class means either accepting fields you shouldn't (`id` in a create request) or annotating half the fields with `@JsonIgnore` depending on direction.\n\n```java\npublic record CreateUserRequest(\n    @NotBlank String name,\n    @Email String email,\n    @Size(min = 8) String password\n) {}\n\npublic record UserResponse(\n    Long id,\n    String name,\n    String email,\n    LocalDateTime createdAt\n) {}\n```\n\nJava `record` classes are ideal for DTOs — they're immutable, generate `equals`/`hashCode`/`toString`, and the constructor enforces that all fields are provided. Validation annotations (`@NotBlank`, `@Email`) go on request DTOs only, keeping response classes clean.\n\nFor mapping between entities and DTOs, **MapStruct** generates type-safe mapping code at compile time — no reflection, no runtime overhead. A single interface with `@Mapper` produces the implementation automatically. This eliminates the boilerplate objection that makes developers skip DTOs in the first place.\n\nOne pattern worth knowing: **projection DTOs** for list endpoints. A `UserListItem` with just `id`, `name`, and `role` is lighter than the full `UserResponse` with all fields. Spring Data JPA even supports interface-based projections that generate the query to select only the needed columns, reducing both network payload and database load."
+          },
+          {
+            "type": "step",
+            "title": "The Mapping Layer — Where Conversion Lives Without Polluting Business Logic",
+            "content": "The conversion between entities and DTOs needs a home. Putting it in the controller clutters request handling. Putting it in the service mixes business logic with serialization concerns. The cleanest approach is a dedicated **mapper layer**.\n\nMapStruct is the standard choice for Java projects. You define a mapper interface, annotate it with `@Mapper(componentModel = \"spring\")`, and MapStruct generates the implementation at compile time.\n\n```java\n@Mapper(componentModel = \"spring\")\npublic interface UserMapper {\n    UserResponse toResponse(User entity);\n    User toEntity(CreateUserRequest request);\n    \n    @Mapping(target = \"id\", ignore = true)\n    @Mapping(target = \"createdAt\", ignore = true)\n    void updateEntity(UpdateUserRequest request, @MappingTarget User entity);\n}\n```\n\nThe `@MappingTarget` annotation handles update operations — MapStruct applies only the fields from the request to the existing entity, preserving server-managed fields like `id` and `createdAt`. This eliminates the manual field-by-field copy that's both tedious and error-prone.\n\nThe generated code is plain Java method calls — no reflection, no proxy magic, full IDE debuggability. This matters when a mapping bug surfaces in production: you can step through the generated source instead of debugging a runtime framework."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Never expose entities directly in REST responses** — exposing JPA entities as response bodies leaks database column names, triggers lazy loading in the serializer, and couples your API contract to your database schema.\n- **Separate request DTOs from response DTOs** — `CreateOrderRequest` (what comes in) and `OrderResponse` (what goes out) are different shapes; combining them forces unnecessary fields or awkward nullability.\n- **MapStruct generates compile-time DTO mappers with zero reflection** — `@Mapper` interface + method signatures; MapStruct generates the implementation; type-safe, IDE-navigable, no runtime cost.\n- **Record classes (Java 16+) are ideal for immutable response DTOs** — `record OrderResponse(Long id, String status, BigDecimal total) {}` — no boilerplate, immutable, serializes correctly with Jackson.\n- **Validate on the request DTO, not the entity** — Bean Validation annotations belong on `CreateOrderRequest`; the entity should receive only already-validated data from the service layer."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "DTOs (Data Transfer Objects) are the boundary between your HTTP layer and your domain/persistence layer. Skipping them is a shortcut that creates API coupling to database schemas and security vulnerabilities.\n\n**Why not expose entities directly**\n- `@JsonIgnore` and `@JsonProperty` on entity fields create maintenance overhead as the schema evolves\n- Bidirectional `@OneToMany` relationships cause infinite recursion during JSON serialization\n- Lazy-loaded fields trigger additional SQL queries inside the Jackson serializer — N+1 inside the serializer\n- API consumers see internal field names and column-level details that break when you refactor the database\n\n**Request vs response DTOs**\n- Request DTO: fields needed to perform the operation, with validation annotations; fields the client is not allowed to set (like `createdAt`) are absent\n- Response DTO: fields the client needs to see, potentially aggregated from multiple entities, with no persistence metadata\n\n**Mapping options**\n- MapStruct: annotation processor generates compile-time implementation; zero reflection; method signature = mapping contract\n- ModelMapper: runtime reflection; simpler setup; harder to debug; slower\n- Manual mapping: explicit but verbose; acceptable for small projects\n\nJava records (`record OrderResponse(Long id, String status) {}`) are the cleanest response DTO — immutable, compact, and Jackson-serializable without configuration."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What are the trade-offs when applying DTO Pattern — Why Never Expose Entities Directly in REST API in production?",
+        "What are the trade-offs when applying DTO Pattern — Why Never Expose Entities Directly in REST API in production?",
+        "What are the trade-offs when applying DTO Pattern — Why Never Expose Entities Directly in REST API in production?"
+      ],
+      "seo": {
+        "metaTitle": "DTO Pattern — Why Never Expose Entities Directly in REST APIs",
+        "metaDescription": "Exposing JPA entities directly in API responses couples your database schema to your API contract, leaks internal fields (like password hashes), triggers lazy."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "DTOs (Data Transfer Objects) are the boundary between your HTTP layer and your domain/persistence layer.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Returning a JPA entity from a controller feels efficient — one class serves the database, the API, and the business logic. In practice, it creates three problems that get worse as the application grows. Problem one: LazyInitializationException. JPA loads @OneToMany and @ManyToMany relationships lazily by default. When Jackson tries to serialize the entity outside the persistence context (which is closed by the time the response is written), it triggers a LazyInitializationException. Developers work around this with FetchType.EAGER or @Transactional on."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the coupling problems of exposing entities and can explain the separation of concerns."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Never expose entities directly in REST responses — exposing JPA entities as response bodies leaks database column names, triggers lazy loading in the serializer, and couples your API contract to your database schema",
+              "Separate request DTOs from response DTOs — CreateOrderRequest (what comes in) and OrderResponse (what goes out) are different shapes; combining them forces unnecessary fields or awkward nullability",
+              "MapStruct generates compile-time DTO mappers with zero reflection — @Mapper interface + method signatures; MapStruct generates the implementation; type-safe, IDE-navigable, no runtime cost",
+              "Record classes (Java 16+) are ideal for immutable response DTOs — record OrderResponse(Long id, String status, BigDecimal total) {} — no boilerplate, immutable, serializes correctly with Jackson",
+              "Validate on the request DTO, not the entity — Bean Validation annotations belong on CreateOrderRequest; the entity should receive only already-validated data from the service layer"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Returning a JPA entity from a controller feels efficient — one class serves the database, the API, and the business logic. In practice, it creates three problems that get worse as the application grows. Problem one: LazyInitializationException. JPA loads @OneToMany and @ManyToMany relationships lazily by default. When Jackson tries to serialize the entity outside the persistence context (which is closed by the time the response is written), it triggers a LazyInitializationException. Developers work around this with FetchType.EAGER or @Transactional on the controller — both are worse than the original problem. Eager loading pulls the entire object graph on every query. @Transactional on the controller keeps the database connection open during serialization, wasting connection pool resources. Problem two: API coupling. Every."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Exposing JPA entities directly and hitting LazyInitializationException when Jackson serializes a lazy collection outside the persistence context"
+            ]
+          }
+        ],
+        "cap": "Why not expose entities directly @JsonIgnore and @JsonProperty on entity fields create maintenance overhead as the schema evolves Bidirectional @OneToMany relationships cause infinite recursion during",
+        "familiarity_anchors": [
+          "Exposing"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What are the trade-offs when applying DTO Pattern — Why Never Expose Entities Directly in REST API in production?",
+          "What are the trade-offs when applying DTO Pattern — Why Never Expose Entities Directly in REST API in production?",
+          "What are the trade-offs when applying DTO Pattern — Why Never Expose Entities Directly in REST API in production?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API serving a mobile client"
+      }
+    },
+    {
+      "id": "api-des-002",
+      "slug": "rest-resource-naming-conventions",
+      "question": "What are the REST resource naming conventions — and which rules actually matter in 2026?",
+      "title": "REST Resource Naming Conventions",
+      "direct_answer": "Use **plural nouns** for collections (`/orders`), identifiers for items (`/orders/{id}`), **kebab-case** for multi-word segments (`/payment-intents`), and **sub-resources** for clear ownership (`/orders/{id}/items`). Keep URLs **noun-based** — verbs belong in the HTTP method, not the path — except for bounded \"controller\" actions like `/invoices/{id}:send` where no CRUD mapping fits. Use **query parameters** for filtering/sorting/paginating, not for identity. Version at the prefix (`/v1`), not the query string. All of these rules exist to make the URL a stable, discoverable contract; breaking them silently is the single biggest cause of painful API migrations.",
+      "layout_type": "how-to-guide",
+      "difficulty": "intermediate",
+      "importance": "medium",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can design URLs that reflect resources (not actions), pluralise consistently, express ownership via sub-resources, and separate filter/sort/pagination (query params) from identity (path).",
+        "common_mistake": "Encoding verbs in the path (`/getOrder`, `/createOrder`), mixing plural and singular (`/order` and `/orders`), using snake_case or camelCase in URLs, or cramming filters into the path (`/orders/by-user/123`) instead of `/orders?userId=123`.",
+        "to_stand_out": "Discuss Stripe's `:action` controller pattern, Google's AIP-121 resource-oriented design, when HATEOAS reduces naming churn, and how cursor-based pagination interacts with URL stability (opaque cursors in query params, never in the path)."
+      },
+      "company_tags": [
+        "Stripe",
+        "GitHub",
+        "Google",
+        "Shopify",
+        "Twilio",
+        "Atlassian"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Naming Rules Earn Their Keep",
+            "content": "A REST URL is a **long-lived contract**.\n- Once a client library ships with `/users/{id}/orders`, that path has to survive a decade of refactoring.\n- Every week a new client — mobile app, partner integration, internal service — hardcodes the shape.\n- The naming rules below aren't pedantry; they reduce the number of ways future-you can break those clients.\n\nThe rules distill to four decisions:\n- **Nouns in the path, verbs in the method** — the path identifies the resource, `GET`/`POST`/`PUT`/`PATCH`/`DELETE` describes the action\n- **Plural for collections, identifier for items** — `/orders` is the collection, `/orders/42` is the item; never mix `/order` and `/orders` in the same API\n- **Sub-resources express ownership** — `/orders/{id}/items` says \"items that belong to this order\"; flat `/items?orderId=...` says \"items that happen to match this filter\"\n- **Query parameters are for filtering, sorting, and pagination** — never for identity, never for hierarchy"
+          },
+          {
+            "type": "step",
+            "title": "The Core Rules, One by One",
+            "content": "**Plural nouns for collections**\n- `GET /orders`, `POST /orders`, `GET /orders/{id}`, `PATCH /orders/{id}`\n- Consistency matters more than any theological argument about whether it should be `/order` or `/orders` — pick plural (Stripe, GitHub, Shopify) and apply it everywhere\n\n**Identifiers, not names, in the path**\n- `GET /users/{userId}` not `GET /users/by-email/{email}` — emails change, IDs don't\n- Lookup by alternate key belongs in a query: `GET /users?email=...` (returns a collection of zero or one)\n\n**Kebab-case for multi-word segments**\n- `/payment-intents`, not `/paymentIntents` or `/payment_intents`\n- Hostnames are case-insensitive but paths are case-sensitive in RFC 3986 — URLs often end up in logs, emails, CLI histories; mixed case is a footgun\n\n**Sub-resources for ownership**\n- `GET /orders/{orderId}/items` — items that belong to this order\n- `POST /orders/{orderId}/items` — create a new item in this order\n- `GET /items?orderId={orderId}` — search the flat item catalog filtered by order; only appropriate if items exist independently of orders\n\n**Query parameters for filtering, sorting, pagination**\n- `GET /orders?status=paid&createdAfter=2026-01-01&sort=-createdAt&limit=50&cursor=...`\n- Repeated keys for multi-value: `?tag=urgent&tag=refund` (or comma-separated — document which)\n- Boolean filters: `?archived=true`; don't invent `/orders/archived/true`\n\n**Version at the prefix, not the query string**\n- `/v1/orders`, `/v2/orders` — one clear switch point for client code\n- Media-type versioning (`Accept: application/vnd.acme.v2+json`) is an alternative but harder to test with curl; most teams default to URL prefix\n\n**Controller actions when CRUD doesn't fit**\n- Some actions don't map to CRUD on a resource — sending an invoice, publishing a draft, running a batch job\n- Stripe's convention: `POST /invoices/{id}:send` (colon-action); Google AIP-136 calls these \"custom methods\"\n- Keep them rare and name them as lowercase verbs after the colon\n\n**Avoid deeply nested hierarchies**\n- `/organizations/{orgId}/teams/{teamId}/projects/{projectId}/issues/{issueId}/comments/{commentId}` is unusable\n- If ownership is transitive and the parent IDs aren't needed for authorisation, flatten to `/comments/{id}` and include parent refs in the body"
+          },
+          {
+            "type": "code_example",
+            "title": "Good vs Bad — Side by Side",
+            "language": "bash",
+            "content": "# --- COLLECTION & ITEM ---\n# BAD                                 # GOOD\nGET    /getAllOrders                  GET    /orders\nGET    /order/42                      GET    /orders/42\nPOST   /createOrder                   POST   /orders\nPUT    /orders/42/update              PUT    /orders/42\nDELETE /deleteOrder?id=42             DELETE /orders/42\n\n# --- OWNERSHIP ---\nGET    /items?order_id=42             GET    /orders/42/items\nPOST   /addItem                       POST   /orders/42/items\n\n# --- FILTERING & SEARCH ---\nGET    /orders/by-status/paid         GET    /orders?status=paid\nGET    /searchOrders?q=foo            GET    /orders?search=foo\nGET    /orders/page/2                 GET    /orders?cursor=eyJ...&limit=50\n\n# --- ACTIONS THAT DON'T FIT CRUD ---\nPOST   /sendInvoice/42                POST   /invoices/42:send\nPOST   /jobs/42/start                 POST   /jobs/42:start   # or POST /jobs/42/runs\n\n# --- CASING ---\nGET    /paymentIntents                GET    /payment-intents\nGET    /payment_intents               GET    /payment-intents\n\n# --- VERSIONING ---\nGET    /orders?version=2              GET    /v2/orders\nGET    /api/orders (no version)       GET    /v1/orders\n\n# --- ALTERNATE LOOKUP ---\nGET    /users/by-email/a@b.com        GET    /users?email=a@b.com\n\n# --- CONTROLLER MAPPING (Spring) ---\n# BAD (verbs in path):\n@GetMapping(\"/getOrder/{id}\")\n# GOOD (nouns in path, verb in HTTP method):\n@GetMapping(\"/orders/{id}\")"
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Controller Shape That Matches the Conventions",
+            "language": "java",
+            "content": "@RestController\n@RequestMapping(\"/v1/orders\")                         // plural, prefix-versioned\nclass OrderController {\n\n    private final OrderService orders;\n    private final OrderItemService items;\n\n    // GET /v1/orders?status=paid&createdAfter=...&sort=-createdAt&cursor=...\n    @GetMapping\n    Page<OrderDto> list(OrderFilter filter, Pageable page) {\n        return orders.list(filter, page);\n    }\n\n    @GetMapping(\"/{id}\")\n    OrderDto get(@PathVariable String id) { return orders.get(id); }\n\n    @PostMapping\n    @ResponseStatus(HttpStatus.CREATED)\n    OrderDto create(@RequestBody @Valid CreateOrderRequest req) {\n        return orders.create(req);\n    }\n\n    @PutMapping(\"/{id}\")                              // full replacement\n    OrderDto replace(@PathVariable String id,\n                     @RequestBody @Valid ReplaceOrderRequest req) {\n        return orders.replace(id, req);\n    }\n\n    @PatchMapping(\"/{id}\")                            // partial update\n    OrderDto update(@PathVariable String id,\n                    @RequestBody @Valid UpdateOrderRequest req) {\n        return orders.update(id, req);\n    }\n\n    @DeleteMapping(\"/{id}\")\n    @ResponseStatus(HttpStatus.NO_CONTENT)\n    void delete(@PathVariable String id) { orders.delete(id); }\n\n    // --- Sub-resource: items that belong to an order ---\n    @GetMapping(\"/{id}/items\")\n    List<OrderItemDto> listItems(@PathVariable(\"id\") String orderId) {\n        return items.listForOrder(orderId);\n    }\n\n    @PostMapping(\"/{id}/items\")\n    @ResponseStatus(HttpStatus.CREATED)\n    OrderItemDto addItem(@PathVariable(\"id\") String orderId,\n                         @RequestBody @Valid AddItemRequest req) {\n        return items.add(orderId, req);\n    }\n\n    // --- Controller-style action (Stripe convention) ---\n    @PostMapping(\"/{id}:cancel\")\n    @ResponseStatus(HttpStatus.ACCEPTED)\n    OrderDto cancel(@PathVariable String id, @RequestBody CancelReason reason) {\n        return orders.cancel(id, reason);\n    }\n}"
+          },
+          {
+            "type": "step",
+            "title": "Edge Cases — Where the Rules Get Hard",
+            "content": "**Singleton resources**\n- A resource where only one exists per parent — `/users/{id}/profile`, `/orders/{id}/shipping-address`\n- Use the **singular** noun here; it's genuinely one, not a collection of one\n- Methods: `GET`, `PUT`, `PATCH`, `DELETE`; no `POST` because you never create a new one\n\n**Batch / bulk operations**\n- `POST /orders:batchCreate` (Google AIP-231) or `POST /orders` with an array body\n- Prefer an array body when the shape matches the single create; use `:batchCreate` when semantics differ (partial failures, transactional guarantees)\n\n**Search endpoints**\n- For complex search queries that don't fit in a GET URL — large filter objects, geo bounding boxes, saved searches — use `POST /orders/search` with a body\n- Keep the GET endpoint for simple parameterised queries\n\n**Polymorphic collections**\n- `/feed` where each item may be a post, photo, or reshare — acceptable; include a `type` discriminator in the response payload\n\n**Cross-resource queries**\n- `GET /users/{id}/orders` — user's orders\n- `GET /orders?userId={id}` — same result, different shape; pick one based on who owns authorisation\n- If the parent owns the authorisation check, nest; if the collection is queried many ways, flatten\n\n**Async / long-running operations**\n- Either **return 202 + operation ID** and expose `GET /operations/{id}`\n- Or use **webhooks** to notify when done\n- Avoid holding an HTTP connection open for minutes; timeouts, retries, and load balancers all fight you"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and What Breaks When Rules Are Broken",
+            "content": "**When strictness helps**\n- Public APIs with many external consumers — stability is existential\n- Multi-team internal APIs where a shared style guide reduces cognitive load\n- Long-lived APIs expected to survive 5+ years\n\n**When relaxation is fine**\n- Internal service-to-service APIs used only by one or two consumers — consistency still helps but verb-in-path mistakes are cheap to fix\n- Rapid prototyping; commit to conventions before the first external client ships\n\n**What breaks when you mix plural and singular**\n- Every client writes wrappers that normalise it, doubling the public surface\n- Code generators (OpenAPI Generator, swagger-codegen) produce weird class names\n- New endpoints can't be derived from existing ones — every one requires a style ruling\n\n**What breaks when verbs creep into paths**\n- `/getOrder` makes the API non-idempotent-looking even for reads; CDN caching config becomes case-by-case\n- Refactoring `GET /getOrder` to `POST /orders/search` breaks every client because the verb-in-path couples method and path semantics\n\n**What breaks when identity leaks into query strings**\n- `GET /orders?id=42` — can't be cached sensibly, auth rules can't bind to a path pattern, routers can't tag it for metrics\n- Identity in the path is the whole point of path parameters\n\n**Controller actions done badly**\n- `POST /order/send/42` — both verb-in-path and id-after-verb — ugly and inconsistent\n- Use `POST /orders/42:send` or `POST /orders/42/actions/send`; keep them rare\n\n**Versioning mistakes**\n- Multiple versioning schemes in one API (prefix on some endpoints, header on others) — clients need conditional logic\n- No version at launch — every later change becomes a breaking change\n- Bumping the version for every minor field addition — operational burden on clients; version only for true incompatibilities\n\n**The escape hatch rule**\n- For every rule above there is an API I can point to that breaks it and succeeds anyway (GitHub has a few verb-in-path endpoints, Google has controller actions without the colon) — pick rules your team will actually follow, then follow them universally within your surface"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Plural nouns for collections, identifiers for items** — `/orders`, `/orders/{id}`; never mix singular and plural\n- **Verbs in the HTTP method, not the path** — `GET /orders/{id}`, not `GET /getOrder/{id}`\n- **Kebab-case for multi-word segments** — `/payment-intents`; URLs are case-sensitive and end up in logs, emails, CLIs\n- **Sub-resources express ownership** — `/orders/{id}/items`; flatten with query params (`/items?orderId=...`) only if items exist independently\n- **Query parameters carry filter, sort, and pagination** — never identity, never hierarchy\n- **Prefix-versioning is the path of least surprise** — `/v1/orders`; media-type versioning is an alternative, not a complement\n- **Controller actions use `:action` suffix sparingly** — `POST /invoices/{id}:send` when no CRUD mapping fits\n- **Consistency beats theology** — pick rules, document them, apply them universally; rewrites after a public launch are brutal"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "REST naming conventions exist because URLs are long-lived contracts. Once a client ships, you can't rename the path without breaking them.\n\n**The four rules that matter**\n- Plural nouns for collections — `/orders`, `/users`, `/payment-intents`\n- Identifier after the collection for items — `/orders/{id}`\n- Kebab-case for multi-word segments — `/payment-intents`, not `/paymentIntents` or `/payment_intents`\n- Verbs in the HTTP method, not the path — `GET /orders/{id}`, not `GET /getOrder/{id}`\n\n**Ownership via sub-resources**\n- `/orders/{id}/items` says items belong to this order\n- Flat `/items?orderId=...` says items are a catalog filtered by order\n- Pick based on who owns the authorisation check\n\n**Filters, sorting, pagination — query parameters**\n- `/orders?status=paid&sort=-createdAt&limit=50&cursor=...`\n- Identity goes in the path; filters go in the query string\n- Opaque cursors for pagination so the client doesn't depend on internals\n\n**Versioning at the prefix**\n- `/v1/orders`, `/v2/orders` — one switch point for client code\n- Media-type versioning is a valid alternative but harder to test with curl\n\n**Controller actions when CRUD doesn't fit**\n- Stripe's convention: `POST /invoices/{id}:send`\n- Use sparingly; most actions should map to a method on a resource\n\n**Singleton resources**\n- `/users/{id}/profile` — exactly one exists per parent; use the singular noun\n\n**Common mistakes**\n- Mixing `/order` and `/orders` in the same API\n- Verbs in paths — `/getOrder`, `/createOrder`, `/deleteOrder`\n- Identity in query strings — `/orders?id=42` instead of `/orders/42`\n- Deep nesting — `/organizations/{}/teams/{}/projects/{}/issues/{}` becomes unusable\n- No version at launch — every later change is a breaking change\n\n**The meta-rule**\n- Consistency beats theology; pick conventions, write them down, apply them universally across the entire API surface"
+          }
+        ]
+      },
+      "followup_questions": [
+        "When do you flatten a nested resource like `/orders/{id}/items` into a top-level `/items?orderId=...`?",
+        "How do you name actions that don't map to CRUD (send invoice, publish draft)?",
+        "What are the trade-offs of URL-prefix versioning vs media-type versioning?",
+        "Why is kebab-case preferred over camelCase or snake_case in URL paths?"
+      ],
+      "seo": {
+        "metaTitle": "REST Resource Naming Conventions — Plural Nouns, Kebab-case, Sub-resources",
+        "metaDescription": "Design REST URLs that last: plural nouns, kebab-case, sub-resources for ownership, query params for filters, prefix-versioning, and controller actions when CRUD doesn't fit."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "REST naming conventions exist because URLs are long-lived contracts.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A REST URL is a long-lived contract. Once a client library ships with /users/{id}/orders, that path has to survive a decade of refactoring. Every week a new client — mobile app, partner integration, internal service — hardcodes the shape. The naming rules below aren't pedantry; they reduce the number of ways future-you can break those clients. The rules distill to four decisions: Nouns in the path, verbs in the method — the path identifies the resource, GET/POST/PUT/PATCH/DELETE describes the action."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can design URLs that reflect resources (not actions), pluralise consistently, express ownership via sub-resources, and separate filter/sort/pagination (query params) from identity (path)."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Plural nouns for collections, identifiers for items — /orders, /orders/{id}; never mix singular and plural Verbs in the HTTP method, not the path — GET /orders/{id}, not GET /getOrder/{id} Kebab-case for multi-word segments — /payment-intents; URLs are case-sensitive and end up in logs, emails, CLIs Sub-resources express ownership — /orders/{id}/items; flatten with query params (/items?orderId=",
+              ") only if items exist independently Query parameters carry filter, sort, and pagination — never identity, never hierarchy Prefix-versioning is the path of least surprise — /v1/orders; media-type versioning is an alternative, not a complement Controller actions use :action suffix sparingly — POST /invoices/{id}:send when no CRUD mapping fits Consistency beats theology — pick rules, document them, apply them universally; rewrites after a public launch are brutal"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "--- COLLECTION & ITEM --- BAD # GOOD GET /getAllOrders GET /orders GET /order/42 GET /orders/42 POST /createOrder POST /orders PUT /orders/42/update PUT /orders/42 DELETE /deleteOrder?id=42 DELETE /orders/42 --- OWNERSHIP --- GET /items?order_id=42 GET /orders/42/items POST /addItem POST /orders/42/items --- FILTERING & SEARCH --- GET /orders/by-status/paid GET /orders?status=paid GET /searchOrders?q=foo GET /orders?search=foo GET /orders/page/2 GET /orders?cursor=eyJ...&limit=50 --- ACTIONS THAT DON'T FIT CRUD --- POST /sendInvoice/42 POST /invoices/42:send POST /jobs/42/start POST /jobs/42:start # or POST /jobs/42/runs --- CASING --- GET /paymentIntents GET /payment-intents GET /payment_intents GET /payment-intents --- VERSIONING --- GET /orders?version=2 GET /v2/orders GET /api/orders (no version) GET /v1/orders --- ALTERNATE LOOKUP --- GET /users/by-email/a@b.com GET /users?email=a@b.com --- CONTROLLER MAPPING (Spring) --- BAD (verbs in path): @GetMapping(\"/getOrder/{id}\") GOOD (nouns in."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Encoding verbs in the path (/getOrder, /createOrder), mixing plural and singular (/order and /orders), using snake_case or camelCase in URLs, or cramming filters into the path (/orders/by-user/123) instead of /orders?userId=123"
+            ]
+          }
+        ],
+        "cap": "Identity goes in the path; filters go in the query string Opaque cursors for pagination so the client doesn't depend on internals Versioning at the prefix /v1/orders, /v2/orders — one switch point for",
+        "familiarity_anchors": [
+          "Version"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "When do you flatten a nested resource like `/orders/{id}/items` into a top-level `/items?orderId=...`?",
+          "How do you name actions that don't map to CRUD (send invoice, publish draft)?",
+          "What are the trade-offs of URL-prefix versioning vs media-type versioning?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API serving a mobile client"
+      }
+    },
+    {
+      "id": "api-des-003",
+      "slug": "rest-error-envelope-design",
+      "question": "How do you design a consistent REST error response envelope — RFC 7807, Stripe-style, or a custom shape?",
+      "title": "REST Error Envelope Design",
+      "direct_answer": "Ship **one** error shape across every endpoint. The 2026 default is **RFC 7807 `application/problem+json`** — `type` (URI), `title`, `status`, `detail`, `instance`, plus **extension fields** for machine-readable context (`errors` for field-level validation, `code` for a stable enum). Spring 6/Boot 3 gives you `ProblemDetail` and `@RestControllerAdvice` handlers to translate exceptions. Stripe-style flat `{error: {type, code, message, param}}` is also valid — pick one and apply it universally. Always include a **stable error `code`** (not the HTTP status), a **correlation/trace ID**, and **never leak stack traces or internal paths**. The envelope is a contract; changing it silently breaks every client's error-handling code.",
+      "layout_type": "how-to-guide",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can design a single error envelope that covers 4xx/5xx, validation failures, and unexpected exceptions — and whether you know RFC 7807 `ProblemDetail` as the modern baseline.",
+        "common_mistake": "Returning different error shapes from different layers — Spring's default `{timestamp, status, error, message, path}`, your own `{success:false, error:'...'}`, and Jackson deserialization errors leaking `MethodArgumentNotValidException` verbatim. Also: using the HTTP status as the application error code, so you can't distinguish `insufficient_funds` from `invalid_card_number`.",
+        "to_stand_out": "Compare RFC 7807 `ProblemDetail` to Stripe's flat envelope and Google AIP-193; explain extension-member conventions, how to carry a stable machine-readable `code` alongside the `type` URI, when to set `type` to a dereferenceable docs URL, and how trace-id propagation makes support debugging tractable."
+      },
+      "company_tags": [
+        "Stripe",
+        "GitHub",
+        "Google",
+        "Spring",
+        "Atlassian",
+        "Slack"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why One Envelope, Everywhere",
+            "content": "Every client treats errors as a small state machine: is this retryable? is it a validation error I should render per-field? is it an auth failure I should redirect on? With a consistent envelope the client writes that state machine once; with drift it writes it per endpoint and gets it wrong.\n\nThe envelope needs to carry:\n- An HTTP status (already in the response line; don't duplicate it as the primary signal)\n- A **stable machine-readable code** the client can branch on even when the HTTP status stays the same\n- A **human-readable message** for logs and developer tools — never the thing you show end-users\n- **Field-level errors** when the problem is in the request body (validation)\n- A **correlation or trace ID** so support can find the request in logs/tracing\n- Optionally, a **docs link** (`type` in RFC 7807) pointing to how-to-fix docs\n\nTwo envelopes dominate in 2026:\n- **RFC 7807 `ProblemDetail`** — IETF standard, `Content-Type: application/problem+json`, first-class in Spring 6/Boot 3.\n- The default for new APIs\n- **Stripe-style flat envelope** — `{error: {type, code, message, param}}`.\n- Popular because Stripe's API set the bar; effectively a custom shape that every ORM of-hand knows"
+          },
+          {
+            "type": "code_example",
+            "title": "RFC 7807 — What the Wire Looks Like",
+            "language": "bash",
+            "content": "# Single error — e.g. insufficient funds\nHTTP/1.1 402 Payment Required\nContent-Type: application/problem+json\nX-Trace-Id: 7a9c3f12b4e84e0a\n\n{\n  \"type\":   \"https://errors.api.acme.com/billing/insufficient-funds\",\n  \"title\":  \"Insufficient funds\",\n  \"status\": 402,\n  \"detail\": \"Your balance is $12.40; this transaction requires $50.00.\",\n  \"instance\": \"/v1/charges/ch_abc123\",\n  \"code\":    \"BILLING_INSUFFICIENT_FUNDS\",\n  \"traceId\": \"7a9c3f12b4e84e0a\",\n  \"balance\": \"12.40\",\n  \"required\": \"50.00\"\n}\n\n# Validation error — field-level details as an extension member\nHTTP/1.1 400 Bad Request\nContent-Type: application/problem+json\n\n{\n  \"type\":   \"https://errors.api.acme.com/validation/invalid-request\",\n  \"title\":  \"Validation failed\",\n  \"status\": 400,\n  \"detail\": \"2 fields failed validation.\",\n  \"instance\": \"/v1/customers\",\n  \"code\":    \"VALIDATION_FAILED\",\n  \"traceId\": \"d3f1...\",\n  \"errors\": [\n    { \"field\": \"email\",     \"code\": \"NOT_EMAIL\",    \"message\": \"must be a well-formed email address\" },\n    { \"field\": \"birthDate\", \"code\": \"IN_PAST\",      \"message\": \"must be in the past\" }\n  ]\n}\n\n# Auth failure\nHTTP/1.1 401 Unauthorized\nContent-Type: application/problem+json\nWWW-Authenticate: Bearer realm=\"api\", error=\"invalid_token\"\n\n{\n  \"type\":    \"https://errors.api.acme.com/auth/invalid-token\",\n  \"title\":   \"Invalid or expired token\",\n  \"status\":  401,\n  \"detail\":  \"Refresh your session and retry.\",\n  \"code\":    \"AUTH_INVALID_TOKEN\",\n  \"traceId\": \"...\"\n}"
+          },
+          {
+            "type": "code_example",
+            "title": "Spring 6 / Boot 3 — ProblemDetail + @RestControllerAdvice",
+            "language": "java",
+            "content": "// Domain exceptions carry a stable code + status\npublic abstract class ApiException extends RuntimeException {\n    private final HttpStatus status;\n    private final String code;\n    protected ApiException(HttpStatus status, String code, String message) {\n        super(message); this.status = status; this.code = code;\n    }\n    public HttpStatus status() { return status; }\n    public String code()       { return code; }\n}\n\npublic class InsufficientFundsException extends ApiException {\n    private final BigDecimal balance, required;\n    public InsufficientFundsException(BigDecimal balance, BigDecimal required) {\n        super(HttpStatus.PAYMENT_REQUIRED, \"BILLING_INSUFFICIENT_FUNDS\",\n              \"Balance %s, required %s\".formatted(balance, required));\n        this.balance = balance; this.required = required;\n    }\n    public BigDecimal balance()  { return balance; }\n    public BigDecimal required() { return required; }\n}\n\n// Single advice translates every exception into ProblemDetail\n@RestControllerAdvice\nclass GlobalErrorHandler extends ResponseEntityExceptionHandler {\n\n    // Domain exceptions\n    @ExceptionHandler(ApiException.class)\n    ProblemDetail handleApi(ApiException ex, HttpServletRequest req) {\n        ProblemDetail pd = ProblemDetail.forStatusAndDetail(ex.status(), ex.getMessage());\n        pd.setType(URI.create(\"https://errors.api.acme.com/\" + ex.code().toLowerCase()\n                                                                     .replace('_', '/')));\n        pd.setTitle(defaultTitleFor(ex.status()));\n        pd.setInstance(URI.create(req.getRequestURI()));\n        pd.setProperty(\"code\", ex.code());\n        pd.setProperty(\"traceId\", MDC.get(\"traceId\"));\n        enrichExtensions(pd, ex);\n        return pd;\n    }\n\n    // @Valid bean-validation errors\n    @Override\n    protected ResponseEntity<Object> handleMethodArgumentNotValid(\n            MethodArgumentNotValidException ex, HttpHeaders h, HttpStatusCode st, WebRequest req) {\n        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,\n                \"%d field(s) failed validation.\".formatted(ex.getFieldErrorCount()));\n        pd.setType(URI.create(\"https://errors.api.acme.com/validation/invalid-request\"));\n        pd.setTitle(\"Validation failed\");\n        pd.setProperty(\"code\", \"VALIDATION_FAILED\");\n        pd.setProperty(\"traceId\", MDC.get(\"traceId\"));\n        pd.setProperty(\"errors\", ex.getFieldErrors().stream()\n            .map(fe -> Map.of(\n                \"field\",   fe.getField(),\n                \"code\",    Optional.ofNullable(fe.getCode()).orElse(\"INVALID\"),\n                \"message\", fe.getDefaultMessage()))\n            .toList());\n        return ResponseEntity.status(HttpStatus.BAD_REQUEST)\n            .contentType(MediaType.APPLICATION_PROBLEM_JSON).body(pd);\n    }\n\n    // Anything unhandled — never leak the stack trace\n    @ExceptionHandler(Throwable.class)\n    ProblemDetail handleUnexpected(Throwable ex, HttpServletRequest req) {\n        log.error(\"unexpected\", ex);      // full detail stays in logs\n        ProblemDetail pd = ProblemDetail.forStatusAndDetail(\n            HttpStatus.INTERNAL_SERVER_ERROR,\n            \"An unexpected error occurred. Reference the traceId to contact support.\");\n        pd.setType(URI.create(\"https://errors.api.acme.com/system/internal\"));\n        pd.setTitle(\"Internal server error\");\n        pd.setProperty(\"code\", \"INTERNAL_ERROR\");\n        pd.setProperty(\"traceId\", MDC.get(\"traceId\"));\n        return pd;\n    }\n\n    private void enrichExtensions(ProblemDetail pd, ApiException ex) {\n        if (ex instanceof InsufficientFundsException ins) {\n            pd.setProperty(\"balance\",  ins.balance().toPlainString());\n            pd.setProperty(\"required\", ins.required().toPlainString());\n        }\n        // add more ex-type enrichments here\n    }\n}"
+          },
+          {
+            "type": "code_example",
+            "title": "Stripe-style Flat Envelope (if you don't adopt RFC 7807)",
+            "language": "bash",
+            "content": "# Single-error shape, nested object\nHTTP/1.1 402 Payment Required\nContent-Type: application/json\n\n{\n  \"error\": {\n    \"type\":    \"card_error\",\n    \"code\":    \"insufficient_funds\",\n    \"message\": \"Your card has insufficient funds.\",\n    \"param\":   \"card\",\n    \"docUrl\":  \"https://stripe.com/docs/error-codes#insufficient-funds\",\n    \"requestId\": \"req_7a9c3f12\"\n  }\n}\n\n# Validation with per-field detail\nHTTP/1.1 400 Bad Request\nContent-Type: application/json\n\n{\n  \"error\": {\n    \"type\":    \"invalid_request_error\",\n    \"code\":    \"parameter_invalid\",\n    \"message\": \"2 parameters invalid\",\n    \"errors\": [\n      { \"param\": \"email\",     \"code\": \"not_email\",   \"message\": \"invalid email\" },\n      { \"param\": \"birthDate\", \"code\": \"in_past\",     \"message\": \"must be in the past\" }\n    ]\n  }\n}\n\n# The rule regardless of shape:\n#  - one envelope everywhere\n#  - stable machine-readable `code`\n#  - correlation id for support\n#  - no stack traces, no internal paths, no SQL messages"
+          },
+          {
+            "type": "step",
+            "title": "What Goes In, What Stays Out",
+            "content": "**Required fields**\n- `status` / HTTP status — client branching is easier when the status is in the body too (old clients that swallow headers)\n- `code` — stable enum (`BILLING_INSUFFICIENT_FUNDS`, `AUTH_INVALID_TOKEN`); **never** change this; it is the machine contract\n- `title` / short human summary\n- `detail` / longer human message — safe for developer tools, not for end users\n- `traceId` — correlation with logs and APM\n- `instance` — URI of the request (`/v1/charges/ch_abc`) for reproducibility\n\n**Recommended**\n- `type` — URI; in RFC 7807 this identifies the problem class and ideally dereferences to human docs\n- `errors[]` for field-level validation: `{field, code, message}`\n- `docUrl` or `help` link when `type` is not a docs URL\n\n**Never include**\n- Stack traces, SQL strings, internal file paths — security leak + noise\n- PII beyond what the caller already sent\n- Tokens, secrets, or header values from other requests\n- Raw ORM exception messages (`could not execute statement; SQL [insert into ...]`)\n\n**Code naming conventions**\n- `SCREAMING_SNAKE_CASE` or `kebab-case.dotted` — pick one\n- Group prefixes — `BILLING_*`, `AUTH_*`, `VALIDATION_*`\n- Never reuse a `code` after retiring it; mark as deprecated in docs and emit a new one\n\n**Status code ↔ code mapping**\n- Multiple codes often map to the same HTTP status (`400 + VALIDATION_FAILED`, `400 + BODY_MALFORMED`, `400 + PARAMETER_UNKNOWN`)\n- One code may map to different statuses over time only if the semantic doesn't change — rare\n- Document the pairing table; auto-generate from source"
+          },
+          {
+            "type": "step",
+            "title": "Cross-cutting Concerns — Validation, Auth, Async, i18n",
+            "content": "**Validation errors (`@Valid`, `@Validated`)**\n- Map `MethodArgumentNotValidException`, `ConstraintViolationException`, and `HttpMessageNotReadableException` in the advice\n- Collect **all** field errors before responding — don't fail on the first\n- Use a stable `code` per constraint (`NOT_BLANK`, `NOT_EMAIL`, `SIZE_EXCEEDED`, `IN_PAST`)\n\n**Auth failures**\n- `401` for missing/expired token; include `WWW-Authenticate` header per RFC 6750\n- `403` for insufficient permission on a valid token — envelope should carry `code: AUTH_FORBIDDEN` with the resource/action in extension fields\n\n**Rate limiting**\n- `429` with `Retry-After` header and `code: RATE_LIMITED`\n- Extension fields: `limit`, `remaining`, `resetAt`\n\n**Async / long-running operations**\n- `202 Accepted` on the create; envelope of operation `{id, status: pending}` — never an error envelope\n- Errors during execution surface via `GET /operations/{id}` with status `failed` and the same `ProblemDetail` shape as an extension field\n\n**Localization (i18n)**\n- Keep `code` language-neutral; localize `detail` via the `Accept-Language` header\n- Optionally provide a `detailKey` that the client can localize locally\n\n**Idempotency conflicts**\n- `409` with `code: IDEMPOTENCY_KEY_REUSED` when the same key arrives with a different request body\n- Include the original request's `traceId` in extensions for debugging\n\n**Multi-error responses**\n- Validation — `errors[]` array is the standard shape\n- Batch endpoints — one envelope per item; don't use a single top-level error shape for partial batch success"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Common Mistakes",
+            "content": "**RFC 7807 vs Stripe-flat**\n- RFC 7807 has IETF weight, first-class Spring support, and the `type` URI doubles as a doc link; most new APIs default to it\n- Stripe-flat is simpler to document and familiar to developers who have used Stripe's API — legitimate if adopted universally\n- Mixing both inside one product is the worst possible choice\n\n**The \"success\" flag anti-pattern**\n- `{success: false, error: '...'}` as a top-level envelope couples semantics to a boolean and prevents clients from using HTTP status codes naturally\n- CDN caching, HTTP retry middleware, and APM tooling all expect 4xx/5xx on errors\n\n**Status code as code**\n- Using `status: 400` as the only differentiator means the client can't tell `VALIDATION_FAILED` from `BODY_MALFORMED` without parsing the message\n- Always ship a stable `code` alongside status\n\n**Leaking internals**\n- `org.hibernate.exception.ConstraintViolationException: could not execute statement` gives attackers information and clients nothing actionable\n- `@ControllerAdvice` plus `@ExceptionHandler(Throwable.class)` must be the last line of defence\n\n**Breaking the envelope silently**\n- Renaming `message` → `detail` mid-lifecycle breaks every client\n- Treat the envelope as part of the public contract; version it like the API\n\n**Too many codes**\n- Hundreds of fine-grained codes nobody documents produces an unusable error taxonomy\n- Start coarse (dozens), split only when a new code is genuinely client-actionable\n\n**Field-error shape drift**\n- `errors` as `[{field, message}]` vs `[{path, error}]` vs `{email: 'invalid'}` — clients can't use one handler for all endpoints\n- Commit to one shape from the start; Spring's `FieldError` maps cleanly to `{field, code, message}`\n\n**The security perimeter**\n- In auth errors, don't reveal whether the username exists — `AUTH_INVALID_CREDENTIALS` covers \"wrong user\" and \"wrong password\"\n- In access-control errors, don't reveal the resource's existence unless the caller has read permission — sometimes a `404` is more correct than `403`"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **One envelope everywhere** — pick RFC 7807 `ProblemDetail` (2026 default) or Stripe-style flat; apply universally across every endpoint and exception\n- **Always include a stable machine-readable `code`** separate from the HTTP status — `BILLING_INSUFFICIENT_FUNDS`, not just `402`\n- **Include `traceId`** for every error — correlation with logs/APM turns support tickets from hours into minutes\n- **Field-level validation goes in `errors[]`** with `{field, code, message}` — collect all failures, don't short-circuit on the first\n- **Spring 6/Boot 3 gives you `ProblemDetail` + `@RestControllerAdvice`** — one advice class handles domain, validation, auth, and unexpected exceptions\n- **Never leak stack traces, SQL strings, or internal paths** — a catch-all `@ExceptionHandler(Throwable.class)` is the last line of defence\n- **Treat the envelope as a contract** — versioned alongside the API; breaking changes trigger a version bump, never a silent migration\n- **Status code is not the code** — multiple `code`s can map to the same HTTP status; clients need the stable `code` to branch"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "An error envelope is a contract, not a convenience. Once a client ships, every field in your error response is something they're parsing.\n\n**The envelope I default to**\n- RFC 7807 `application/problem+json` — `type`, `title`, `status`, `detail`, `instance`, plus extensions\n- First-class in Spring 6 and Boot 3 via `ProblemDetail`\n- The `type` URI doubles as a link to docs, which shortens support cycles\n\n**What must be in the envelope**\n- A stable machine-readable `code` — never the HTTP status, because multiple codes share a status\n- A `traceId` — every error I respond with correlates with APM and logs\n- An `instance` — URI of the request for reproducibility\n- For validation, an `errors[]` array with per-field `{field, code, message}`\n- A human `detail` for developer tooling, never for end users\n\n**What never goes in**\n- Stack traces, SQL strings, internal paths — security leak and noise\n- PII beyond what the caller already sent\n- Tokens or secrets — even in rate-limit responses\n\n**Spring implementation**\n- Single `@RestControllerAdvice` with `@ExceptionHandler` for domain exceptions, `handleMethodArgumentNotValid` for bean validation, and a final `@ExceptionHandler(Throwable.class)` so nothing leaks unfiltered\n- Extension fields via `pd.setProperty(\"code\", ...)` and `pd.setProperty(\"traceId\", ...)`\n\n**Stripe-flat as an alternative**\n- `{error: {type, code, message, param}}` — perfectly valid if applied universally\n- The mistake is mixing RFC 7807 for some endpoints and Stripe-flat for others — clients can't write one error handler\n\n**Design mistakes I watch for**\n- A `success: false` flag — couples error semantics to a boolean, breaks HTTP expectations\n- Status code as the only differentiator — clients can't tell `VALIDATION_FAILED` from `BODY_MALFORMED`\n- Leaking `org.hibernate.ConstraintViolationException: could not execute statement` — the catch-all advice must translate\n- Renaming envelope fields mid-lifecycle — treat the envelope as public contract, version accordingly\n- Too many fine-grained codes nobody documents — start coarse, split when codes are client-actionable\n\n**Security subtleties**\n- Auth errors shouldn't reveal whether a username exists — one `AUTH_INVALID_CREDENTIALS` for both wrong-user and wrong-password\n- Access-control errors sometimes need to be `404` not `403` to avoid leaking resource existence"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you map `MethodArgumentNotValidException` into an RFC 7807 ProblemDetail with per-field errors?",
+        "Why should the machine-readable `code` be separate from the HTTP status, and how do you version it?",
+        "When would you choose Stripe-style flat envelope over RFC 7807 `ProblemDetail`?",
+        "What's the right way to avoid leaking stack traces from an unexpected exception in Spring Boot?"
+      ],
+      "seo": {
+        "metaTitle": "REST Error Envelope — RFC 7807 ProblemDetail, Stripe Flat, Spring Boot",
+        "metaDescription": "Design a consistent REST error envelope: RFC 7807 ProblemDetail vs Stripe-style flat, stable error codes, traceId correlation, validation shape, and Spring 6 ControllerAdvice."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "An error envelope is a contract, not a convenience.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Every client treats errors as a small state machine: is this retryable? is it a validation error I should render per-field? is it an auth failure I should redirect on? With a consistent envelope the client writes that state machine once; with drift it writes it per endpoint and gets it wrong. The envelope needs to carry: An HTTP status (already in the response line; don't duplicate it as the primary signal) A stable machine-readable code the client can branch."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can design a single error envelope that covers 4xx/5xx, validation failures, and unexpected exceptions — and whether you know RFC 7807 ProblemDetail as the modern baseline."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "One envelope everywhere — pick RFC 7807 ProblemDetail (2026 default) or Stripe-style flat; apply universally across every endpoint and exception Always include a stable machine-readable code separate from the HTTP status — BILLING_INSUFFICIENT_FUNDS, not just 402 Include traceId for every error — correlation with logs/APM turns support tickets from hours into minutes Field-level validation goes in errors[] with {field, code, message} — collect all failures, don't short-circuit on the first Spring 6/Boot 3 gives you ProblemDetail + @RestControllerAdvice — one advice class handles domain, validation, auth, and unexpected exceptions Never leak stack traces, SQL strings, or internal paths — a catch-all @ExceptionHandler(Throwable",
+              "class) is the last line of defence Treat the envelope as a contract — versioned alongside the API; breaking changes trigger a version bump, never a silent migration Status code is not the code — multiple codes can map to the same HTTP status; clients need the stable code to branch"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Single error — e.g. insufficient funds HTTP/1.1 402 Payment Required Content-Type: application/problem+json X-Trace-Id: 7a9c3f12b4e84e0a { \"type\": \"https://errors.api.acme.com/billing/insufficient-funds\", \"title\": \"Insufficient funds\", \"status\": 402, \"detail\": \"Your balance is $12.40; this transaction requires $50.00.\", \"instance\": \"/v1/charges/ch_abc123\", \"code\": \"BILLING_INSUFFICIENT_FUNDS\", \"traceId\": \"7a9c3f12b4e84e0a\", \"balance\": \"12.40\", \"required\": \"50.00\" } Validation error — field-level details as an extension member HTTP/1.1 400 Bad Request Content-Type: application/problem+json { \"type\": \"https://errors.api.acme.com/validation/invalid-request\", \"title\": \"Validation failed\", \"status\": 400, \"detail\": \"2 fields failed validation.\", \"instance\": \"/v1/customers\", \"code\": \"VALIDATION_FAILED\", \"traceId\": \"d3f1...\", \"errors\": [ { \"field\": \"email\", \"code\": \"NOT_EMAIL\", \"message\": \"must be a well-formed email address\" }, { \"field\": \"birthDate\", \"code\": \"IN_PAST\", \"message\": \"must be in the past\" } ] } Auth failure HTTP/1.1 401 Unauthorized Content-Type: application/problem+json WWW-Authenticate: Bearer realm=\"api\", error=\"invalid_token\" { \"type\": \"https://errors.api.acme.com/auth/invalid-token\", \"title\"."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Returning different error shapes from different layers — Spring's default {timestamp, status, error, message, path}, your own {success:false, error:'",
+              "'}, and Jackson deserialization errors leaking MethodArgumentNotValidException verbatim",
+              "Also: using the HTTP status as the application error code, so you can't distinguish insufficient_funds from invalid_card_number"
+            ]
+          }
+        ],
+        "cap": "The envelope I default to RFC 7807 application/problem+json — type, title, status, detail, instance, plus extensions First-class in Spring 6 and Boot 3 via ProblemDetail The type URI doubles as a link",
+        "familiarity_anchors": [
+          "Spring",
+          "ProblemDetail",
+          "RestControllerAdvice"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you map `MethodArgumentNotValidException` into an RFC 7807 ProblemDetail with per-field errors?",
+          "Why should the machine-readable `code` be separate from the HTTP status, and how do you version it?",
+          "When would you choose Stripe-style flat envelope over RFC 7807 `ProblemDetail`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API serving a mobile client"
+      }
+    }
+  ]
+}

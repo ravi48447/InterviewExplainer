@@ -1,0 +1,254 @@
+{
+  "topic": "AWS Scenario-Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "aws-sc-001",
+      "slug": "aws-bill-doubled-overnight-debug",
+      "question": "Your AWS bill doubled overnight without traffic growth. How do you investigate?",
+      "title": "AWS Bill Doubled: Cost Explorer, Untagged Resources, Egress",
+      "direct_answer": "Open Cost Explorer first, group by service to find which spend doubled. Most common culprits: (1) NAT Gateway egress charges from a misconfigured workload (S3 traffic going through NAT instead of VPC endpoint); (2) data transfer out (cross-AZ, cross-region, internet egress); (3) spot instance fallback to On-Demand; (4) un-deleted resources (load balancers, EIPs, NAT Gateways, snapshots from a deleted environment); (5) DynamoDB on-demand burst from a runaway loop. Tag-by-cost-allocation finds the owner; AWS Budgets + Anomaly Detection prevents recurrence.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "Practical FinOps debugging skills and AWS cost-driver knowledge",
+        "common_mistake": "Looking only at compute (EC2/Lambda) when the actual driver is data transfer or NAT Gateway",
+        "to_stand_out": "Discuss VPC endpoints to bypass NAT charges, Cost Anomaly Detection setup, untagged-resource policies via SCPs, and FinOps culture (showback to teams)"
+      },
+      "company_tags": [
+        "aws",
+        "intuit",
+        "lyft",
+        "atlassian"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "AWS Bills Don't Double for No Reason — But the Reason Hides",
+            "content": "An AWS bill doubling overnight has a discrete cause. The mistake teams make is starting from compute (EC2 instances, Lambda invocations) because that's the obvious cost. The actual culprit is often hidden in line items most engineers don't review: NAT Gateway data transfer, cross-AZ traffic, S3 egress to the internet, abandoned resources from deleted environments, or a runaway feedback loop in DynamoDB.\n\nThe systematic debug uses Cost Explorer to identify which AWS service grew, then drills into that service's drivers. The most common surprise costs:\n\n1. **NAT Gateway data transfer** — $0.045/GB processed plus $0.045/hr per gateway. A workload that suddenly streams 1TB through NAT costs $45 in transfer alone. Often caused by S3 calls going through NAT instead of a VPC endpoint.\n2. **Cross-AZ data transfer** — $0.01/GB each way ($0.02 round-trip). A chatty service deployed in three AZs serving cross-AZ traffic at scale racks up surprising charges.\n3. **Internet egress** — $0.09/GB out to internet. Streaming media, large downloads, or accidentally serving public S3 bucket directly.\n4. **DynamoDB on-demand spike** — a runaway loop or unexpected usage burst at $1.25 per million WCU adds up fast.\n5. **Abandoned resources** — load balancers ($0.0225/hr each), Elastic IPs not attached ($0.005/hr each), NAT Gateways from deleted environments, RDS snapshots from years ago.\n\nGet to the cause first; fix second; prevent recurrence with budgets and anomaly detection."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Cost Investigation Flow",
+            "content": "```mermaid\nflowchart TB\n    Detect[Bill doubled overnight] --> CE[Cost Explorer<br/>group by SERVICE]\n    CE --> Q1{Which service grew?}\n    Q1 -->|EC2-Other 'data transfer'| DT[Data transfer drilldown]\n    Q1 -->|NAT Gateway| NAT[NAT Gateway analysis]\n    Q1 -->|DynamoDB| DDB[DDB on-demand spike]\n    Q1 -->|S3| S3[S3 egress analysis]\n    Q1 -->|EC2| EC2[EC2 + EBS analysis]\n    DT --> DT1[Group by USAGE TYPE<br/>InterAZ vs InterRegion vs DataTransferOut]\n    NAT --> NAT1[CloudWatch BytesProcessed<br/>per NAT Gateway]\n    NAT --> NAT2[VPC Flow Logs<br/>find top talkers]\n    NAT2 --> NAT3[S3 calls? Use VPC endpoint<br/>External APIs? Accept]\n    DDB --> DDB1[CloudWatch table metrics<br/>WCU/RCU spike]\n    DDB1 --> DDB2[Find runaway client<br/>or set max RCU/WCU]\n    EC2 --> EC2a[Untagged or abandoned?<br/>orphaned EBS, EIPs, ELBs]\n    NAT3 --> Fix[Fix root cause]\n    DDB2 --> Fix\n    EC2a --> Fix\n    Fix --> Prev[Cost Anomaly Detection<br/>+ Budget alerts<br/>+ Tag enforcement SCP]\n    style CE fill:#fff9c4\n    style Fix fill:#c8e6c9\n```"
+          },
+          {
+            "type": "step",
+            "title": "The Detailed Investigation",
+            "content": "**Step 1 — Cost Explorer, group by SERVICE.**\n\nIdentify which AWS service category grew. Common patterns:\n- \"EC2 - Other\" jumped → it's data transfer or NAT Gateway\n- DynamoDB jumped → RCU/WCU spike or storage growth\n- S3 jumped → storage growth, lifecycle missing, or egress\n- CloudWatch jumped → verbose log ingestion\n\n**Step 2 — Drill into the spike.**\n\n*If \"EC2 - Other\" or NAT Gateway:*\n```\nGroup by USAGE TYPE\nFilter: \"NatGateway-Bytes\" or \"DataTransfer-Out\" or \"InterAZ\"\n```\n\nThe top USAGE TYPE tells the pattern. NatGateway-Bytes huge? You're routing too much through NAT. InterAZ-In/Out high? Cross-AZ chatter.\n\n*If DynamoDB:*\nCloudWatch → DynamoDB → ConsumedWriteCapacityUnits and ConsumedReadCapacityUnits per table. Find the table that spiked. Look at the application that writes to it.\n\n*If S3:*\nCost Explorer group by USAGE TYPE filtered to S3 — look for `DataTransfer-Out-Bytes`. S3 access logs (if enabled) show who's downloading.\n\n**Step 3 — Find the root cause.**\n\n*NAT Gateway runaway:*\nVPC Flow Logs are the single best tool. Query for top destinations:\n\n```sql\n-- Athena query on VPC Flow Logs\nSELECT dstaddr, SUM(bytes) AS total_bytes\nFROM vpc_flow_logs\nWHERE day = '2026/04/22'\n  AND srcaddr LIKE '10.%'  -- private subnet\n  AND dstaddr NOT LIKE '10.%'  -- internet-bound\nGROUP BY dstaddr\nORDER BY total_bytes DESC\nLIMIT 20;\n```\n\nResolve top destinations. Common: S3 bucket regional endpoints (52.x.x.x), Docker Hub, package repos. If S3, fix is a VPC endpoint (Gateway endpoint for S3 — free; Interface endpoints for other services — small cost).\n\n*DynamoDB spike:*\nReview application logs for the period of spike. Common causes: a retry loop hitting DynamoDB; a new feature deployed without rate limiting; an analytics job accidentally pointed at production.\n\n*Abandoned resources:*\nUse AWS Resource Explorer or Trusted Advisor:\n```bash\n# Idle load balancers\naws elbv2 describe-load-balancers --query 'LoadBalancers[?State.Code==`active`].LoadBalancerName'\n# Then check CloudWatch for RequestCount = 0 for past 30 days\n\n# Unattached EIPs\naws ec2 describe-addresses --query 'Addresses[?AssociationId==null]'\n\n# Old snapshots\naws ec2 describe-snapshots --owner-ids self --query 'Snapshots[?StartTime<=`2025-01-01`]'\n```\n\n**Step 4 — Fix the immediate cost.**\n\n- Add VPC Gateway Endpoint for S3 and DynamoDB (free, eliminates NAT charges for these)\n- Set DynamoDB max RCU/WCU on tables to cap runaway costs\n- Delete abandoned resources\n- For cross-AZ chatter, deploy ECS/EKS with topology-aware routing (`topologySpreadConstraints` + service mesh) so traffic stays in-AZ when possible\n\n**Step 5 — Prevent recurrence.**\n\n*Cost Anomaly Detection* (free): create a monitor that alerts when daily spend deviates from baseline. Catches the next surprise within hours instead of at month-end.\n\n*AWS Budgets*: alert at 50%, 80%, 100% of monthly budget. Per-team budgets if you have cost allocation tags.\n\n*Tagging policy via SCP* (Service Control Policy): require `cost-center`, `team`, `environment` tags on all resources. Untagged resources are easy to abandon because no one owns them.\n\n*FinOps culture*: monthly showback to teams — \"your team spent $X\"; gives engineers feedback on cost-impacting decisions."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Hidden Cost Drivers",
+            "content": "**NAT Gateway is the silent cost killer.** $0.045/hr per gateway plus $0.045/GB processed. A team running a busy backend in a private subnet that talks to S3 + ECR + Docker Hub + npm + Maven Central can pay thousands a month in NAT charges that VPC endpoints would eliminate. VPC Gateway Endpoints (S3, DynamoDB) are FREE. VPC Interface Endpoints cost ~$0.01/hr but eliminate NAT for that service.\n\n**Cross-AZ data transfer adds up.** $0.01/GB each way. A chatty microservices stack with services across 3 AZs: a request hits service A (AZ-1), which calls B (AZ-2), which calls C (AZ-3). Each hop is cross-AZ. At 1000 RPS, easily 1TB/day of cross-AZ traffic = $20/day. Use topology-aware routing (Istio, Linkerd, ALB target group preference).\n\n**Same-region S3 to EC2 is free; cross-region is not.** $0.02/GB cross-region transfer. Replication or cross-region read patterns get expensive at scale.\n\n**EBS gp3 vs gp2.** gp3 is ~20% cheaper than gp2 for the same performance. Migrate via `modify-volume`. Free downtime-less migration.\n\n**S3 lifecycle policies.** Without lifecycle, old objects sit on Standard ($0.023/GB) when they could be on Standard-IA ($0.0125/GB) or Glacier ($0.004/GB). For a 100TB bucket, that's $2300 vs $400 vs $40 per month. Set lifecycle rules from day one.\n\n**CloudWatch Logs ingestion costs $0.50/GB.** A verbose Spring app with DEBUG logging across 100 pods can ingest 100GB/day = $50/day = $1500/month just for logs. Tune log levels; consider ship-to-S3-via-Firehose for cheaper long-term retention.\n\n**RDS Aurora I/O charges.** Standard Aurora charges per I/O. I/O-heavy workloads can have I/O cost exceed compute cost. Switch to Aurora I/O-Optimized when I/O > 25% of total Aurora bill.\n\n**On-demand DynamoDB vs provisioned.** On-demand is great for unpredictable traffic but ~7x more expensive per request than provisioned at full utilization. Switch to provisioned + auto-scaling for steady workloads.\n\n**Reserved Instances and Savings Plans.** Compute Savings Plans cover Lambda + Fargate + EC2 with one commitment; easier than juggling RIs across instance types. 30–70% savings for 1-3 year commits.\n\n**The cultural piece**: engineering decisions drive cost. If engineers don't see the bill impact of their choices, they don't optimize. Showback (\"team X spent Y this month\") is the FinOps maturity step that changes behavior."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Cost Explorer first, group by SERVICE** — identifies which category grew; common surprise: \"EC2 - Other\" hides data transfer and NAT Gateway charges\n- **NAT Gateway data transfer is the silent killer** — add VPC Gateway Endpoints for S3 and DynamoDB (free) to eliminate large chunks\n- **Cross-AZ traffic adds up** — $0.01/GB each way; chatty microservices stacks pay surprising amounts; use topology-aware routing\n- **Abandoned resources accumulate** — load balancers, EIPs, NAT Gateways, snapshots from deleted environments; periodic cleanup or Resource Explorer\n- **DynamoDB spikes from runaway loops** — cap with max RCU/WCU; investigate consuming application\n- **Cost Anomaly Detection + Budgets** prevent the next surprise; catches anomalies within hours instead of at month-end\n- **Tag enforcement via SCP** — untagged resources have no owner and become abandoned; require tags from creation\n- **Showback culture** changes behavior — engineers who see their team's spend optimize their own decisions"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "AWS bills don't double overnight for no reason — there's a discrete cause. The mistake teams make is starting from compute because that's the obvious cost. The actual culprit is usually hidden in line items most engineers don't review: NAT Gateway data transfer, cross-AZ traffic, abandoned resources, or a runaway loop.\n\n**Step 1 — Cost Explorer, group by service**\n- Identifies which AWS service category grew; this narrows the search dramatically\n- Common patterns: \"EC2 - Other\" jumped means data transfer or NAT Gateway; DynamoDB jumped means RCU/WCU spike; S3 jumped means storage growth or egress; CloudWatch jumped means verbose logs\n\n**Step 2 — Drill into the spike**\n- For data transfer / NAT: group by USAGE TYPE; \"NatGateway-Bytes\" or \"InterAZ-In/Out\" or \"DataTransfer-Out\" tells the pattern\n- For DynamoDB: CloudWatch table metrics (ConsumedWriteCapacityUnits) per table; find the table that spiked; correlate with deploys\n- For S3: USAGE TYPE filtered to S3 looking for \"DataTransfer-Out-Bytes\"; S3 access logs reveal who's downloading\n\n**Step 3 — Find the root cause**\n- For NAT Gateway, VPC Flow Logs are the single best tool; Athena query against flow logs grouped by destination IP shows top talkers\n- Resolve those IPs — if S3 regional endpoints, the fix is a VPC Gateway Endpoint for S3 (free) which bypasses NAT entirely\n- For DynamoDB spikes, application logs during the spike window usually reveal the runaway loop or new feature\n- For abandoned resources, AWS Trusted Advisor or Resource Explorer surfaces idle ELBs, unattached EIPs, old snapshots\n\n**Step 4 — Fix the immediate cost**\n- VPC Gateway Endpoints for S3 and DynamoDB are free and eliminate NAT charges for those services\n- Set DynamoDB max RCU/WCU on tables to cap runaway costs\n- Delete abandoned resources\n- For cross-AZ chatter, deploy with topology-aware routing (Istio, Linkerd, ALB target group preference) to keep traffic in-AZ\n\n**Step 5 — Prevent recurrence**\n- Cost Anomaly Detection (free): alerts when daily spend deviates from baseline; catches the next surprise within hours\n- AWS Budgets: alert at 50, 80, 100 percent of monthly budget; per-team if you have cost allocation tags\n- Tagging policy via Service Control Policy: require cost-center, team, environment tags on every resource; untagged resources have no owner and become abandoned\n- Monthly showback to teams — the FinOps culture step that changes behavior; engineers who see their spend optimize their choices\n\n**The hidden cost drivers most teams miss**\n- NAT Gateway: $0.045 per hour per gateway plus $0.045 per GB processed; a busy backend talking to S3, ECR, Docker Hub, npm through NAT pays thousands per month that VPC endpoints would eliminate\n- Cross-AZ traffic: $0.01 per GB each way; chatty microservices across 3 AZs add up fast\n- CloudWatch Logs: $0.50 per GB ingested; a verbose Spring app with DEBUG logging across 100 pods can spend $1500 per month just on logs\n- S3 lifecycle: without it, old objects sit on Standard ($0.023/GB); should be on Standard-IA or Glacier; 100TB bucket pays $2300 vs $400 vs $40 per month\n- Aurora I/O charges: Standard charges per I/O; switch to I/O-Optimized when I/O > 25 percent of Aurora bill\n- gp3 EBS is 20 percent cheaper than gp2 for the same performance; free downtime-less migration\n\n**The cultural answer**\n- FinOps is engineering culture — if engineers don't see the cost impact of their decisions, they don't optimize\n- Showback turns cost into a feedback loop; teams that see their monthly spend make different architectural choices\n- Cost Anomaly Detection is the safety net; tagging and SCPs are the prevention; showback is the culture change"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between VPC Gateway Endpoints and Interface Endpoints?",
+        "How does AWS Cost Anomaly Detection work and what does it cost?",
+        "What's the FinOps maturity model and how do showback/chargeback differ?",
+        "How do you enforce tagging via Service Control Policies (SCPs)?"
+      ],
+      "seo": {
+        "metaTitle": "AWS Bill Doubled Overnight: How to Investigate | InterviewExplainer",
+        "metaDescription": "Systematic AWS cost debugging: Cost Explorer drill-down, NAT Gateway data transfer, cross-AZ traffic, abandoned resources, and FinOps prevention."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P10",
+        "hook": "AWS bills don't double overnight for no reason — there's a discrete cause.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "An AWS bill doubling overnight has a discrete cause. The mistake teams make is starting from compute (EC2 instances, Lambda invocations) because that's the obvious cost. The actual culprit is often hidden in line items most engineers don't review: NAT Gateway data transfer, cross-AZ traffic, S3 egress to the internet."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Practical FinOps debugging skills and AWS cost-driver knowledge"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Step 1 — Cost Explorer, group by SERVICE.",
+              "Identify which AWS service category grew.",
+              "Common patterns: \"EC2 - Other\" jumped → it's data transfer or NAT Gateway DynamoDB jumped → RCU/WCU spike or storage growth S3 jumped → storage growth, lifecycle missing, or egress CloudWatch jumped → verbose log ingestion Step 2 — Drill into the spike.",
+              "If \"EC2 - Other\" or NAT Gateway: `` Group by USAGE TYPE Filter: \"NatGateway-Bytes\" or \"DataTransfer-Out\" or \"InterAZ\" ` The top USAGE TYPE tells the pattern.",
+              "NatGateway-Bytes huge?",
+              "You're routing too much through NAT."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "Cost Explorer first, group by SERVICE — identifies which category grew; common surprise: \"EC2 - Other\" hides data transfer and NAT Gateway charges NAT Gateway data transfer is the silent killer — add VPC Gateway Endpoints for S3 and DynamoDB (free) to eliminate large chunks Cross-AZ traffic adds up — $0",
+              "01/GB each way; chatty microservices stacks pay surprising amounts; use topology-aware routing Abandoned resources accumulate — load balancers, EIPs, NAT Gateways, snapshots from deleted environments; periodic cleanup or Resource Explorer DynamoDB spikes from runaway loops — cap with max RCU/WCU; investigate consuming application Cost Anomaly Detection + Budgets prevent the next surprise; catches anomalies within hours instead of at month-end Tag enforcement via SCP — untagged resources have no owner and become abandoned; require tags from creation Showback culture changes behavior — engineers who see their team's spend optimize their own decisions"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "NAT Gateway is the silent cost killer. $0.045/hr per gateway plus $0.045/GB processed. A team running a busy backend in a private subnet that talks to S3 + ECR + Docker Hub + npm + Maven Central can pay thousands a month in NAT charges that VPC endpoints would eliminate. VPC Gateway Endpoints (S3, DynamoDB) are FREE. VPC Interface Endpoints cost ~$0.01/hr but eliminate NAT for that service. Cross-AZ data."
+          }
+        ],
+        "cap": "Step 1 — Cost Explorer, group by service Identifies which AWS service category grew; this narrows the search dramatically Common patterns: \"EC2 - Other\" jumped means data transfer or NAT Gateway; Dyna",
+        "familiarity_anchors": [
+          "Explorer",
+          "Gateway",
+          "Demand"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between VPC Gateway Endpoints and Interface Endpoints?",
+          "How does AWS Cost Anomaly Detection work and what does it cost?",
+          "What's the FinOps maturity model and how do showback/chargeback differ?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed on AWS ECS with RDS"
+      }
+    },
+    {
+      "id": "aws-sc-002",
+      "slug": "ec2-instance-cant-reach-rds-debug",
+      "question": "Your EC2 instance can't reach RDS in the same VPC. How do you systematically debug?",
+      "title": "EC2 Cannot Connect to RDS: VPC Networking Debug Walkthrough",
+      "direct_answer": "Work the layers bottom-up: (1) IP reachability — ping won't work to RDS, but `nc -zv <rds-endpoint> 5432` tests TCP; (2) Security Group on RDS — must allow inbound from EC2's SG or IP; (3) NACL on subnet — stateless, must allow both directions; (4) RDS publicly accessible setting + subnet routing; (5) VPC peering / Transit Gateway if cross-VPC; (6) DNS — ensure EC2 resolves the RDS endpoint; (7) RDS parameter `rds.force_ssl` and IAM auth if those are configured. Isolate at each layer; AWS Reachability Analyzer automates much of this.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "VPC networking depth and systematic troubleshooting approach",
+        "common_mistake": "Loosening Security Groups to 0.0.0.0/0 to make it work, then leaving it that way — a security disaster",
+        "to_stand_out": "Walk through layers methodically; mention Reachability Analyzer, the SG-references-SG pattern, the IGW vs NAT vs VPC Endpoint choices, and what `nc -zv` actually tests vs ping"
+      },
+      "company_tags": [
+        "aws",
+        "stripe",
+        "shopify",
+        "spring"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Layer-by-Layer Network Debugging",
+            "content": "EC2-to-RDS connectivity failures in the same VPC have a small set of root causes. The temptation is to start changing things until it works — typically by opening Security Groups too widely, which creates security debt that survives long after the original incident. The disciplined approach is bottom-up layer testing: each layer either passes or fails; you fix the failing layer; you don't touch the others.\n\nThe layers, in order:\n\n1. **TCP reachability** — can the EC2 even open a TCP connection to the RDS port? `nc -zv <endpoint> 5432` tests this without app-level auth.\n2. **Security Group on RDS** — must allow inbound from EC2's Security Group (or EC2's private IP).\n3. **Security Group on EC2** — default SGs allow all outbound; but custom SGs may restrict.\n4. **NACL on the subnet** — stateless rules that must allow both inbound and outbound; default NACL is permissive but custom NACLs often misconfigured.\n5. **Subnet routing** — RDS in private subnet, EC2 in same VPC should be routed by default route table; cross-VPC needs peering or Transit Gateway.\n6. **DNS resolution** — RDS endpoints are DNS names; EC2 must resolve them; VPCs have DNS resolution enabled by default but it can be disabled.\n7. **Application layer** — IAM database auth, SSL/TLS requirements, credentials.\n\nAWS Reachability Analyzer automates layers 1–5 — give it source and destination, it tells you which layer blocks. Use it before manually walking the layers."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Connection Path and Failure Layers",
+            "content": "```mermaid\nflowchart TB\n    EC2[EC2 in private subnet] --> SGE[EC2 Security Group<br/>egress allowed?]\n    SGE --> NACLEout[Subnet NACL<br/>egress allowed?]\n    NACLEout --> RT[VPC Route Table<br/>local route to RDS subnet?]\n    RT --> NACLRin[RDS subnet NACL<br/>ingress on 5432?]\n    NACLRin --> SGR[RDS Security Group<br/>ingress from EC2 SG?]\n    SGR --> RDS[RDS instance]\n    RDS --> SGRout[RDS SG<br/>egress to EC2?]\n    SGRout --> NACLRout[RDS subnet NACL<br/>egress to EC2 ephemeral ports?]\n    NACLRout --> NACLEin[EC2 subnet NACL<br/>ingress on ephemeral ports?]\n    NACLEin --> EC2done[Connection established]\n    style SGR fill:#fff9c4\n    style NACLEout fill:#fff9c4\n    style NACLRin fill:#fff9c4\n    style EC2done fill:#c8e6c9\n```\n\nNACLs are stateless — must allow BOTH directions explicitly (request out + response back). Security Groups are stateful — only need rule on the receiving side. This is the most common gotcha for custom NACLs."
+          },
+          {
+            "type": "step",
+            "title": "The Systematic Layer-by-Layer Debug",
+            "content": "**Step 1 — Test TCP reachability with `nc`.**\n\nPing won't work to RDS (ICMP blocked); use TCP test:\n\n```bash\n# From the EC2\nnc -zv mydb.abc123.us-east-1.rds.amazonaws.com 5432\n```\n\n- `succeeded`: connection works at network level; the issue is application/auth\n- `Connection refused`: TCP got there, RDS rejected (rare — wrong port?)\n- `Connection timed out`: blocked by SG, NACL, or routing\n- `Name or service not known`: DNS issue\n\nIf timeout, proceed to Step 2.\n\n**Step 2 — Inspect RDS Security Group.**\n\n```bash\naws rds describe-db-instances --db-instance-identifier mydb \\\n  --query 'DBInstances[0].VpcSecurityGroups'\n# Get the SG ID, then:\naws ec2 describe-security-groups --group-ids sg-xxxxx \\\n  --query 'SecurityGroups[0].IpPermissions'\n```\n\nLook for an inbound rule on port 5432 (Postgres) or 3306 (MySQL). Source should be either:\n- The EC2's Security Group (SG referencing SG — the recommended pattern)\n- The EC2's private IP CIDR\n- The VPC CIDR\n\n**The recommended pattern** is SG-to-SG (RDS SG allows EC2 SG as source). This avoids hardcoding IPs and works as EC2 instances scale.\n\nIf the rule is missing, add it:\n```bash\naws ec2 authorize-security-group-ingress \\\n  --group-id sg-rds \\\n  --protocol tcp --port 5432 \\\n  --source-group sg-ec2\n```\n\n**Step 3 — Check NACL on the RDS subnet.**\n\nNACLs are stateless — you need both inbound (port 5432) AND outbound (ephemeral ports 1024-65535) rules.\n\n```bash\naws ec2 describe-network-acls --filters \"Name=association.subnet-id,Values=subnet-yyyyy\"\n```\n\nDefault NACL allows all; custom NACLs need explicit rules. The most common bug: someone added inbound 5432 but forgot the outbound ephemeral port rule for the response.\n\n**Step 4 — Verify VPC routing.**\n\n```bash\n# Find subnet IDs\naws rds describe-db-subnet-groups\naws ec2 describe-instances --instance-ids i-xxxx --query 'Reservations[0].Instances[0].SubnetId'\n\n# Both subnets in same VPC?\naws ec2 describe-subnets --subnet-ids subnet-rds subnet-ec2 \\\n  --query 'Subnets[].VpcId'\n\n# Same VPC: local route handles it; cross-VPC requires peering or TGW\n```\n\nIf cross-VPC: check for VPC Peering connection or Transit Gateway attachment; route table must have route to the other VPC CIDR.\n\n**Step 5 — RDS publicly accessible setting.**\n\n```bash\naws rds describe-db-instances --db-instance-identifier mydb \\\n  --query 'DBInstances[0].PubliclyAccessible'\n```\n\nIf `false` and EC2 is using the public DNS name, it resolves to a private IP (good) — but DNS resolution must be enabled in the VPC (it usually is). If `true`, the DNS resolves to public IP, and traffic might try to go through IGW — unusual.\n\n**Step 6 — DNS resolution.**\n\n```bash\nnslookup mydb.abc123.us-east-1.rds.amazonaws.com\n# Should resolve to a 10.x.x.x address (private IP)\n```\n\nIf it resolves to a public IP, traffic routes through IGW; if it doesn't resolve at all, VPC DNS is disabled. Check VPC settings: `enableDnsSupport` and `enableDnsHostnames` should be `true`.\n\n**Step 7 — Use Reachability Analyzer to skip Steps 1–5.**\n\n```bash\naws ec2 create-network-insights-path \\\n  --source i-xxxx \\\n  --destination <rds-eni-id> \\\n  --protocol tcp --destination-port 5432\n\naws ec2 start-network-insights-analysis --network-insights-path-id nip-xxxx\naws ec2 describe-network-insights-analyses --network-insights-analysis-ids nia-xxxx\n```\n\nReachability Analyzer simulates the path and tells you exactly which SG/NACL/route blocks. Free for first 100 analyses/month.\n\n**Step 8 — Application layer.**\n\nIf TCP works but app auth fails:\n- Check `rds.force_ssl` parameter; client must use SSL\n- IAM database auth: client must use temporary token, not password\n- Verify credentials and database name in connection string"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Common Mistakes",
+            "content": "**Don't use 0.0.0.0/0 in Security Groups for RDS.** It's tempting to make this just work by allowing all sources — then you forget to fix it. RDS exposed to the internet (combined with `PubliclyAccessible: true`) is a data breach waiting to happen. Always SG-to-SG or VPC CIDR.\n\n**SG referencing SG is the right pattern.** RDS SG inbound rule sources EC2 SG (not its IP). As EC2 instances scale, they remain authorized automatically. Hardcoded IPs break when ASGs replace instances.\n\n**NACLs vs Security Groups.** Security Groups are stateful and pod/instance-level; if you allow inbound, return traffic flows automatically. NACLs are stateless and subnet-level; you must allow both directions explicitly. Use SGs as your primary control; NACLs sparingly for subnet-wide blocks.\n\n**RDS in public subnet is wrong.** RDS should be in private subnets across multiple AZs; the DB subnet group should reference these. Public subnet placement signals architectural confusion — only use for explicit dev/test exposure with strict SG.\n\n**Cross-AZ EC2 to RDS is fine but cross-region adds latency and cost.** Same-region EC2 to RDS is free transfer; cross-region replicas incur transfer cost.\n\n**DNS endpoint vs IP.** Always connect via the RDS endpoint DNS name, never the IP. RDS failover changes the underlying IP (the DNS endpoint stays the same). Apps using IPs break on failover.\n\n**Connection pooling matters.** A misconfigured app opening 1000 connections per minute will hit RDS connection limits (Postgres default 100, scales with instance class). Use HikariCP with sensible pool size (typically 10-20 per app instance). RDS Proxy multiplexes connections — essential for Lambda + RDS.\n\n**SSL is required by default in many configurations.** RDS instances often have `rds.force_ssl=1` parameter. JDBC URL needs `?ssl=true&sslmode=require`. App fails with \"connection requires SSL\" unless configured.\n\n**Reachability Analyzer is underused.** It diagnoses 90% of these issues in 30 seconds. Use it before manual layer-by-layer debugging — it'll tell you exactly which SG, NACL, or route is blocking.\n\n**Document the network topology.** Teams that document their VPC peering, TGW attachments, route tables, and SG-to-SG dependencies debug faster. Diagrams via tools like CloudCraft or AWS Architecture Diagrams help."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Layer-by-layer bottom-up debug** — TCP reachability with `nc`, then SG, then NACL, then routing, then DNS, then app auth; don't skip ahead\n- **Reachability Analyzer automates layers 1–5** — use first; tells you exactly which layer blocks; free for 100 analyses/month\n- **NACLs are stateless** — must allow both inbound and outbound; the most common custom-NACL bug is forgetting the ephemeral port outbound rule for the response\n- **Security Groups are stateful** — only need rule on receiving side; SG-to-SG referencing is the recommended pattern (RDS SG allows EC2 SG as source)\n- **Never 0.0.0.0/0 for RDS** — always SG-to-SG or VPC CIDR; combined with public accessible setting, this is a data breach pattern\n- **Always connect via RDS DNS endpoint, not IP** — underlying IP changes on failover; the DNS stays stable\n- **HikariCP + RDS Proxy** — connection pooling matters; RDS Proxy multiplexes connections, essential for Lambda+RDS"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "EC2 to RDS connectivity in the same VPC has a small set of root causes. The temptation is to start changing things until it works — usually by opening Security Groups too widely — which creates security debt. The disciplined approach is bottom-up layer testing.\n\n**The layers, in order**\n- TCP reachability — ping won't work to RDS (ICMP blocked) but `nc -zv <endpoint> 5432` tests TCP connectivity\n- Security Group on RDS — must allow inbound from EC2's SG or VPC CIDR\n- Security Group on EC2 — default allows all outbound; custom SGs may restrict\n- NACL on the subnet — stateless, must allow both directions explicitly\n- VPC routing — same VPC handled by default; cross-VPC needs peering or Transit Gateway\n- DNS resolution — RDS endpoints are DNS names; EC2 must resolve them; VPC DNS settings\n- Application layer — SSL requirements, IAM auth, credentials\n\n**Step-by-step debug**\n\n*Step 1 — test TCP with `nc`*\n- `nc -zv <rds-endpoint> 5432` — succeeded means network is fine, issue is app/auth; timed out means blocked at network layer\n\n*Step 2 — inspect RDS Security Group*\n- Look for inbound rule on the database port; source should be the EC2's Security Group (SG-to-SG, the recommended pattern) or VPC CIDR\n- SG-to-SG is best because as EC2 instances scale they remain authorized automatically; hardcoded IPs break when ASGs replace instances\n\n*Step 3 — check NACL on the RDS subnet*\n- NACLs are stateless — you need both inbound (port 5432) AND outbound (ephemeral ports 1024-65535)\n- Default NACLs allow all; custom NACLs need explicit rules; the most common bug is forgetting the ephemeral outbound for the response\n\n*Step 4 — verify VPC routing*\n- Same VPC: local route handles it automatically\n- Cross-VPC: requires VPC Peering or Transit Gateway with explicit routes\n\n*Step 5 — RDS publicly accessible and DNS*\n- If RDS is private, DNS endpoint should resolve to private IP from inside the VPC; VPC must have enableDnsSupport and enableDnsHostnames\n- Always connect via DNS endpoint, never IP — IP changes on failover, DNS stays stable\n\n*Step 6 — use Reachability Analyzer to skip the layers*\n- AWS service that simulates the path and tells you exactly which SG, NACL, or route blocks\n- Free for 100 analyses per month; should be the first tool you reach for, before manual debugging\n\n*Step 7 — application layer*\n- If TCP works but auth fails: check SSL requirement (rds.force_ssl), IAM database auth, credentials, database name\n- Spring Boot example: `?ssl=true&sslmode=require` in JDBC URL\n\n**The mistakes to avoid**\n- Don't use 0.0.0.0/0 in RDS Security Group — even \"temporarily\"; combined with PubliclyAccessible: true, this is a data breach pattern\n- RDS in public subnet is wrong; RDS should be in private subnets across multiple AZs; DB subnet group references these\n- Don't connect via IP; the underlying IP changes on failover, the DNS endpoint stays stable\n- Connection pooling matters; HikariCP with sensible pool size (10-20 per app instance); for Lambda+RDS use RDS Proxy to multiplex connections\n\n**The strategic answer**\n- Use Reachability Analyzer before manual debugging — diagnoses 90 percent of issues in 30 seconds\n- Standardize on SG-to-SG for service-to-service authorization (no hardcoded IPs)\n- Document the network topology — VPC peering, TGW attachments, route tables, SG dependencies; teams with diagrams debug faster\n- Treat RDS like any sensitive resource — in private subnets, SG locked to specific source SGs, never publicly accessible without explicit business justification"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between Security Groups and NACLs in AWS?",
+        "How does AWS Reachability Analyzer work and what does it cost?",
+        "What problem does RDS Proxy solve for Lambda + RDS architectures?",
+        "Why is connecting to RDS via IP address dangerous?"
+      ],
+      "seo": {
+        "metaTitle": "EC2 Cannot Connect to RDS: VPC Networking Debug | InterviewExplainer",
+        "metaDescription": "Systematic debug for EC2-to-RDS connectivity failures. Layer-by-layer: TCP, Security Groups, NACLs, routing, DNS. Reachability Analyzer + best practices."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P10",
+        "hook": "EC2 to RDS connectivity in the same VPC has a small set of root causes.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "EC2-to-RDS connectivity failures in the same VPC have a small set of root causes. The temptation is to start changing things until it works — typically by opening Security Groups too widely, which creates security debt that survives long after the original incident. The disciplined approach is bottom-up layer testing."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "VPC networking depth and systematic troubleshooting approach"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Step 1 — Test TCP reachability with nc.",
+              "Ping won't work to RDS (ICMP blocked); use TCP test: ``bash From the EC2 nc -zv mydb.abc123.us-east-1.rds.amazonaws.com 5432 ` succeeded: connection works at network level; the issue is application/auth Connection refused: TCP got there, RDS rejected (rare — wrong port?) Connection timed out: blocked by SG, NACL, or routing Name or service not known: DNS issue If timeout, proceed to Step 2.",
+              "Step 2 — Inspect RDS Security Group.",
+              "`bash aws rds describe-db-instances --db-instance-identifier mydb \\ --query 'DBInstances[0].VpcSecurityGroups' Get the SG ID, then: aws ec2 describe-security-groups --group-ids sg-xxxxx \\ --query 'SecurityGroups[0].IpPermissions' ` Look for an inbound rule on port 5432 (Postgres) or 3306 (MySQL).",
+              "Source should be either: The EC2's Security Group (SG referencing SG — the recommended pattern) The EC2's private IP CIDR The VPC CIDR The recommended pattern is SG-to-SG (RDS SG allows EC2 SG as source).",
+              "This avoids hardcoding IPs and works as EC2 instances scale."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "Layer-by-layer bottom-up debug — TCP reachability with nc, then SG, then NACL, then routing, then DNS, then app auth; don't skip ahead Reachability Analyzer automates layers 1–5 — use first; tells you exactly which layer blocks; free for 100 analyses/month NACLs are stateless — must allow both inbound and outbound; the most common custom-NACL bug is forgetting the ephemeral port outbound rule for the response Security Groups are stateful — only need rule on receiving side; SG-to-SG referencing is the recommended pattern (RDS SG allows EC2 SG as source) Never 0",
+              "0/0 for RDS — always SG-to-SG or VPC CIDR; combined with public accessible setting, this is a data breach pattern Always connect via RDS DNS endpoint, not IP — underlying IP changes on failover; the DNS stays stable HikariCP + RDS Proxy — connection pooling matters; RDS Proxy multiplexes connections, essential for Lambda+RDS"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "Don't use 0.0.0.0/0 in Security Groups for RDS. It's tempting to make this just work by allowing all sources — then you forget to fix it. RDS exposed to the internet (combined with PubliclyAccessible: true) is a data breach waiting to happen. Always SG-to-SG or VPC CIDR. SG referencing SG is the right pattern. RDS SG inbound rule sources EC2 SG (not its IP). As EC2 instances scale, they remain."
+          }
+        ],
+        "cap": "The layers, in order TCP reachability — ping won't work to RDS (ICMP blocked) but nc -zv <endpoint> 5432 tests TCP connectivity Security Group on RDS — must allow inbound from EC2's SG or VPC.",
+        "familiarity_anchors": [
+          "Security",
+          "Group",
+          "Transit"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between Security Groups and NACLs in AWS?",
+          "How does AWS Reachability Analyzer work and what does it cost?",
+          "What problem does RDS Proxy solve for Lambda + RDS architectures?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed on AWS ECS with RDS"
+      }
+    }
+  ]
+}

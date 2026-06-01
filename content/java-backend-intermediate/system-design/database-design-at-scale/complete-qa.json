@@ -1,0 +1,149 @@
+{
+  "topic": "Database Design at Scale",
+  "topicSlug": "database-design-at-scale",
+  "questions": [
+    {
+      "id": "sdf-008",
+      "slug": "database-replication-strategies",
+      "question": "What are the main database replication strategies and when do you use each?",
+      "title": "Database Replication: Master-Slave, Master-Master, and Quorum Reads",
+      "direct_answer": "Three main strategies: **single-leader (master-slave)** — one writer, many read replicas, simple and consistent on writes but read-after-write lag; **multi-leader (master-master)** — writers in multiple regions, low-latency global writes but conflicts to reconcile; **leaderless / quorum (Dynamo-style)** — any node accepts writes, consistency tuned via R+W>N. Pick **single-leader** for most relational workloads (Postgres/MySQL with read replicas), **multi-leader** for active-active multi-region with low-conflict workloads, and **leaderless** for high-availability key-value stores (DynamoDB, Cassandra) that need to survive entire-region failures.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Understanding of three replication topologies, their consistency/latency/availability trade-offs, and conflict resolution.",
+        "common_mistake": "Conflating sync vs async replication with the topology choice, or assuming master-master means strong consistency across regions.",
+        "to_stand_out": "Walk through quorum math (R+W>N for strong reads), discuss conflict resolution strategies (LWW, vector clocks, CRDTs), and explain semi-sync replication as a middle ground for the leader-failure data-loss problem."
+      },
+      "company_tags": [
+        "Amazon",
+        "Google",
+        "Stripe",
+        "GitHub",
+        "DataStax"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Replicate at All",
+            "content": "Replication serves three goals — you usually want all three but they pull in different directions:\n\n- **Durability:** survive disk/server/AZ/region loss without data loss.\n- **Availability:** keep serving reads (and ideally writes) when any one replica fails.\n- **Read scalability:** spread read load across many replicas.\n\nThe choice of replication topology determines:\n- Whether writes are accepted in one place or many.\n- How fresh the replicas are (sync vs async).\n- What happens during a partition (CP vs AP from CAP).\n- How conflicts are reconciled (or avoided)."
+          },
+          {
+            "type": "step",
+            "title": "Single-Leader (Master-Slave) Replication",
+            "content": "**Topology:**\n```mermaid\nflowchart LR\n    Client([Clients])\n    Leader[(Leader<br/>writes + reads)]\n    F1[(Follower 1<br/>reads)]\n    F2[(Follower 2<br/>reads)]\n    F3[(Follower 3<br/>reads)]\n\n    Client -->|writes| Leader\n    Client -->|reads| F1\n    Client -->|reads| F2\n    Client -->|reads| F3\n    Leader -.async/sync replication.-> F1\n    Leader -.async/sync replication.-> F2\n    Leader -.async/sync replication.-> F3\n\n    classDef leader fill:#fee2e2,stroke:#ef4444\n    classDef follower fill:#dbeafe,stroke:#3b82f6\n    class Leader leader\n    class F1,F2,F3 follower\n```\n\n- One node (the leader) accepts all writes; followers replicate from leader.\n- Reads can go to leader (strong) or followers (eventual).\n- Examples: PostgreSQL streaming replication, MySQL primary/replica, MongoDB replica set, Redis primary/replica.\n\n**Sync modes:**\n- **Async:** leader commits + acks client without waiting for followers. Fast writes, risk of data loss on leader crash.\n- **Sync:** leader waits for all followers (or quorum) before acking. Slow writes, durable.\n- **Semi-sync (PostgreSQL/MySQL):** leader waits for at least one follower; balances durability and latency.\n\n**Pros:** simple, consistent on writes, easy to reason about.\n**Cons:** writes don't scale beyond what one leader can handle; failover takes seconds-to-minutes; followers lag (read-after-write inconsistency)."
+          },
+          {
+            "type": "step",
+            "title": "Read-After-Write Consistency — The Big Single-Leader Trap",
+            "content": "**The problem:** user posts a tweet (write to leader), refreshes the page (read from a follower), doesn't see their own tweet because the follower hasn't replicated yet.\n\n**Solutions, weakest to strongest:**\n\n1. **Read-from-leader after write** — for some time window after a write (e.g., 30s), route the same user's reads to the leader. Defeats some read scaling.\n2. **Sticky session to leader** — always serve a particular user from the leader. Coarse but simple.\n3. **Wait-for-replica with version tokens** — client receives a write LSN; subsequent reads pass it; replica blocks until it has caught up.\n4. **Synchronous replication** — follower commit before client ack. Strongest, slowest.\n\n**Monotonic-reads consistency:** even on followers, route the same user to the same follower (sticky), so they don't see the data appear, then disappear (when one follower is more up-to-date than another)."
+          },
+          {
+            "type": "step",
+            "title": "Multi-Leader (Master-Master) Replication",
+            "content": "**Topology:**\n```mermaid\nflowchart LR\n    USClient([US Clients])\n    EUClient([EU Clients])\n    USLeader[(US Leader<br/>writes + reads)]\n    EULeader[(EU Leader<br/>writes + reads)]\n\n    USClient --> USLeader\n    EUClient --> EULeader\n    USLeader <-->|async bi-directional<br/>replication| EULeader\n\n    classDef leader fill:#fee2e2,stroke:#ef4444\n    class USLeader,EULeader leader\n```\n\n- Multiple leaders, typically one per region, all accepting writes.\n- Bi-directional async replication between leaders.\n- Examples: PostgreSQL with BDR, MySQL Galera Cluster, CouchDB, multi-master Cassandra, DynamoDB Global Tables.\n\n**Pros:**\n- Low write latency for users worldwide (write to nearest region).\n- Survives region failure with active capacity elsewhere.\n- Higher write throughput aggregate.\n\n**Cons:**\n- **Conflicts** — two regions write to the same row simultaneously; which wins?\n- Replication lag means a user in region B might briefly not see region A's write.\n- Operationally complex (which region won that conflict last week?).\n\n**Conflict resolution strategies:**\n- **Last-write-wins (LWW)** — keep the write with latest timestamp. Simple but loses data on concurrent writes.\n- **Application-level merge** — surface conflict to app code (CouchDB style).\n- **CRDTs** — mathematically guaranteed merge (counters, sets, sequences).\n- **Avoid by routing** — partition writes by user/key so the same key only ever writes to one leader."
+          },
+          {
+            "type": "step",
+            "title": "Leaderless (Quorum / Dynamo-Style) Replication",
+            "content": "**Topology:**\n```mermaid\nflowchart TB\n    Client([Client])\n    Coord[Coordinator<br/>any node]\n    R1[(Replica 1)]\n    R2[(Replica 2)]\n    R3[(Replica 3)]\n\n    Client --> Coord\n    Coord -->|write to W replicas| R1\n    Coord -->|write to W replicas| R2\n    Coord -->|write to W replicas| R3\n    Coord -.read from R replicas.-> R1\n    Coord -.read from R replicas.-> R2\n\n    classDef coord fill:#fef3c7,stroke:#f59e0b\n    classDef replica fill:#dbeafe,stroke:#3b82f6\n    class Coord coord\n    class R1,R2,R3 replica\n```\n\n- No leader; client (or coordinator node) sends writes to **all N replicas** in parallel; commits when **W** replicas ack.\n- Reads sent to **all N replicas**; client merges responses from **R** replicas.\n- Examples: DynamoDB, Cassandra, Riak.\n\n**Quorum math: R + W > N**\n- N = total replicas (typically 3).\n- W = write replicas (typically 2).\n- R = read replicas (typically 2).\n- R + W > N → read and write sets overlap by at least one node → reads see latest write.\n\n**Tunable per operation:**\n- `R=W=1, N=3` → fast, eventual consistency.\n- `R=W=2, N=3` → strong consistency on each operation, still tolerant to one failure.\n- `R=W=3, N=3` → strict but no failure tolerance.\n- `R=1, W=3` → fast reads, durable writes (read-mostly workload).\n\n**Pros:** survives multiple failures, no failover needed, tunable consistency.\n**Cons:** consistency is per-operation, not global; conflicts still possible (concurrent writes); operationally complex."
+          },
+          {
+            "type": "step",
+            "title": "Conflict Resolution — Going Deeper",
+            "content": "**Last-write-wins (LWW)**\n- Each write tagged with a timestamp; conflict winner = highest timestamp.\n- Simple. **Bad in distributed systems** because clocks drift; recent writes can be silently overwritten.\n- Used by Cassandra default.\n\n**Vector clocks**\n- Each replica maintains a counter per replica; writes carry the vector.\n- Two writes are **concurrent** if neither vector strictly dominates the other.\n- Concurrent writes are surfaced to the application for resolution.\n- Used by DynamoDB (early), Riak.\n\n**Hybrid Logical Clocks (HLC)**\n- Combines wall clock + logical counter; provides causality with bounded skew.\n- Used by CockroachDB, MongoDB.\n\n**CRDTs (Conflict-free Replicated Data Types)**\n- Data structures designed to merge automatically without conflict.\n- Counters (G-Counter, PN-Counter), sets (G-Set, OR-Set), sequences (Logoot, RGA).\n- Used by Riak, Redis CRDTs (Enterprise), collaborative editors (Figma, Google Docs).\n\n**Operational transformation (OT)**\n- Transform operations to commute; older approach used by Google Docs (now moving to CRDTs)."
+          },
+          {
+            "type": "step",
+            "title": "Sync vs Async — Orthogonal to Topology",
+            "content": "**Async replication**\n- Writer doesn't wait for replicas. Low latency.\n- Risk: leader crashes after ack but before replication → data loss.\n- Used by default in MySQL, PostgreSQL, MongoDB.\n\n**Sync replication**\n- Writer waits for ALL replicas. No data loss but a single slow replica blocks every write.\n- Rarely used pure-form due to latency/availability cost.\n\n**Semi-sync / quorum-sync**\n- Writer waits for AT LEAST ONE (or quorum) of the replicas. Bounded data-loss risk; bounded latency.\n- PostgreSQL `synchronous_commit=on` with `synchronous_standby_names`.\n- MySQL semi-sync replication.\n- Spanner / Raft / Paxos systems are inherently quorum-sync.\n\n**Recommendation:** semi-sync (one replica must ack) for production relational DBs — balances durability and write latency."
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes and Operational Realities",
+            "content": "**Single-leader: leader failure**\n- Detect via heartbeat timeout.\n- Promote a follower (manual or automated via Patroni, Orchestrator, RDS managed failover).\n- Risk: split-brain if the old leader comes back — STONITH (Shoot The Other Node In The Head) or fencing tokens.\n- Recent writes may be lost if async replication.\n\n**Multi-leader: conflict storms**\n- During network partition, both regions accept writes; on heal, conflicts may be many.\n- Strategy: route writes by partition key so same row only writes to one region; conflicts only happen at boundary cases.\n\n**Leaderless: read repair and anti-entropy**\n- Read repair: if reads return inconsistent values, write the latest back to lagging replicas.\n- Anti-entropy: background process compares replicas and reconciles (Cassandra repair, Riak active anti-entropy).\n\n**Cascading replication failure**\n- Followers lag behind → leader's WAL grows → leader runs out of disk → outage.\n- Monitor replication lag; alert before lag becomes critical."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Single-leader** — one writer, many readers; simple, default for relational; read-after-write lag is the main hazard.\n- **Multi-leader** — multiple regional writers; low write latency globally; conflicts need resolution.\n- **Leaderless / quorum** — any node writes; tune consistency via R+W>N; survives multi-node failure.\n- **Sync vs async is orthogonal** to topology; semi-sync is the practical sweet spot for relational.\n- **Conflict resolution:** LWW is simple but lossy; vector clocks expose concurrent writes; CRDTs auto-merge.\n- **Read-after-write consistency** — stick session to leader, use version tokens, or accept eventual.\n- **Match topology to use case:** relational + read-scale = single-leader; global active-active = multi-leader; max availability = leaderless."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Three topologies**\n\n**Single-leader (master-slave):**\n- One leader takes all writes; followers replicate; reads can hit any node\n- Examples: Postgres, MySQL, MongoDB, Redis\n- Pros: simple, consistent writes, easy to reason about\n- Cons: writes capped at one node; failover takes time; follower lag causes read-after-write issues\n\n**Multi-leader (master-master):**\n- Multiple leaders, typically one per region; bi-directional async replication\n- Examples: Postgres BDR, MySQL Galera, CouchDB, DynamoDB Global Tables\n- Pros: low write latency globally, survives region failure with hot capacity elsewhere\n- Cons: conflicts on concurrent writes need resolution; operationally complex\n\n**Leaderless (Dynamo-style quorum):**\n- No leader; coordinator writes to N replicas in parallel, commits when W ack; reads from R replicas, merges\n- Examples: DynamoDB, Cassandra, Riak\n- Pros: survives multi-node failure, no failover needed, tunable consistency per operation\n- Cons: consistency is per-op not global; concurrent-write conflicts still possible\n\n**Quorum math — R + W > N**\n\nWith N=3 replicas, the standard is R=W=2. Read and write sets overlap by at least one node, so reads see the latest write. Tunable: R=1 W=3 for read-heavy, R=W=1 for fastest+eventual, R=W=3 for strict but no failure tolerance.\n\n**The single-leader trap — read-after-write**\n\nUser posts tweet to leader, refreshes, hits a follower that hasn't replicated yet, doesn't see their own tweet. Solutions: read-from-leader for 30s after write; sticky session; pass write LSN as version token, replica waits until caught up; synchronous replication.\n\nMonotonic reads: route the same user to the same follower, so they don't see data appear and then disappear.\n\n**Multi-leader conflicts**\n\nResolution strategies:\n- Last-write-wins (LWW): timestamp-based; bad because clock skew loses data\n- Vector clocks: track causality; concurrent writes surfaced to app code\n- HLC (Hybrid Logical Clocks): wall + logical, bounded skew\n- CRDTs: data structures that merge mathematically (counters, sets, collaborative-editor sequences)\n- Avoid: route writes by partition key so each row only writes to one leader\n\n**Sync vs async — orthogonal to topology**\n\n- Async: low latency, risk of data loss on leader crash. Default in most relational DBs.\n- Sync (all replicas): no data loss but a slow replica blocks every write. Rarely pure-form.\n- Semi-sync (one replica must ack): bounded data-loss + bounded latency. Production sweet spot.\n\nSpanner and Raft systems are inherently quorum-sync.\n\n**Failure modes**\n\nSingle-leader: failover via Patroni/Orchestrator; STONITH or fencing for split-brain prevention; recent writes lost if async.\n\nMulti-leader: partition causes conflict storms on heal; mitigation = partition by key.\n\nLeaderless: read repair (write latest back to lagging replicas during reads) + anti-entropy background reconciliation.\n\nCascade: follower lag → leader WAL grows → leader OOMs disk. Monitor lag and alert early.\n\n**Match topology to use case**\n\n- Relational with read-scale needs → single-leader Postgres/MySQL with replicas + semi-sync\n- Global low-latency writes, low-conflict workload → multi-leader, partition by region\n- Max availability + scale, key-value workload → leaderless Cassandra/DynamoDB with R+W>N\n\n**Recommendation**\n\n**Default to single-leader for transactional/relational workloads (Postgres or MySQL with one or two replicas, semi-sync replication, read-after-write via sticky session or LSN token). Reach for multi-leader only when global write latency requires it and you can route by key to avoid conflicts. Use leaderless quorum (Cassandra/DynamoDB) for high-availability key-value workloads where R+W>N gives you tunable consistency per operation. The replication topology determines your CAP/PACELC posture — pick deliberately.**"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the failure scenario where async replication loses committed writes? How does semi-sync prevent it?",
+        "Walk through how Cassandra's QUORUM consistency level handles a network partition.",
+        "Explain how CockroachDB or Spanner achieve global strong consistency — what's the cost?",
+        "Design a multi-region write architecture for an e-commerce cart system. Single-leader, multi-leader, or leaderless?"
+      ],
+      "seo": {
+        "metaTitle": "Database Replication Strategies — Single-Leader, Multi-Leader, Quorum",
+        "metaDescription": "Single-leader (master-slave), multi-leader (master-master), and leaderless (quorum) replication topologies; sync/async modes, R+W>N math, conflict resolution (LWW, vector clocks, CRDTs), and read-after-write consistency."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P06",
+        "hook": "Three topologies Single-leader (master-slave): One leader takes all writes; followers replicate; reads can hit any node Examples: Postgres, MySQL, MongoDB, Redis Pros: simple, consistent writes, easy to reason about Cons: writes capped at one node.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Replication serves three goals — you usually want all three but they pull in different directions: Durability: survive disk/server/AZ/region loss without data loss. Availability: keep serving reads (and ideally writes) when any one replica fails. Read scalability: spread read load across many replicas. The choice of replication topology determines: Whether writes are accepted in one place or many. How fresh the replicas are (sync vs async). What happens during a partition (CP vs AP from CAP). How conflicts are reconciled."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of three replication topologies, their consistency/latency/availability trade-offs, and conflict resolution."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Single-leader — one writer, many readers; simple, default for relational; read-after-write lag is the main hazard",
+              "Multi-leader — multiple regional writers; low write latency globally; conflicts need resolution",
+              "Leaderless / quorum — any node writes; tune consistency via R+W>N; survives multi-node failure",
+              "Sync vs async is orthogonal to topology; semi-sync is the practical sweet spot for relational",
+              "Conflict resolution: LWW is simple but lossy; vector clocks expose concurrent writes; CRDTs auto-merge"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Replication serves three goals — you usually want all three but they pull in different directions: Durability: survive disk/server/AZ/region loss without data loss. Availability: keep serving reads (and ideally writes) when any one replica fails. Read scalability: spread read load across many replicas. The choice of replication topology determines: Whether writes are accepted in one place or many. How fresh the replicas are (sync vs async). What happens during a partition (CP vs AP from CAP). How conflicts are reconciled (or avoided)."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Conflating sync vs async replication with the topology choice, or assuming master-master means strong consistency across regions"
+            ]
+          }
+        ],
+        "cap": "The replication topology determines your CAP/PACELC posture — pick deliberately.",
+        "familiarity_anchors": [
+          "Three",
+          "Dynamo",
+          "Postgres"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the failure scenario where async replication loses committed writes? How does semi-sync prevent it?",
+          "Walk through how Cassandra's QUORUM consistency level handles a network partition.",
+          "Explain how CockroachDB or Spanner achieve global strong consistency — what's the cost?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Distributed Java system handling 10k requests per second"
+      }
+    }
+  ]
+}

@@ -1,0 +1,627 @@
+{
+  "topic": "Completable Future",
+  "topicSlug": "completable-future",
+  "questions": [
+    {
+      "id": "what-is-completablefuture-java",
+      "slug": "what-is-completablefuture-java",
+      "question": "What is `CompletableFuture` in Java? Why was it added when `Future` already existed?",
+      "title": "What Is `CompletableFuture` in Java — Beyond `Future` to Composable Async",
+      "direct_answer": "**`CompletableFuture<T>`** (Java 8) is a `Future` you can **complete manually**, **chain with non-blocking callbacks**, and **compose** with other futures. The original `Future<T>` (Java 5) had crippling limitations: **`get()` blocks**, no way to attach callbacks, no composition, no exception handling beyond rethrowing on `get()`. `CompletableFuture` fixes all of that with a fluent API: **`thenApply`** (transform), **`thenCompose`** (chain dependent async), **`thenCombine`** (combine two independent results), **`allOf`/`anyOf`** (fan-in), **`exceptionally`/`handle`** (recovery). Tasks run on the **`ForkJoinPool.commonPool`** by default; supply a custom `Executor` via the `*Async(executor)` variants. It's the JVM's answer to JavaScript Promises and the building block of Spring WebFlux, gRPC Java, and most modern async libraries before reactive frameworks.",
+      "layout_type": "default",
+      "difficulty": "easy",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can articulate why plain Future was insufficient (blocking get(), no composition) and what CompletableFuture adds: callbacks, combinators, manual completion, async variants",
+        "common_mistake": "Calling `.get()` on a CompletableFuture and missing the whole point. Not knowing that `*Async` variants run on commonPool and shouldn't be used for blocking work without a custom executor",
+        "to_stand_out": "Mention `commonPool` parallelism = `Runtime.getRuntime().availableProcessors() - 1`, the importance of supplying a dedicated `Executor` for blocking work, and that `CompletableFuture` is what Java 21 virtual threads largely replace for I/O-bound code"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "linkedin",
+        "uber",
+        "twitter"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why `Future` Wasn't Enough — The Problems CompletableFuture Solves",
+            "content": "Java 5 introduced `Future<T>` as the result handle for `ExecutorService.submit()`. It was a step forward, but had fundamental limitations:\n\n- **`get()` blocks the calling thread** — to actually use the result, you have to wait synchronously. That defeats the point of async work.\n- **No callbacks** — you can't say \"call me when this finishes.\" You poll `isDone()` or block on `get()`.\n- **No composition** — chaining \"do A, then B with A's result, then C in parallel\" requires nested executors and manual coordination.\n- **No exception handling beyond rethrow on `get()`** — errors propagate awkwardly.\n- **Cannot be completed manually** — only the executor that produced it can complete it.\n\nThe result: any non-trivial async code with `Future` looked like callback hell or blocked everywhere, killing the asynchrony.\n\n`CompletableFuture<T>` (Java 8) is the redesign. It implements `Future<T>` for backward compatibility but adds:\n\n- **Fluent callback API** — `.thenApply`, `.thenAccept`, `.thenRun` for transformations.\n- **Composition** — `.thenCompose`, `.thenCombine`, `.allOf`, `.anyOf`.\n- **Exception recovery** — `.exceptionally`, `.handle`, `.whenComplete`.\n- **Manual completion** — `.complete(value)`, `.completeExceptionally(throwable)`.\n- **Async variants** — `.thenApplyAsync(fn, executor)` to control which thread runs the callback.\n\nIt's the JVM's equivalent of JavaScript Promises and underpins most modern Java async code (gRPC, Spring's `WebClient`, AWS SDK v2)."
+          },
+          {
+            "type": "before_code",
+            "title": "The Old `Future` Pain",
+            "content": "```java\nExecutorService pool = Executors.newFixedThreadPool(8);\n\n// Want: fetch user, then their orders, in parallel with their preferences,\n//       combine and return.\nFuture<User> userF = pool.submit(() -> userService.fetch(id));\nUser user = userF.get(); // BLOCKS — worker waits idle\n\nFuture<List<Order>> ordersF = pool.submit(() -> orderService.fetch(user));\nFuture<Prefs> prefsF = pool.submit(() -> prefsService.fetch(user));\n\nList<Order> orders = ordersF.get(); // BLOCKS\nPrefs prefs = prefsF.get();         // BLOCKS\n\nUserDashboard result = build(user, orders, prefs);\n```\n\nProblems:\n- Three blocking `get()` calls — the caller thread sits idle.\n- Sequential structure even though orders and prefs could overlap.\n- Exception handling means try/catch around each get, with `ExecutionException` unwrapping.\n- No way to say \"do all of this asynchronously and let me know when done.\""
+          },
+          {
+            "type": "after_code",
+            "title": "The `CompletableFuture` Way — Composable, Non-Blocking",
+            "content": "```java\nExecutor pool = Executors.newFixedThreadPool(8);\n\nCompletableFuture<UserDashboard> dashboard =\n    CompletableFuture.supplyAsync(() -> userService.fetch(id), pool)\n        .thenCompose(user -> {\n            CompletableFuture<List<Order>> ordersF =\n                CompletableFuture.supplyAsync(() -> orderService.fetch(user), pool);\n            CompletableFuture<Prefs> prefsF =\n                CompletableFuture.supplyAsync(() -> prefsService.fetch(user), pool);\n            return ordersF.thenCombine(prefsF,\n                (orders, prefs) -> build(user, orders, prefs));\n        })\n        .exceptionally(ex -> defaultDashboard());\n\n// Use it without blocking the caller\ndashboard.thenAccept(this::renderResponse);\n```\n\nWhat's better:\n- **No blocking** — the calling thread returns immediately.\n- **Orders and prefs run in parallel** via `thenCombine`.\n- **Exception path is declarative** — `exceptionally` handles failures from any stage.\n- **Composition is fluent** — reads top-to-bottom like a description of the data flow."
+          },
+          {
+            "type": "step",
+            "title": "The Three Categories of Operations",
+            "content": "`CompletableFuture` methods fall into three families. Knowing the suffix conventions makes the API navigable.\n\n**Transformation (1 input → 1 output)**:\n- `.thenApply(fn)` — transform the value (`T -> U`).\n- `.thenAccept(consumer)` — consume the value, no result.\n- `.thenRun(runnable)` — ignore the value, just run.\n- `.thenCompose(fn)` — transform via another async (`T -> CompletableFuture<U>`); flattens the result. Equivalent of JS `await chain` or Scala's flatMap.\n\n**Combination (2 inputs → 1 output)**:\n- `.thenCombine(other, fn)` — combine results when both done (`(T, U) -> V`).\n- `.thenAcceptBoth(other, biConsumer)` — consume both, no result.\n- `.applyToEither(other, fn)` — first to complete wins.\n- `.acceptEither`, `.runAfterBoth`, `.runAfterEither` — variants.\n\n**Fan-in (N futures → aggregate)**:\n- `CompletableFuture.allOf(f1, f2, f3, ...)` — completes when all complete; returns `Void`. Get individual results from each future after.\n- `CompletableFuture.anyOf(f1, f2, ...)` — completes with the first to complete.\n\n**Each method has three suffixes**:\n- `thenApply(fn)` — runs on whichever thread completed the previous stage (could be the caller).\n- `thenApplyAsync(fn)` — runs on `ForkJoinPool.commonPool`.\n- `thenApplyAsync(fn, executor)` — runs on a custom executor. **This is what production code should use** for blocking work."
+          },
+          {
+            "type": "step",
+            "title": "The `commonPool` Trap and the Need for Custom Executors",
+            "content": "The single most common `CompletableFuture` mistake is using the `*Async` variants without a custom executor.\n\n`CompletableFuture.supplyAsync(task)` runs `task` on `ForkJoinPool.commonPool()`. Default parallelism is **`Runtime.getRuntime().availableProcessors() - 1`** — a tiny pool sized for CPU-bound work.\n\nIf `task` is **blocking I/O** (database call, HTTP request), it occupies a `commonPool` thread for the duration of the I/O. A handful of slow requests can saturate the pool, blocking every parallel stream and async operation in the JVM.\n\n**Fix**: always pass an explicit executor for any blocking work:\n```java\nExecutor io = new ThreadPoolExecutor(\n    50, 50, 0L, TimeUnit.MILLISECONDS,\n    new ArrayBlockingQueue<>(1000),\n    new ThreadFactoryBuilder().setNameFormat(\"io-%d\").build());\n\nCompletableFuture.supplyAsync(() -> blockingHttpCall(), io)\n    .thenApplyAsync(this::parseResponse, io);\n```\n\n**For CPU-bound work** — the default `commonPool` is appropriate (it's sized for your CPUs).\n\n**For Java 21+ I/O-bound work** — consider a virtual-thread executor:\n```java\nExecutor io = Executors.newVirtualThreadPerTaskExecutor();\n```\n\nWhen reviewing code, every `*Async` without an executor argument is suspect. Most production uses should pass an explicit executor."
+          },
+          {
+            "type": "step",
+            "title": "Manual Completion — The 'Completable' Part",
+            "content": "Unlike `Future`, you can complete a `CompletableFuture` from any thread:\n\n```java\nCompletableFuture<String> cf = new CompletableFuture<>();\n\n// Some other code path — callback from a third-party library, message arrived, etc.\nlistener.onMessage(msg -> cf.complete(msg.body()));\n// or on failure\ncf.completeExceptionally(new TimeoutException(\"no message\"));\n```\n\nThis enables wrapping callback-style APIs (Netty, OkHttp's async, JDBC drivers with callbacks) into a uniform `CompletableFuture`-based programming model. Most modern async libraries already return `CompletableFuture`s precisely for this reason.\n\n**`completeOnTimeout(value, timeout, unit)`** (Java 9+) and **`orTimeout(timeout, unit)`** add timeout behavior without the awkward `CompletableFuture.allOf(actual, scheduledTimeout)` patterns from earlier."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Use `CompletableFuture` (and When Not To)",
+            "content": "**Use `CompletableFuture` when**:\n- You need to coordinate multiple async operations (parallel calls, fallbacks, combinators).\n- You're wrapping a callback-based library into a uniform async API.\n- You want non-blocking error handling and recovery.\n- You're between synchronous JDBC/RestTemplate code and full reactive (a stepping stone).\n\n**Don't use `CompletableFuture` for**:\n- **Pure CPU work that doesn't compose** — use parallel streams or `ForkJoinPool` directly.\n- **Backpressure-sensitive streaming** — use Reactor `Flux`/`Mono` or RxJava `Observable` for bounded reactive flows.\n- **Java 21+ blocking I/O** — virtual threads with simple blocking code is often clearer than CompletableFuture chains. Loom largely replaces CompletableFuture for typical request handlers.\n\n**Watch out for**:\n- **`commonPool` saturation** from blocking work — always pass an executor.\n- **Lost exceptions** — a chain that doesn't `.get()`, `.join()`, `.exceptionally()`, or `.whenComplete()` may swallow failures silently.\n- **Threading hops** — each `thenApplyAsync` may run on a different thread; ThreadLocal context (security, MDC for logging) doesn't propagate automatically. Use Spring's `Executor`-decorating or your framework's context propagation.\n- **Chains too long to debug** — break complex flows into named methods returning `CompletableFuture`."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`CompletableFuture<T>`** (Java 8) implements `Future<T>` plus a fluent composable async API.\n- Solves `Future`'s problems: **blocking `get()`**, **no callbacks**, **no composition**, **no exception handling**.\n- Three method families: **transformation** (`thenApply`, `thenCompose`), **combination** (`thenCombine`, `applyToEither`), **fan-in** (`allOf`, `anyOf`).\n- Each has three suffixes: **none** (caller thread), **`Async`** (`commonPool`), **`Async(executor)`** (custom).\n- **`commonPool` is sized for CPU work** — don't use `*Async` for blocking I/O without a custom executor.\n- **Manual completion** via `complete()`/`completeExceptionally()` — wraps callback APIs.\n- **Exception handling**: `.exceptionally`, `.handle`, `.whenComplete`.\n- **Java 9+** added `orTimeout`, `completeOnTimeout` for time-bound futures.\n- **Java 21 virtual threads** can replace many CompletableFuture chains for I/O-bound code with simpler blocking code."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`CompletableFuture` is Java 8's redesign of `Future` for **composable, non-blocking async work**.\n\n**Why plain `Future` wasn't enough**\n- `get()` blocks the caller — defeats the point of async\n- No callbacks — you have to poll or block\n- No composition — \"do A then B then both C and D\" requires nested executors\n- No exception handling beyond rethrow on `get()`\n- Cannot be completed manually — only the executor controls completion\n\n**`CompletableFuture` fixes all of that**\n- Implements `Future<T>` for backward compatibility\n- Fluent API: `thenApply`, `thenCompose`, `thenCombine`, `exceptionally`, `handle`\n- Manual completion: `complete(value)`, `completeExceptionally(throwable)`\n- Three method families:\n  - **Transformation**: `thenApply` (T → U), `thenCompose` (T → CompletableFuture<U>; flatten), `thenAccept` (consume)\n  - **Combination**: `thenCombine` (combine two), `applyToEither` (first to complete wins)\n  - **Fan-in**: `allOf` (wait for all), `anyOf` (first done)\n\n**Three suffix variants on every method**\n- **No suffix** — runs on whichever thread completed the previous stage\n- **`Async`** — runs on `ForkJoinPool.commonPool`\n- **`Async(executor)`** — runs on a custom executor; **what production code should use**\n\n**The commonPool trap**\n- Default `commonPool` parallelism = `availableProcessors - 1`\n- Sized for CPU work\n- If you submit blocking I/O via `supplyAsync(task)` without an executor, slow tasks saturate the tiny pool\n- Suddenly every parallel stream and `CompletableFuture` in the JVM stalls\n- **Always pass an explicit executor** for blocking work\n\n**Manual completion enables wrapping callbacks**\n- `CompletableFuture<String> cf = new CompletableFuture<>();`\n- `listener.onMessage(msg -> cf.complete(msg.body()));`\n- `cf.completeExceptionally(new TimeoutException());`\n- This is how Netty, OkHttp async, JDBC callback drivers integrate with the CompletableFuture model\n\n**Exception handling**\n- `.exceptionally(ex -> fallbackValue)` — recover from failure\n- `.handle((value, ex) -> ...)` — see both branches\n- `.whenComplete((value, ex) -> ...)` — observe without changing\n- Without one of these, exceptions are lost unless someone calls `get()` or `join()`\n\n**Java 9+ additions**\n- `orTimeout(t, unit)` — fail with TimeoutException after t\n- `completeOnTimeout(default, t, unit)` — complete with default after t\n\n**The Java 21 shift**\n- Virtual threads replace many CompletableFuture chains for I/O-bound code\n- Simple blocking code on a virtual thread reads better than nested `thenCompose`\n- CompletableFuture remains useful for true parallelism (combinators) and wrapping callback APIs\n\n**Recommendation:** Use `CompletableFuture` whenever you need to **coordinate multiple async operations** — parallel calls with combinators, fallbacks, fan-in. **Always pass an explicit `Executor`** to the `*Async` methods; never rely on the default `commonPool` for anything that might block. Always end your chain with `exceptionally` or `handle` so failures don't disappear silently. On Java 21+, evaluate whether **virtual threads with blocking code** would be clearer for your I/O patterns; CompletableFuture is still indispensable for parallel fan-out and integrating with callback-based libraries, but for sequential I/O it's often more code than it's worth."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between `thenApply` and `thenApplyAsync`?",
+        "Why is using the default `commonPool` for blocking work dangerous?",
+        "How do you propagate a `ThreadLocal` (e.g., MDC) across `CompletableFuture` stages?",
+        "When would you prefer Reactor `Mono`/`Flux` over `CompletableFuture`?",
+        "Do Java 21 virtual threads make `CompletableFuture` obsolete?"
+      ],
+      "seo": {
+        "metaTitle": "What Is `CompletableFuture` in Java — Composable Async Beyond `Future`",
+        "metaDescription": "Complete guide to Java CompletableFuture: why Future was insufficient, three method families (transform/combine/fan-in), commonPool trap, manual completion, exception handling, and Java 21 virtual thread implications."
+      },
+      "order": 1,
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "CompletableFuture is Java 8's redesign of Future for composable, non-blocking async work.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Java 5 introduced Future<T> as the result handle for ExecutorService.submit(). It was a step forward, but had fundamental limitations: get() blocks the calling thread — to actually use the result, you have to wait synchronously. That defeats the point of async work. No callbacks — you can't say \"call me when this finishes.\" You poll isDone() or block on get(). No composition — chaining \"do A, then B with A's."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Use CompletableFuture when: You need to coordinate multiple async operations (parallel calls, fallbacks, combinators)",
+              "You're wrapping a callback-based library into a uniform async API",
+              "You want non-blocking error handling and recovery",
+              "You're between synchronous JDBC/RestTemplate code and full reactive (a stepping stone)",
+              "Don't use CompletableFuture for: Pure CPU work that doesn't compose — use parallel streams or ForkJoinPool directly"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Use CompletableFuture when: You need to coordinate multiple async operations (parallel calls, fallbacks, combinators). You're wrapping a callback-based library into a uniform async API. You want non-blocking error handling and recovery. You're between synchronous JDBC/RestTemplate code and full reactive (a stepping stone). Don't use CompletableFuture for: Pure CPU work that doesn't compose — use parallel streams or ForkJoinPool directly. Backpressure-sensitive streaming — use Reactor Flux/Mono or RxJava Observable for bounded reactive flows. Java 21+ blocking I/O — virtual threads with simple blocking code is often clearer than CompletableFuture chains. Loom."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Java 5 introduced Future<T> as the result handle for ExecutorService.submit(). It was a step forward, but had fundamental limitations: get() blocks the calling thread — to actually use the result, you have to wait synchronously. That defeats the point of async work. No callbacks — you can't say \"call me when this finishes.\" You poll isDone() or block on get()."
+          }
+        ],
+        "cap": "On Java 21+, evaluate whether virtual threads with blocking code would be clearer for your I/O patterns; CompletableFuture is still indispensable for parallel fan-out and integrating with callback-bas",
+        "familiarity_anchors": [
+          "CompletableFuture",
+          "Future",
+          "Tasks"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between `thenApply` and `thenApplyAsync`?",
+          "Why is using the default `commonPool` for blocking work dangerous?",
+          "How do you propagate a `ThreadLocal` (e.g., MDC) across `CompletableFuture` stages?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 multi-threaded service handling concurrent requests"
+      }
+    },
+    {
+      "id": "future-vs-completablefuture",
+      "slug": "java-future-vs-completablefuture-comparison",
+      "question": "What is the difference between Future and CompletableFuture in Java?",
+      "title": "Future vs CompletableFuture in Java",
+      "direct_answer": "Future (Java 5) represents a pending result but only supports blocking get() — you can't chain callbacks, compose results, or handle errors declaratively. CompletableFuture (Java 8) adds a fluent API for non-blocking composition: thenApply, thenCompose, exceptionally, allOf/anyOf. It can also be completed manually, making it far more powerful for building async pipelines.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you understand the limitations of Future that motivated CompletableFuture, and can use the fluent chaining API",
+        "common_mistake": "Blocking on CompletableFuture with get() everywhere, defeating its purpose. Or not handling exceptions in the chain, causing silent failures",
+        "to_stand_out": "Show a real async pipeline using thenCompose for dependent tasks, allOf for parallel fan-out, and exceptionally for error recovery"
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "uber",
+        "linkedin"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-12",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Future.get() Blocks the Calling Thread — CompletableFuture Lets You Chain Without Blocking",
+            "content": "The `Future` interface (Java 5) gives you a handle to an asynchronous result, but its API is fundamentally **blocking**. `get()` parks the calling thread until the result is available. `isDone()` requires polling. There is no way to attach a callback that fires when the computation completes.\n\n**CompletableFuture** (Java 8) is a complete rewrite of asynchronous programming in Java. It supports **non-blocking composition**: `thenApply()` transforms the result, `thenCompose()` chains dependent async operations, `thenCombine()` merges two independent futures, and `exceptionally()` handles errors — all without blocking any thread.\n\nThe key mental model: Future is **pull-based** (you ask for the result when you need it). CompletableFuture is **push-based** (you declare what should happen when the result arrives, and the framework invokes your code). This enables reactive-style pipelines where data flows through transformation stages without thread blocking.\n\nCompletableFuture also supports **manual completion** — `complete(value)` and `completeExceptionally(throwable)` let you resolve the future from any thread. This makes it suitable for integrating callback-based APIs (Netty, gRPC) into a future-based programming model."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Blocking vs Non-Blocking: The API Difference That Changes Everything",
+            "content": "The table shows that CompletableFuture is not just an upgraded Future — it is a fundamentally different programming model.\n\n| Feature | Future | CompletableFuture |\n|---|---|---|\n| Get result | `get()` — blocks | `get()`, `join()`, or callbacks (non-blocking) |\n| Chain transformations | Not possible | `thenApply()`, `thenCompose()`, `thenCombine()` |\n| Error handling | `ExecutionException` from `get()` | `exceptionally()`, `handle()`, `whenComplete()` |\n| Combine multiple futures | Manual loop with `get()` | `allOf()`, `anyOf()`, `thenCombine()` |\n| Manual completion | Not possible | `complete()`, `completeExceptionally()` |\n| Async execution | Requires ExecutorService | Built-in — `supplyAsync()`, `runAsync()` |\n| Cancel | `cancel(mayInterrupt)` | `cancel(mayInterrupt)` — but does not interrupt computation |\n\nThe **cancel** row is a common gotcha. `CompletableFuture.cancel()` marks the future as cancelled (subsequent `get()` throws CancellationException) but does **not interrupt** the underlying computation. The task continues running — cancel is advisory, not forceful."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`Future.get()` blocks** — no callbacks, no chaining; defeats the purpose of asynchronous execution.\n- **`CompletableFuture` is push-based** — declare what happens when the result arrives; no blocking.\n- **`thenApply` for plain values; `thenCompose` for async functions** — avoids nested `CompletableFuture<CompletableFuture<T>>`.\n- **`cancel()` does not interrupt** — marks cancelled, but the underlying task keeps running.\n- **Always pass a custom executor to `supplyAsync()` for I/O** — avoid starving the common ForkJoinPool."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`Future<V>` represents the result of an asynchronous computation — you submit a task to an executor, receive a Future back, and retrieve the result when needed. `CompletableFuture` extends this model significantly: it's non-blocking, composable, and designed for building full async pipelines rather than just waiting for individual tasks.\n\n**Future limitations:**\n- `get()` blocks the calling thread — no callbacks, no chaining, just block or poll\n- No way to compose or combine futures without writing blocking glue code\n\n**CompletableFuture capabilities:**\n- `thenApply()`: transform the result (one-to-one, like map)\n- `thenCompose()`: chain dependent async operations — function returns a `CompletableFuture`; avoids nested futures\n- `thenCombine()`: merge two independent futures running in parallel\n- `exceptionally()`: recover with a default value on exception\n- `handle()`/`whenComplete()`: receive both result and exception\n\n**cancel() gotcha:**\n- Does not interrupt the underlying computation — marks the future as cancelled, but the task keeps running\n\nI recommend CompletableFuture for all async work in modern Java. `Future.get()` blocking defeats the purpose of asynchronous execution."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens if you don't handle exceptions in a CompletableFuture chain?",
+        "When would you use thenApply vs thenCompose?",
+        "How do virtual threads in Java 21 change the async programming model?"
+      ],
+      "seo": {
+        "metaTitle": "Future vs CompletableFuture in Java | Interview Guide",
+        "metaDescription": "Understand the difference between Future and CompletableFuture: blocking vs non-blocking, chaining, error handling, and parallel coordination.",
+        "keywords": [
+          "future vs completablefuture",
+          "java async",
+          "thenApply thenCompose",
+          "completablefuture java"
+        ]
+      },
+      "order": 2,
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "Future<V> represents the result of an asynchronous computation — you submit a task to an executor, receive a Future back, and retrieve the result when needed.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The Future interface (Java 5) gives you a handle to an asynchronous result, but its API is fundamentally blocking. get() parks the calling thread until the result is available. isDone() requires polling. There is no way to attach a callback that fires when the computation completes. CompletableFuture (Java 8) is a complete rewrite of asynchronous programming in Java. It supports non-blocking composition: thenApply() transforms the result, thenCompose() chains dependent async."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "The table shows that CompletableFuture is not just an upgraded Future — it is a fundamentally different programming model",
+              "| Feature | Future | CompletableFuture | |---|---|---| | Get result | get() — blocks | get(), join(), or callbacks (non-blocking) | | Chain transformations | Not possible | thenApply(), thenCompose(), thenCombine() | | Error handling | ExecutionException from get() | exceptionally(), handle(), whenComplete() | | Combine multiple futures | Manual loop with get() | allOf(), anyOf(), thenCombine() | | Manual completion | Not possible | complete(), completeExceptionally() | | Async execution | Requires ExecutorService | Built-in — supplyAsync(), runAsync() | | Cancel | cancel(mayInterrupt) | cancel(mayInterrupt) — but does not interrupt computation | The cancel row is a common gotcha",
+              "CompletableFuture",
+              "cancel() marks the future as cancelled (subsequent get() throws CancellationException) but does not interrupt the underlying computation",
+              "The task continues running — cancel is advisory, not forceful"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "The Future interface (Java 5) gives you a handle to an asynchronous result, but its API is fundamentally blocking. get() parks the calling thread until the result is available. isDone() requires polling. There is no way to attach a callback that fires when the computation completes. CompletableFuture (Java 8) is a complete rewrite of asynchronous programming in Java. It supports non-blocking composition: thenApply() transforms the result, thenCompose() chains dependent async operations, thenCombine() merges two independent futures, and exceptionally() handles errors — all without blocking any thread. The key mental model."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The Future interface (Java 5) gives you a handle to an asynchronous result, but its API is fundamentally blocking. get() parks the calling thread until the result is available. isDone() requires polling. There is no way to attach a callback that fires when the computation completes. CompletableFuture (Java 8) is a complete rewrite of asynchronous programming in Java. It supports."
+          }
+        ],
+        "cap": "Future.get() blocking defeats the purpose of asynchronous execution.",
+        "familiarity_anchors": [
+          "Future",
+          "CompletableFuture"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens if you don't handle exceptions in a CompletableFuture chain?",
+          "When would you use thenApply vs thenCompose?",
+          "How do virtual threads in Java 21 change the async programming model?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 multi-threaded service handling concurrent requests"
+      }
+    },
+    {
+      "id": "cmt-010",
+      "slug": "completablefuture-chains",
+      "title": "CompletableFuture Chains: thenApply, thenCompose, exceptionally",
+      "question": "How do you chain asynchronous operations using CompletableFuture? Explain the difference between thenApply, thenCompose, and exceptionally with examples.",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "layout_type": "code-workshop",
+      "company_tags": [
+        "netflix",
+        "amazon",
+        "stripe",
+        "shopify"
+      ],
+      "interviewer_intent": {
+        "testing": "Ability to build non-blocking async pipelines in Java and handle errors cleanly without nesting callbacks.",
+        "common_mistake": "Using thenApply when the mapping function itself returns a CompletableFuture — this produces CompletableFuture<CompletableFuture<T>> instead of flattening. Use thenCompose (flatMap) instead.",
+        "to_stand_out": "Discuss thenApplyAsync vs thenApply (which thread executes the callback), handle() vs exceptionally (both error and result in one stage), and whenComplete for side effects."
+      },
+      "direct_answer": "thenApply transforms the result (map); thenCompose chains a function that returns another CompletableFuture (flatMap); exceptionally handles errors and provides a fallback value. Together they form a composable async pipeline without blocking threads.",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "thenApply vs thenCompose Is the flatMap vs map Distinction — Getting It Wrong Nests Futures Inside Futures",
+            "content": "The most common mistake with CompletableFuture chaining is using `thenApply()` when `thenCompose()` is needed — or vice versa. The distinction is identical to `map()` vs `flatMap()` in streams.\n\n**`thenApply(fn)`** transforms the result: `String -> Integer`. The function returns a plain value. If your function returns a CompletableFuture, you get `CompletableFuture<CompletableFuture<T>>` — a nested future that requires double unwrapping.\n\n**`thenCompose(fn)`** flattens: the function returns a `CompletableFuture<T>`, and `thenCompose()` unwraps it to `CompletableFuture<T>`. Use this when the transformation itself is asynchronous — calling another service, querying a database.\n\n**`thenCombine(other, fn)`** merges two independent futures: when both complete, apply the function to both results. Use when two operations can run in parallel and you need both results.\n\nError handling uses `exceptionally(fn)` for recovery (returns a default value) or `handle(fn)` for both success and failure in one function. `whenComplete(fn)` receives both result and error but cannot change the result — use for logging or cleanup.\n\nThe `*Async` variants (`thenApplyAsync`, `thenComposeAsync`) run the callback on a different thread. Without the Async suffix, the callback runs on the thread that completed the previous stage — which might be the common pool, the calling thread, or any other thread."
+          },
+          {
+            "type": "step",
+            "title": "Building a Multi-Stage Pipeline: Fetch, Transform, Combine, Handle Errors",
+            "content": "Real-world CompletableFuture pipelines combine multiple patterns — here is the structure that covers 90% of use cases.\n\n```java\nExecutor io = Executors.newFixedThreadPool(10);\n\nCompletableFuture<OrderResult> pipeline =\n    CompletableFuture.supplyAsync(() -> fetchOrder(orderId), io)\n        .thenCompose(order -> supplyAsync(() -> enrichOrder(order), io))\n        .thenCombine(\n            supplyAsync(() -> fetchInventory(orderId), io),\n            (enriched, inventory) -> new OrderResult(enriched, inventory)\n        )\n        .exceptionally(ex -> {\n            log.error(\"Pipeline failed\", ex);\n            return OrderResult.empty();\n        });\n```\n\n**`supplyAsync`** starts two independent operations on the specified executor. **`thenCompose`** chains a dependent async call, flattening the nested future. **`thenCombine`** merges the enriched order with the independently-fetched inventory when both complete. **`exceptionally`** recovers from any failure anywhere in the pipeline by returning a default value.\n\n**`allOf()`** waits for multiple independent futures without combining results — useful for fire-and-forget batches. `anyOf()` completes when the first future completes — useful for racing requests against a timeout.\n\n```java\nCompletableFuture.allOf(future1, future2, future3)\n    .thenRun(() -> log.info(\"All completed\"));\n```\n\nAlways specify a custom executor for I/O-bound stages. The default common ForkJoinPool has `availableProcessors() - 1` threads — blocking I/O on these threads starves parallel streams and other CompletableFuture pipelines."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`thenApply` = map (plain value); `thenCompose` = flatMap (returns CompletableFuture)** — the most important distinction.\n- **`thenCombine`** — runs two futures in parallel; combining function receives both results when both complete.\n- **`exceptionally()`** — recover with a default value on exception; `handle()` receives both result and exception.\n- **`whenComplete()` for side effects** — logging, metrics; does not transform the value.\n- **Pipeline pattern: `supplyAsync` -> `thenCompose` -> `thenCombine` -> `exceptionally`**."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`CompletableFuture`'s composition API covers four main scenarios: transforming a result, chaining async operations, combining two independent futures, and handling errors. Each scenario has a dedicated method — choosing the wrong one silently wraps results in extra layers or blocks unexpectedly.\n\n**thenApply vs thenCompose:**\n- `thenApply(fn)`: function returns a plain value — wraps it in a new CompletableFuture automatically\n- `thenCompose(fn)`: function returns a `CompletableFuture` — flattens it; avoids `CompletableFuture<CompletableFuture<T>>`\n- Use `thenCompose` whenever the next step is itself asynchronous\n\n**thenCombine:**\n- Merges two independent futures running in parallel\n- Combining function receives both results when both complete — does not introduce sequencing\n\n**Error handling:**\n- `exceptionally(fn)`: recover with a default value when an exception occurs\n- `handle(fn)`: receives both result and exception — handles both success and failure paths\n- `whenComplete(fn)`: side effects like logging — does not transform the value\n\n**Thread assignment:**\n- Without Async suffix: runs on the completing thread — could be any thread, unpredictable\n- Use `thenApplyAsync(fn, executor)` for predictable thread assignment; always pass a custom executor for I/O stages\n\nI recommend structuring pipelines as: `supplyAsync` → `thenCompose` for dependent calls → `thenCombine` for parallel fetching → `exceptionally` at the end for recovery."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between thenApply and thenApplyAsync?",
+        "How do you implement a timeout for a CompletableFuture chain?",
+        "How does CompletableFuture.allOf differ from CompletableFuture.anyOf?"
+      ],
+      "seo": {
+        "meta_title": "Java CompletableFuture thenApply thenCompose exceptionally | Interview",
+        "meta_description": "Learn how to chain CompletableFuture stages in Java using thenApply, thenCompose, and exceptionally with working code examples.",
+        "keywords": [
+          "java completablefuture thenapply thencompose",
+          "completablefuture error handling java",
+          "java async pipeline example"
+        ],
+        "metaDescription": "thenApply transforms the result (map); thenCompose chains a function that returns another CompletableFuture (flatMap); exceptionally handles errors and provide.",
+        "metaTitle": "CompletableFuture Chains: thenApply, thenCompose, exceptionally"
+      },
+      "order": 3,
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "CompletableFuture's composition API covers four main scenarios: transforming a result, chaining async operations, combining two independent futures, and handling errors.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The most common mistake with CompletableFuture chaining is using thenApply() when thenCompose() is needed — or vice versa. The distinction is identical to map() vs flatMap() in streams. thenApply(fn) transforms the result: String -> Integer. The function returns a plain value. If your function returns a CompletableFuture, you get CompletableFuture<CompletableFuture<T>> — a nested future that requires double unwrapping. thenCompose(fn) flattens: the function returns a CompletableFuture<T>, and thenCompose() unwraps it to."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "thenApply = map (plain value); thenCompose = flatMap (returns CompletableFuture) — the most important distinction",
+              "thenCombine — runs two futures in parallel; combining function receives both results when both complete",
+              "exceptionally() — recover with a default value on exception; handle() receives both result and exception",
+              "whenComplete() for side effects — logging, metrics; does not transform the value",
+              "Pipeline pattern: supplyAsync -> thenCompose -> thenCombine -> exceptionally"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "The most common mistake with CompletableFuture chaining is using thenApply() when thenCompose() is needed — or vice versa. The distinction is identical to map() vs flatMap() in streams. thenApply(fn) transforms the result: String -> Integer. The function returns a plain value. If your function returns a CompletableFuture, you get CompletableFuture<CompletableFuture<T>> — a nested future that requires double unwrapping. thenCompose(fn) flattens: the function returns a CompletableFuture<T>, and thenCompose() unwraps it to CompletableFuture<T>. Use this when the transformation itself is asynchronous — calling another service, querying a database. thenCombine(other, fn) merges two."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The most common mistake with CompletableFuture chaining is using thenApply() when thenCompose() is needed — or vice versa. The distinction is identical to map() vs flatMap() in streams. thenApply(fn) transforms the result: String -> Integer. The function returns a plain value. If your function returns a CompletableFuture, you get CompletableFuture<CompletableFuture<T>> — a nested future that requires double unwrapping. thenCompose(fn) flattens."
+          }
+        ],
+        "cap": "thenApply vs thenCompose: thenApply(fn): function returns a plain value — wraps it in a new CompletableFuture automatically thenCompose(fn): function returns a CompletableFuture — flattens it; avoids",
+        "familiarity_anchors": [
+          "CompletableFuture",
+          "Together"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between thenApply and thenApplyAsync?",
+          "How do you implement a timeout for a CompletableFuture chain?",
+          "How does CompletableFuture.allOf differ from CompletableFuture.anyOf?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 multi-threaded service handling concurrent requests"
+      }
+    },
+    {
+      "id": "thencompose-vs-thencombine-java",
+      "slug": "thencompose-vs-thencombine-java",
+      "question": "What's the difference between `thenCompose` and `thenCombine` in `CompletableFuture`?",
+      "title": "`thenCompose` vs `thenCombine` — Sequential Chain vs Parallel Combine",
+      "direct_answer": "**`thenCompose`** is for **sequential dependent async operations** — when the second call needs the first result to start. Signature: `CompletableFuture<U> thenCompose(Function<T, CompletableFuture<U>>)`. Think of it as async flatMap: it flattens a `CompletableFuture<CompletableFuture<U>>` into `CompletableFuture<U>`. **`thenCombine`** is for **two independent futures running in parallel** whose results you combine when both finish. Signature: `CompletableFuture<V> thenCombine(CompletionStage<U>, BiFunction<T, U, V>)`. **Rule of thumb**: if B needs A's result before starting → `thenCompose` (sequential). If A and B can run simultaneously and you combine when both done → `thenCombine` (parallel). Using `thenApply` where you need `thenCompose` gives you a nested `CompletableFuture<CompletableFuture<U>>` — the classic beginner bug.",
+      "layout_type": "default",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the flatMap nature of thenCompose vs the parallel combine of thenCombine — a common source of performance bugs (unnecessarily sequential code)",
+        "common_mistake": "Using thenApply with a function returning CompletableFuture and ending up with a nested CompletableFuture<CompletableFuture<U>>. Also: using thenCompose when the two operations are independent and could run in parallel",
+        "to_stand_out": "Show the wire-diagram intuition: thenCompose = pipe output-to-input (sequential), thenCombine = two parallel wires merging into one. Mention that thenCompose is analogous to monadic bind / flatMap / await-chain"
+      },
+      "company_tags": [
+        "amazon",
+        "netflix",
+        "google",
+        "linkedin",
+        "uber"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Core Distinction — Dependent vs Independent",
+            "content": "Two async operations have exactly two interesting topologies:\n\n**Sequential dependent** — B needs A's result to start.\n```\nA ────→ B(A) ────→ result\n```\nTime = time(A) + time(B). Use **`thenCompose`**.\n\n**Parallel independent** — A and B can run simultaneously; combine when both done.\n```\nA ────┐\n          ├── combine(A, B) ──→ result\nB ────┘\n```\nTime = max(time(A), time(B)). Use **`thenCombine`**.\n\nChoosing the wrong one either:\n- Serializes work that could have been parallel (use `thenCompose` when `thenCombine` would work), or\n- Creates impossible data dependencies (using `thenCombine` when B truly needs A).\n\nA subtler case: `thenApply` on an async function. If your function returns `CompletableFuture<U>`, `thenApply` gives you a nested `CompletableFuture<CompletableFuture<U>>`. `thenCompose` flattens it. This is the single most common beginner bug with the API."
+          },
+          {
+            "type": "comparison_table",
+            "title": "thenCompose vs thenCombine vs thenApply",
+            "content": "| Method | Signature | Use Case | Execution |\n|---|---|---|---|\n| **`thenApply`** | `Function<T, U>` | Transform value (sync transformation) | Sequential; one input, one output |\n| **`thenCompose`** | `Function<T, CompletionStage<U>>` | Chain dependent async op | Sequential; second starts after first |\n| **`thenCombine`** | `(other, BiFunction<T, U, V>)` | Combine two independent results | Parallel; both run concurrently |\n| **`thenApply` with async fn (WRONG)** | `Function<T, CompletableFuture<U>>` | Nothing; produces `CompletableFuture<CompletableFuture<U>>` | Broken — caller must `.join()` twice |\n\n**Return types are the giveaway**:\n- If your transformation function returns a plain value `U` → `thenApply`\n- If it returns a `CompletableFuture<U>` → `thenCompose`\n- If you have two already-existing futures → `thenCombine`"
+          },
+          {
+            "type": "before_code",
+            "title": "The Wrong Choices — Both Common Bugs",
+            "content": "**Bug 1 — `thenApply` instead of `thenCompose`** (nested futures):\n```java\nCompletableFuture<User> userF = userService.findByIdAsync(id);\n\n// WRONG: findOrdersAsync returns CompletableFuture<List<Order>>\nCompletableFuture<CompletableFuture<List<Order>>> broken =\n    userF.thenApply(user -> orderService.findOrdersAsync(user));\n// Now you need broken.thenCompose(x -> x) to unwrap, or two .join() calls.\n// Every downstream operation has to deal with double-wrapping.\n```\n\n**Bug 2 — `thenCompose` when `thenCombine` would parallelize**:\n```java\nCompletableFuture<User> userF = userService.findByIdAsync(id);\n\n// WRONG: orders and prefs are independent — both only need user\n// But this chains them sequentially: prefs waits for orders to finish!\nCompletableFuture<UserDashboard> bad =\n    userF.thenCompose(user ->\n        orderService.findOrdersAsync(user).thenCompose(orders ->\n            prefsService.findPrefsAsync(user).thenApply(prefs ->\n                new UserDashboard(user, orders, prefs))));\n// Latency = time(user) + time(orders) + time(prefs).\n```"
+          },
+          {
+            "type": "after_code",
+            "title": "The Right Choices — Compose for Dependent, Combine for Parallel",
+            "content": "**Fix 1 — use `thenCompose` for dependent chains**:\n```java\nCompletableFuture<List<Order>> ordersF =\n    userService.findByIdAsync(id)\n        .thenCompose(user -> orderService.findOrdersAsync(user));\n// Type: CompletableFuture<List<Order>> — flattened.\n// Latency: time(user) + time(orders) — unavoidable, they're dependent.\n```\n\n**Fix 2 — use `thenCombine` for parallel independent work**:\n```java\nCompletableFuture<User> userF = userService.findByIdAsync(id);\n\nCompletableFuture<UserDashboard> good = userF.thenCompose(user -> {\n    // Both start in parallel — they only depend on user, not each other\n    CompletableFuture<List<Order>> ordersF =\n        orderService.findOrdersAsync(user);\n    CompletableFuture<Prefs> prefsF =\n        prefsService.findPrefsAsync(user);\n\n    return ordersF.thenCombine(prefsF,\n        (orders, prefs) -> new UserDashboard(user, orders, prefs));\n});\n// Latency = time(user) + max(time(orders), time(prefs)).\n```\n\nFor a 200 ms user + 300 ms orders + 250 ms prefs:\n- Bad (sequential): 750 ms.\n- Good (parallel inner): 500 ms. 33% faster for free."
+          },
+          {
+            "type": "step",
+            "title": "Mental Model — thenCompose as flatMap, thenCombine as zip",
+            "content": "If you know Streams or Scala:\n\n- **`thenApply` ≈ `Stream.map`** — `T → U`.\n- **`thenCompose` ≈ `Stream.flatMap`** — `T → CompletableFuture<U>`, flattened.\n- **`thenCombine` ≈ zip** — two streams combined element-wise.\n\n**Monadic intuition**: `thenCompose` is the monadic `bind` / `flatMap` / Haskell's `>>=`. It's what makes `CompletableFuture` a monad and enables do-notation-style chains. Every await-chain in JavaScript/C# corresponds to a chain of `thenCompose` in Java.\n\n**Parallel intuition**: `thenCombine` is what you reach for when your data flow has a **diamond** (one result fans out, two branches compute independently, they merge). For fan-out beyond two, compose multiple `thenCombine` calls or use `CompletableFuture.allOf(f1, f2, f3).thenApply(v -> { ... })`.\n\nAt review time, when I see a chain of `thenCompose` where none of the intermediate values is used, I ask: are these actually dependent? If not, you're serializing for free."
+          },
+          {
+            "type": "step",
+            "title": "The Async Variants — thenComposeAsync and thenCombineAsync",
+            "content": "Like every CompletableFuture method, both have three variants:\n- `thenCompose(fn)` — fn runs on whichever thread completed the previous stage.\n- `thenComposeAsync(fn)` — fn runs on `ForkJoinPool.commonPool`.\n- `thenComposeAsync(fn, executor)` — fn runs on the supplied executor.\n\nIf your composition function does non-trivial work (calls other async services, does CPU), use the `Async(executor)` form to avoid hogging the thread that completed the previous stage. If it's a trivial transformation like building a response object, the non-async form is fine and skips a thread hop.\n\nFor **`thenCombine`**, when both futures complete, the combiner function runs on whichever of the two completed second. Same async variants apply."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Picking the Right Combinator",
+            "content": "**Decision guide**:\n\n| Situation | Choice |\n|---|---|\n| Synchronous transformation of a result | `thenApply` |\n| Function returns another `CompletableFuture` | `thenCompose` |\n| Two independent futures, combine both results | `thenCombine` |\n| Many independent futures, wait for all | `CompletableFuture.allOf(...)` then read each |\n| Many independent futures, first one wins | `CompletableFuture.anyOf(...)` or `applyToEither` |\n| Branch on result (different downstream depending on value) | `thenCompose` with conditional inside |\n\n**Watch out for**:\n- **Lost parallelism** — chained `thenCompose` calls are inherently sequential. If two operations don't share data, use `thenCombine` or `allOf` to parallelize.\n- **Overly nested chains** — a long `thenCompose` chain with closure captures can be hard to reason about. Extract stages into named methods returning `CompletableFuture`.\n- **Exception propagation** — if the function inside `thenCompose` throws synchronously, it propagates as a failed future. If it returns a failed CompletableFuture, same effect. Both cases bubble through the chain.\n- **Threading hops** — every `Async` variant is a context switch. For latency-critical code, avoid unnecessary async hops."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`thenCompose(fn)`** — fn returns `CompletableFuture<U>`; flattens the nested future; **sequential dependent** operations.\n- **`thenCombine(other, fn)`** — combines two independent futures in **parallel**; result is `BiFunction<T, U, V>`.\n- **`thenApply(fn)`** — fn returns plain `U`; synchronous transformation.\n- **Rule of thumb**: function return type tells you which one: value → `thenApply`, future → `thenCompose`.\n- **Most common bug**: `thenApply` with an async function → nested `CompletableFuture<CompletableFuture<U>>`.\n- **Second most common bug**: `thenCompose` when `thenCombine` would have parallelized independent work.\n- **`thenCompose`** is the monadic `flatMap`; **`thenCombine`** is zip.\n- `*Async` variants run on `commonPool` or a custom executor — use them for non-trivial work.\n- For N > 2 parallel futures, use **`allOf`** or **`anyOf`** instead of nested `thenCombine`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`thenCompose` and `thenCombine` handle the two fundamental async topologies.\n\n**`thenCompose` — sequential dependent**\n- Second async op needs first result to start\n- Signature: `Function<T, CompletionStage<U>>`\n- Flattens a `CompletableFuture<CompletableFuture<U>>` into `CompletableFuture<U>`\n- Exactly the monadic flatMap / JavaScript await-chain equivalent\n- Use when: chained DB → service → cache lookups where each uses the previous\n- Latency: sum of all stages (inherent to dependence)\n\n**`thenCombine` — parallel independent**\n- Two futures run simultaneously; combine results when both done\n- Signature: `(other, BiFunction<T, U, V>)`\n- Use when: fetch orders and preferences for a user in parallel, then build a response\n- Latency: max of the two stages (parallel)\n\n**The rule of thumb**\n- Return type of your function tells you which to use\n- Function returns `U` → `thenApply`\n- Function returns `CompletableFuture<U>` → `thenCompose`\n- You already have two futures → `thenCombine`\n\n**The two classic bugs**\n\n**Bug 1 — thenApply instead of thenCompose**:\n- `userF.thenApply(user -> findOrdersAsync(user))`\n- Result: `CompletableFuture<CompletableFuture<List<Order>>>` — double-wrapped\n- Every downstream must `.join().join()` or unwrap explicitly\n- Fix: use `thenCompose`\n\n**Bug 2 — thenCompose when thenCombine would work**:\n- Fetching orders and prefs for the same user\n- Neither depends on the other, only on user\n- Chaining `thenCompose` serializes them: time = orders + prefs\n- Should be `thenCombine`: time = max(orders, prefs)\n- Easy 30–40% latency win for typical dashboards\n\n**Mental model**\n- `thenCompose` ≈ `flatMap` / monadic bind / await-chain\n- `thenCombine` ≈ zip / diamond merge\n- `thenApply` ≈ `map`\n\n**Async variants on both**\n- `thenComposeAsync(fn, executor)` — fn on supplied executor\n- `thenCombineAsync(other, fn, executor)` — combiner on supplied executor\n- Use when combiner does non-trivial work; otherwise the non-async form skips a thread hop\n\n**For N > 2 parallel operations**\n- Don't chain `thenCombine` N times\n- Use `CompletableFuture.allOf(f1, f2, f3, ...)` then read each result\n- Cleaner and doesn't build a left-leaning tree\n\n**Recommendation:** When reviewing async Java, **read the function return types** — they tell you whether `thenApply`, `thenCompose`, or `thenCombine` is right. **Any `thenCompose` chain where the intermediate result isn't used later** is a red flag: those stages can probably run in parallel via `thenCombine` or `allOf`. Extract long chains into named helper methods; a page-long chain of lambdas is nearly impossible to debug. And on Java 21, ask whether virtual threads with blocking code would be clearer than the CompletableFuture dance — often it will be."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens if the function passed to `thenCompose` throws synchronously?",
+        "How would you combine 10 parallel CompletableFutures?",
+        "Show me the signature difference between `thenApply` and `thenCompose` — why does it matter?",
+        "When would you use `applyToEither` vs `thenCombine`?",
+        "How do you parallelize a list of async calls and wait for all?"
+      ],
+      "seo": {
+        "metaTitle": "`thenCompose` vs `thenCombine` in CompletableFuture — Sequential vs Parallel",
+        "metaDescription": "Deep dive on thenCompose vs thenCombine: when to use each, common bugs (nested futures, lost parallelism), mental models (flatMap vs zip), async variants, and decision guide."
+      },
+      "order": 4,
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "thenCompose and thenCombine handle the two fundamental async topologies.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Two async operations have exactly two interesting topologies: Sequential dependent — B needs A's result to start. `` A ────→ B(A) ────→ result ` Time = time(A) + time(B). Use thenCompose. Parallel independent — A and B can run simultaneously; combine when both done. ` A ────┐ ├── combine(A, B) ──→ result B ────┘ ` Time = max(time(A), time(B)). Use thenCombine. Choosing the wrong one either: Serializes work that could."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "| Method | Signature | Use Case | Execution | |---|---|---|---| | thenApply | Function<T, U> | Transform value (sync transformation) | Sequential; one input, one output | | thenCompose | Function<T, CompletionStage<U>> | Chain dependent async op | Sequential; second starts after first | | thenCombine | (other, BiFunction<T, U, V>) | Combine two independent results | Parallel; both run concurrently | | thenApply with async fn (WRONG) | Function<T, CompletableFuture<U>> | Nothing; produces CompletableFuture<CompletableFuture<U>> | Broken — caller must",
+              "join() twice | Return types are the giveaway: If your transformation function returns a plain value U → thenApply If it returns a CompletableFuture<U> → thenCompose If you have two already-existing futures → thenCombine"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Decision guide: | Situation | Choice | |---|---| | Synchronous transformation of a result | thenApply | | Function returns another CompletableFuture | thenCompose | | Two independent futures, combine both results | thenCombine | | Many independent futures, wait for all | CompletableFuture.allOf(...) then read each | | Many independent futures, first one wins | CompletableFuture.anyOf(...) or applyToEither | | Branch on result (different downstream depending on value) | thenCompose with conditional inside | Watch out for: Lost parallelism — chained thenCompose calls are inherently sequential. If two operations."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Two async operations have exactly two interesting topologies: Sequential dependent — B needs A's result to start. `` A ────→ B(A) ────→ result ` Time = time(A) + time(B). Use thenCompose. Parallel independent — A and B can run simultaneously; combine when both done. ` A ────┐ ├── combine(A, B) ──→ result B ────┘ ` Time = max(time(A), time(B)). Use."
+          }
+        ],
+        "cap": "And on Java 21, ask whether virtual threads with blocking code would be clearer than the CompletableFuture dance — often it will be.",
+        "familiarity_anchors": [
+          "Signature",
+          "CompletableFuture",
+          "Function"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens if the function passed to `thenCompose` throws synchronously?",
+          "How would you combine 10 parallel CompletableFutures?",
+          "Show me the signature difference between `thenApply` and `thenCompose` — why does it matter?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 multi-threaded service handling concurrent requests"
+      }
+    },
+    {
+      "id": "completablefuture-exception-handling-java",
+      "slug": "completablefuture-exception-handling-java",
+      "question": "How do you handle exceptions in `CompletableFuture`? Difference between `exceptionally`, `handle`, and `whenComplete`?",
+      "title": "`CompletableFuture` Exception Handling — `exceptionally` vs `handle` vs `whenComplete`",
+      "direct_answer": "`CompletableFuture` provides three recovery/observation hooks. **`exceptionally(Function<Throwable, T>)`** — runs **only on failure**; returns a replacement value of type `T`; the cleanest \"fallback on error\" API. **`handle(BiFunction<T, Throwable, U>)`** — runs on **both success and failure**; sees both `value` and `throwable` (one is null); can transform type `T → U` and swallow the exception. **`whenComplete(BiConsumer<T, Throwable>)`** — runs on **both** but is **observe-only**: can't change the result, exception propagates downstream unchanged. Key rule: **every `CompletableFuture` chain should terminate in `exceptionally`, `handle`, or have someone call `.get()`/`.join()` on it**. Otherwise, exceptions vanish silently. Inside callbacks, the thrown exception is wrapped in a `CompletionException` at `.join()` time — unwrap with `ex.getCause()`.",
+      "layout_type": "default",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-22",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows there are three hooks with distinct semantics (recover / recover-or-transform / observe) and understands that lost exceptions are a real production problem",
+        "common_mistake": "Assuming `.exceptionally` runs on success too. Or forgetting to terminate a chain, losing exceptions. Or being confused by CompletionException wrapping",
+        "to_stand_out": "Mention CompletionException unwrapping, that whenComplete is observe-only (exception propagates), that exceptionally is bypassed on success, and that exceptionallyCompose (Java 12+) lets you fall back to another async"
+      },
+      "company_tags": [
+        "amazon",
+        "netflix",
+        "google",
+        "linkedin"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Three Hooks, Three Purposes",
+            "content": "CompletableFuture has three exception-handling methods that appear similar but have very different semantics:\n\n| Method | Runs on Success? | Runs on Failure? | Can Change Result? | Exception Propagates? |\n|---|---|---|---|---|\n| **`exceptionally(fn)`** | No | Yes | Yes (supplies fallback) | No (recovered) |\n| **`handle(biFn)`** | Yes | Yes | Yes (can transform) | No (unless biFn rethrows) |\n| **`whenComplete(biCons)`** | Yes | Yes | No (observe only) | Yes (unchanged) |\n\n**Rule of thumb**:\n- Need to recover with a fallback value only on error → **`exceptionally`**.\n- Need to transform the result in both success and failure branches (including logging on success) → **`handle`**.\n- Need side effects (logging, metrics) without changing result or exception → **`whenComplete`**.\n\n**Critical**: exceptions propagate through an async chain just like in sync code, but they're invisible unless you end the chain with one of these hooks, or call `.get()` / `.join()`. A `CompletableFuture` whose exception no one observes is a silent bug."
+          },
+          {
+            "type": "step",
+            "title": "`exceptionally` — Fallback on Failure",
+            "content": "Signature (Java 8): `CompletableFuture<T> exceptionally(Function<Throwable, T> fn)`.\n\n- Runs **only** if the upstream completed exceptionally.\n- The function receives the `Throwable` and returns a replacement value of the same type `T`.\n- Resulting future completes normally with that replacement.\n- If upstream succeeded, `fn` is **not called**, the result passes through.\n\n```java\nCompletableFuture<UserDashboard> dashboard =\n    userService.findByIdAsync(id)\n        .thenCompose(u -> buildDashboardAsync(u))\n        .exceptionally(ex -> UserDashboard.empty());\n```\n\nIf any stage fails, the downstream gets `UserDashboard.empty()`. No try/catch; the recovery is declarative.\n\n**Java 12+ added `exceptionallyAsync`** (runs on executor) and **`exceptionallyCompose`** (fallback itself returns a `CompletableFuture`, great for async retry or calling a backup service):\n```java\n.exceptionallyCompose(ex -> backupService.fetchAsync(id))\n```\n\nUnlike `handle`, `exceptionally` can't transform the success path — the success value just passes through unchanged."
+          },
+          {
+            "type": "step",
+            "title": "`handle` — Transform Both Branches",
+            "content": "Signature: `CompletableFuture<U> handle(BiFunction<T, Throwable, U> fn)`.\n\n- Runs on **both success and failure**.\n- Receives `(value, throwable)` — exactly one is null.\n- Returns the new result value (can change type from `T` to `U`).\n- If `fn` itself throws, the resulting future fails with that exception.\n\n```java\nCompletableFuture<Response> response =\n    backend.fetchAsync(req)\n        .handle((body, ex) -> {\n            if (ex != null) {\n                meter.counter(\"backend.errors\").increment();\n                return Response.error(ex.getMessage());\n            }\n            meter.counter(\"backend.success\").increment();\n            return Response.ok(body);\n        });\n```\n\n**Why `handle` over `exceptionally` + `thenApply`**:\n- Single unified callback for both branches.\n- You can compute metrics, log uniformly, build a response object with status encoded.\n- You can also **change the result type** — `exceptionally` can only give you the same type back.\n\n**Trap**: `handle` silently swallows exceptions if your function doesn't rethrow. If you want to observe but not recover, use `whenComplete`."
+          },
+          {
+            "type": "step",
+            "title": "`whenComplete` — Observe, Don't Touch",
+            "content": "Signature: `CompletableFuture<T> whenComplete(BiConsumer<T, Throwable> action)`.\n\n- Runs on both success and failure.\n- Receives `(value, throwable)` — exactly one is null.\n- **Cannot change the result.** The returned future has the same outcome as upstream.\n- Exception still propagates downstream.\n- If `action` itself throws, the new exception suppresses the original (be careful).\n\n```java\nCompletableFuture<Order> result = orderService.placeAsync(order)\n    .whenComplete((o, ex) -> {\n        if (ex != null) {\n            log.error(\"Order failed: {}\", order.id(), ex);\n            metrics.recordFailure();\n        } else {\n            log.info(\"Order placed: {}\", o.id());\n            metrics.recordSuccess();\n        }\n    });\n\n// Caller still has to handle the exception — whenComplete didn't swallow it\nresult.exceptionally(ex -> Order.failed());\n```\n\nThe mental model: `whenComplete` is a **tap** — you see what's going through but don't alter the flow. Use it for logging, metrics, audit trails. For recovery, use `exceptionally` or `handle`."
+          },
+          {
+            "type": "step",
+            "title": "The `CompletionException` Wrapping Gotcha",
+            "content": "When an exception happens inside a CompletableFuture stage, it gets wrapped when observed synchronously:\n\n```java\nCompletableFuture<String> cf = CompletableFuture.supplyAsync(() -> {\n    throw new IllegalStateException(\"boom\");\n});\n\ntry {\n    cf.join();\n} catch (CompletionException ce) {\n    // ce.getCause() is the real IllegalStateException\n}\n\ntry {\n    cf.get();\n} catch (ExecutionException ee) {\n    // ee.getCause() is the real IllegalStateException\n}\n```\n\nBut inside `exceptionally`, `handle`, or `whenComplete`, the Throwable is **also wrapped in CompletionException** if it came from an upstream stage (not from the current stage).\n\n```java\nCompletableFuture.supplyAsync(() -> { throw new IOException(\"net\"); })\n    .thenApply(x -> x.toUpperCase())\n    .exceptionally(ex -> {\n        // ex is CompletionException, ex.getCause() is IOException\n        if (ex instanceof CompletionException && ex.getCause() instanceof IOException) {\n            return \"fallback\";\n        }\n        throw new RuntimeException(ex);\n    });\n```\n\n**Common pattern**: unwrap once with a helper:\n```java\nstatic Throwable unwrap(Throwable t) {\n    return (t instanceof CompletionException && t.getCause() != null) ? t.getCause() : t;\n}\n```\n\nJava's **structured concurrency** (Java 21 preview) solves this ergonomics issue for virtual-thread-style code."
+          },
+          {
+            "type": "before_code",
+            "title": "The Silent Failure — Missing Terminator",
+            "content": "A CompletableFuture chain that doesn't end in a terminator loses its exceptions:\n\n```java\n// WRONG — no one ever observes the exception\nvoid placeOrder(Order order) {\n    orderService.validateAsync(order)\n        .thenCompose(v -> paymentService.chargeAsync(v))\n        .thenCompose(p -> fulfillmentService.shipAsync(p));\n    // Returns void; no .get(), no .exceptionally(), no .handle()\n    // If any stage fails, the exception is garbage-collected silently.\n}\n```\n\nThe request appears to succeed (the method returns without throwing), but the order never shipped, and nothing is logged.\n\n**Fixed**:\n```java\nCompletableFuture<Void> placeOrder(Order order) {\n    return orderService.validateAsync(order)\n        .thenCompose(v -> paymentService.chargeAsync(v))\n        .thenCompose(p -> fulfillmentService.shipAsync(p))\n        .whenComplete((result, ex) -> {\n            if (ex != null) {\n                log.error(\"Order {} failed\", order.id(), ex);\n                metrics.recordOrderFailure();\n            }\n        })\n        .exceptionally(ex -> {\n            // Convert to a business exception the caller can handle\n            throw new OrderFailedException(order.id(), ex);\n        });\n}\n```\n\nNow the caller gets a failed future, and logging/metrics run regardless of the outcome."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Choosing Between the Three",
+            "content": "| Situation | Use |\n|---|---|\n| Recover from error with a default value | `exceptionally` |\n| Recover asynchronously (call backup service) | `exceptionallyCompose` (Java 12+) |\n| Build a response object that encodes success/failure status | `handle` |\n| Change result type in both branches | `handle` |\n| Log, record metrics, audit without changing outcome | `whenComplete` |\n| Retry on specific exception types | custom `handle` that re-invokes the async + recurses, or a library like Resilience4j |\n\n**Chaining patterns**:\n- **Tap before recovery**: `.whenComplete(log)` then `.exceptionally(fallback)` — logs every outcome, then recovers from failure.\n- **Typed exception filter**: in `exceptionally`, check `ex.getCause()` against specific types and rethrow others:\n```java\n.exceptionally(ex -> {\n    Throwable cause = unwrap(ex);\n    if (cause instanceof IOException) return fallback();\n    if (ex instanceof CompletionException) throw (CompletionException) ex;\n    throw new CompletionException(ex);\n})\n```\n- **Bounded retry**: extract a method `CompletableFuture<T> withRetry(Supplier<CompletableFuture<T>> op, int attempts)`.\n\n**Watch out for**:\n- **Lost exceptions** — always terminate chains with `handle`/`exceptionally`/`whenComplete` or ensure the future is returned to a caller who `.join()`s.\n- **Callback swallowing via `handle`** — if your `handle` function doesn't rethrow in the error case, the exception is recovered. That's intentional for recovery but a bug for logging.\n- **`CompletionException` unwrapping** — always check `getCause()`, especially when pattern-matching exception types.\n- **Executor switching** — the `*Async` variants of these methods exist and should be used if the handler does non-trivial work."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- Three exception hooks: **`exceptionally`** (failure-only recovery), **`handle`** (both branches, transform), **`whenComplete`** (both, observe-only).\n- **`exceptionally`** — `Function<Throwable, T>`; fallback value on failure; pass-through on success.\n- **`handle`** — `BiFunction<T, Throwable, U>`; runs both; can change type.\n- **`whenComplete`** — `BiConsumer<T, Throwable>`; runs both; can't change result; exception still propagates.\n- **Always terminate** a CompletableFuture chain with one of these hooks or return it to a caller that `.join()`s — otherwise exceptions are silently dropped.\n- **CompletionException wrapping** — unwrap with `.getCause()` to access the real exception.\n- **Java 12+**: `exceptionallyCompose` for async fallbacks; `exceptionallyAsync` for executor control.\n- **`whenComplete` ≠ `handle`**: whenComplete can't swallow the exception; handle can.\n- Common pattern: `.whenComplete(log)` then `.exceptionally(fallback)` — log everything, then recover."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`CompletableFuture` has three exception-handling hooks with distinct semantics.\n\n**`exceptionally(fn)` — recover on failure**\n- `Function<Throwable, T>`\n- Runs **only** on upstream failure; success value passes through untouched\n- Returns a replacement value; the resulting future succeeds\n- Same type `T` in and out\n- Use for: \"on error, fall back to cached/default value\"\n- Java 12+ adds `exceptionallyAsync` (on executor) and `exceptionallyCompose` (async fallback)\n\n**`handle(biFn)` — transform both branches**\n- `BiFunction<T, Throwable, U>`\n- Runs on **both** success and failure; one of the two params is null\n- Can change type: `T → U`\n- Returns new value; exception is swallowed unless biFn rethrows\n- Use for: uniform response builder (wrap result or error into a Response object), metric recording with typed return\n\n**`whenComplete(biCons)` — observe, don't touch**\n- `BiConsumer<T, Throwable>`\n- Runs on **both** branches\n- **Cannot change the result** — pass-through\n- Exception propagates downstream unchanged\n- Use for: logging, metrics, audit trails\n- If biCons itself throws, the new exception suppresses the original\n\n**Decision guide**\n- Need fallback value on error? → `exceptionally`\n- Need to transform both branches into a unified result? → `handle`\n- Need side effects without altering outcome? → `whenComplete`\n\n**The silent-failure trap**\n- A chain with no terminator loses exceptions\n- `future.thenCompose(x).thenApply(y);` — returns void, exception vanishes\n- Fix: always end with `whenComplete` + `exceptionally`, or return the future to someone who `.join()`s\n\n**CompletionException wrapping**\n- Inside exception hooks, the Throwable is typically wrapped\n- `ex.getCause()` to get the real exception\n- At `.join()`: throws `CompletionException` (unchecked); unwrap with getCause\n- At `.get()`: throws `ExecutionException` (checked); same getCause dance\n\n**Common patterns**\n- **Tap-then-recover**: `.whenComplete(log)` then `.exceptionally(fallback)` — log every outcome, fall back on errors\n- **Typed filter**: inside `exceptionally`, check `ex.getCause()` type; rethrow others as `CompletionException`\n- **Retry**: extract a helper that composes `handle` + re-invocation of the async supplier\n\n**Recommendation:** Treat **every** CompletableFuture chain like a promise chain in JavaScript — **terminate it** with a handler, or pass it to a caller who will. An unterminated chain that fails is indistinguishable from a successful one and creates the nastiest kind of silent bug. **Use `exceptionally` for simple fallback**, **`handle` when you want to unify success and failure into one response type**, **`whenComplete` as a logging tap** that doesn't change semantics. And always write a helper that **unwraps `CompletionException`** before matching on exception types — that code gets written once, used everywhere, and saves hours of debugging."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens if the function inside `exceptionally` itself throws?",
+        "How do you retry a failed CompletableFuture on a specific exception type?",
+        "What's the difference between `whenComplete` and `handle` — why both?",
+        "Why is the exception inside `exceptionally` often a `CompletionException`?",
+        "How would you fall back to a backup service asynchronously on failure?"
+      ],
+      "seo": {
+        "metaTitle": "CompletableFuture Exception Handling — exceptionally vs handle vs whenComplete",
+        "metaDescription": "Complete guide to exception handling in Java CompletableFuture: exceptionally (recover), handle (transform both), whenComplete (observe), CompletionException unwrapping, and common patterns."
+      },
+      "order": 5,
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "CompletableFuture has three exception-handling hooks with distinct semantics.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "CompletableFuture has three exception-handling methods that appear similar but have very different semantics: | Method | Runs on Success? | Runs on Failure? | Can Change Result? | Exception Propagates? | |---|---|---|---|---| | exceptionally(fn) | No | Yes | Yes (supplies fallback) | No (recovered) | | handle(biFn) | Yes | Yes | Yes (can transform) | No (unless biFn rethrows) | | whenComplete(biCons) | Yes | Yes | No."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "| Situation | Use | |---|---| | Recover from error with a default value | exceptionally | | Recover asynchronously (call backup service) | exceptionallyCompose (Java 12+) | | Build a response object that encodes success/failure status | handle | | Change result type in both branches | handle | | Log, record metrics, audit without changing outcome | whenComplete | | Retry on specific exception types | custom handle that re-invokes the async + recurses, or a library like Resilience4j | Chaining patterns: Tap before recovery:",
+              "whenComplete(log) then",
+              "exceptionally(fallback) — logs every outcome, then recovers from failure",
+              "Typed exception filter: in exceptionally, check ex",
+              "getCause() against specific types and rethrow others: ``java"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "| Situation | Use | |---|---| | Recover from error with a default value | exceptionally | | Recover asynchronously (call backup service) | exceptionallyCompose (Java 12+) | | Build a response object that encodes success/failure status | handle | | Change result type in both branches | handle | | Log, record metrics, audit without changing outcome | whenComplete | | Retry on specific exception types | custom handle that re-invokes the async + recurses, or a library like Resilience4j | Chaining patterns: Tap before recovery: .whenComplete(log) then .exceptionally(fallback)."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "CompletableFuture has three exception-handling methods that appear similar but have very different semantics: | Method | Runs on Success? | Runs on Failure? | Can Change Result? | Exception Propagates? | |---|---|---|---|---| | exceptionally(fn) | No | Yes | Yes (supplies fallback) | No (recovered) | | handle(biFn) | Yes | Yes | Yes (can transform) | No (unless biFn."
+          }
+        ],
+        "cap": "And always write a helper that unwraps CompletionException before matching on exception types — that code gets written once, used everywhere, and saves hours of debugging.",
+        "familiarity_anchors": [
+          "CompletableFuture",
+          "Function",
+          "Throwable"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens if the function inside `exceptionally` itself throws?",
+          "How do you retry a failed CompletableFuture on a specific exception type?",
+          "What's the difference between `whenComplete` and `handle` — why both?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 multi-threaded service handling concurrent requests"
+      }
+    }
+  ]
+}

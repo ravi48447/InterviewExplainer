@@ -1,0 +1,259 @@
+{
+  "topic": "Replication",
+  "topicSlug": "replication",
+  "questions": [
+    {
+      "id": "mysql-006",
+      "slug": "mysql-replication-primary-replica",
+      "question": "How does MySQL primary-replica replication work and how does it affect a Spring Boot application's read/write strategy?",
+      "title": "MySQL Replication: Primary-Replica Setup",
+      "direct_answer": "MySQL replication streams **binary log (binlog)** events from the primary to one or more replicas asynchronously. On each replica an **I/O thread** pulls binlog events into a local relay log, and an **SQL thread** (or multi-threaded workers) replays them. In Spring Boot, you configure separate DataSource beans for writes (primary) and reads (replicas) and use `AbstractRoutingDataSource` with `@Transactional(readOnly=true)` to split traffic, while handling replication lag for read-your-writes.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand the full replication pipeline (binlog, I/O thread, relay log, SQL thread), the consistency trade-offs of async vs semi-sync, and how to implement read/write splitting in a Spring Boot application.",
+        "common_mistake": "Routing reads to replicas without considering replication lag, producing read-your-writes bugs where users do not see their own changes. Another common mistake is assuming async replication is safe — a primary crash can lose recently committed transactions.",
+        "to_stand_out": "Explain GTID-based replication, how automated failover with Orchestrator or InnoDB Cluster works, and when Aurora or Spanner-style replication is preferable to self-managed binlog replication."
+      },
+      "company_tags": [
+        "Uber",
+        "Shopify",
+        "Booking.com",
+        "Stripe",
+        "Meta",
+        "GitHub"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "How MySQL Replication Scales Reads and Enables Failover",
+            "content": "MySQL replication lets one **primary** node stream all writes to one or more **replicas**.\n- The primary records every committed change in a sequential binary log; each replica connects, downloads events, and applies them locally.\n- This enables three production capabilities: **read scaling** by routing SELECTs to replicas, **high availability** by promoting a replica if the primary fails, and **zero-impact backups** taken from a replica.\n\nThe core trade-off is **replication lag**.\n- Async replication commits on the primary before any replica acknowledges receipt, so a reader hitting a lagging replica immediately after a write may see the pre-write state.\n- Lag is normally milliseconds but can spike to seconds during heavy writes, long transactions, or single-threaded SQL thread bottlenecks on the replica.\n\nFor a Spring Boot application the design question is always: which reads can tolerate stale data, which cannot, and how do we route accordingly?"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Binlog → I/O Thread → Relay Log → SQL Thread Flow",
+            "diagram_format": "mermaid",
+            "content": "```mermaid\nflowchart LR\n    subgraph Primary\n        clientWrite[\"Client Write\"] --> engine[\"InnoDB Engine\"]\n        engine --> binlog[\"Binary Log (binlog)\"]\n    end\n    subgraph Replica\n        ioThread[\"I/O Thread\"] --> relayLog[\"Relay Log\"]\n        relayLog --> sqlThread[\"SQL Thread / Workers\"]\n        sqlThread --> replicaData[\"Replica Tables\"]\n    end\n    binlog -- \"streamed events\" --> ioThread\n    readClient[\"Read Client\"] --> replicaData\n    writeClient[\"Write Client\"] --> engine\n```"
+          },
+          {
+            "type": "step",
+            "title": "The Replication Pipeline in Detail",
+            "content": "**Primary side — binlog generation**\n- Every committed transaction writes events to the binary log in commit order\n- `binlog_format = ROW` (recommended) records before/after row images; `STATEMENT` records raw SQL and breaks on non-deterministic functions like `NOW()` or `UUID()`\n- `sync_binlog = 1` fsyncs the binlog on every commit — required for durability, costs write latency\n\n**Replica side — two threads per channel**\n- **I/O thread** opens a TCP connection to the primary, requests events from its last known position, and writes them to a local relay log on disk\n- **SQL thread** reads from the relay log and executes events against the replica's tables; since MySQL 5.7 this can run as parallel workers (`slave_parallel_workers`)\n- The replica tracks position by file+offset (legacy) or by GTID set (recommended)\n\n```sql\n-- Configure replica to follow a primary via GTID\nCHANGE REPLICATION SOURCE TO\n    SOURCE_HOST='primary.db.internal',\n    SOURCE_USER='repl_user',\n    SOURCE_PASSWORD='...',\n    SOURCE_AUTO_POSITION=1;\n\nSTART REPLICA;\n\n-- Inspect replication health\nSHOW REPLICA STATUS\\G\n-- Seconds_Behind_Source: replication lag in seconds\n-- Replica_IO_Running / Replica_SQL_Running: must both be 'Yes'\n-- Last_IO_Error / Last_SQL_Error: surface failures immediately\n```\n\n**Replication modes**\n- **Async (default)**: primary commits before replicas acknowledge — lowest latency, highest data-loss risk on primary crash\n- **Semi-sync** (`rpl_semi_sync_master_enabled = 1`): primary waits for at least one replica to acknowledge binlog receipt before returning to the client — bounds data loss\n- **Group Replication / InnoDB Cluster**: synchronous multi-node consensus via a Paxos-derived protocol — no data loss, higher write latency"
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Boot Read/Write Routing with AbstractRoutingDataSource",
+            "language": "java",
+            "content": "// 1. ThreadLocal key holder\npublic class DataSourceContextHolder {\n    private static final ThreadLocal<String> context = new ThreadLocal<>();\n    public static void setDataSourceType(String type) { context.set(type); }\n    public static String getDataSourceType() { return context.get(); }\n    public static void clear() { context.remove(); }\n}\n\n// 2. Routing DataSource\npublic class RoutingDataSource extends AbstractRoutingDataSource {\n    @Override\n    protected Object determineCurrentLookupKey() {\n        return DataSourceContextHolder.getDataSourceType();\n    }\n}\n\n// 3. DataSource configuration\n@Configuration\npublic class DataSourceConfig {\n    @Bean\n    @ConfigurationProperties(\"spring.datasource.primary\")\n    public DataSource primaryDataSource() { return DataSourceBuilder.create().build(); }\n\n    @Bean\n    @ConfigurationProperties(\"spring.datasource.replica\")\n    public DataSource replicaDataSource() { return DataSourceBuilder.create().build(); }\n\n    @Bean @Primary\n    public DataSource routingDataSource(\n            @Qualifier(\"primaryDataSource\") DataSource primary,\n            @Qualifier(\"replicaDataSource\") DataSource replica) {\n        RoutingDataSource rds = new RoutingDataSource();\n        Map<Object, Object> sources = new HashMap<>();\n        sources.put(\"primary\", primary);\n        sources.put(\"replica\", replica);\n        rds.setTargetDataSources(sources);\n        rds.setDefaultTargetDataSource(primary);\n        return rds;\n    }\n}\n\n// 4. Read-your-writes guard: route reads to primary briefly after a write\n@Aspect @Component\npublic class DataSourceRoutingAspect {\n    @Around(\"@annotation(org.springframework.transaction.annotation.Transactional)\")\n    public Object route(ProceedingJoinPoint pjp) throws Throwable {\n        Transactional tx = ((MethodSignature) pjp.getSignature())\n            .getMethod().getAnnotation(Transactional.class);\n        boolean readOnly = tx != null && tx.readOnly();\n        String key = readOnly && !RecentWriteMarker.isRecent() ? \"replica\" : \"primary\";\n        DataSourceContextHolder.setDataSourceType(key);\n        try { return pjp.proceed(); }\n        finally { DataSourceContextHolder.clear(); }\n    }\n}"
+          },
+          {
+            "type": "step",
+            "title": "GTID Replication, Automated Failover, and InnoDB Cluster",
+            "content": "**GTID (Global Transaction Identifier) replication**\n- Assigns every committed transaction a UUID:counter — e.g., `3E11FA47-71CA-11E1-9E33-C80AA9429562:23`\n- Replicas track which GTIDs they have applied, so promoting any replica is a single command — other replicas auto-compute which GTIDs they still need\n- Required for any setup with automated failover; enable with `gtid_mode=ON` + `enforce_gtid_consistency=ON`\n\n**Automated failover with Orchestrator / MHA / Cloud**\n- Health checker detects the primary is unreachable for N seconds\n- Picks the replica with the most advanced applied GTID set as the new primary\n- Waits for that replica to drain its relay log, promotes it, repoints other replicas\n- Updates DNS or VIP so applications reach the new primary\n- Typical RTO: 30–60 seconds; RPO depends on async vs semi-sync\n\n**InnoDB Cluster / Group Replication**\n- Three or more nodes form a consensus group; writes commit only after majority ack\n- MySQL Router proxies connections, handling failover transparently\n- Eliminates the async data-loss window at the cost of write latency\n\n**Cloud-managed alternatives**\n- AWS Aurora replaces binlog replication with a log-structured shared-storage layer; replica lag is typically under 100ms\n- Google Spanner and CockroachDB extend the model to globally distributed strong consistency\n- For new systems, evaluate whether managed services remove enough operational load to justify the premium"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Replication Trade-offs",
+            "content": "**When it helps:**\n- Read-heavy workloads scale linearly by adding replicas\n- Backups run on replicas without impacting primary throughput\n- Analytical queries isolated from OLTP traffic\n- Failover provides high availability with minutes-level RTO\n\n**When it hurts:**\n- Replication lag breaks read-your-writes — needs explicit routing to primary for recent writers\n- Async replication allows data loss on primary crash — recent committed transactions not yet streamed are lost\n- Single-threaded SQL thread becomes a bottleneck on write-heavy primaries; parallel workers require row-based replication\n- Schema changes must be compatible across primary and replicas during rolling deploys\n\n**Watch for:**\n- `Seconds_Behind_Source` spikes during bulk DML or long transactions\n- Replica disk full from relay log accumulation after SQL thread errors\n- Statement-based replication bugs with `NOW()`, `RAND()`, `AUTO_INCREMENT` in mixed environments\n- Replication breaks silently when `binlog_format` differs between primary and replica"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Async replication allows data loss on primary crash** — the primary commits and acknowledges before any replica confirms receipt; semi-sync replication eliminates this window at the cost of write latency\n- **Replication lag breaks read-your-writes** — a user reads from a lagging replica immediately after writing and sees the old value; route reads to the primary for a short post-write window\n- **Row-based replication (binlog_format=ROW) is safer than statement-based** — it replicates exact row changes; statement-based breaks for non-deterministic functions like `NOW()` or `RAND()`\n- **`SHOW REPLICA STATUS` is the first monitoring check** — `Seconds_Behind_Source`, `Replica_IO_Running`, `Replica_SQL_Running`, and `Last_SQL_Error` surface every common failure mode\n- **GTID-based replication simplifies failover** — Global Transaction IDs make promoting any replica a single command instead of computing binlog coordinates by hand"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "MySQL primary-replica replication is the standard way to scale reads — the primary handles all writes and streams changes to replicas via the binary log.\n\n**How it works**\n- Every write on the primary is recorded in the binary log in commit order — each replica runs an I/O thread that pulls binlog events into a local relay log, and an SQL thread that replays those events\n- Replication is asynchronous by default, which means there's always some lag — how much depends on replica hardware and primary write rate\n\n**Async vs semi-sync vs Group Replication**\n- Async: primary acknowledges commit before any replica confirms — lowest latency, but a primary crash can lose recently committed transactions\n- Semi-sync: primary waits for at least one replica to ack binlog receipt — bounds data loss at the cost of a small latency bump\n- Group Replication: synchronous multi-node consensus — no data loss, higher write latency; used in InnoDB Cluster\n\n**Read routing in Spring Boot**\n- Configure separate DataSource beans for primary and replica, wire them into an `AbstractRoutingDataSource` that picks based on `@Transactional(readOnly=true)`\n- For read-your-writes, remember the user just wrote and route their next reads to the primary for a short window — otherwise they hit a lagging replica and see stale data\n\nRow-based replication is the production default — it replicates exact row changes and avoids the determinism bugs that plague statement-based replication."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you handle the scenario where a user creates a record and then immediately reads it — and the replica hasn't caught up yet?",
+        "What is GTID replication and what problem does it solve over binlog position-based replication?",
+        "How would you promote a replica to primary in a failover scenario with zero data loss?",
+        "How does Aurora's shared-storage replication differ from traditional binlog replication?"
+      ],
+      "seo": {
+        "metaTitle": "MySQL Primary-Replica Replication — Spring Boot Read/Write Routing | Interview Guide",
+        "metaDescription": "Understand MySQL binlog replication, GTID-based failover, and Spring Boot read/write splitting with AbstractRoutingDataSource. Covers lag, read-your-writes, and InnoDB Cluster."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P03",
+        "hook": "MySQL primary-replica replication is the standard way to scale reads — the primary handles all writes and streams changes to replicas via the binary log.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "MySQL replication lets one primary node stream all writes to one or more replicas. The primary records every committed change in a sequential binary log; each replica connects, downloads events, and applies them locally. This enables three production capabilities: read scaling by routing SELECTs to replicas, high availability by promoting a replica if the primary fails, and zero-impact backups taken from a replica. The core trade-off is replication lag. Async."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "When it helps: Read-heavy workloads scale linearly by adding replicas Backups run on replicas without impacting primary throughput Analytical queries isolated from OLTP traffic Failover provides high availability with minutes-level RTO When it hurts: Replication lag breaks read-your-writes — needs explicit routing to primary for recent writers Async replication allows data loss on primary crash — recent committed transactions not yet streamed are lost Single-threaded SQL thread becomes a bottleneck on write-heavy primaries",
+              "parallel workers require row-based replication Schema changes must be compatible across primary and replicas during rolling deploys Watch for: Seconds_Behind_Source spikes during bulk DML or long transactions Replica disk full from relay log accumulation after SQL thread errors Statement-based replication bugs with NOW(), RAND(), AUTO_INCREMENT in mixed environments Replication breaks silently when binlog_format differs between primary and replica"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When it helps: Read-heavy workloads scale linearly by adding replicas Backups run on replicas without impacting primary throughput Analytical queries isolated from OLTP traffic Failover provides high availability with minutes-level RTO When it hurts: Replication lag breaks read-your-writes — needs explicit routing to primary for recent writers Async replication allows data loss on primary crash — recent committed transactions not yet streamed are lost Single-threaded SQL thread becomes a bottleneck on write-heavy primaries; parallel workers require row-based replication Schema changes must be compatible across primary and replicas during rolling deploys."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "// 1. ThreadLocal key holder public class DataSourceContextHolder { private static final ThreadLocal<String> context = new ThreadLocal<>(); public static void setDataSourceType(String type) { context.set(type); } public static String getDataSourceType() { return context.get(); } public static void clear() { context.remove(); } } // 2. Routing DataSource public class RoutingDataSource extends AbstractRoutingDataSource { @Override protected Object determineCurrentLookupKey() { return DataSourceContextHolder.getDataSourceType(); } }."
+          }
+        ],
+        "cap": "How it works Every write on the primary is recorded in the binary log in commit order — each replica runs an I/O thread that pulls binlog events into a local relay log, and an.",
+        "familiarity_anchors": [
+          "MySQL",
+          "Spring",
+          "DataSource"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you handle the scenario where a user creates a record and then immediately reads it — and the replica hasn't caught up yet?",
+          "What is GTID replication and what problem does it solve over binlog position-based replication?",
+          "How would you promote a replica to primary in a failover scenario with zero data loss?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with JPA over a relational database"
+      }
+    },
+    {
+      "id": "pg-streaming-replication",
+      "slug": "postgresql-streaming-replication-and-logical-replication",
+      "question": "How does PostgreSQL streaming replication work, and when do you use logical replication instead?",
+      "title": "PostgreSQL Streaming vs Logical Replication",
+      "direct_answer": "PostgreSQL offers two replication families. **Streaming (physical) replication** ships **WAL** records from the primary to standbys byte-for-byte — the standby is an exact block-level copy, great for HA and read scaling but bound to the same major version and cluster-wide. **Logical replication** decodes WAL into logical row changes per publication and applies them on the subscriber, enabling cross-version upgrades, selective table replication, and cross-database data movement. Sync modes range from async (default) to `synchronous_commit=remote_apply` for zero data loss.",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can distinguish physical (WAL-level) from logical (row-level) replication, pick the right mode for HA vs migration vs CDC, and configure replication slots, synchronous commit, and publications correctly.",
+        "common_mistake": "Using streaming replication for zero-downtime major-version upgrades — it cannot cross major versions. Another is forgetting to drop orphaned replication slots, which causes the primary's WAL to grow until disk fills.",
+        "to_stand_out": "Explain replication slots and why they are required for reliable standbys, how `pg_stat_replication` diagnoses lag, and how logical replication underpins Debezium-based CDC pipelines."
+      },
+      "company_tags": [
+        "Instagram",
+        "GitLab",
+        "Heroku",
+        "Crunchy Data",
+        "Stripe",
+        "Zalando"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Replication Models, Two Different Problems",
+            "content": "PostgreSQL ships with two complementary replication systems built on top of the **write-ahead log (WAL)**. Every modification — DML, DDL, index updates, vacuum work — is recorded to WAL before the data page is marked dirty; replication reuses this log.\n\n**Streaming (physical) replication** transports raw WAL bytes to standby servers, which apply them block-for-block.\n- The standby is a physical twin of the primary, suitable for **hot standby reads** and **fast failover**.\n- It cannot cross major versions, cannot selectively replicate a subset of tables, and cannot be written to while acting as standby.\n\n**Logical replication** decodes WAL into a logical change stream (INSERT/UPDATE/DELETE per table) and ships that stream to subscribers, which apply the changes through normal SQL. This enables **major-version upgrades with minimal downtime**, **partial replication** (specific tables or schemas), and **CDC pipelines** via tools like Debezium.\n\nKnowing which to use for a given problem is the senior-level signal interviewers probe for."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Physical vs Logical Replication",
+            "content": "A short way to see the choice: physical is for HA and read scaling within a cluster; logical is for moving data across versions, databases, or systems.\n\n| Dimension | Streaming (Physical) | Logical |\n|---|---|---|\n| Unit of replication | Raw WAL bytes | Decoded row changes per table |\n| Cross major versions | No | Yes (PG 10+) |\n| Selective tables | No | Yes via publications |\n| Writes on replica | No (read-only) | Yes (each side independent) |\n| DDL replication | Automatic | Not replicated (manual) |\n| Typical use | HA, read replicas, PITR base | Upgrades, CDC, multi-master patterns |\n| Tooling | `pg_basebackup`, replication slot | `CREATE PUBLICATION/SUBSCRIPTION`, Debezium |"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Streaming Replication Topology",
+            "diagram_format": "mermaid",
+            "content": "```mermaid\nflowchart LR\n    subgraph Primary\n        client[\"Client Writes\"] --> wal[\"WAL Writer\"]\n        wal --> walFiles[\"pg_wal segments\"]\n        walFiles --> slot[\"Replication Slot\"]\n    end\n    subgraph StandbyA[\"Hot Standby A (sync)\"]\n        walReceiverA[\"walreceiver\"] --> applyA[\"startup/recovery\"]\n        applyA --> standbyDataA[\"Standby Heap & Indexes\"]\n    end\n    subgraph StandbyB[\"Hot Standby B (async)\"]\n        walReceiverB[\"walreceiver\"] --> applyB[\"startup/recovery\"]\n        applyB --> standbyDataB[\"Standby Heap & Indexes\"]\n    end\n    slot --> walReceiverA\n    slot --> walReceiverB\n    readerA[\"Read-only Query\"] --> standbyDataA\n    readerB[\"Read-only Query\"] --> standbyDataB\n```"
+          },
+          {
+            "type": "step",
+            "title": "Configuring Streaming Replication with Replication Slots",
+            "content": "**Primary setup**\n- Set `wal_level = replica`, `max_wal_senders = 10`, `max_replication_slots = 10` in `postgresql.conf`\n- Allow replication connections in `pg_hba.conf`: `host replication replicator 10.0.0.0/8 scram-sha-256`\n- Create a role for replication: `CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '...';`\n- Create a **replication slot** so the primary retains WAL until the standby consumes it\n\n```sql\n-- On the primary\nSELECT pg_create_physical_replication_slot('standby_a');\n```\n\n**Standby setup**\n- Take a base backup that copies the data directory and WAL: `pg_basebackup -h primary -D /var/lib/pgsql/17/data -U replicator -X stream -S standby_a -R`\n- The `-R` flag writes `standby.signal` and adds `primary_conninfo` to `postgresql.auto.conf`\n- Start the standby — it connects, streams WAL, and enters hot-standby read-only mode\n\n**Monitoring**\n```sql\n-- On the primary\nSELECT client_addr, state, sent_lsn, write_lsn, flush_lsn, replay_lsn,\n       pg_wal_lsn_diff(sent_lsn, replay_lsn) AS apply_lag_bytes\nFROM pg_stat_replication;\n\n-- On the standby\nSELECT pg_last_wal_receive_lsn(), pg_last_wal_replay_lsn(),\n       now() - pg_last_xact_replay_timestamp() AS replay_delay;\n```\n\n**The replication-slot hazard**\n- Slots guarantee the primary keeps WAL until the standby replays it\n- If a standby is removed without dropping its slot, WAL accumulates until `pg_wal` fills the disk and the primary stops accepting writes\n- Always `SELECT pg_drop_replication_slot('standby_a');` when retiring a standby"
+          },
+          {
+            "type": "step",
+            "title": "Logical Replication and CDC Pipelines",
+            "content": "**Publication/Subscription model**\n- The publisher declares which tables to publish\n- Each subscriber has an independent copy and can write to other tables or receive publications from multiple publishers\n\n```sql\n-- On the publisher (source)\nALTER SYSTEM SET wal_level = 'logical';\n-- restart\nCREATE PUBLICATION app_pub FOR TABLE orders, order_items, customers;\n\n-- On the subscriber (target)\nCREATE SUBSCRIPTION app_sub\n    CONNECTION 'host=publisher.db user=replicator password=... dbname=app'\n    PUBLICATION app_pub;\n```\n\n**Use cases**\n- **Zero-downtime major upgrades**: set up a PG 17 subscriber reading from a PG 14 publisher, let it catch up, switch the application at a quiet moment\n- **Selective replication**: replicate only customer-facing tables to a read-only analytics node\n- **Cross-region read models**: maintain a denormalized copy per region without full cluster replication\n- **CDC via Debezium**: Debezium attaches as a logical-replication consumer using the `pgoutput` plugin, publishes row changes to Kafka, and feeds downstream search indexes, caches, and warehouses\n\n**Gotchas**\n- DDL is not replicated — run schema migrations on both sides (Flyway/Liquibase helps)\n- Primary keys are required on replicated tables (or `REPLICA IDENTITY FULL`, which is expensive)\n- Large initial copies can stall WAL retention — monitor `pg_replication_slots.wal_status`\n- Sequences are not advanced on the subscriber; resync at cutover"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Use Each",
+            "content": "**When streaming replication helps:**\n- Same-version HA with fast failover via Patroni or repmgr\n- Read scaling for analytics and reports that tolerate sub-second lag\n- Physical backups via `pg_basebackup` plus WAL archive for PITR\n\n**When streaming replication hurts:**\n- Cannot upgrade PostgreSQL major versions without downtime\n- Cannot replicate a subset of tables or a single database only\n- Cannot accept writes on the standby\n\n**When logical replication helps:**\n- Near-zero-downtime major-version upgrades\n- CDC pipelines into Kafka, Elasticsearch, Snowflake via Debezium\n- Per-region read models, multi-tenant data distribution\n\n**Watch for:**\n- Orphaned replication slots filling `pg_wal` and halting writes\n- `synchronous_commit = remote_apply` destroying write latency if the sync standby is geographically far\n- DDL drift between publisher and subscriber breaking logical replication silently"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Physical replication is block-level, logical is row-level** — physical standbys are exact copies; logical subscribers apply decoded INSERT/UPDATE/DELETE events and can diverge\n- **Replication slots prevent WAL loss but risk disk fill** — they guarantee the primary keeps WAL until the replica consumes it; always drop slots when retiring standbys\n- **`synchronous_commit` controls the durability guarantee** — `off` is fire-and-forget, `on` fsyncs locally, `remote_write` and `remote_apply` wait on a sync standby\n- **Logical replication is the standard upgrade path** — spin up a new-version subscriber, catch up, switch the application; downtime is measured in seconds\n- **Debezium uses `pgoutput` as a logical consumer** — it reads the same change stream that logical replication uses and publishes events to Kafka for CDC pipelines"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "PostgreSQL has two replication systems and choosing the right one is usually half the interview answer.\n\n**Streaming replication — for HA and read scaling**\n- Ships raw WAL bytes from the primary to standbys that replay them block-for-block; the standby is an identical copy and can serve read-only queries\n- Configure `wal_level=replica`, create a replication slot so the primary keeps WAL until the standby consumes it, and take a base backup with `pg_basebackup -R` to bootstrap the standby\n- Monitor with `pg_stat_replication` — the LSN diff between `sent_lsn` and `replay_lsn` is your lag metric\n\n**Logical replication — for upgrades and partial copies**\n- Decodes WAL into row-level change events and ships them per publication; subscribers apply through regular SQL, so cross-version and cross-database replication work\n- Used for zero-downtime major-version upgrades, selective replication of a few tables, and CDC into Kafka via Debezium's `pgoutput` plugin\n- Requires primary keys on replicated tables and manual DDL propagation — run Flyway on both sides\n\n**Pitfalls worth mentioning**\n- Orphaned replication slots fill `pg_wal` and bring down the primary — always drop slots when retiring standbys\n- Synchronous commit modes trade durability for write latency; pick based on how far the sync standby is geographically\n\nIn practice: streaming for HA, logical for anything that crosses a boundary — version, database, or system."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is a replication slot and why is it required for reliable standbys?",
+        "How would you perform a major-version upgrade with near-zero downtime using logical replication?",
+        "How does Debezium hook into PostgreSQL's WAL stream?",
+        "What does `synchronous_commit = remote_apply` guarantee and what does it cost?"
+      ],
+      "seo": {
+        "metaTitle": "PostgreSQL Streaming vs Logical Replication — Interview Guide",
+        "metaDescription": "Understand PostgreSQL WAL streaming replication vs logical replication. Covers replication slots, synchronous commit, pg_stat_replication, and Debezium-based CDC."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P03",
+        "hook": "PostgreSQL has two replication systems and choosing the right one is usually half the interview answer.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "PostgreSQL ships with two complementary replication systems built on top of the write-ahead log (WAL). Every modification — DML, DDL, index updates, vacuum work — is recorded to WAL before the data page is marked dirty; replication reuses this log. Streaming (physical) replication transports raw WAL bytes to standby servers, which apply them block-for-block. The standby is a physical twin of the primary, suitable for hot standby reads and fast."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "A short way to see the choice: physical is for HA and read scaling within a cluster; logical is for moving data across versions, databases, or systems",
+              "| Dimension | Streaming (Physical) | Logical | |---|---|---| | Unit of replication | Raw WAL bytes | Decoded row changes per table | | Cross major versions | No | Yes (PG 10+) | | Selective tables | No | Yes via publications | | Writes on replica | No (read-only) | Yes (each side independent) | | DDL replication | Automatic | Not replicated (manual) | | Typical use | HA, read replicas, PITR base | Upgrades, CDC, multi-master patterns | | Tooling | pg_basebackup, replication slot | CREATE PUBLICATION/SUBSCRIPTION, Debezium |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When streaming replication helps: Same-version HA with fast failover via Patroni or repmgr Read scaling for analytics and reports that tolerate sub-second lag Physical backups via pg_basebackup plus WAL archive for PITR When streaming replication hurts: Cannot upgrade PostgreSQL major versions without downtime Cannot replicate a subset of tables or a single database only Cannot accept writes on the standby When logical replication helps: Near-zero-downtime major-version upgrades CDC pipelines into Kafka, Elasticsearch, Snowflake via Debezium Per-region read models, multi-tenant data distribution Watch for: Orphaned replication slots filling pg_wal and halting."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "PostgreSQL ships with two complementary replication systems built on top of the write-ahead log (WAL). Every modification — DML, DDL, index updates, vacuum work — is recorded to WAL before the data page is marked dirty; replication reuses this log. Streaming (physical) replication transports raw WAL bytes to standby servers, which apply them block-for-block. The standby is a physical twin."
+          }
+        ],
+        "cap": "Streaming replication — for HA and read scaling Ships raw WAL bytes from the primary to standbys that replay them block-for-block; the standby is an identical copy and can serve read-only queries Conf",
+        "familiarity_anchors": [
+          "PostgreSQL",
+          "Streaming",
+          "Logical"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is a replication slot and why is it required for reliable standbys?",
+          "How would you perform a major-version upgrade with near-zero downtime using logical replication?",
+          "How does Debezium hook into PostgreSQL's WAL stream?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with JPA over a relational database"
+      }
+    }
+  ]
+}

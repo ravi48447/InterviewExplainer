@@ -1,0 +1,271 @@
+{
+  "topic": "Security Fundamentals",
+  "topicSlug": "security-fundamentals",
+  "questions": [
+    {
+      "id": "ss-001",
+      "slug": "spring-security-filter-chain",
+      "question": "How does the Spring Security filter chain work, and in what order do requests flow through it?",
+      "title": "Spring Security Filter Chain — How Requests Flow Through",
+      "direct_answer": "The Spring Security filter chain is a series of **servlet filters** that intercept every HTTP request **before** it reaches your controller. **`DelegatingFilterProxy`** delegates to **`FilterChainProxy`**, which holds one or more **`SecurityFilterChain`** beans. For each request, the **first matching chain** runs, and its filters execute in a fixed order: **`SecurityContextHolderFilter`** (loads context) -> headers/CORS/CSRF -> **authentication filters** (`UsernamePasswordAuthenticationFilter`, `BearerTokenAuthenticationFilter`) -> **`AnonymousAuthenticationFilter`** -> **`ExceptionTranslationFilter`** -> **`AuthorizationFilter`** (final access check, replaces `FilterSecurityInterceptor` in 6.x). The chain halts early if any check fails.",
+      "layout_type": "lifecycle-timeline",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands that Spring Security is filter-based and can reason about ordering and short-circuit behavior.",
+        "common_mistake": "Thinking Spring Security hooks into the controller layer — it operates entirely at the servlet filter level, before DispatcherServlet.",
+        "to_stand_out": "Mention FilterChainProxy, SecurityFilterChain beans, and how multiple chains can match different URL patterns with different configurations."
+      },
+      "company_tags": [
+        "amazon",
+        "google",
+        "netflix",
+        "pivotal",
+        "vmware"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Spring Security Operates Entirely at the Servlet Filter Level",
+            "content": "The most important architectural fact: **Spring Security works as a servlet filter chain, not at the controller level.** By the time a request reaches your `@RestController`, authentication and authorization have already happened.\n- If rejected, the controller method **never executes**.\n- Developers who think Spring Security intercepts inside Spring MVC are surprised when a custom `HandlerInterceptor` runs *after* Spring Security has already decided.\n\nSpring registers a single **`DelegatingFilterProxy`** in the servlet container.\n- This proxy looks up **`FilterChainProxy`** from the Spring `ApplicationContext`. `FilterChainProxy` holds one or more **`SecurityFilterChain`** beans — each matching a URL pattern with an ordered list of security filters.\n- A request to `/api/**` might hit one chain with JWT auth, while `/admin/**` hits another with form login.\n\n**Filter order within a chain is fixed by `FilterOrderRegistration`** — it's not configurable.\n- Inserting a custom filter at the wrong position breaks the security model in non-obvious ways.\n- A custom auth filter placed after `AuthorizationFilter` means every request is rejected before the custom filter runs. `addFilterBefore()`, `addFilterAfter()`, and `addFilterAt()` make placement precise."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Filter Chain Order (Servlet)",
+            "content": "```mermaid\nflowchart TD\n    req[\"HTTP request\"] --> dfp[\"DelegatingFilterProxy (servlet container)\"]\n    dfp --> fcp[\"FilterChainProxy (Spring managed)\"]\n    fcp --> match{\"First SecurityFilterChain whose request matcher matches?\"}\n    match --> sch[\"SecurityContextHolderFilter (load SecurityContext from session or create empty for stateless)\"]\n    sch --> hwf[\"HeaderWriterFilter (X-Frame-Options, HSTS, CSP, X-Content-Type-Options)\"]\n    hwf --> cors[\"CorsFilter (if http.cors configured)\"]\n    cors --> csrf[\"CsrfFilter (validate CSRF token for state-changing requests)\"]\n    csrf --> logout[\"LogoutFilter (POST /logout)\"]\n    logout --> oauthInit[\"OAuth2AuthorizationRequestRedirectFilter / Saml2WebSsoAuthenticationRequestFilter\"]\n    oauthInit --> upf[\"UsernamePasswordAuthenticationFilter (POST /login form auth)\"]\n    upf --> btf[\"BearerTokenAuthenticationFilter (Authorization Bearer JWT)\"]\n    btf --> basic[\"BasicAuthenticationFilter (HTTP Basic)\"]\n    basic --> rcf[\"RequestCacheAwareFilter (replay original request after login)\"]\n    rcf --> scharf[\"SecurityContextHolderAwareRequestFilter (adapts HttpServletRequest)\"]\n    scharf --> anon[\"AnonymousAuthenticationFilter (set anonymous principal if still no auth)\"]\n    anon --> etf[\"ExceptionTranslationFilter (catch AuthenticationException -> 401, AccessDeniedException -> 403)\"]\n    etf --> authz[\"AuthorizationFilter (replaces FilterSecurityInterceptor in 6.x; final access check)\"]\n    authz --> ds[\"DispatcherServlet -> @RestController\"]\n```"
+          },
+          {
+            "type": "phase",
+            "title": "Phase 1: FilterChainProxy Selects the Right Chain",
+            "content": "**First-match selection:**\n- `FilterChainProxy` iterates `SecurityFilterChain` beans in registration order\n- Selects the **first** chain whose `RequestMatcher` matches\n- Subsequent chains never fire\n\n**`@Order` controls priority:**\n- Lower order = higher priority (runs first)\n- `@Order(1)` for `/api/**` JWT chain\n- `@Order(2)` for `/**` web fallback\n\n**The classic ordering bug:**\n- Permissive chain matching `/**` registered before `/api/**` chain\n- Web chain catches API requests first\n- API endpoints get redirected to form login instead of returning 401\n- Both chains work individually — bug appears only at runtime\n\n**Within the selected chain:**\n- Filters execute in fixed sequence from `FilterOrderRegistration`\n- Each filter calls `chain.doFilter()` to continue OR sends a response to halt\n- Authentication filters short-circuit on failure (throw `AuthenticationException`)\n- `ExceptionTranslationFilter` catches and sends 401 without reaching `AuthorizationFilter`\n\n**Debugging tip:**\n- `logging.level.org.springframework.security=DEBUG` logs every filter executed per request\n- Prints class name and execution order — chain becomes visible, not inferred\n- **Never** enable in production — logs sensitive security data"
+          },
+          {
+            "type": "phase",
+            "title": "Phase 2: Authentication, Exception Translation, Authorization",
+            "content": "**`SecurityContextHolderFilter` (first):**\n- Session-based auth: loads `SecurityContext` from HTTP session\n- Stateless JWT: creates new empty `SecurityContext`\n- Must run before any auth filter so `SecurityContextHolder.getContext()` returns initialized (if empty) context\n\n**Authentication filters (middle):**\n- Only one typically matches per request\n- `UsernamePasswordAuthenticationFilter` — POST `/login` with form parameters\n- `BearerTokenAuthenticationFilter` — `Authorization: Bearer ...` (OAuth2 Resource Server)\n- `BasicAuthenticationFilter` — HTTP Basic auth\n- On success: `SecurityContextHolder.getContext().setAuthentication(authentication)`\n- On failure: throws `AuthenticationException`\n\n**`ExceptionTranslationFilter` (wraps tail):**\n- Try-catch around remaining filters\n- `AuthenticationException` -> 401 or redirect to login (depending on entry point)\n- `AccessDeniedException` -> 403 or redirect to error page\n- Without it: auth/authz exceptions propagate as unhandled 500s\n\n**`AuthorizationFilter` (last):**\n- Replaced `FilterSecurityInterceptor` in Spring Security 6\n- Evaluates `requestMatchers` rules\n- Throws `AccessDeniedException` if principal lacks required authority\n- Moving it earlier: authorization runs before authentication populates principal — every request fails"
+          },
+          {
+            "type": "phase",
+            "title": "Phase 3: Custom Filter Insertion — A Security Decision",
+            "content": "**Three placement methods:**\n- **`addFilterBefore(custom, ReferenceFilter.class)`** — immediately before reference\n- **`addFilterAfter(custom, ReferenceFilter.class)`** — immediately after\n- **`addFilterAt(custom, ReferenceFilter.class)`** — same conceptual position; both run; order undefined\n\n**Use `addFilterBefore`/`After` for deterministic ordering.**\n\n**Custom API key auth filter — typical placement:**\n\n```java\n@Bean\npublic SecurityFilterChain filterChain(HttpSecurity http) throws Exception {\n    return http\n        .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class)\n        .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())\n        .build();\n}\n```\n\n**Why this position:**\n- Before `UsernamePasswordAuthenticationFilter` — standard auth-filter slot\n- After `SecurityContextHolderFilter` — context is initialized\n- Before `AuthorizationFilter` — auth happens before authz check\n\n**Filter responsibility checklist:**\n- Don't assume other filters have run — check `SecurityContextHolder.getContext().getAuthentication()` before authenticating\n- Don't catch `AuthenticationException` — let `ExceptionTranslationFilter` handle it\n- Don't call `chain.doFilter()` after sending a response\n- Extend `OncePerRequestFilter` to guarantee single execution per request even on async dispatch"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Filter Chain Patterns: Helps, Hurts, Watch For",
+            "content": "**When multiple chains help:**\n- Mixed auth strategies (`/api/**` JWT + `/web/**` session)\n- Different CSRF/session policies per area\n- Actuator with separate auth from app\n\n**When custom filters help:**\n- API key auth alongside JWT/session\n- Multi-tenancy resolution\n- Custom token formats\n- Pre-auth audit logging\n\n**When it hurts:**\n- Re-implementing what built-in filters do (`oauth2ResourceServer`, `formLogin`)\n- Custom filter at wrong position -> empty `SecurityContext` during authorization\n- Catching auth exceptions in custom filter -> security bypass\n- Missing `@Order` -> undefined chain evaluation\n\n**Watch for:**\n- **First-match wins** — order chains carefully; specific before fallback\n- **`AuthorizationFilter` replaces `FilterSecurityInterceptor`** in 6.x — older docs/blogs misleading\n- **`anyRequest()` last** in `authorizeHttpRequests` — earlier rules ignored otherwise\n- **`request.getSession()` in controllers** breaks `STATELESS` policy\n- **Custom filter before `SecurityContextHolderFilter`** — context not initialized\n- **`@WebFilter` annotations** — bypass Spring Security; use `addFilterBefore` instead\n- **`spring.security.debug` in production** — logs sensitive data\n- **Reactive vs servlet mixing** — `SecurityWebFilterChain` is the WebFlux equivalent; can't mix in one app"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Spring Security is entirely filter-based** — operates before `DispatcherServlet`; all checks happen in `FilterChainProxy`.\n- **Multiple `SecurityFilterChain` beans coexist, matched by request pattern** — `@Order` determines priority; first match wins.\n- **Filter order within a chain is fixed by `FilterOrderRegistration`** — insert custom filters with `addFilterBefore`/`After`/`At`.\n- **`UsernamePasswordAuthenticationFilter` (form), `BearerTokenAuthenticationFilter` (JWT), `BasicAuthenticationFilter`** — only one typically matches.\n- **`ExceptionTranslationFilter` translates auth exceptions to 401/403** — wraps the tail of the chain.\n- **`AuthorizationFilter`** is the final access check — replaced `FilterSecurityInterceptor` in 6.x.\n- **`OncePerRequestFilter`** is the standard base for custom filters — guarantees single execution."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**`FilterChainProxy`**\n- Spring registers one `DelegatingFilterProxy` with the Servlet container\n- Delegates to `FilterChainProxy`, which holds multiple `SecurityFilterChain` beans\n- Each chain has a request matcher and an ordered list of security filters\n- First matching chain wins; filters run in fixed order\n\n**Key filters in order**\n- `SecurityContextHolderFilter` -> loads `SecurityContext` from session or creates empty\n- `HeaderWriterFilter` -> security headers\n- `CorsFilter`, `CsrfFilter`, `LogoutFilter`\n- `UsernamePasswordAuthenticationFilter` -> form login POST\n- `BearerTokenAuthenticationFilter` -> JWT Bearer\n- `BasicAuthenticationFilter` -> HTTP Basic\n- `AnonymousAuthenticationFilter` -> sets anonymous if no auth\n- `ExceptionTranslationFilter` -> AuthenticationException -> 401, AccessDeniedException -> 403\n- `AuthorizationFilter` -> last check; replaces `FilterSecurityInterceptor`\n\n**Multiple chains**\n- Define multiple `SecurityFilterChain` beans with `@Order`\n- First matching `requestMatcher` wins\n- Pattern: `@Order(1)` `/api/**` STATELESS JWT; `@Order(2)` `/**` session-based UI\n\n**Custom filter placement**\n- `addFilterBefore(custom, UsernamePasswordAuthenticationFilter.class)` for auth filters\n- Extend `OncePerRequestFilter` for single-execution guarantee\n- Don't catch auth exceptions; let `ExceptionTranslationFilter` handle them\n\n**Common mistakes**\n- Permissive chain registered first catches everything\n- `anyRequest()` before specific rules blocks them\n- Custom filter at wrong position -> empty `SecurityContext`\n- Mixing servlet and reactive in one app"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you add a custom filter at a specific position in the chain?",
+        "What happens when two SecurityFilterChain beans match the same URL?",
+        "How does Spring Security 6 differ from Spring Security 5 in terms of filter chain configuration?",
+        "Why did AuthorizationFilter replace FilterSecurityInterceptor in 6.x?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Security Filter Chain Explained — Java Interview Guide",
+        "metaDescription": "How the Spring Security filter chain processes HTTP requests step-by-step — FilterChainProxy, SecurityFilterChain ordering, authentication, AuthorizationFilter, and custom filter insertion."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "FilterChainProxy Spring registers one DelegatingFilterProxy with the Servlet container Delegates to FilterChainProxy, which holds multiple SecurityFilterChain beans Each chain has a request matcher an",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The most important architectural fact: Spring Security works as a servlet filter chain, not at the controller level. By the time a request reaches your @RestController, authentication and authorization have already happened. If rejected, the controller method never executes. Developers who think Spring Security intercepts inside Spring MVC are surprised when a custom HandlerInterceptor runs after Spring Security has already decided. Spring registers a single DelegatingFilterProxy in the servlet container. This proxy looks up FilterChainProxy from the Spring ApplicationContext. FilterChainProxy."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands that Spring Security is filter-based and can reason about ordering and short-circuit behavior."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Spring Security is entirely filter-based — operates before DispatcherServlet; all checks happen in FilterChainProxy",
+              "Multiple SecurityFilterChain beans coexist, matched by request pattern — @Order determines priority; first match wins",
+              "Filter order within a chain is fixed by FilterOrderRegistration — insert custom filters with addFilterBefore/After/At",
+              "UsernamePasswordAuthenticationFilter (form), BearerTokenAuthenticationFilter (JWT), BasicAuthenticationFilter — only one typically matches",
+              "ExceptionTranslationFilter translates auth exceptions to 401/403 — wraps the tail of the chain"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The most important architectural fact: Spring Security works as a servlet filter chain, not at the controller level. By the time a request reaches your @RestController, authentication and authorization have already happened. If rejected, the controller method never executes. Developers who think Spring Security intercepts inside Spring MVC are surprised when a custom HandlerInterceptor runs after Spring Security has already decided. Spring registers a single DelegatingFilterProxy in the servlet container. This proxy looks up FilterChainProxy from the Spring ApplicationContext. FilterChainProxy holds one or more SecurityFilterChain beans — each matching a URL pattern with an ordered list of security filters. A request to /api/ might hit one chain with JWT auth, while /admin/ hits another with form login. Filter order within."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking Spring Security hooks into the controller layer",
+              "it operates entirely at the servlet filter level, before DispatcherServlet"
+            ]
+          }
+        ],
+        "cap": "FilterChainProxy Spring registers one DelegatingFilterProxy with the Servlet container Delegates to FilterChainProxy, which holds multiple SecurityFilterChain beans Each chain has a request matcher an",
+        "familiarity_anchors": [
+          "Spring",
+          "Security",
+          "DelegatingFilterProxy"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you add a custom filter at a specific position in the chain?",
+          "What happens when two SecurityFilterChain beans match the same URL?",
+          "How does Spring Security 6 differ from Spring Security 5 in terms of filter chain configuration?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JWT-based authentication"
+      }
+    },
+    {
+      "id": "ss-011",
+      "slug": "security-context-security-context-holder",
+      "question": "How do SecurityContext and SecurityContextHolder work internally in Spring Security?",
+      "title": "SecurityContext and SecurityContextHolder — How They Work",
+      "direct_answer": "**`SecurityContextHolder`** is a static class that stores the current **`SecurityContext`** using a **`ThreadLocal`** by default, making the authenticated user's **`Authentication`** accessible anywhere on the request thread without parameter passing. The `SecurityContext` is populated by authentication filters and **cleared after the response** (in a finally block) to prevent leakage between requests sharing pooled threads. The ThreadLocal model breaks under **`@Async`**, **`CompletableFuture`**, and reactive code: the worker thread sees an empty context. Fixes: **`MODE_INHERITABLETHREADLOCAL`** (only safe for non-pooled child threads), **`DelegatingSecurityContextExecutor`** (production solution for thread pools), and **`ReactiveSecurityContextHolder` + Reactor Context** for WebFlux.",
+      "layout_type": "internals-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Deep understanding of the thread-local security model and its implications for async code.",
+        "common_mistake": "Accessing SecurityContextHolder in a @Async method or new Thread and getting null — the child thread has its own empty ThreadLocal.",
+        "to_stand_out": "Discuss MODE_INHERITABLETHREADLOCAL, DelegatingSecurityContextExecutor, and how reactive (WebFlux) Spring Security uses Reactor Context instead of ThreadLocal."
+      },
+      "company_tags": [
+        "netflix",
+        "amazon",
+        "pivotal",
+        "atlassian",
+        "vmware"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "ThreadLocal — Convenient Until You Spawn a Thread",
+            "content": "After authentication succeeds, the **`Authentication`** object is stored in **`SecurityContextHolder`**, which uses a **`ThreadLocal`** strategy by default.\n- Every line of code on the same thread can access the current user via `SecurityContextHolder.getContext().getAuthentication()`.\n- When the request completes, the filter chain **clears it** — so the next request on that thread (in a thread pool) starts with an empty context.\n\n**The ThreadLocal trap:** spawning a new thread gets a **fresh ThreadLocal with no security context**. `@Async` methods, `CompletableFuture.supplyAsync()`, and manually created threads see `getAuthentication()` return null. If that null reaches an `@PreAuthorize`, it throws `InsufficientAuthenticationException` — surfacing as a confusing 403 in a flow that works synchronously.\n\n**This is one of the most common Spring Security bugs in production:** code that works synchronously fails silently when moved to async. The fix depends on the threading model:\n- **`MODE_INHERITABLETHREADLOCAL`** — copies context to child threads at creation time; safe for `new Thread()`, **dangerous for thread pools**\n- **`DelegatingSecurityContextExecutor`** — captures at submission time, restores during execution; safe for thread pools\n- **Reactor Context** (WebFlux) — fundamentally different mechanism, replaces ThreadLocal entirely"
+          },
+          {
+            "type": "phase",
+            "title": "Phase 1: How Authentication Populates the SecurityContext",
+            "content": "**At request entry — `SecurityContextHolderFilter` runs first:**\n- Session-based auth: loads `SecurityContext` from HTTP session (where it was stored after the last request)\n- Stateless JWT: creates new empty `SecurityContext`\n- Either way, `SecurityContextHolder` is initialized before any auth filter sees the request\n\n**During authentication:**\n- `BearerTokenAuthenticationFilter` validates JWT\n- Calls `SecurityContextHolder.getContext().setAuthentication(authentication)`\n- Stores `Authentication` (principal, cleared credentials, `GrantedAuthority` list) in ThreadLocal\n- Every subsequent filter and every line of application code on this thread can access the user\n\n**During request processing:**\n- Service layer can call `SecurityContextHolder.getContext().getAuthentication()` to get principal\n- `@AuthenticationPrincipal` annotation in controllers extracts principal automatically\n- `@PreAuthorize`/`@PostAuthorize` use the context to evaluate SpEL expressions"
+          },
+          {
+            "type": "phase",
+            "title": "Phase 2: Cleanup, Persistence, Why It Matters",
+            "content": "**At request completion:**\n- `SecurityContextHolderFilter`'s finally block calls `SecurityContextHolder.clearContext()`\n- Removes the `SecurityContext` from ThreadLocal entirely\n- Without this clear: thread returning to pool carries previous request's auth into next request -> **privilege escalation vulnerability**\n- Finally block guarantees clear even on exceptions\n\n**For session-based apps — persistence:**\n- `HttpSessionSecurityContextRepository` persists `SecurityContext` to session before response is committed\n- Next request restores it from session in the first step\n- This is what enables session-based logins to persist across requests\n\n**For stateless JWT apps:**\n- No persistence — JWT IS the identity, re-validated per request\n- `SecurityContext` populated fresh per request, cleared after\n- No HTTP session created (with `STATELESS` policy)\n\n**Why ThreadLocal at all:**\n- Avoids passing `Authentication` as parameter through every method\n- Service layer code stays clean\n- Performance: ThreadLocal access is O(1) hash lookup\n- Trade-off: opaque dependency on thread identity, breaks across thread boundaries"
+          },
+          {
+            "type": "phase",
+            "title": "Phase 3: Three Solutions for the Async Problem",
+            "content": "**Solution 1: `MODE_INHERITABLETHREADLOCAL`**\n\n```java\nSecurityContextHolder.setStrategyName(\n    SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);\n```\n\n- Spring uses `InheritableThreadLocal`\n- New thread inherits parent's values at creation time\n- Works for `new Thread()` started fresh per task\n- **Dangerous for thread pools:** threads created once and reused\n- Inherited context = thread-creation context (server startup), not current request\n- User A's request could execute with whatever auth was active when the thread was first spun up\n- **Never use with pooled threads**\n\n**Solution 2: `DelegatingSecurityContextExecutor` — production solution**\n\n```java\n@Bean\npublic Executor securityAwareTaskExecutor() {\n    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();\n    executor.setCorePoolSize(8);\n    executor.initialize();\n    return new DelegatingSecurityContextTaskExecutor(executor);\n}\n```\n\n- Wraps any `ExecutorService` or Spring `TaskExecutor`\n- Each task wrapped at submission time\n- Captures current `SecurityContext` from submitting thread\n- Restores and clears around task execution\n- Safe for thread pools because capture happens **per-task**\n- Variants: `DelegatingSecurityContextRunnable`, `DelegatingSecurityContextCallable`\n\n**Solution 3: Reactor Context (WebFlux)**\n\n```java\nMono<String> currentUser = ReactiveSecurityContextHolder.getContext()\n    .map(SecurityContext::getAuthentication)\n    .map(Authentication::getName);\n```\n\n- No thread-per-request model in reactive\n- Spring stores context in **Reactor Context** — flows through reactive operator chains\n- `ReactiveSecurityContextHolder.getContext()` returns `Mono<SecurityContext>`\n- `SecurityContextHolder.getContext()` (the static one) **returns null in WebFlux**\n- Trips up developers migrating servlet code — no compile error, runtime null\n\n**Project Loom (virtual threads, Spring Boot 3+):**\n- Virtual threads are first-class threads\n- `ThreadLocal` works correctly per virtual thread\n- But carrier-thread pinning concerns exist for synchronized blocks\n- `ScopedValue` (preview) is the modern replacement for `ThreadLocal` in Loom-friendly code"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "SecurityContext Strategies: Helps, Hurts, Watch For",
+            "content": "**When ThreadLocal helps:**\n- Synchronous request-thread code (the common case)\n- Clean service-layer API without parameter pollution\n- O(1) access, minimal overhead\n\n**When `INHERITABLETHREADLOCAL` helps:**\n- Per-task `new Thread()` (rare in modern apps)\n- Quick experimental scripts\n\n**When `DelegatingSecurityContextExecutor` helps:**\n- All thread-pool work: `@Async`, `@Scheduled`, `CompletableFuture` with custom executor\n- Per-task context capture is correct\n\n**When Reactor Context helps:**\n- WebFlux applications\n- Reactive pipelines spanning multiple threads\n\n**When it hurts:**\n- `INHERITABLETHREADLOCAL` + thread pool -> stale auth across users\n- `@Async` with default executor -> empty context\n- Mixing servlet `SecurityContextHolder` with reactive `ReactiveSecurityContextHolder` -> nulls\n- Forgetting to clear context after manual `setAuthentication` -> leakage\n\n**Watch for:**\n- **`@Async` default executor** — not security-aware; wrap with `DelegatingSecurityContextExecutor` or set as `@Bean`\n- **Parallel streams** — use the common ForkJoinPool; same problem as thread pools\n- **Static `SecurityContextHolder.getContext()` in WebFlux** — returns null; use `ReactiveSecurityContextHolder`\n- **Manual `SecurityContext` set in code** — must clear in finally block; otherwise leaks\n- **Tests that mutate `SecurityContextHolder`** — clear in `@AfterEach` or use `@WithMockUser`\n- **Virtual threads (Loom)** — `ThreadLocal` works but consider `ScopedValue` for pinning-sensitive paths\n- **Logging frameworks (MDC)** — same pattern; pair with `DelegatingSecurityContextExecutor` if you need MDC propagation"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`SecurityContextHolder` is `ThreadLocal` by default** — `Authentication` accessible only on the same thread.\n- **`MODE_INHERITABLETHREADLOCAL`** propagates to `new Thread()` children; **NOT safe for thread pools**.\n- **`DelegatingSecurityContextExecutor`** wraps an executor and copies context per task — production solution for `@Async` and thread pools.\n- **Reactive (WebFlux) uses `ReactorContextWebFilter`** — `SecurityContext` lives in Reactor Context, retrieved via `ReactiveSecurityContextHolder`.\n- **Clear `SecurityContext` in finally blocks for non-filter code** — prevents leakage between requests on pooled threads.\n- **Session persistence** via `HttpSessionSecurityContextRepository` — restores context next request.\n- **`@AuthenticationPrincipal`** in controllers extracts principal cleanly without `SecurityContextHolder`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**How it works**\n- After successful authentication, Spring stores an `Authentication` in the `SecurityContext` held by `SecurityContextHolder`\n- Service methods call `SecurityContextHolder.getContext().getAuthentication()` for current user\n- At end of request, Spring Security clears the context\n\n**The async thread problem**\n- `@Async` runs on a thread pool — different thread from the HTTP request\n- `SecurityContextHolder.getContext().getAuthentication()` returns null in `@Async` by default\n- Fix 1: `MODE_INHERITABLETHREADLOCAL` — child threads inherit; **does NOT work for pools**\n- Fix 2: `DelegatingSecurityContextExecutor` wraps the executor; each task gets a copy of parent's context — production solution\n\n**WebFlux**\n- No single thread per request — ThreadLocal would always be empty\n- `ReactiveSecurityContextHolder` stores in Reactor Context (attached to reactive pipeline)\n- `ReactorContextWebFilter` populates it from session or JWT\n\n**Cleanup matters**\n- `SecurityContextHolderFilter` clears in finally block\n- Without clear: thread returning to pool carries previous user's auth -> privilege escalation\n- Manual context manipulation must clear in finally\n\n**Persistence**\n- Session-based: `HttpSessionSecurityContextRepository` saves to session before response\n- Stateless JWT: no persistence — JWT IS the identity\n\n**Modern considerations**\n- Project Loom virtual threads: `ThreadLocal` works; consider `ScopedValue` for pinning\n- Test with `@WithMockUser` — doesn't pollute `SecurityContextHolder` across tests"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Spring Security store and restore the SecurityContext across requests for session-based authentication?",
+        "What changes in the SecurityContext handling model between Spring Security 5 and Spring Security 6?",
+        "How do you propagate the SecurityContext to virtual threads (Project Loom) in Spring Boot 3?",
+        "Why does @Async lose authentication and how does DelegatingSecurityContextExecutor fix it?"
+      ],
+      "seo": {
+        "metaTitle": "SecurityContext and SecurityContextHolder — Spring Security Internals",
+        "metaDescription": "How SecurityContextHolder uses ThreadLocal, when context is populated/cleared, and how to propagate it to async, reactive, and virtual-thread code in Spring Boot."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "How it works After successful authentication, Spring stores an Authentication in the SecurityContext held by SecurityContextHolder Service methods call SecurityContextHolder.getContext().getAuthentica",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "After authentication succeeds, the Authentication object is stored in SecurityContextHolder, which uses a ThreadLocal strategy by default. Every line of code on the same thread can access the current user via SecurityContextHolder.getContext().getAuthentication(). When the request completes, the filter chain clears it — so the next request on that thread (in a thread pool) starts with an empty context. The ThreadLocal trap: spawning a new thread gets a fresh ThreadLocal with no security context. @Async methods, CompletableFuture.supplyAsync(), and manually created threads."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Deep understanding of the thread-local security model and its implications for async code."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "SecurityContextHolder is ThreadLocal by default — Authentication accessible only on the same thread",
+              "MODE_INHERITABLETHREADLOCAL propagates to new Thread() children; NOT safe for thread pools",
+              "DelegatingSecurityContextExecutor wraps an executor and copies context per task — production solution for @Async and thread pools",
+              "Reactive (WebFlux) uses ReactorContextWebFilter — SecurityContext lives in Reactor Context, retrieved via ReactiveSecurityContextHolder",
+              "Clear SecurityContext in finally blocks for non-filter code — prevents leakage between requests on pooled threads"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "After authentication succeeds, the Authentication object is stored in SecurityContextHolder, which uses a ThreadLocal strategy by default. Every line of code on the same thread can access the current user via SecurityContextHolder.getContext().getAuthentication(). When the request completes, the filter chain clears it — so the next request on that thread (in a thread pool) starts with an empty context. The ThreadLocal trap: spawning a new thread gets a fresh ThreadLocal with no security context. @Async methods, CompletableFuture.supplyAsync(), and manually created threads see getAuthentication() return null. If that null reaches an @PreAuthorize, it throws InsufficientAuthenticationException — surfacing as a confusing 403 in a flow that works synchronously. This is one of the most common Spring Security bugs in production: code that works."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Accessing SecurityContextHolder in a @Async method or new Thread and getting null",
+              "the child thread has its own empty ThreadLocal"
+            ]
+          }
+        ],
+        "cap": "How it works After successful authentication, Spring stores an Authentication in the SecurityContext held by SecurityContextHolder Service methods call SecurityContextHolder.getContext().getAuthentica",
+        "familiarity_anchors": [
+          "SecurityContextHolder",
+          "SecurityContext",
+          "ThreadLocal"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Spring Security store and restore the SecurityContext across requests for session-based authentication?",
+          "What changes in the SecurityContext handling model between Spring Security 5 and Spring Security 6?",
+          "How do you propagate the SecurityContext to virtual threads (Project Loom) in Spring Boot 3?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JWT-based authentication"
+      }
+    }
+  ]
+}

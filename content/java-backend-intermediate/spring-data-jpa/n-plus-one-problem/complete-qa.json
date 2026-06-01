@@ -1,0 +1,292 @@
+{
+  "topic": "N Plus One Problem",
+  "topicSlug": "n-plus-one-problem",
+  "questions": [
+    {
+      "id": "jpa-001",
+      "slug": "n-plus-one-query-problem",
+      "title": "N+1 Query Problem in Spring Data JPA",
+      "question": "What is the N+1 query problem in JPA/Hibernate and how do you fix it?",
+      "direct_answer": "N+1 happens when JPA fires **1 query to load N parent entities**, then fires **N more queries to load each parent's lazy association** — loading 100 orders and touching each order's customer triggers **101 SQL statements** instead of 1 or 2. Three fixes: **`JOIN FETCH`** in JPQL eagerly joins the association in the same query but **breaks pagination with collections** (Hibernate paginates in memory, logs `HHH90003004`); **`@EntityGraph`** declares the same eager fetch per-method and is Spring Data's idiomatic alternative; **`@BatchSize`** on the association reduces N+1 to `N/batchSize + 1` using `WHERE id IN (?,?,...)` and works with pagination. Diagnose with `spring.jpa.show-sql=true`, assert query counts in integration tests via Hibernate Statistics, and prefer **DTO projections** for read-heavy endpoints.",
+      "layout_type": "problem-detective",
+      "difficulty": "intermediate",
+      "importance": "critical",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can identify a common ORM performance pitfall and knows multiple remediation strategies",
+        "common_mistake": "Mentioning only `JOIN FETCH` without knowing `@EntityGraph` or `@BatchSize`, or switching everything to EAGER loading which causes over-fetching",
+        "to_stand_out": "Mention SQL logging to diagnose the problem, compare `JOIN FETCH` vs `@EntityGraph` trade-offs, and bring up the Hibernate Statistics API for production monitoring"
+      },
+      "company_tags": [
+        "Amazon",
+        "Thoughtworks",
+        "Capgemini",
+        "Infosys",
+        "Booking.com",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Query That Runs Once Should Run Once — Not 101 Times",
+            "content": "The N+1 problem is the most common performance issue in JPA applications. You write one query to load N entities, then Hibernate fires N additional queries to load each entity's lazy association — one per entity. Loading 100 orders with their customers generates **101 SQL statements** instead of 1 or 2.\n\nThe problem is **invisible in development**. With 5 test orders, 6 queries take milliseconds. In production with 1,000 orders, 1,001 queries take seconds. **The fix is always to fetch the association in the original query** rather than letting Hibernate load them one at a time.\n\nDevelopers who know only `JOIN FETCH` miss important trade-offs.\n- **`JOIN FETCH` cannot be used with pagination on collections** (Hibernate fetches all rows and paginates in memory with a warning). `@EntityGraph` is the Spring Data-friendly alternative. `@BatchSize` reduces N+1 to N/batch+1 without changing queries.\n- Each fix has a different use case."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "N+1 Explosion vs JOIN FETCH Solution",
+            "content": "Visual contrast: 101 round trips for the lazy path, 1 round trip with `JOIN FETCH` (or 2 with `@BatchSize`).",
+            "mermaid": "flowchart TB\n    subgraph Bad[\"N+1 lazy access (101 queries)\"]\n        b1[\"orderRepo.findAll() -> 1 SELECT order\"] --> b2[\"100 orders returned\"]\n        b2 --> b3[\"forEach: order.getCustomer().getName()\"]\n        b3 --> b4[\"Hibernate fires SELECT customer WHERE id = ?\"]\n        b4 --> b5[\"...repeats 100 times\"]\n        b5 --> b6[\"Total: 1 + 100 = 101 SQL round trips\"]\n    end\n\n    subgraph GoodFetch[\"JOIN FETCH (1 query)\"]\n        g1[\"SELECT o FROM Order o JOIN FETCH o.customer\"] --> g2[\"Single SQL with INNER JOIN\"]\n        g2 --> g3[\"100 orders + 100 customers in 1 round trip\"]\n        g3 --> g4[\"Caveat: collections + Pageable -> in-memory paginate (HHH90003004)\"]\n    end\n\n    subgraph GoodBatch[\"@BatchSize (N/batch + 1 queries)\"]\n        bt1[\"@BatchSize(50) on customer\"] --> bt2[\"SELECT order page (1 query)\"]\n        bt2 --> bt3[\"Lazy access triggers WHERE id IN (?,?,...50)\"]\n        bt3 --> bt4[\"100 customers in 2 batched queries\"]\n        bt4 --> bt5[\"Pagination compatible\"]\n    end\n\n    Bad -.fix.-> GoodFetch\n    Bad -.fix.-> GoodBatch"
+          },
+          {
+            "type": "step",
+            "title": "Diagnosing N+1 — SQL Logging and the Hibernate Statistics API",
+            "content": "**Make the queries visible:**\n- `spring.jpa.show-sql=true` for development.\n- `logging.level.org.hibernate.SQL=DEBUG` for more control.\n- `logging.level.org.hibernate.orm.jdbc.bind=TRACE` to see bind values.\n- Count SELECT statements per API call — repeated query patterns with different bind values = N+1.\n\n**Hibernate Statistics API for production:**\n- Enable: `spring.jpa.properties.hibernate.generate_statistics=true`.\n- Access via `sessionFactory.getStatistics().getQueryExecutionCount()` and `getPrepareStatementCount()`.\n- Detect N+1 in integration tests by asserting query counts.\n\n**Tooling:**\n- `datasource-proxy` wraps the DataSource and logs every query with stack traces — finds which code path triggers extra queries.\n- `p6spy` is a similar option.\n- Production: expose Hibernate metrics through Micrometer; alert on anomaly spikes."
+          },
+          {
+            "type": "step",
+            "title": "Three Fixes and When Each One Fits",
+            "content": "**`JOIN FETCH` in JPQL:**\n- Loads association in the same query using SQL JOIN.\n- `SELECT o FROM Order o JOIN FETCH o.customer` -> one query, one JOIN.\n- **Trade-off**: breaks pagination on collections — `firstResult/maxResults specified with collection fetch` warning, in-memory paginate.\n- Best for single-row detail views or `@ManyToOne` only.\n\n**`@EntityGraph`:**\n- Spring Data's declarative alternative.\n- `@EntityGraph(attributePaths = \"customer\")` on a repository method.\n- Generates LEFT JOIN — same SQL as `JOIN FETCH` but no JPQL needed.\n- Same pagination caveat for collections.\n\n**`@BatchSize` on the association:**\n- `@BatchSize(size = 25)` on the field.\n- Hibernate batches lazy loads: `WHERE id IN (?,?,...)`.\n- N+1 becomes `N/25 + 1` — for N=100, 4 queries instead of 100.\n- **Works with pagination** because Hibernate batches lazily after the paginated query.\n- Best when JOIN FETCH would break pagination.\n- Optimal batch size 10-50.\n\n**`@Fetch(FetchMode.SUBSELECT)`:**\n- When any item's collection is accessed, Hibernate loads all collections for the entire result set using `WHERE order_id IN (SELECT id FROM order WHERE ...)`.\n- One extra query per relationship regardless of result set size.\n- Ideal when you consistently need the association for all loaded parents."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Decision Matrix — JOIN FETCH vs @EntityGraph vs @BatchSize vs DTO",
+            "content": "Pick based on whether the query paginates, how many collections you need, and whether you return entities or DTOs.\n\n| Approach | Syntax | SQL generated | Pagination compatible | Multiple collections | Best for |\n|---|---|---|---|---|---|\n| **JOIN FETCH** | JPQL `SELECT o FROM Order o JOIN FETCH o.items` | Single query with INNER/LEFT JOIN | No — collections break it | No — Cartesian product | Single-valued `@ManyToOne`, non-paginated queries |\n| **@EntityGraph** | `@EntityGraph(attributePaths = {\"items\"})` | Single query with LEFT JOIN FETCH | No — same caveat for collections | No — Cartesian product | Reusable, declarative; avoids JPQL |\n| **@BatchSize** | `@BatchSize(size = 50)` on field | `WHERE id IN (...)` batches; `N/batch + 1` queries | Yes | Yes — each collection batched independently | Paginated queries, mixed needs |\n| **@Fetch(SUBSELECT)** | `@Fetch(FetchMode.SUBSELECT)` | One subquery per association | Yes | Yes | All parents always need all children |\n| **DTO projection** | `SELECT new com.x.OrderDTO(...)` | Single query, no entities | Yes | Yes — no Cartesian product | Read-heavy list views, exports |\n\n**Decision shortcut:**\n- One parent + children for a detail view -> `JOIN FETCH` or `@EntityGraph`.\n- A page of parents -> `@BatchSize` on the collection + `Pageable`.\n- A list for display (no edits) -> DTO projection.\n- Multiple collections on one parent -> separate queries combined into a DTO.\n\n**The HHH90003004 warning is the tell.** `firstResult/maxResults specified with collection fetch; applying in memory` -> Hibernate has loaded the entire unpaginated result set and paginated in Java. Latent OOM. Switch to `@BatchSize` or DTO."
+          },
+          {
+            "type": "after_code",
+            "title": "Runnable Example — Triggering, Measuring, and Fixing an N+1",
+            "content": "**The bug:**\n\n```java\n@Entity\npublic class Order {\n    @Id @GeneratedValue Long id;\n    @ManyToOne(fetch = FetchType.LAZY) Customer customer;\n    @OneToMany(mappedBy = \"order\", fetch = FetchType.LAZY) List<OrderItem> items;\n}\n\n@RestController\npublic class OrderController {\n    @GetMapping(\"/orders\")\n    public List<OrderSummary> list() {\n        return orderRepo.findAll().stream()           // 1 SQL\n            .map(o -> new OrderSummary(\n                o.getId(),\n                o.getCustomer().getName(),            // +N SQL (customer)\n                o.getItems().size()))                 // +N SQL (items)\n            .toList();\n    }\n}\n```\n\nFor 100 orders: **201 queries.**\n\n**Measure it in a test so it never regresses:**\n\n```java\n@DataJpaTest\n@AutoConfigureTestDatabase(replace = NONE)\nclass OrderQueryCountTest {\n    @Autowired EntityManagerFactory emf;\n    @Autowired OrderRepository orderRepo;\n\n    @Test\n    void findAllOrdersWithCustomer_usesOneQuery() {\n        Statistics stats = emf.unwrap(SessionFactory.class).getStatistics();\n        stats.setStatisticsEnabled(true);\n        stats.clear();\n\n        orderRepo.findAllWithCustomer();\n\n        assertThat(stats.getPrepareStatementCount()).isLessThanOrEqualTo(2);\n    }\n}\n```\n\n**Fix 1 — `@EntityGraph` for the detail/summary:**\n\n```java\npublic interface OrderRepository extends JpaRepository<Order, Long> {\n    @EntityGraph(attributePaths = {\"customer\"})\n    List<Order> findAllWithCustomer();\n\n    @EntityGraph(attributePaths = {\"customer\", \"items\"})\n    Optional<Order> findById(Long id);\n}\n```\n\n**Fix 2 — `@BatchSize` for paginated list views:**\n\n```java\n@Entity\npublic class Order {\n    @ManyToOne(fetch = FetchType.LAZY)\n    @BatchSize(size = 50)\n    Customer customer;\n\n    @OneToMany(mappedBy = \"order\", fetch = FetchType.LAZY)\n    @BatchSize(size = 50)\n    List<OrderItem> items;\n}\n```\n\nNow `orderRepo.findAll(PageRequest.of(0, 100))` fires **3 queries**: 1 for orders page, 1 batched customer fetch, 1 batched items fetch.\n\n**Fix 3 — DTO projection for a read-only list endpoint:**\n\n```java\npublic record OrderSummary(Long id, String customerName, long itemCount) {}\n\n@Query(\"\"\"\n    SELECT new com.acme.OrderSummary(o.id, o.customer.name, SIZE(o.items))\n    FROM Order o\n    ORDER BY o.createdAt DESC\n\"\"\")\nPage<OrderSummary> summaries(Pageable pageable);\n```\n\nOne query, no entity loading, no lazy proxies, no N+1 possible."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Pitfalls, Edge Cases, and a Production Checklist",
+            "content": "**When fixes help:**\n- `JOIN FETCH` / `@EntityGraph` collapse N+1 to a single query for non-paginated reads.\n- `@BatchSize` works with pagination and requires no query changes.\n- DTO projections eliminate N+1 by skipping entity loading altogether.\n\n**When fixes hurt (Cartesian product trap):**\n- Two `@OneToMany` collections in one `JOIN FETCH` (e.g., `items` and `payments`).\n- Order with 20 items and 5 payments returns 100 rows.\n- Hibernate deduplicates in memory but transferred 5x bytes over the wire.\n- Always fetch collections in **separate queries** or with `@BatchSize`.\n\n**Watch for:**\n- **`DISTINCT` is a Hibernate-specific hint** — `SELECT DISTINCT o FROM Order o JOIN FETCH o.items` deduplicates parents in memory; use `passDistinctThrough = false` query hint to suppress SQL `DISTINCT`.\n- **`Set` vs `List`** — `Set` deduplicates automatically (no DISTINCT) but requires `equals/hashCode` consistency; using a generated ID in equals breaks the Set when entities are unsaved.\n- **`findAll()` is never acceptable in production** — always combine with `Pageable` or filter.\n- **`FetchType.EAGER` on associations is a trap** — triggers on every query whether you need the association or not; always LAZY by default, opt-in per query.\n- **`spring.jpa.open-in-view=true` is the Spring Boot default** — keeps session open across view render; hides N+1 because lazy loads succeed silently in the controller. **Disable it.** Lazy access outside a transaction then throws `LazyInitializationException` — a loud error instead of a silent performance bug.\n\n**Production checklist:**\n- `spring.jpa.open-in-view=false`\n- All `@ManyToOne` and `@OneToMany` set to `fetch = FetchType.LAZY`\n- Every `JOIN FETCH` with collections checked for pagination usage\n- `@BatchSize` on collections accessed in paginated queries\n- DTO projections for list views; entities only for commands/edits\n- Query count assertions in integration tests (HibernateStatistics)\n- Production monitoring: `hibernate.query.count` metric with anomaly alerts\n- `datasource-proxy` or p6spy in dev to log every SQL with stack trace\n- Never use `findAll()` without `Pageable`"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **N+1 = 1 query for N parents + N queries for the lazy association** — 100 orders + customers = 101 queries.\n- **`JOIN FETCH`** — JPQL keyword; one query with JOIN; breaks pagination on collections.\n- **`@EntityGraph`** — Spring Data declarative; same SQL, same pagination caveat for collections.\n- **`@BatchSize`** — reduces N+1 to `N/batch + 1`; works with pagination.\n- **DTO projection** — `SELECT new ...` returns plain objects; no proxies, no lazy access, no N+1 possible.\n- **`spring.jpa.show-sql=true` + query count test** — make N+1 visible and prevent regressions.\n- **`spring.jpa.open-in-view=false`** mandatory for REST APIs."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "N+1 is the most common JPA performance bug. Loading a collection of entities and then accessing a lazy association on each — one query for the parents, one query per parent for the association.\n\n**The classic example:**\n- `List<Order> orders = orderRepo.findAll()` — 1 query, 100 orders\n- `orders.forEach(o -> o.getItems().size())` — 100 additional queries\n- Total: 101 SQL queries to do what one JOIN could accomplish\n\n**Fix 1 — `JOIN FETCH` in JPQL:**\n- `@Query(\"SELECT o FROM Order o JOIN FETCH o.items WHERE o.status = :status\")`\n- One SQL with a JOIN\n- Limitation: cannot combine `JOIN FETCH` with `Pageable` on a collection — in-memory pagination warning\n\n**Fix 2 — `@EntityGraph`:**\n- `@EntityGraph(attributePaths = {\"items\"})` on the repository method\n- Spring translates to LEFT JOIN FETCH; same caveat with collection pagination\n\n**Fix 3 — `@BatchSize`:**\n- `@BatchSize(size = 25)` on the collection field\n- Hibernate batches lazy loads: instead of 100 queries, 4 `WHERE id IN (...)` queries\n- Easiest to add, fully compatible with pagination\n\n**Fix 4 — DTO projection:**\n- `SELECT new com.x.OrderDto(...)` returns plain objects\n- No entities, no proxies, no possibility of N+1"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the Cartesian product problem with multiple JOIN FETCHes and how do you handle it?",
+        "How does `@BatchSize` differ from `JOIN FETCH` in terms of the SQL generated?",
+        "Can you still paginate queries that use `JOIN FETCH`?",
+        "How would you write an integration test that fails when N+1 is introduced?"
+      ],
+      "seo": {
+        "metaTitle": "N+1 Query Problem Spring Data JPA — Java Interview Guide",
+        "metaDescription": "Diagnose and fix the N+1 query problem in JPA/Hibernate using JOIN FETCH, @EntityGraph, @BatchSize, and DTO projections — with pagination caveats and tests."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P02",
+        "hook": "N+1 is the most common JPA performance bug.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "The N+1 problem is the most common performance issue in JPA applications. You write one query to load N entities, then Hibernate fires N additional queries to load each entity's lazy association — one per entity. Loading 100 orders with their customers generates 101 SQL statements instead of 1 or."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Whether the candidate can identify a common ORM performance pitfall and knows multiple remediation strategies"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Make the queries visible: spring.jpa.show-sql=true for development.",
+              "logging.level.org.hibernate.SQL=DEBUG for more control.",
+              "logging.level.org.hibernate.orm.jdbc.bind=TRACE to see bind values.",
+              "Count SELECT statements per API call — repeated query patterns with different bind values = N+1.",
+              "Hibernate Statistics API for production: Enable: spring.jpa.properties.hibernate.generate_statistics=true.",
+              "Access via sessionFactory.getStatistics().getQueryExecutionCount() and getPrepareStatementCount()."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "N+1 = 1 query for N parents + N queries for the lazy association — 100 orders + customers = 101 queries",
+              "JOIN FETCH — JPQL keyword; one query with JOIN; breaks pagination on collections",
+              "@EntityGraph — Spring Data declarative; same SQL, same pagination caveat for collections",
+              "@BatchSize — reduces N+1 to N/batch + 1; works with pagination",
+              "DTO projection — SELECT new"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "When fixes help: JOIN FETCH / @EntityGraph collapse N+1 to a single query for non-paginated reads. @BatchSize works with pagination and requires no query changes. DTO projections eliminate N+1 by skipping entity loading altogether. When fixes hurt (Cartesian product trap): Two @OneToMany collections in one JOIN FETCH (e.g., items and payments). Order with 20 items and 5 payments returns 100 rows. Hibernate deduplicates in memory but transferred 5x bytes over."
+          }
+        ],
+        "cap": "The classic example: List<Order> orders = orderRepo.findAll() — 1 query, 100 orders orders.forEach(o -> o.getItems().size()) — 100 additional queries Total: 101 SQL queries to do what one JOIN could a",
+        "familiarity_anchors": [
+          "Three",
+          "FETCH",
+          "Hibernate"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the Cartesian product problem with multiple JOIN FETCHes and how do you handle it?",
+          "How does `@BatchSize` differ from `JOIN FETCH` in terms of the SQL generated?",
+          "Can you still paginate queries that use `JOIN FETCH`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "jpa-005",
+      "slug": "entity-graph-solving-n-plus-one",
+      "title": "Solving N+1 with @EntityGraph",
+      "question": "How do you use @EntityGraph in Spring Data JPA to solve N+1 without writing JPQL JOIN FETCH queries?",
+      "direct_answer": "**`@EntityGraph`** is Spring Data's declarative answer to N+1: annotate a repository method with `@EntityGraph(attributePaths = {\"customer\", \"items\"})` and Hibernate generates a **LEFT JOIN FETCH** for those attributes only for that query, leaving the entity's default `FetchType.LAZY` intact for every other query. It is cleaner than writing JPQL `JOIN FETCH` by hand, composes with derived queries (no `@Query` needed), and accepts both ad-hoc `attributePaths` and reusable **`@NamedEntityGraph`** declarations on the entity. The two graph types — **`FETCH`** (only graph attributes are eager, all others LAZY) and **`LOAD`** (graph attributes eager, others follow entity defaults) — let you override EAGER-mapped associations back to LAZY per query. Same pagination caveat as `JOIN FETCH`: collection graphs + `Pageable` trigger in-memory pagination (HHH90003004). For paginated list views, use **`@BatchSize`**.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Practical knowledge of Spring Data JPA features beyond `findAll()` — whether the candidate knows declarative fetch strategies",
+        "common_mistake": "Using `JOIN FETCH` in a paginated query, which causes Hibernate to load everything in memory and apply pagination in Java — `@EntityGraph` triggers a similar issue, so handle pagination carefully",
+        "to_stand_out": "Explain the difference between FETCH and LOAD graph types, and demonstrate `@NamedEntityGraph` on the entity class for reuse"
+      },
+      "company_tags": [
+        "Booking.com",
+        "Delivery Hero",
+        "Adyen",
+        "Klarna",
+        "Wise",
+        "Zalando"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "@EntityGraph Is Spring Data's Declarative Alternative to JOIN FETCH — With the Same Pagination Trap",
+            "content": "Writing `JOIN FETCH` JPQL queries for every repository method gets repetitive. **`@EntityGraph` lets you declare which associations to fetch eagerly** on a per-query basis, directly on Spring Data repository method signatures, without writing JPQL.\n\nUnder the hood, `@EntityGraph` generates a LEFT JOIN — the same SQL as `JOIN FETCH`. This means it carries the **same pagination caveat**: combining `@EntityGraph` with `Pageable` on a collection association causes Hibernate to load all rows into memory and paginate in Java, logging the HHH90003004 warning.\n\nTwo graph types: **FETCH** (attributes in graph eager, all others follow default fetch type) and **LOAD** (attributes in graph eager, all others follow **entity-level** fetch type — EAGER stays EAGER). The distinction matters when you want `@EntityGraph` to override EAGER associations to LAZY — only **FETCH** does that."
+          },
+          {
+            "type": "step",
+            "title": "Ad-hoc vs Named EntityGraphs — When Reuse Justifies the Annotation",
+            "content": "**Ad-hoc `attributePaths` on the repository method:**\n- Cleanest for simple cases.\n- No entity annotation needed.\n\n```java\npublic interface OrderRepository extends JpaRepository<Order, Long> {\n    @EntityGraph(attributePaths = {\"customer\", \"items\"})\n    List<Order> findByStatus(String status);\n}\n```\n\n- Tells Hibernate to LEFT JOIN `customer` and `items`.\n- Same repository can have another method without `@EntityGraph` that loads orders lazily — each method controls its own fetch strategy.\n\n**`@NamedEntityGraph` on the entity:**\n- Define graph once on the entity, reference by name in repositories.\n- Avoids duplicating `attributePaths` across multiple methods.\n- Best for graphs reused across multiple repositories or services.\n\n**For paginated queries with collections:**\n- Avoid `@EntityGraph` entirely.\n- Use `@BatchSize` on the association.\n- Or split: load parent IDs with pagination first, then load full entities with `@EntityGraph` using the ID list."
+          },
+          {
+            "type": "step",
+            "title": "EntityGraph Limitations — When It Does Not Save You",
+            "content": "**Multiple `@OneToMany` collections in one EntityGraph -> Cartesian product:**\n- Same problem as multiple `JOIN FETCH`es.\n- Order with 20 items and 5 payments -> 100-row result set, deduplicated by Hibernate.\n- Inefficient at scale.\n- Fix: load each collection in **separate queries** or use `@BatchSize`.\n\n**`@EntityGraph` + paginated query with collections:**\n- Triggers `HHH90003004: firstResult/maxResults specified with collection fetch; applying in memory`.\n- Hibernate loads all rows (ignoring page size), paginates in memory.\n- Latent OOM.\n- Fix: paginate parent IDs (no JOIN), then fetch with `@EntityGraph` using `findByIdIn(ids)`.\n\n**Native queries:**\n- `@EntityGraph` is JPQL-only.\n- Native SQL must use explicit JOINs and projections.\n\n**`@BatchSize` after pagination:**\n- Paginate the parents (works correctly with no JOIN).\n- Let `@BatchSize` load collections in batches after pagination is applied.\n- COUNT and data queries only touch parent table — pagination works correctly."
+          },
+          {
+            "type": "comparison_table",
+            "title": "FETCH vs LOAD Graph Types — Which Overrides Your Entity Mapping",
+            "content": "The two `EntityGraph.EntityGraphType` values behave very differently when the entity has `FetchType.EAGER` declarations.\n\n| Scenario | Entity mapping | Graph type | Attribute in graph | Attribute NOT in graph |\n|---|---|---|---|---|\n| **FETCH (default)** | `@ManyToOne(fetch = EAGER) Customer customer` | FETCH | Eager | **LAZY** (overrides entity default) |\n| **FETCH (default)** | `@OneToMany(fetch = LAZY) List<Item> items` | FETCH | Eager | LAZY |\n| **LOAD** | `@ManyToOne(fetch = EAGER) Customer customer` | LOAD | Eager | **Still EAGER** (entity default wins) |\n| **LOAD** | `@OneToMany(fetch = LAZY) List<Item> items` | LOAD | Eager | LAZY |\n\n**Practical implication:**\n- **FETCH** is safer and stricter — guarantees attributes not in the graph are LAZY.\n- **LOAD** respects entity's original mapping for unlisted attributes — useful if you explicitly want EAGER associations to stay EAGER.\n\n```java\n@EntityGraph(attributePaths = {\"items\"}, type = EntityGraph.EntityGraphType.FETCH)\nList<Order> findByStatus(OrderStatus status);\n```\n\n**Rule of thumb:** default to `FETCH` so queries are self-describing — reading the method tells you exactly which associations are loaded."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Limitations and Patterns for Multi-Collection Fetches",
+            "content": "**When `@EntityGraph` helps:**\n- Loading a single entity by ID for a detail page.\n- Non-paginated list queries with one collection.\n- Replacing repetitive `JOIN FETCH` JPQL with a declarative annotation.\n- Reusable named graphs for cross-repository consistency.\n\n**When `@EntityGraph` hurts:**\n- Pagination + collection -> in-memory pagination, latent OOM.\n- Multiple `@OneToMany` -> Cartesian product blowup.\n- Native queries -> not supported.\n- Deep graphs (3+ levels) -> result set explosion.\n\n**Three patterns for loading multiple collections:**\n\n1. **Separate service calls, join in memory.** Load orders with `items`, then load orders with `payments`, merge by ID. Two small queries beat one giant JOIN.\n\n2. **ID-first pagination.** Step 1: page parent IDs with a filter query (no collections). Step 2: load full entities with `@EntityGraph` using `findByIdIn(pageIds)` — no pagination, no HHH90003004.\n\n3. **DTO projection with `SIZE()` or aggregate subquery.** For list views needing only counts, `SELECT new OrderSummary(o.id, SIZE(o.items), SIZE(o.payments))` is one query, one row per order, no Cartesian.\n\n**Watch for:**\n- Always profile generated SQL with `spring.jpa.show-sql=true` when combining `@EntityGraph` + `Pageable`.\n- Subgraphs let you declare deep graphs (`@NamedSubgraph`).\n- Use `jakarta.persistence.fetchgraph` or `jakarta.persistence.loadgraph` query hints for dynamic graphs built at runtime."
+          },
+          {
+            "type": "after_code",
+            "title": "Three Production-Grade Patterns Using @EntityGraph",
+            "content": "**Pattern 1 — Named graph with subgraph:**\n\n```java\n@Entity\n@NamedEntityGraph(\n    name = \"Order.detail\",\n    attributeNodes = {\n        @NamedAttributeNode(\"customer\"),\n        @NamedAttributeNode(value = \"items\", subgraph = \"Order.itemsSubgraph\")\n    },\n    subgraphs = {\n        @NamedSubgraph(\n            name = \"Order.itemsSubgraph\",\n            attributeNodes = @NamedAttributeNode(\"product\"))\n    }\n)\npublic class Order { ... }\n\npublic interface OrderRepository extends JpaRepository<Order, Long> {\n    @EntityGraph(value = \"Order.detail\", type = EntityGraph.EntityGraphType.FETCH)\n    Optional<Order> findDetailById(Long id);\n}\n```\n\nOne JPQL query, one SQL with nested LEFT JOINs. Perfect for an order-detail endpoint.\n\n**Pattern 2 — ID-first pagination for list views with collections:**\n\n```java\npublic interface OrderRepository extends JpaRepository<Order, Long> {\n    @Query(\"SELECT o.id FROM Order o WHERE o.status = :status ORDER BY o.createdAt DESC\")\n    Page<Long> findIdsByStatus(@Param(\"status\") OrderStatus status, Pageable page);\n\n    @EntityGraph(attributePaths = {\"items\"})\n    List<Order> findByIdIn(Collection<Long> ids);\n}\n\n@Service\nclass OrderQueryService {\n    public Page<Order> listWithItems(OrderStatus status, Pageable page) {\n        Page<Long> idPage = orderRepo.findIdsByStatus(status, page);\n        List<Order> orders = orderRepo.findByIdIn(idPage.getContent());\n        Map<Long, Order> byId = orders.stream()\n            .collect(Collectors.toMap(Order::getId, Function.identity()));\n        List<Order> ordered = idPage.getContent().stream().map(byId::get).toList();\n        return new PageImpl<>(ordered, page, idPage.getTotalElements());\n    }\n}\n```\n\nID query paginates correctly (no JOIN). Entity query eagerly loads items with no pagination (no Cartesian).\n\n**Pattern 3 — Dynamic graph at runtime:**\n\n```java\n@Service\nclass OrderQueryService {\n    @PersistenceContext EntityManager em;\n\n    public Optional<Order> findWithDynamicGraph(Long id, Set<String> includes) {\n        EntityGraph<Order> graph = em.createEntityGraph(Order.class);\n        if (includes.contains(\"customer\")) graph.addAttributeNodes(\"customer\");\n        if (includes.contains(\"items\"))    graph.addAttributeNodes(\"items\");\n        if (includes.contains(\"payments\")) graph.addAttributeNodes(\"payments\");\n\n        TypedQuery<Order> q = em.createQuery(\n            \"SELECT o FROM Order o WHERE o.id = :id\", Order.class);\n        q.setParameter(\"id\", id);\n        q.setHint(\"jakarta.persistence.fetchgraph\", graph);\n        return q.getResultList().stream().findFirst();\n    }\n}\n```\n\nLets the caller request `GET /orders/42?include=customer,items` — Hibernate generates exactly the joins needed."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@EntityGraph` = per-query eager fetching** — no entity mapping changes; Hibernate generates LEFT JOIN FETCH.\n- **Named vs ad-hoc** — `@NamedEntityGraph` on entity for reuse; `@EntityGraph(attributePaths = {...})` on method for one-offs.\n- **Same pagination caveat as `JOIN FETCH`** — collection graph + `Pageable` -> in-memory pagination warning.\n- **Cartesian product on multi-collection graphs** — split into separate queries or use `@BatchSize`.\n- **`FETCH` vs `LOAD`** — FETCH overrides EAGER to LAZY for unlisted; LOAD keeps entity defaults.\n- **Dynamic graphs** — build `EntityGraph` at runtime via `EntityManager.createEntityGraph()`.\n- **ID-first pagination** is the canonical fix for paginated list views with collections."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@EntityGraph` solves N+1 by telling Hibernate which associations to fetch eagerly for a specific query, without changing the entity's default fetch strategy. It is the clean solution when `JOIN FETCH` breaks pagination.\n\n**How it works:**\n- Declare an ad-hoc graph on the repository method: `@EntityGraph(attributePaths = {\"items\", \"items.product\"})`\n- Hibernate translates this to LEFT JOIN FETCH on those paths for that query only\n- The entity's `@OneToMany(fetch = LAZY)` stays LAZY for all other queries\n\n**Named vs ad-hoc graphs:**\n- Named: `@NamedEntityGraph(name = \"Order.withItems\", attributeNodes = @NamedAttributeNode(\"items\"))` on the entity class; reference by name\n- Ad-hoc: `@EntityGraph(attributePaths = {\"items\"})` directly on the repository method — preferred for most cases\n\n**Pagination compatibility:**\n- `JOIN FETCH` + `Pageable` on a collection triggers HHH90003004 warning and in-memory pagination — dangerous on large datasets\n- `@EntityGraph` carries the same caveat — for paginated collections, paginate IDs first or use `@BatchSize`\n\n**Over-fetching trap:**\n- Fetching multiple `@OneToMany` associations in one graph produces a Cartesian product\n- Prefer separate queries or DTO projections when you need data from multiple collection associations"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between `EntityGraph.EntityGraphType.FETCH` and `LOAD`?",
+        "How would you handle pagination when you need to eagerly load a `@OneToMany` collection?",
+        "Can you combine `@EntityGraph` with a custom `@Query` JPQL method?",
+        "How do `@NamedSubgraph` declarations let you build deep graphs?"
+      ],
+      "seo": {
+        "metaTitle": "@EntityGraph Spring Data JPA — Solve N+1 Without JOIN FETCH",
+        "metaDescription": "Use @EntityGraph in Spring Data JPA to eliminate N+1 queries; difference between FETCH and LOAD graph types; pagination caveats; named subgraphs and dynamic graphs."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P02",
+        "hook": "@EntityGraph solves N+1 by telling Hibernate which associations to fetch eagerly for a specific query, without changing the entity's default fetch strategy.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "Writing JOIN FETCH JPQL queries for every repository method gets repetitive. @EntityGraph lets you declare which associations to fetch eagerly on a per-query basis, directly on Spring Data repository method signatures, without writing JPQL. Under the hood, @EntityGraph generates a LEFT JOIN — the same SQL as JOIN FETCH. This."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Practical knowledge of Spring Data JPA features beyond findAll() — whether the candidate knows declarative fetch strategies"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Ad-hoc attributePaths on the repository method: Cleanest for simple cases.",
+              "No entity annotation needed.",
+              "``java public interface OrderRepository extends JpaRepository<Order, Long> { @EntityGraph(attributePaths = {\"customer\", \"items\"}) List<Order> findByStatus(String status); } ` Tells Hibernate to LEFT JOIN customer and items.",
+              "Same repository can have another method without @EntityGraph that loads orders lazily — each method controls its own fetch strategy.",
+              "@NamedEntityGraph on the entity: Define graph once on the entity, reference by name in repositories.",
+              "Avoids duplicating attributePaths across multiple methods."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "@EntityGraph = per-query eager fetching — no entity mapping changes; Hibernate generates LEFT JOIN FETCH",
+              "Named vs ad-hoc — @NamedEntityGraph on entity for reuse; @EntityGraph(attributePaths = {",
+              "}) on method for one-offs",
+              "Same pagination caveat as JOIN FETCH — collection graph + Pageable -> in-memory pagination warning",
+              "Cartesian product on multi-collection graphs — split into separate queries or use @BatchSize"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "When @EntityGraph helps: Loading a single entity by ID for a detail page. Non-paginated list queries with one collection. Replacing repetitive JOIN FETCH JPQL with a declarative annotation. Reusable named graphs for cross-repository consistency. When @EntityGraph hurts: Pagination + collection -> in-memory pagination, latent OOM. Multiple @OneToMany -> Cartesian product blowup. Native queries -> not supported. Deep graphs (3+ levels) -> result set explosion. Three patterns for loading multiple collections."
+          }
+        ],
+        "cap": "How it works: Declare an ad-hoc graph on the repository method: @EntityGraph(attributePaths = {\"items\", \"items.product\"}) Hibernate translates this to LEFT JOIN FETCH on those paths for that query onl",
+        "familiarity_anchors": [
+          "EntityGraph",
+          "Spring",
+          "Hibernate"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between `EntityGraph.EntityGraphType.FETCH` and `LOAD`?",
+          "How would you handle pagination when you need to eagerly load a `@OneToMany` collection?",
+          "Can you combine `@EntityGraph` with a custom `@Query` JPQL method?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    }
+  ]
+}

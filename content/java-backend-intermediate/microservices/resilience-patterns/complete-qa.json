@@ -1,0 +1,534 @@
+{
+  "topic": "Resilience Patterns",
+  "topicSlug": "resilience-patterns",
+  "questions": [
+    {
+      "id": "ms-rp-001",
+      "slug": "resilience4j-circuit-breaker-retry-bulkhead-timelimiter",
+      "question": "Walk me through the resilience patterns: Circuit Breaker, Retry, Bulkhead, Rate Limiter, Time Limiter — when and how to combine them in Spring Boot.",
+      "title": "Resilience4j Patterns: Circuit Breaker, Retry, Bulkhead, Rate Limiter, Time Limiter",
+      "direct_answer": "Five complementary patterns from Resilience4j (the 2026 standard replacing Hystrix): **Circuit Breaker** trips open on sustained failure to stop hammering a broken dependency; **Retry** handles transient failures with exponential backoff + jitter; **Bulkhead** limits concurrent calls to one dependency so it can't exhaust threads for the whole service; **Rate Limiter** caps outgoing call rate to respect downstream limits; **Time Limiter** enforces per-call deadlines. Combine in order: **TimeLimiter → CircuitBreaker → Retry → Bulkhead → RateLimiter** around the downstream call. Always pair with **fallbacks** and **idempotency**.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Practical resilience engineering knowledge and pattern composition",
+        "common_mistake": "Using only retry (amplifies outages); combining patterns in wrong order; retrying on non-idempotent calls; no fallback",
+        "to_stand_out": "Discuss pattern ordering, retry storm risk, exponential backoff with jitter, circuit-breaker state machine (closed/open/half-open), and the thread-pool bulkhead vs semaphore bulkhead distinction"
+      },
+      "company_tags": [
+        "netflix",
+        "resilience4j",
+        "spring",
+        "amazon",
+        "Netflix",
+        "Amazon"
+      ],
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Five Patterns, Applied in Order, Keep Services Resilient",
+            "content": "Microservices talk to each other over the network. Networks fail, services get slow, pods restart, databases have spikes. Without resilience patterns, one slow downstream cascades: requests pile up, threads exhaust, the service becomes unresponsive, and the failure propagates upstream.\n\nResilience4j is the current standard library for JVM resilience (Netflix Hystrix was deprecated in 2020). It provides five complementary patterns:\n\n1. **Circuit Breaker** — monitors failure rate of a dependency; when it crosses a threshold, 'trips open' and fails fast for a cooling period instead of sending doomed requests. After timeout, half-opens to test recovery.\n\n2. **Retry** — for transient failures (network blips, brief 503s), retry with exponential backoff + jitter. Not for persistent failures (retrying 10x on a broken DB just amplifies the outage).\n\n3. **Bulkhead** — limits concurrent in-flight calls to one dependency. If downstream becomes slow, only N threads wait on it; the rest of your service keeps serving other requests. Prevents slow dependencies from sinking the whole service.\n\n4. **Rate Limiter** — caps the rate of outgoing calls; protects downstream from being overwhelmed and respects quota agreements.\n\n5. **Time Limiter** — enforces a deadline per call. A 30-second network timeout is often too long; time limiter cuts it off at, say, 2 seconds.\n\nThe order matters. From outermost to innermost: **TimeLimiter → CircuitBreaker → Retry → Bulkhead → RateLimiter → actual call**. Each wraps the next. TimeLimiter enforces the overall deadline; CircuitBreaker short-circuits if tripped; Retry runs inside the circuit; Bulkhead caps concurrency; RateLimiter paces.\n\nAnd always: **fallback** for when everything fails. Return cached data, degraded response, or a clear error. Never let the caller see a stack trace."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Pattern Composition Around a Downstream Call",
+            "content": "```mermaid\nflowchart TB\n    Req[Incoming request] --> TL[TimeLimiter<br/>2s deadline]\n    TL --> CB{CircuitBreaker<br/>state?}\n    CB -->|OPEN| Fallback[Fallback:<br/>cached or default]\n    CB -->|CLOSED/HALF-OPEN| RT[Retry<br/>3 attempts, exp backoff + jitter]\n    RT --> BH[Bulkhead<br/>max 10 concurrent]\n    BH --> RL[RateLimiter<br/>max 100 req/s]\n    RL --> Call[Actual HTTP call<br/>to downstream]\n    Call -->|success| Ret[Return result]\n    Call -->|transient error| RT\n    Call -->|persistent error<br/>exhausted retries| CBTrip[CircuitBreaker<br/>records failure]\n    CBTrip -->|threshold reached| OpenState[Circuit opens<br/>30s cooldown]\n    OpenState --> HalfOpen[Half-open:<br/>test with 1 request]\n    HalfOpen -->|success| Closed[Circuit closed]\n    HalfOpen -->|fail| OpenState\n    CBTrip --> Fallback\n    BH -->|full| FB2[Fallback or reject]\n    RL -->|rate exceeded| FB3[Fallback or queue]\n    style CB fill:#fff9c4\n    style Fallback fill:#ffe0b2\n    style OpenState fill:#ff8a80\n    style Closed fill:#c8e6c9\n```"
+          },
+          {
+            "type": "step",
+            "title": "Configuring Each Pattern in Spring Boot",
+            "content": "**Dependency:**\n\n```xml\n<dependency>\n  <groupId>io.github.resilience4j</groupId>\n  <artifactId>resilience4j-spring-boot3</artifactId>\n  <version>2.2.0</version>\n</dependency>\n```\n\n**application.yml (production-grade defaults):**\n\n```yaml\nresilience4j:\n  circuitbreaker:\n    instances:\n      paymentService:\n        registerHealthIndicator: true\n        failureRateThreshold: 50          # trip at 50% failures\n        slowCallRateThreshold: 50         # trip if 50% calls are slow\n        slowCallDurationThreshold: 2s     # 'slow' means > 2 seconds\n        permittedNumberOfCallsInHalfOpenState: 3\n        slidingWindowSize: 20             # last 20 calls\n        minimumNumberOfCalls: 10          # don't trip on small samples\n        waitDurationInOpenState: 30s\n        automaticTransitionFromOpenToHalfOpenEnabled: true\n\n  retry:\n    instances:\n      paymentService:\n        maxAttempts: 3\n        waitDuration: 500ms\n        exponentialBackoffMultiplier: 2\n        randomizedWaitFactor: 0.5          # jitter\n        retryExceptions:\n          - java.io.IOException\n          - java.util.concurrent.TimeoutException\n        ignoreExceptions:\n          - com.example.BusinessException   # don't retry 4xx\n\n  bulkhead:\n    instances:\n      paymentService:\n        maxConcurrentCalls: 10\n        maxWaitDuration: 100ms\n\n  ratelimiter:\n    instances:\n      paymentService:\n        limitForPeriod: 100\n        limitRefreshPeriod: 1s\n        timeoutDuration: 200ms\n\n  timelimiter:\n    instances:\n      paymentService:\n        timeoutDuration: 2s\n        cancelRunningFuture: true\n```\n\n**Annotation-based composition (order matters):**\n\n```java\n@Service\npublic class PaymentClient {\n\n    @TimeLimiter(name = \"paymentService\", fallbackMethod = \"paymentFallback\")\n    @CircuitBreaker(name = \"paymentService\")\n    @Retry(name = \"paymentService\")\n    @Bulkhead(name = \"paymentService\", type = Bulkhead.Type.SEMAPHORE)\n    @RateLimiter(name = \"paymentService\")\n    public CompletableFuture<PaymentResult> charge(Payment p) {\n        return CompletableFuture.supplyAsync(() -> restTemplate.postForObject(\n            \"https://payments.internal/charge\", p, PaymentResult.class));\n    }\n\n    public CompletableFuture<PaymentResult> paymentFallback(Payment p, Throwable t) {\n        log.warn(\"Payment fallback for {}: {}\", p.getId(), t.getMessage());\n        return CompletableFuture.completedFuture(\n            PaymentResult.deferred(p.getId()));\n    }\n}\n```\n\nThe annotation order (outermost first): `@TimeLimiter > @CircuitBreaker > @Retry > @Bulkhead > @RateLimiter`. Resilience4j applies them from outside to inside.\n\n**Why this order:**\n\n- **TimeLimiter first**: the overall deadline is enforced even if retries chain; a 2s limit means 2s total\n- **CircuitBreaker next**: if circuit is open, short-circuit immediately — don't retry or bulkhead a doomed call\n- **Retry inside circuit**: retries contribute to circuit's failure rate; several retries then trip the circuit\n- **Bulkhead inside retry**: each retry attempt passes through bulkhead; prevents a retry storm from monopolizing threads\n- **RateLimiter innermost**: paces the actual call to downstream\n\n**Fallback patterns:**\n\n```java\n// Option A: cached last-known value\npublic PaymentResult paymentFallback(Payment p, Throwable t) {\n    return paymentCache.getLastKnown(p.getId())\n        .orElse(PaymentResult.error(\"Service unavailable\"));\n}\n\n// Option B: deferred processing\npublic PaymentResult paymentFallback(Payment p, Throwable t) {\n    deferredQueue.enqueue(p);\n    return PaymentResult.accepted(\"Queued for retry\");\n}\n\n// Option C: degraded response\npublic UserProfile profileFallback(String userId, Throwable t) {\n    return UserProfile.minimal(userId);  // just the fields we have locally\n}\n```\n\n**Monitoring (essential):**\n\n```yaml\nmanagement:\n  endpoints.web.exposure.include: health,metrics,circuitbreakers\n  health.circuitbreakers.enabled: true\n  metrics.tags.application: payment-service\n```\n\nPrometheus metrics exposed automatically: `resilience4j_circuitbreaker_state`, `resilience4j_retry_calls`, `resilience4j_bulkhead_available_concurrent_calls`. Dashboard them."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Dangerous Anti-Patterns",
+            "content": "**Retry storms amplify outages.** A downstream service hits 80% failure.\n- Every client retries 3 times — effective load is 3×.\n- Downstream can't recover because retry volume keeps it overloaded.\n- Always combine retry with circuit breaker and exponential backoff + jitter.\n- When the circuit is open, retries are paused.\n\n**Exponential backoff without jitter = thundering herd.** 1000 clients all fail at t=0, back off 1s, 2s, 4s. They retry in synchronized waves. Downstream gets hammered in pulses. Add randomized jitter so retry times spread out.\n\n**Don't retry non-idempotent operations.** `POST /charge` without idempotency key: retry after timeout = duplicate charge. Either make the operation idempotent (idempotency-key header), or skip retry entirely. Retry is safe for GETs and idempotent PUTs/DELETEs.\n\n**Circuit breaker state machine.** CLOSED (normal): calls pass; counts failures.\n- OPEN (tripped): calls fail fast; timer runs.\n- HALF_OPEN (testing): allows small number of calls; if they succeed, back to CLOSED; if any fail, back to OPEN.\n- Understanding the state machine helps debugging 'why is my circuit stuck open?'\n\n**Circuit breaker threshold calibration.** Too low (trips on normal variance). Too high (trips too late; thread pool already exhausted). Start at 50% failure rate + slow-call-rate 50% + 2s slow threshold; tune based on observed behavior.\n\n**Slow-call detection matters more than error detection.** A downstream returning 200s in 30 seconds is as bad as returning 500s in 10ms. Slow-call threshold in the circuit breaker catches this; Hystrix didn't have this natively.\n\n**Bulkhead types: thread-pool vs semaphore.**\n- **Semaphore** (default, lightweight): limits concurrent calls; caller's thread is used\n- **ThreadPool**: separate thread pool per dependency; caller thread freed; better isolation but more overhead\n\nSemaphore is fine for most Spring Boot services; thread-pool bulkhead shines when dealing with blocking clients that may hang.\n\n**Rate limiter isn't for protection from attacks.** It paces outgoing calls to respect quotas; not a DDoS defense. For incoming rate limiting, use API Gateway or WAF.\n\n**TimeLimiter needs async.** @TimeLimiter requires the method to return `CompletableFuture`; it runs the work on an executor and interrupts on timeout. Synchronous methods need explicit timeout in the HTTP client (e.g., RestTemplate connectTimeout/readTimeout).\n\n**Fallbacks should be fast and predictable.** A fallback that itself calls a database or another service can fail too. Prefer: in-memory cache, default values, deferred queue.\n\n**Don't fallback-hide real problems.** Silent fallbacks mean the primary service never recovers attention. Always log and metric when fallback fires; alert on fallback rate.\n\n**Annotation order can be confusing.** Spring AOP applies decorators outside-in; Resilience4j's Spring integration docs show the intended order. Verify behavior with tests.\n\n**Resilience4j vs Istio vs Envoy.** Service mesh (Istio) provides retries, circuit breaking, timeouts at the network layer. Resilience4j at the app layer. Use both: service mesh for generic HTTP resilience; Resilience4j for business-specific patterns (fallbacks, custom predicates).\n\n**Spring Cloud OpenFeign integration.** Feign clients support Resilience4j via `spring-cloud-starter-openfeign` + `feign-resilience4j`; declarative HTTP client with resilience for free.\n\n**WebClient + Resilience4j for reactive.** WebClient works with Resilience4j operators (`.transformDeferred(CircuitBreakerOperator.of(circuitBreaker))`). Different API than blocking but same patterns.\n\n**Tuning checklist:**\n- Retry attempts: 3 is standard; more causes storms\n- Retry delay: 500ms start, 2× multiplier, 50% jitter\n- Circuit breaker failure threshold: 50%\n- Circuit breaker wait duration: 30s (allows downstream recovery)\n- Bulkhead concurrent calls: 10–20 per dependency\n- Time limiter: 2–5s for HTTP calls (not the default 1 min socket timeout)\n\n**Testing resilience.** Chaos engineering (Chaos Monkey, Gremlin) to verify circuits trip, fallbacks fire, SLOs survive. Game days to verify on-call can recognize these patterns."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Five complementary patterns**: Circuit Breaker, Retry, Bulkhead, Rate Limiter, Time Limiter — use in combination\n- **Order (outermost to innermost)**: TimeLimiter → CircuitBreaker → Retry → Bulkhead → RateLimiter → call\n- **Resilience4j replaced Hystrix** — Hystrix deprecated in 2020; Resilience4j is the 2026 standard\n- **Retry + Circuit Breaker are paired** — retry alone amplifies outages; circuit breaker stops retry storm\n- **Exponential backoff + jitter** — prevents synchronized retry waves (thundering herd)\n- **Don't retry non-idempotent operations** without idempotency keys — duplicate charges, duplicate emails\n- **Slow-call detection** is as important as error detection — Resilience4j has it; Hystrix didn't\n- **Bulkhead prevents dependency slowness from sinking the whole service** — limit concurrent calls per dependency\n- **Fallbacks must be fast and predictable** — cached value, default, deferred queue; never call another service\n- **Monitor resilience4j metrics** — circuit state, retry count, bulkhead saturation, fallback rate"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Microservices talk to each other over networks. Networks fail, services get slow, pods restart, databases have spikes. Without resilience patterns, one slow downstream cascades: requests pile up, threads exhaust, the service becomes unresponsive, and failure propagates upstream.\n\nResilience4j is the JVM standard in 2026 — Netflix Hystrix was deprecated in 2020. Five complementary patterns:\n\n**Circuit Breaker**\n- Monitors failure rate of a dependency; when it crosses a threshold, trips open\n- Fails fast during the cooldown instead of sending doomed requests\n- Three states: CLOSED (normal), OPEN (tripped), HALF_OPEN (testing recovery)\n- Resilience4j adds slow-call detection that Hystrix didn't have\n\n**Retry**\n- For transient failures: network blips, brief 503s, connection resets\n- Exponential backoff with jitter; not linear or zero-delay\n- Never retry non-idempotent operations without idempotency keys; duplicate charges result\n- Typical: 3 attempts, 500ms start, 2x multiplier, 50% jitter\n\n**Bulkhead**\n- Limits concurrent in-flight calls to one dependency\n- If downstream becomes slow, only N threads wait on it; rest of service keeps serving\n- Semaphore type (lightweight) is default; thread-pool type for better isolation\n- Prevents slow dependencies from sinking the whole service\n\n**Rate Limiter**\n- Caps outgoing call rate; respects downstream quotas\n- Not for DDoS defense (that's API Gateway); for protecting downstream and respecting agreements\n\n**Time Limiter**\n- Enforces per-call deadline; requires method to return CompletableFuture\n- Default socket timeouts are often 30 seconds; too long for user-facing paths\n- Cut off at 2 to 5 seconds\n\n**The composition order matters**\n- From outermost to innermost: TimeLimiter, CircuitBreaker, Retry, Bulkhead, RateLimiter, then the actual call\n- TimeLimiter first: overall deadline is enforced even if retries chain\n- CircuitBreaker next: if circuit is open, short-circuit immediately; don't retry doomed calls\n- Retry inside circuit: retries contribute to circuit's failure count; several retries can trip the circuit\n- Bulkhead inside retry: each retry attempt passes through bulkhead; prevents retry storm\n- RateLimiter innermost: paces the actual call to downstream\n\n**Annotation order in Spring Boot**\n- @TimeLimiter, @CircuitBreaker, @Retry, @Bulkhead, @RateLimiter; outermost first\n- Resilience4j's Spring integration applies them in this documented order\n\n**Fallbacks are essential**\n- Return cached last-known value, default, deferred queue, degraded response\n- Never call another service from a fallback; it can fail too\n- Log and metric every fallback; alert on fallback rate\n- Silent fallbacks hide real problems\n\n**Dangerous anti-patterns**\n- Retry without circuit breaker: one downstream outage becomes 3x load, prevents recovery\n- No jitter: synchronized retry waves hammer downstream in pulses\n- Retrying POST /charge without idempotency key: duplicate charges\n- Too-long timeouts: 30-second default socket timeout means one slow call blocks a thread for 30 seconds\n- No fallback: caller sees stack traces and 500 errors\n\n**Bulkhead types**\n- Semaphore (default, lightweight): limits concurrent calls using caller thread\n- ThreadPool: separate thread pool per dependency; caller thread freed; better isolation but more overhead\n- Semaphore is fine for most Spring Boot services\n\n**Service mesh vs app-level**\n- Istio/Linkerd provide retries, circuit breaking at network layer\n- Resilience4j at app layer\n- Use both: service mesh for generic HTTP resilience; Resilience4j for business-specific patterns with fallbacks\n\n**Monitoring is essential**\n- Resilience4j exposes Prometheus metrics: circuit state, retry count, bulkhead saturation\n- Dashboard per dependency; alert on circuit OPEN, high fallback rate\n\n**The strategic answer**\n- Five patterns, applied in the right order, make services resilient to downstream failure\n- Retry alone amplifies outages; circuit breaker stops the storm\n- Always pair patterns with fallbacks and idempotency\n- Test with chaos engineering; verify circuits actually trip and fallbacks fire\n- Tune based on observed traffic; don't blindly copy tutorial defaults"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Resilience4j's slow-call detection differ from Hystrix's approach?",
+        "When do you choose semaphore bulkhead vs thread-pool bulkhead?",
+        "How do you make a POST endpoint safely retryable with idempotency keys?",
+        "How does service mesh resilience (Istio) compare to Resilience4j?"
+      ],
+      "seo": {
+        "meta_title": "Resilience4j Patterns: Circuit Breaker, Retry, Bulkhead, Rate Limiter",
+        "meta_description": "Combine Resilience4j patterns in Spring Boot. Circuit breaker state machine, retry storms, exponential backoff with jitter, bulkhead types, fallbacks.",
+        "keywords": [
+          "resilience4j spring boot",
+          "circuit breaker pattern",
+          "retry pattern java",
+          "bulkhead pattern",
+          "hystrix alternative"
+        ],
+        "metaDescription": "Five complementary patterns from Resilience4j (the 2026 standard replacing Hystrix): Circuit Breaker trips open on sustained failure to stop hammering a broken.",
+        "metaTitle": "Resilience4j Patterns: Circuit Breaker, Retry, Bulkhead, Rate"
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Microservices talk to each other over networks.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Microservices talk to each other over the network. Networks fail, services get slow, pods restart, databases have spikes. Without resilience patterns, one slow downstream cascades: requests pile up, threads exhaust, the service becomes unresponsive, and the failure propagates upstream. Resilience4j is the current standard library for JVM resilience (Netflix Hystrix was deprecated in 2020). It provides five complementary patterns: 1. Circuit Breaker — monitors failure rate of a dependency; when it crosses a threshold, 'trips open' and fails fast for."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical resilience engineering knowledge and pattern composition"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Five complementary patterns: Circuit Breaker, Retry, Bulkhead, Rate Limiter, Time Limiter — use in combination Order (outermost to innermost): TimeLimiter → CircuitBreaker → Retry → Bulkhead → RateLimiter → call Resilience4j replaced Hystrix — Hystrix deprecated in 2020",
+              "Resilience4j is the 2026 standard Retry + Circuit Breaker are paired — retry alone amplifies outages",
+              "circuit breaker stops retry storm Exponential backoff + jitter — prevents synchronized retry waves (thundering herd) Don't retry non-idempotent operations without idempotency keys — duplicate charges, duplicate emails Slow-call detection is as important as error detection — Resilience4j has it",
+              "Hystrix didn't Bulkhead prevents dependency slowness from sinking the whole service — limit concurrent calls per dependency Fallbacks must be fast and predictable — cached value, default, deferred queue",
+              "never call another service Monitor resilience4j metrics — circuit state, retry count, bulkhead saturation, fallback rate"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Microservices talk to each other over the network. Networks fail, services get slow, pods restart, databases have spikes. Without resilience patterns, one slow downstream cascades: requests pile up, threads exhaust, the service becomes unresponsive, and the failure propagates upstream. Resilience4j is the current standard library for JVM resilience (Netflix Hystrix was deprecated in 2020). It provides five complementary patterns: 1. Circuit Breaker — monitors failure rate of a dependency; when it crosses a threshold, 'trips open' and fails fast for a cooling period instead of sending doomed requests. After timeout, half-opens to test recovery. 2. Retry — for transient failures (network blips, brief 503s), retry with exponential backoff + jitter. Not for persistent failures (retrying 10x on a broken DB."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using only retry (amplifies outages)",
+              "combining patterns in wrong order",
+              "retrying on non-idempotent calls",
+              "no fallback"
+            ]
+          }
+        ],
+        "cap": "Five complementary patterns: Circuit Breaker Monitors failure rate of a dependency; when it crosses a threshold, trips open Fails fast during the cooldown instead of sending doomed requests Three stat",
+        "familiarity_anchors": [
+          "Hystrix",
+          "Circuit",
+          "Breaker"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Resilience4j's slow-call detection differ from Hystrix's approach?",
+          "When do you choose semaphore bulkhead vs thread-pool bulkhead?",
+          "How do you make a POST endpoint safely retryable with idempotency keys?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    },
+    {
+      "id": "ms-rp-002",
+      "slug": "idempotency-exactly-once-distributed-systems",
+      "question": "How do you design idempotent APIs and achieve effectively-once semantics in a distributed system?",
+      "title": "Idempotency + Exactly-Once: Design Patterns",
+      "direct_answer": "True exactly-once is impossible across network boundaries; aim for **effectively-once**: at-least-once delivery + idempotent processing = observationally exactly-once. Techniques: **Idempotency keys** (client-supplied UUIDs stored with results; duplicate keys return the cached response); **Natural idempotency** (DELETE, PUT by id); **Version tokens** (optimistic locking: 'update row where version=X'); **Dedupe tables** (track processed message IDs); **Outbox pattern** (transactionally write DB change + event; separate publisher drains). Never trust clients to retry safely without idempotency; design it into the protocol.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Depth on distributed-systems correctness, a recurring real-world concern",
+        "common_mistake": "Confusing idempotency with exactly-once; thinking 2PC solves it; not designing idempotency from day one",
+        "to_stand_out": "Discuss why true exactly-once is impossible, the 'two generals' problem, idempotency-key retention/cleanup, outbox vs 2PC, and the difference between delivery guarantees and processing guarantees"
+      },
+      "company_tags": [
+        "stripe",
+        "shopify",
+        "kafka",
+        "aws",
+        "Netflix",
+        "Amazon"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "'Exactly-Once' Is Marketing; Effectively-Once Is Engineering",
+            "content": "In a distributed system, you can't guarantee a message is delivered exactly once.\n- The canonical proof is the 'two generals problem': if the sender doesn't get an ack, it doesn't know if the receiver got the message, so it retries — possibly causing duplication.\n- If the sender waits for ack before committing, the receiver can't know if the sender will retry.\n- Perfect exactly-once is impossible across a network boundary.\n\nWhat is achievable: **effectively-once**. That's **at-least-once delivery + idempotent processing**. The message may arrive multiple times, but the receiver processes it once — subsequent deliveries are no-ops. From the outside, the system behaves exactly-once.\n\nThe techniques that make processing idempotent:\n\n1. **Idempotency keys** — client generates a UUID per logical operation, sends in header. Server stores the key → result mapping. Duplicate key returns the cached result. Classic for Stripe API.\n\n2. **Natural idempotency** — some operations are inherently idempotent: `DELETE /users/42`, `PUT /users/42 {...}`, `SET key=value`. Repeating them produces the same state.\n\n3. **Version tokens / optimistic locking** — update `SET ... WHERE id=X AND version=Y`. Second update finds version already incremented; no-op.\n\n4. **Dedupe tables** — track processed message IDs in a small table; check-and-insert is atomic. Works for Kafka consumers, SQS consumers.\n\n5. **Outbox pattern** — transactionally write both the DB change and an 'outbox event' row. A separate publisher polls the outbox and sends events; crashes between DB commit and event send are safe because the outbox is durable.\n\nTrue correctness in distributed processing comes from designing idempotency from day one. Retries, network blips, and consumer restarts will happen; the question is whether duplicate processing is a duplicate charge or a no-op."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Idempotency Key Flow vs Outbox Pattern",
+            "content": "```mermaid\nflowchart TB\n    subgraph IK[Idempotency Key Pattern]\n        Client[Client] -->|POST /charge<br/>Idempotency-Key: uuid-123| Server[Server]\n        Server --> Check{Key seen?}\n        Check -->|yes| Cached[Return cached response]\n        Check -->|no| Process[Process request]\n        Process --> Store[Store key → response]\n        Store --> Return[Return response]\n        Store --> TTL[TTL: 24 hours]\n    end\n    subgraph OB[Outbox Pattern]\n        App[App] -->|single TX| DB[(DB)]\n        DB --> Change[Business table]\n        DB --> Outbox[Outbox table<br/>event rows]\n        Publisher[Publisher worker] -->|poll| Outbox\n        Publisher -->|emit| Kafka[Kafka / SQS]\n        Publisher --> Mark[Mark outbox row<br/>as published]\n        Kafka -->|consumer| C1[Consumer 1]\n        Kafka -->|consumer| C2[Consumer 2]\n        C1 --> Dedupe{Dedupe table:<br/>seen event_id?}\n        Dedupe -->|yes| Skip[Skip]\n        Dedupe -->|no| Proc[Process + record]\n    end\n    style Cached fill:#c8e6c9\n    style Store fill:#fff9c4\n    style Outbox fill:#fff9c4\n    style Proc fill:#c8e6c9\n```"
+          },
+          {
+            "type": "step",
+            "title": "Implementation Patterns",
+            "content": "**Idempotency Key — Stripe-style**\n\nClient generates a UUID per logical request:\n\n```http\nPOST /v1/charges HTTP/1.1\nIdempotency-Key: 4f8b1e2a-9c0d-4e5f-a1b2-3c4d5e6f7a8b\nContent-Type: application/json\n\n{\"amount\": 1000, \"currency\": \"usd\", \"customer\": \"cus_abc\"}\n```\n\nServer implementation:\n\n```java\n@PostMapping(\"/charges\")\npublic ResponseEntity<Charge> charge(\n        @RequestHeader(\"Idempotency-Key\") String key,\n        @RequestBody ChargeRequest req) {\n\n    Optional<IdempotencyRecord> existing = idempotencyRepo.findByKey(key);\n    if (existing.isPresent()) {\n        IdempotencyRecord rec = existing.get();\n        if (rec.getStatus() == COMPLETED) {\n            return ResponseEntity.status(rec.getHttpStatus())\n                .body(rec.getResponseBody(Charge.class));\n        } else if (rec.getStatus() == IN_PROGRESS) {\n            return ResponseEntity.status(409)\n                .body(Charge.error(\"Original request in progress\"));\n        }\n        // FAILED — depending on policy, could retry or return same error\n    }\n\n    IdempotencyRecord record = new IdempotencyRecord(key, IN_PROGRESS, Instant.now());\n    try {\n        idempotencyRepo.save(record);\n    } catch (DataIntegrityViolationException e) {\n        return ResponseEntity.status(409).build();  // concurrent duplicate\n    }\n\n    try {\n        Charge result = paymentService.charge(req);\n        record.setStatus(COMPLETED);\n        record.setHttpStatus(200);\n        record.setResponseBody(result);\n        idempotencyRepo.save(record);\n        return ResponseEntity.ok(result);\n    } catch (Exception e) {\n        record.setStatus(FAILED);\n        idempotencyRepo.save(record);\n        throw e;\n    }\n}\n```\n\nKey design:\n- Store with TTL (e.g., 24 hours); older requests won't retry\n- Store status (IN_PROGRESS prevents concurrent duplicate processing)\n- Atomic insert (DB unique constraint on key) prevents race\n- Response body cached; exact same response on retry\n\n**Dedupe table for message consumers**\n\n```java\n@KafkaListener(topics = \"payment-events\")\npublic void onEvent(PaymentEvent event) {\n    if (processedEventsRepo.existsById(event.getId())) {\n        return;  // already processed\n    }\n    try {\n        jdbcTemplate.execute(() -> {\n            processEvent(event);\n            processedEventsRepo.save(new ProcessedEvent(event.getId(), Instant.now()));\n        });\n    } catch (DuplicateKeyException e) {\n        // race: another consumer saved first; that's OK\n    }\n}\n```\n\nDedupe table has TTL; old entries cleaned up by periodic job. Size depends on throughput and retention.\n\n**Outbox pattern (for publishing events transactionally)**\n\nInstead of:\n```java\n@Transactional\npublic void placeOrder(Order o) {\n    orderRepo.save(o);      // committed\n    kafkaTemplate.send(...); // separate; may fail after commit\n}\n```\n\nUse outbox:\n```java\n@Transactional\npublic void placeOrder(Order o) {\n    orderRepo.save(o);\n    OutboxEvent event = new OutboxEvent(\"OrderPlaced\", o.toJson(), Instant.now());\n    outboxRepo.save(event);  // in same TX\n}\n\n// Separate scheduled publisher\n@Scheduled(fixedDelay = 1000)\npublic void publishOutbox() {\n    List<OutboxEvent> unpublished = outboxRepo.findUnpublishedLimit(100);\n    for (OutboxEvent e : unpublished) {\n        try {\n            kafkaTemplate.send(\"orders\", e.getPayload()).get(5, TimeUnit.SECONDS);\n            e.markPublished();\n            outboxRepo.save(e);\n        } catch (Exception ex) {\n            // will retry next poll; idempotent on consumer side\n        }\n    }\n}\n```\n\nThe outbox guarantees: if the DB transaction commits, the event is eventually published. At-least-once, consumer dedupes = effectively once.\n\n**Optimistic locking for updates**\n\n```java\n@Entity\npublic class Inventory {\n    @Id Long id;\n    Integer quantity;\n    @Version Long version;\n}\n\n@Transactional\npublic void decrementInventory(Long id, int amount) {\n    Inventory inv = inventoryRepo.findById(id).orElseThrow();\n    if (inv.getQuantity() < amount) throw new InsufficientStockException();\n    inv.setQuantity(inv.getQuantity() - amount);\n    inventoryRepo.save(inv);  // throws OptimisticLockException if version mismatch\n}\n```\n\nIf two threads concurrent decrement, one fails with OptimisticLockException. Caller retries; correct end state."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs, Kafka Exactly-Once, and Common Mistakes",
+            "content": "**Kafka 'exactly-once' semantics.** Kafka (since 0.11) supports transactional producers + idempotent producers, giving exactly-once *within Kafka* (read from topic, process, write to topic atomically). Does not extend to external systems.\n- If your consumer writes to a database, that write is not part of the Kafka transaction — you still need idempotent processing at the DB side.\n\n**Two-Phase Commit (2PC) is rarely the answer.** XA transactions across DB + message broker exist but are fragile, slow, and require all resources to support XA. Most modern architectures avoid 2PC in favor of outbox + idempotent consumers.\n\n**Idempotency key TTL.** Too short: clients retrying after the TTL see different results. Too long: DB grows unboundedly. Stripe uses 24 hours. For batch systems with longer retries, consider 72 hours or 1 week.\n\n**Idempotency key scope.** Same key reused for different operations? Server should detect payload mismatch and return 400 (Stripe does this). The key isn't just a cache lookup; it's a contract with the payload.\n\n**Concurrent requests with same key.** Two requests with the same idempotency key arrive simultaneously. One should process; the other should wait or return 409. Implement via DB unique constraint: the second insert fails, and the handler returns 409 or blocks on the first completing.\n\n**Idempotency vs uniqueness.** Idempotency says 'repeating the operation is safe'. Uniqueness says 'this entity can exist only once'. They overlap but aren't the same. Create-by-idempotency-key is idempotent; create-by-natural-key is unique.\n\n**Design idempotency into the API, not as an afterthought.** Adding idempotency to a deployed API requires coordinated client updates. Start day-one with idempotency keys on all unsafe operations (POST creating resources, POST transferring money).\n\n**DynamoDB / NoSQL idempotency** via conditional writes. `PutItem` with `ConditionExpression: attribute_not_exists(id)` is atomic idempotent insert. No transaction needed.\n\n**PostgreSQL `INSERT ... ON CONFLICT DO NOTHING`** for upserts with idempotency.\n\n**The 'didn't I already send this?' pattern.** Email sending, SMS sending, push notifications — all should check dedupe table before sending. Even with idempotent receivers at API layer, external services like SendGrid may double-send if you don't dedupe at call site.\n\n**Outbox pattern trade-offs.** Adds DB write per event; polling introduces latency (default fixedDelay=1s); outbox table grows if cleanup job lags. For high-throughput (>1000 events/s), CDC-based outbox (Debezium reads binlog) is cheaper than polling.\n\n**Consumer dedupe size.** For high-throughput Kafka (1M events/day), dedupe table needs efficient lookup. Redis with TTL, or a bloom filter + small authoritative DB.\n\n**Effectively-once for distributed workflows.** Saga patterns and orchestrators (Temporal, Conductor, Cadence) provide workflow-level idempotency and retries. Consider these for complex multi-step business processes.\n\n**Testing idempotency.** Chaos testing — deliberately inject duplicates, retries, failures. Verify no double-charges, no double-sends, no data corruption. Hard to test but critical.\n\n**Client behavior matters too.** If clients don't generate stable idempotency keys (e.g., regenerate UUID per retry), the server can't deduplicate. Client SDK should generate a key once per logical operation and reuse on retry.\n\n**Observability on idempotency.** Log when a duplicate key is detected (cached response returned). Metric idempotency-hit-rate. Spikes indicate retry storms or client bugs."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **True exactly-once is impossible** across network boundaries (two generals problem); target effectively-once = at-least-once delivery + idempotent processing\n- **Idempotency keys (Stripe pattern)** — client UUID per logical operation; server stores key → response; duplicate key returns cached response\n- **Natural idempotency**: DELETE, PUT by id; repeating produces same state\n- **Optimistic locking / version tokens** for safe concurrent updates\n- **Dedupe tables** for message consumers — check-and-insert processed event IDs\n- **Outbox pattern** for publishing events transactionally — same TX as DB change, separate publisher drains\n- **Kafka exactly-once is within Kafka only** — doesn't extend to external DB writes\n- **2PC rarely the answer** — fragile, slow; outbox + idempotent consumers is the modern pattern\n- **Idempotency key TTL**: 24 hours typical; balance client retry window vs storage growth\n- **Design idempotency day one** — retrofitting to deployed APIs requires coordinated client updates"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "In a distributed system, you can't guarantee a message is delivered exactly once. The canonical proof is the two generals problem: if the sender doesn't get an ack, it doesn't know if the receiver got the message, so it retries. Perfect exactly-once is impossible across a network boundary.\n\n**What is achievable: effectively-once**\n- At-least-once delivery plus idempotent processing\n- Message may arrive multiple times; receiver processes it once; subsequent deliveries are no-ops\n- From outside, the system behaves exactly-once\n\n**The techniques that make processing idempotent**\n\n*Idempotency keys — the Stripe pattern*\n- Client generates a UUID per logical operation; sends in Idempotency-Key header\n- Server stores the key mapped to response\n- Duplicate key returns the cached response\n- Critical for POSTs creating resources or transferring money\n- Store with TTL around 24 hours; status tracking (IN_PROGRESS, COMPLETED, FAILED)\n- DB unique constraint on key prevents race conditions\n\n*Natural idempotency*\n- Some operations are inherently idempotent: DELETE /users/42, PUT /users/42, SET key=value\n- Repeating them produces the same state\n- Use when the API allows\n\n*Optimistic locking with version tokens*\n- UPDATE ... WHERE id=X AND version=Y\n- Second concurrent update finds version incremented; fails\n- Caller retries; correct end state\n- JPA @Version handles this automatically\n\n*Dedupe tables for message consumers*\n- Small table tracks processed event IDs\n- Consumer checks before processing; atomic insert prevents double-processing\n- TTL cleanup for old entries\n\n*Outbox pattern for transactional publishing*\n- Write DB change and outbox event in same transaction\n- Separate publisher polls outbox and emits events\n- Crashes between DB commit and event send are safe; outbox is durable\n- Guarantees: if DB commits, event is eventually published\n\n**Kafka exactly-once is within Kafka only**\n- Transactional producer plus idempotent producer gives exactly-once within Kafka\n- Read from topic, process, write to topic atomically\n- Does NOT extend to external DB writes; your consumer still needs idempotent processing at the DB side\n- Advertising 'exactly-once Kafka' and thinking it solves your DB problem is a common misconception\n\n**Why 2PC (Two-Phase Commit) is rarely the answer**\n- XA transactions across DB plus message broker exist\n- Fragile, slow, require all resources to support XA\n- Modern architectures prefer outbox plus idempotent consumers\n\n**Common mistakes**\n- Thinking idempotency is exactly-once; they're different concepts\n- Retrofitting idempotency after API is deployed; requires coordinated client updates\n- Clients regenerating UUID per retry; defeats idempotency at server\n- No TTL on idempotency keys; table grows unboundedly\n- Silent dedupe; no observability on hit rate to catch retry storms\n\n**The design discipline**\n- Day-one design: idempotency keys on all unsafe operations\n- Client SDK generates key once per logical operation; reuses on retry\n- Server stores key-to-response; duplicate key returns cached response\n- Concurrent requests with same key: one processes, one waits or returns 409\n- Outbox pattern for event publishing; transactional guarantees\n- Dedupe tables on consumers; check-and-insert atomic\n\n**Test chaos**\n- Deliberately inject duplicates, retries, failures in test environments\n- Verify no double-charges, double-sends, data corruption\n- Hard to test but critical\n\n**The strategic answer**\n- Exactly-once is marketing; effectively-once is engineering\n- At-least-once delivery plus idempotent processing is the architecture\n- Idempotency keys on client-facing APIs (Stripe pattern)\n- Outbox pattern for event publishing\n- Dedupe tables on consumers\n- Design from day one; retrofitting is coordinated-update pain"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Kafka's transactional producer enable exactly-once within Kafka?",
+        "What is the Debezium approach to Change Data Capture (CDC) based outbox?",
+        "How do you handle idempotency-key collisions with different payloads?",
+        "When would you use Temporal or Cadence for workflow-level idempotency?"
+      ],
+      "seo": {
+        "meta_title": "Idempotency and Effectively-Once Semantics in Distributed Systems",
+        "meta_description": "Design idempotent APIs with idempotency keys, outbox pattern, dedupe tables. Why exactly-once is impossible and how effectively-once works.",
+        "keywords": [
+          "idempotency key",
+          "exactly-once semantics",
+          "effectively-once",
+          "outbox pattern",
+          "stripe idempotency"
+        ],
+        "metaDescription": "True exactly-once is impossible across network boundaries; aim for effectively-once: at-least-once delivery + idempotent processing = observationally exactly-o.",
+        "metaTitle": "Idempotency + Exactly-Once: Design Patterns"
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "In a distributed system, you can't guarantee a message is delivered exactly once.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "In a distributed system, you can't guarantee a message is delivered exactly once. The canonical proof is the 'two generals problem': if the sender doesn't get an ack, it doesn't know if the receiver got the message, so it retries — possibly causing duplication. If the sender waits for ack before committing, the receiver can't know if the sender will retry. Perfect exactly-once is impossible across a network boundary. What is achievable: effectively-once. That's at-least-once delivery + idempotent processing. The."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Depth on distributed-systems correctness, a recurring real-world concern"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "True exactly-once is impossible across network boundaries (two generals problem)",
+              "target effectively-once = at-least-once delivery + idempotent processing Idempotency keys (Stripe pattern) — client UUID per logical operation",
+              "server stores key → response",
+              "duplicate key returns cached response Natural idempotency: DELETE, PUT by id",
+              "repeating produces same state Optimistic locking / version tokens for safe concurrent updates Dedupe tables for message consumers — check-and-insert processed event IDs Outbox pattern for publishing events transactionally — same TX as DB change, separate publisher drains Kafka exactly-once is within Kafka only — doesn't extend to external DB writes 2PC rarely the answer — fragile, slow",
+              "outbox + idempotent consumers is the modern pattern Idempotency key TTL: 24 hours typical",
+              "balance client retry window vs storage growth Design idempotency day one — retrofitting to deployed APIs requires coordinated client updates"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "In a distributed system, you can't guarantee a message is delivered exactly once. The canonical proof is the 'two generals problem': if the sender doesn't get an ack, it doesn't know if the receiver got the message, so it retries — possibly causing duplication. If the sender waits for ack before committing, the receiver can't know if the sender will retry. Perfect exactly-once is impossible across a network boundary. What is achievable: effectively-once. That's at-least-once delivery + idempotent processing. The message may arrive multiple times, but the receiver processes it once — subsequent deliveries are no-ops. From the outside, the system behaves exactly-once. The techniques that make processing idempotent: 1. Idempotency keys — client generates a UUID per logical operation."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing idempotency with exactly-once",
+              "thinking 2PC solves it",
+              "not designing idempotency from day one"
+            ]
+          }
+        ],
+        "cap": "WHERE id=X AND version=Y Second concurrent update finds version incremented; fails Caller retries; correct end state JPA @Version handles this automatically Dedupe tables for message consumers Small t",
+        "familiarity_anchors": [
+          "Techniques",
+          "Idempotency",
+          "UUIDs"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Kafka's transactional producer enable exactly-once within Kafka?",
+          "What is the Debezium approach to Change Data Capture (CDC) based outbox?",
+          "How do you handle idempotency-key collisions with different payloads?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    },
+    {
+      "id": "ms-rp-003",
+      "slug": "rate-limiter-resilience4j-spring-boot",
+      "question": "How do you implement rate limiting in a Spring Boot microservice with Resilience4j? Explain token bucket vs leaky bucket and how to handle bursty traffic.",
+      "title": "Rate Limiting with Resilience4j: Token Bucket, Leaky Bucket, and Burst Control",
+      "direct_answer": "**Resilience4j RateLimiter** enforces a per-instance **token-bucket** policy via `limitForPeriod` (tokens per `limitRefreshPeriod`) and `timeoutDuration` (how long a caller waits for a token). Token bucket absorbs short bursts by allowing accumulated tokens to be spent at once; **leaky bucket** (e.g., Bucket4j's `Bandwidth` with smooth refill) smooths output to a constant rate. Use `@RateLimiter(name = \"svc\", fallbackMethod = \"degraded\")` for outgoing-call pacing; use **Spring Cloud Gateway's `RequestRateLimiter` filter + Redis** for distributed inbound rate limiting across replicas.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Understanding of rate-limiting algorithms, per-instance vs distributed limits, and Resilience4j RateLimiter configuration",
+        "common_mistake": "Assuming per-pod RateLimiter enforces a global rate (it doesn't; 5 pods at 100 rps = 500 rps globally); using rate limiter for DDoS defense (that's the gateway's job)",
+        "to_stand_out": "Contrast token bucket vs leaky bucket, explain why bursty traffic needs distinct configuration, and know when to reach for Bucket4j + Redis or Spring Cloud Gateway's RequestRateLimiter for distributed enforcement"
+      },
+      "company_tags": [
+        "Stripe",
+        "Shopify",
+        "Netflix",
+        "Cloudflare",
+        "GitHub",
+        "Amazon"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Rate Limiter Paces Calls; It Is Not a Shield Against Attacks",
+            "content": "A rate limiter caps how many calls flow through a protected section per unit of time.\n- In Resilience4j it is the innermost resilience primitive — wrapped by Bulkhead, Retry, CircuitBreaker, TimeLimiter from inside out.\n- Its job is narrow: **respect a downstream quota**, **avoid self-inflicted overload on a slow dependency**, or **smooth traffic into a backend that can't absorb bursts**.\n- It is not the DDoS layer — that lives at the API gateway or WAF.\n\nThe algorithm choice determines burst behavior.\n\n**Token bucket** (Resilience4j default): a bucket holds up to `limitForPeriod` tokens and refills every `limitRefreshPeriod`. Each call consumes one token.\n- Between refills, tokens accumulate (up to the cap).\n- A quiet period followed by a burst can drain the bucket in a single instant — bursty but bounded.\n\n**Leaky bucket**: water pours in at any rate, but drains at a constant rate.\n- Output is perfectly smooth; input bursts are queued or rejected.\n- Bucket4j models this with smooth refill (`Refill.greedy` vs `Refill.intervally`); some API gateways (Nginx `limit_req` with `nodelay=off`) implement leaky bucket directly.\n\n**Fixed window**: count calls per wall-clock minute. Simple but vulnerable to double bursts at window edges (100 at :59 and 100 at :00 = 200 in 2 seconds). Avoid for production.\n\n**Sliding-window log**: exact count over the last N seconds using a per-key sorted set. Most accurate, highest memory cost.\n\nResilience4j's implementation is token-bucket, per-JVM. That last part is the trap: **5 pods with `limitForPeriod: 100/s` allow 500 rps globally**, not 100 rps. For a true global limit across replicas, use **Spring Cloud Gateway's `RequestRateLimiter` filter backed by Redis**, or **Bucket4j with a Redis/Hazelcast grid store**."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Token Bucket Rate Limiter Flow",
+            "content": "```mermaid\nflowchart LR\n    Req[Incoming request] --> RL{RateLimiter<br/>tokens available?}\n    RL -->|yes, consume token| Call[Call downstream]\n    RL -->|no, bucket empty| Wait[Wait up to<br/>timeoutDuration]\n    Wait -->|refill in time| Call\n    Wait -->|still empty| Reject[RequestNotPermitted<br/>-> fallback]\n    subgraph Bucket[Token Bucket]\n        Tokens[tokens: limitForPeriod]\n        Refill[Refill every limitRefreshPeriod]\n        Refill --> Tokens\n    end\n    RL -.-> Bucket\n    Call --> Downstream[Downstream service]\n```"
+          },
+          {
+            "type": "step",
+            "title": "Configuring Resilience4j RateLimiter in Spring Boot",
+            "content": "**Dependency:**\n\n```xml\n<dependency>\n  <groupId>io.github.resilience4j</groupId>\n  <artifactId>resilience4j-spring-boot3</artifactId>\n  <version>2.2.0</version>\n</dependency>\n```\n\n**application.yml** — three common profiles:\n\n```yaml\nresilience4j:\n  ratelimiter:\n    instances:\n      # Profile A: strict pacing — 100 rps, refill every second\n      paymentApi:\n        limitForPeriod: 100\n        limitRefreshPeriod: 1s\n        timeoutDuration: 0            # fail fast if no token\n\n      # Profile B: bursty-tolerant — 600 per 10s window allows 600-req burst\n      analyticsIngest:\n        limitForPeriod: 600\n        limitRefreshPeriod: 10s\n        timeoutDuration: 200ms        # brief wait for refill\n\n      # Profile C: per-request quota — 5000/hour to a third-party API\n      externalVendor:\n        limitForPeriod: 5000\n        limitRefreshPeriod: 1h\n        timeoutDuration: 0\n```\n\n**Outbound call protected by @RateLimiter:**\n\n```java\n@Service\npublic class PaymentClient {\n\n    @RateLimiter(name = \"paymentApi\", fallbackMethod = \"rateLimitedFallback\")\n    public PaymentResult charge(Payment p) {\n        return restClient.post().uri(\"/charges\").body(p).retrieve()\n            .body(PaymentResult.class);\n    }\n\n    public PaymentResult rateLimitedFallback(Payment p, RequestNotPermitted e) {\n        pendingQueue.enqueue(p);                         // defer for later\n        return PaymentResult.queued(p.getId());\n    }\n\n    public PaymentResult rateLimitedFallback(Payment p, Throwable t) {\n        throw new RuntimeException(t);                   // only rate-limit handled here\n    }\n}\n```\n\nNote the two fallback methods — Resilience4j dispatches on the exception type. Only `RequestNotPermitted` is the rate-limit reject; everything else falls through.\n\n**Spring Cloud Gateway distributed rate limiting (Redis-backed):**\n\nFor inbound traffic hitting a fleet of gateway pods, a local token bucket per pod is wrong. Use the built-in `RequestRateLimiter` filter with `RedisRateLimiter`:\n\n```yaml\nspring:\n  cloud:\n    gateway:\n      routes:\n        - id: order-route\n          uri: lb://order-service\n          predicates:\n            - Path=/api/orders/**\n          filters:\n            - name: RequestRateLimiter\n              args:\n                redis-rate-limiter.replenishRate: 100    # tokens/sec\n                redis-rate-limiter.burstCapacity: 200    # max tokens\n                redis-rate-limiter.requestedTokens: 1\n                key-resolver: \"#{@userKeyResolver}\"\n  redis:\n    host: redis.prod.internal\n    port: 6379\n```\n\n```java\n@Bean\nKeyResolver userKeyResolver() {\n    return exchange -> Mono.justOrEmpty(\n        exchange.getRequest().getHeaders().getFirst(\"X-User-Id\"))\n        .defaultIfEmpty(exchange.getRequest().getRemoteAddress()\n            .getAddress().getHostAddress());\n}\n```\n\n`replenishRate` + `burstCapacity` = token bucket. `burstCapacity > replenishRate` permits short spikes; equal disables burst tolerance. The limiter key is per user (or IP as fallback) so one noisy caller can't burn the whole quota.\n\n**Bucket4j + Redis for business-level quotas** (per API key, per tenant):\n\n```java\nBucket bucket = Bucket.builder()\n    .addLimit(Bandwidth.classic(10_000, Refill.greedy(10_000, Duration.ofHours(1))))\n    .build();\n\nif (bucket.tryConsume(1)) {\n    processRequest();\n} else {\n    throw new QuotaExceededException();\n}\n```\n\nBucket4j integrates with Redisson / Hazelcast for a shared grid — suitable when multiple services all enforce one tenant quota."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Token vs Leaky Bucket, Burstiness, and Distributed Pitfalls",
+            "content": "**Bursty traffic — token bucket wins, configure cap correctly.** A quiet customer who sends nothing for 10 seconds then dumps 200 requests is normal for batch integrations. Token bucket lets them spend accumulated tokens. Leaky bucket would force-smooth the burst at output, which is correct when the downstream can't tolerate spikes, but wrong when you're okay with bursty consumption as long as the average is respected.\n\n**Cap the bucket to avoid unbounded accumulation.** In Spring Cloud Gateway's `RedisRateLimiter`, `burstCapacity` is the cap. If you set `replenishRate: 100, burstCapacity: 10_000`, a customer idle for 100 seconds could burst 10,000 requests — which may overwhelm the downstream despite the long-term rate being respected.\n\n**Per-instance vs global.** Resilience4j is per-JVM. If you scale to 5 pods with `limitForPeriod: 100/s`, the global rate is 500/s. For contracts with a third-party API that caps at 100/s globally, this silently breaks SLA. Options: (1) divide limit by replica count (brittle under autoscaling), (2) use Bucket4j + Redis for a shared bucket, (3) use a sidecar/proxy (Envoy's global rate limit service) that all replicas hit.\n\n**Fail-fast vs queue.** `timeoutDuration: 0` rejects immediately with `RequestNotPermitted` — use when callers prefer a fast 429 over a slow success. `timeoutDuration: 200ms` briefly waits for a refill — use when a tiny wait rescues many requests (e.g., pacing a batch).\n\n**429 responses with Retry-After.** When the gateway rate-limits a client, return HTTP 429 with a `Retry-After` header telling the client when to retry. Without it, well-behaved clients retry immediately and hit the limit again.\n\n**Don't use RateLimiter as DDoS defense.** A malicious client sending 100k rps will overwhelm the *gateway* CPU just parsing requests. DDoS mitigation lives at the CDN/WAF/LB layer (Cloudflare, AWS Shield, Nginx `limit_conn`). RateLimiter is for application-level fairness and quota compliance.\n\n**Hot-shard problem in distributed limiters.** A Redis-backed limiter keyed on user ID hits one Redis shard per key, but a single popular key (a whale tenant) can saturate that shard's single thread. Mitigate with Redis Cluster sharding, or local + distributed two-tier limiters: local first (rejects most over-limit calls without touching Redis), Redis authoritative for the remainder.\n\n**Metrics to expose.** `resilience4j_ratelimiter_available_permissions`, `resilience4j_ratelimiter_waiting_threads`. In Spring Cloud Gateway: `spring_cloud_gateway_requests` with status=429. Dashboard rejection rate per route; alert when it sustains above a normal baseline (indicates misconfigured cap or legitimate traffic growth needing scaling).\n\n**Burst test your config.** Before production, run a load test that pauses N seconds then fires M requests at once. Verify the bucket behaves as designed. Many teams ship broken configs because they only test steady-state.\n\n**Algorithm cheat-sheet:**\n\n| Algorithm | Burst tolerance | Implementation cost | Good for |\n|---|---|---|---|\n| Token bucket | yes, up to cap | low (Resilience4j native) | General pacing, API quotas |\n| Leaky bucket | no (output smoothed) | low (Bucket4j refill) | Strict output rate, queue-fed backends |\n| Fixed window | yes (double-burst risk) | trivial | Hacky counters, not production |\n| Sliding window log | exact | high (memory per key) | Billing-accurate metering |"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Resilience4j RateLimiter is token-bucket, per-JVM** — scales with replicas unless you use a shared store\n- **`limitForPeriod` + `limitRefreshPeriod` + `timeoutDuration`** are the three knobs; `burstCapacity` in Gateway's RedisRateLimiter caps accumulation\n- **Token bucket tolerates bursts; leaky bucket smooths output** — pick based on downstream tolerance\n- **Use Spring Cloud Gateway's `RequestRateLimiter` + Redis** for distributed inbound rate limiting across replicas\n- **Use Bucket4j + Redisson/Hazelcast** for per-tenant / per-API-key quotas with exact global enforcement\n- **Return 429 with `Retry-After`** when rejecting; naive clients retry immediately and make it worse\n- **RateLimiter ≠ DDoS defense** — that lives at WAF/CDN/LB, not the app layer\n- **Beware hot-shard on distributed limiters** — a single whale tenant can saturate one Redis thread; use two-tier local+global\n- **`timeoutDuration: 0`** fails fast; small waits (100–200ms) rescue borderline bursts\n- **Burst-test the config** — quiet then burst reveals cap misconfigurations steady-state tests miss"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**What a rate limiter does**\n- Caps the rate of calls through a protected section\n- In Resilience4j it is the innermost resilience primitive — TimeLimiter, CircuitBreaker, Retry, Bulkhead all wrap around it\n- Purpose: respect downstream quotas, avoid self-inflicted overload, smooth traffic to fragile backends\n- Not a DDoS shield — that belongs at the gateway, WAF, or CDN\n\n**Algorithms to know**\n- Token bucket (Resilience4j default) — tokens refill periodically; tolerates bursts up to the cap\n- Leaky bucket — constant output rate; smooths input bursts; Bucket4j implements this\n- Fixed window — simple counter per minute; vulnerable to double-burst at window edges; avoid\n- Sliding-window log — exact count over a rolling window; highest memory cost; use for billing-grade accuracy\n\n**Resilience4j configuration knobs**\n- limitForPeriod — tokens per refresh period\n- limitRefreshPeriod — how often the bucket refills\n- timeoutDuration — how long a caller waits for a token; zero means fail fast\n- Token cap equals limitForPeriod — accumulation is bounded\n\n**The distributed trap**\n- Resilience4j RateLimiter is per-JVM\n- Five pods at 100 per second allow 500 globally, not 100\n- If you have a third-party quota at 100 per second, per-pod config silently breaks SLA\n- Options: divide the limit by replica count (brittle), use Bucket4j plus Redis for shared state, or use a sidecar like Envoy's global rate-limit service\n\n**Spring Cloud Gateway with Redis for inbound traffic**\n- RequestRateLimiter filter plus RedisRateLimiter\n- replenishRate plus burstCapacity gives token bucket across all gateway pods\n- KeyResolver bean chooses the limit key — per user ID, per API key, or IP fallback\n- Correct answer for multi-pod gateway fleets\n\n**Bucket4j for business quotas**\n- Per-API-key or per-tenant quotas with exact global enforcement\n- Bandwidth plus Refill model; integrates with Redisson or Hazelcast for shared grid\n- Use when contracts specify hard ceilings like 10,000 requests per hour\n\n**Handling rejection well**\n- Return HTTP 429 with a Retry-After header; naive clients otherwise retry immediately\n- Log and metric rejections; sustained high rejection rate means either misconfig or legitimate growth\n- Fallback options: queue for later, return stale data, 429 to client\n\n**Common pitfalls**\n- Confusing per-instance with global rate\n- Using rate limiter for DDoS protection\n- No burst cap — idle customer accumulates tokens and overwhelms downstream at wake-up\n- No 429 + Retry-After — well-behaved clients retry in a loop and keep hitting the limit\n- No burst tests — steady-state load tests miss bucket-drain scenarios\n- Hot shard — one popular key saturates a single Redis thread\n\n**The strategic answer**\n- Token bucket for bursty-tolerant quota respect; leaky bucket when output must stay smooth\n- Resilience4j for per-JVM outbound pacing; Gateway plus Redis for distributed inbound limits\n- Bucket4j for per-tenant contractual quotas\n- Always return 429 with Retry-After; always metric rejections; always burst-test the config"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement a truly global rate limit for a 100-rps third-party API across 5 Spring Boot replicas?",
+        "What is the 'hot shard' problem with Redis-backed rate limiters and how do you mitigate it?",
+        "When would you choose Bucket4j over Resilience4j's RateLimiter?",
+        "How do you handle rate-limit rejections on the client side — retry behaviour with Retry-After?"
+      ],
+      "seo": {
+        "metaTitle": "Resilience4j Rate Limiter Spring Boot — Token Bucket, Leaky Bucket, Distributed",
+        "metaDescription": "Configure Resilience4j RateLimiter in Spring Boot. Token bucket vs leaky bucket, burst control, Spring Cloud Gateway Redis rate limiting, Bucket4j for global quotas."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "What a rate limiter does Caps the rate of calls through a protected section In Resilience4j it is the innermost resilience primitive — TimeLimiter, CircuitBreaker, Retry, Bulkhead all wrap around it P",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A rate limiter caps how many calls flow through a protected section per unit of time. In Resilience4j it is the innermost resilience primitive — wrapped by Bulkhead, Retry, CircuitBreaker, TimeLimiter from inside out. Its job is narrow: respect a downstream quota, avoid self-inflicted overload on a slow dependency, or smooth traffic into a backend that can't absorb bursts. It is not the DDoS layer — that lives at the API gateway or WAF. The algorithm choice determines burst behavior."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of rate-limiting algorithms, per-instance vs distributed limits, and Resilience4j RateLimiter configuration"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Resilience4j RateLimiter is token-bucket, per-JVM — scales with replicas unless you use a shared store limitForPeriod + limitRefreshPeriod + timeoutDuration are the three knobs",
+              "burstCapacity in Gateway's RedisRateLimiter caps accumulation Token bucket tolerates bursts",
+              "leaky bucket smooths output — pick based on downstream tolerance Use Spring Cloud Gateway's RequestRateLimiter + Redis for distributed inbound rate limiting across replicas Use Bucket4j + Redisson/Hazelcast for per-tenant / per-API-key quotas with exact global enforcement Return 429 with Retry-After when rejecting",
+              "naive clients retry immediately and make it worse RateLimiter ≠ DDoS defense — that lives at WAF/CDN/LB, not the app layer Beware hot-shard on distributed limiters — a single whale tenant can saturate one Redis thread",
+              "use two-tier local+global timeoutDuration: 0 fails fast",
+              "small waits (100–200ms) rescue borderline bursts Burst-test the config — quiet then burst reveals cap misconfigurations steady-state tests miss"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A rate limiter caps how many calls flow through a protected section per unit of time. In Resilience4j it is the innermost resilience primitive — wrapped by Bulkhead, Retry, CircuitBreaker, TimeLimiter from inside out. Its job is narrow: respect a downstream quota, avoid self-inflicted overload on a slow dependency, or smooth traffic into a backend that can't absorb bursts. It is not the DDoS layer — that lives at the API gateway or WAF. The algorithm choice determines burst behavior. Token bucket (Resilience4j default): a bucket holds up to limitForPeriod tokens and refills every limitRefreshPeriod. Each call consumes one token. Between refills, tokens accumulate (up to the cap). A quiet period followed by a burst can drain the bucket in."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Assuming per-pod RateLimiter enforces a global rate (it doesn't",
+              "5 pods at 100 rps = 500 rps globally)",
+              "using rate limiter for DDoS defense (that's the gateway's job)"
+            ]
+          }
+        ],
+        "cap": "What a rate limiter does Caps the rate of calls through a protected section In Resilience4j it is the innermost resilience primitive — TimeLimiter, CircuitBreaker, Retry, Bulkhead all wrap around it P",
+        "familiarity_anchors": [
+          "RateLimiter",
+          "Token",
+          "Bandwidth"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement a truly global rate limit for a 100-rps third-party API across 5 Spring Boot replicas?",
+          "What is the 'hot shard' problem with Redis-backed rate limiters and how do you mitigate it?",
+          "When would you choose Bucket4j over Resilience4j's RateLimiter?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    },
+    {
+      "id": "ms-rp-004",
+      "slug": "combining-resilience-patterns-order-of-operations",
+      "question": "In what order should you compose Resilience4j decorators — Retry, CircuitBreaker, TimeLimiter, Bulkhead, RateLimiter — and why does the order matter?",
+      "title": "Combining Resilience Patterns: Decorator Order and Why It Matters",
+      "direct_answer": "Compose from outermost to innermost as **TimeLimiter → CircuitBreaker → Retry → Bulkhead → RateLimiter → actual call**. **TimeLimiter** bounds total wall-clock latency including retries. **CircuitBreaker** short-circuits when tripped so retries never waste capacity on doomed calls. **Retry** sits inside the breaker so its attempts contribute to the breaker's failure stats. **Bulkhead** caps concurrency per retry attempt. **RateLimiter** paces the actual outbound call. Wrong order causes retry storms that trip the breaker, missed deadlines, or bulkhead saturation from retry fan-out.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Deep understanding of how resilience primitives compose; awareness that wrong order produces subtly broken behaviour under load",
+        "common_mistake": "Putting Retry outside CircuitBreaker (retries bypass a tripped breaker and amplify load); putting TimeLimiter inside Retry (each attempt gets full timeout so total latency balloons)",
+        "to_stand_out": "Walk through what each wrong order breaks concretely — retry storms, deadline violations, bulkhead saturation — and show both the annotation-based order and the programmatic Decorators.ofSupplier fluent chain"
+      },
+      "company_tags": [
+        "Netflix",
+        "Amazon",
+        "Stripe",
+        "Uber",
+        "Airbnb",
+        "Revolut"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "difficulty": "hard",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Order Is Not Aesthetic — It Determines Load Behaviour Under Failure",
+            "content": "Resilience4j decorators are composable functions.\n- Each one wraps the next and they execute as nested lambdas.\n- The order you declare them — whether with annotations, the fluent `Decorators.ofSupplier(...)` API, or explicit `.withCircuitBreaker(...)` chains — determines what each primitive *sees* and therefore how the system behaves when a downstream dependency misbehaves.\n\nThe canonical order, outside to inside, is: **TimeLimiter, CircuitBreaker, Retry, Bulkhead, RateLimiter, then the call itself**. Read it as 'the outermost primitive sees everything inside it, and nothing outside'.\n\n- **TimeLimiter outermost**: the overall deadline is for the whole operation — including every retry attempt, every probe through a half-open breaker, every wait in the bulkhead queue. Users care about total latency, not per-attempt latency. If TimeLimiter is inside Retry, each attempt gets the full timeout and a 3-retry chain can blow the budget to 3× the intended ceiling.\n\n- **CircuitBreaker above Retry**: when the breaker is OPEN, it rejects the call immediately with `CallNotPermittedException`. If Retry were outside CircuitBreaker, the retry loop would still run 3 times, each attempt bouncing off the breaker — wasted CPU and thread time. Inside the breaker, a single short-circuit ends the whole flow.\n\n- **Retry above Bulkhead**: each retry attempt passes through the bulkhead individually, respecting the concurrency cap per-attempt. If Bulkhead were outside Retry, a single 'slot' would be held for the full retry lifetime including backoff sleep, holding the bulkhead hostage for seconds and starving other callers.\n\n- **Bulkhead above RateLimiter**: bulkhead decides whether *this particular* attempt gets to try; rate limiter paces how fast it actually goes out. A call that gets admitted by the bulkhead still consumes a token. Saturated bulkhead never wakes the rate limiter.\n\n- **RateLimiter innermost**: closest to the actual call. A token is consumed only for real outbound traffic.\n\nFallback is attached to the outermost decorator. It fires when anything inside the chain throws — breaker-open, retry exhaustion, timeout, bulkhead saturation, rate-limit rejection."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Decorator Composition From Caller to Downstream",
+            "content": "```mermaid\nflowchart LR\n    Caller[Caller] --> TL[TimeLimiter<br/>2s deadline]\n    TL --> CB[CircuitBreaker<br/>state check]\n    CB --> RT[Retry<br/>3 attempts exp backoff]\n    RT --> BH[Bulkhead<br/>max 10 concurrent]\n    BH --> RL[RateLimiter<br/>100 rps]\n    RL --> Svc[Downstream service]\n    Svc -->|response| Caller\n    CB -. open .-> FB[Fallback]\n    TL -. timeout .-> FB\n    BH -. saturated .-> FB\n    RL -. over-limit .-> FB\n    FB --> Caller\n```"
+          },
+          {
+            "type": "step",
+            "title": "The Canonical Order — Annotation-Based and Programmatic",
+            "content": "**Annotation style (Spring integration):**\n\nResilience4j Spring integration applies annotation proxies in the documented outer-to-inner order. The ordering is baked in — declaring `@Retry` before `@CircuitBreaker` in source does *not* change execution order. The runtime always wraps: TimeLimiter → CircuitBreaker → RateLimiter → Retry → Bulkhead. Note the Spring-integration default slightly differs (Bulkhead innermost); this is the documented behaviour from the `resilience4j-spring-boot3` module.\n\n```java\n@Service\npublic class PaymentClient {\n\n    @TimeLimiter(name = \"paymentSvc\", fallbackMethod = \"fallback\")\n    @CircuitBreaker(name = \"paymentSvc\")\n    @Retry(name = \"paymentSvc\")\n    @Bulkhead(name = \"paymentSvc\", type = SEMAPHORE)\n    @RateLimiter(name = \"paymentSvc\")\n    public CompletableFuture<PaymentResult> charge(Payment p) {\n        return CompletableFuture.supplyAsync(() -> paymentApi.post(p));\n    }\n\n    public CompletableFuture<PaymentResult> fallback(Payment p, Throwable t) {\n        log.warn(\"payment fallback for {}: {}\", p.getId(), t.getClass().getSimpleName());\n        return CompletableFuture.completedFuture(PaymentResult.queued(p.getId()));\n    }\n}\n```\n\n`@TimeLimiter` requires `CompletableFuture<T>` because it runs the work on an executor and cancels on deadline. Synchronous methods cannot use `@TimeLimiter`; use the HTTP client's readTimeout instead.\n\n**Programmatic style — when you need full control:**\n\nThe annotation layer hides order. When you want to **prove** to yourself (or in a code review) that composition is right, the fluent `Decorators` API is explicit:\n\n```java\nSupplier<PaymentResult> decorated = Decorators\n    .ofSupplier(() -> paymentApi.post(payment))\n    .withRateLimiter(rateLimiter)       // innermost\n    .withBulkhead(bulkhead)\n    .withRetry(retry)\n    .withCircuitBreaker(circuitBreaker)\n    .withFallback(List.of(CallNotPermittedException.class,\n                          BulkheadFullException.class,\n                          RequestNotPermitted.class,\n                          RuntimeException.class),\n                  ex -> PaymentResult.queued(payment.getId()))\n    .decorate();\n\n// TimeLimiter wraps the async version:\nCompletableFuture<PaymentResult> future = timeLimiter.executeCompletionStage(\n    scheduledExecutor,\n    () -> CompletableFuture.supplyAsync(decorated::get, executor)\n).toCompletableFuture();\n```\n\nRead it bottom-up: the supplier is decorated first by RateLimiter (innermost execution), then Bulkhead, Retry, CircuitBreaker, Fallback; TimeLimiter runs async around the whole chain. **The chaining order (inner first in `.with...` calls) reverses the conceptual outer-to-inner order.**\n\n**Reactive WebClient composition:**\n\n```java\nMono<PaymentResult> reactive = webClient.post()\n    .uri(\"/charges\").bodyValue(payment)\n    .retrieve().bodyToMono(PaymentResult.class)\n    .transformDeferred(RateLimiterOperator.of(rateLimiter))\n    .transformDeferred(BulkheadOperator.of(bulkhead))\n    .transformDeferred(RetryOperator.of(retry))\n    .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))\n    .timeout(Duration.ofSeconds(2))\n    .onErrorResume(ex -> Mono.just(PaymentResult.queued(payment.getId())));\n```\n\nSame inner-to-outer stacking via `transformDeferred`; `.timeout()` replaces TimeLimiter at the outermost position."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "What Each Wrong Order Concretely Breaks",
+            "content": "**Retry *outside* CircuitBreaker (wrong).** When the breaker is OPEN, each retry attempt still runs — it just bounces off the breaker with `CallNotPermittedException`.\n- A 3-retry policy with 500ms backoff gives you 1.5 seconds of waste per call while the downstream is already known-broken.\n- Under high load, this compounds: thread-time consumed, bulkhead slots held during backoff sleeps, retry storms that prolong the breaker's open state.\n- **Fix:** CircuitBreaker outside Retry.\n- One short-circuit, done.\n\n**TimeLimiter *inside* Retry (wrong).** Each attempt gets the full 2-second deadline.\n- Three attempts with bad luck: 2s + 2s + 2s = 6s total latency for a single user request.\n- The caller's deadline (say, 3s) is violated and they time out anyway — having made the downstream do 3x the work.\n- **Fix:** TimeLimiter outermost.\n- The 2s deadline applies to the whole retry chain; at 2s, everything cancels and the fallback fires.\n\n**Bulkhead *outside* Retry (wrong).** A caller acquires one bulkhead slot, fails, retries, succeeds on attempt 3.\n- The slot was held for attempt 1 + backoff + attempt 2 + backoff + attempt 3 ≈ several seconds.\n- Other callers queued on a 10-slot bulkhead hit `BulkheadFullException` under moderate retry activity.\n- **Fix:** Bulkhead inside Retry.\n- Each attempt acquires and releases its own slot; waits between attempts free slots for others.\n\n**RateLimiter *outside* Retry (debatable).** One token per *user request* regardless of retry count is often what you want when rate-limiting for a *fairness* reason (per-user quota).\n- But when rate-limiting for *downstream protection*, you want one token per *actual outbound call* — retries should each consume a token.\n- Resilience4j's convention (innermost, inside Retry) is the downstream-protection mindset; if you need per-user semantics, put the quota check at the API gateway instead.\n\n**CircuitBreaker wraps Retry's aggregate, not each attempt.** This is the subtle part.\n- With Retry inside CircuitBreaker: the CB sees one outcome per user call (success or final failure after retries exhausted).\n- Its failure rate counts user-visible failures, which is what you want for 'trip the breaker when things are really bad'.\n- If you inverted — CB inside Retry — then each of 3 retry attempts is a separate failure event for the CB; sporadic failures trip the breaker at 1/3 the incidence.\n- Either approach is defensible, but the standard (CB outer) is what engineers expect.\n\n**Fallback placement.** Attach fallback to the outermost decorator. If you attach it to each primitive, you get weird partial-degradation behaviour (fallback fires from Retry on retry exhaustion but not from CB on open). Single fallback on the outermost catch-all is the simplest mental model.\n\n**Mixing sync and async.** `@TimeLimiter` forces `CompletableFuture` return.\n- If you mix with a sync HTTP client, the call body runs on a worker thread — wrap with care to avoid thread-pool leak on timeout.\n- Always set the HTTP client's `readTimeout` to *at least* the TimeLimiter duration; otherwise the cancelled future leaves the blocking socket read hanging in the client.\n\n**Metrics to watch:**\n- `resilience4j_retry_calls{kind='successful_with_retry'}` — retries happening\n- `resilience4j_circuitbreaker_state` — circuit state per instance\n- `resilience4j_bulkhead_available_concurrent_calls` — bulkhead headroom\n- `resilience4j_timelimiter_calls{kind='timeout'}` — deadline hits\n\nIf retries are high and CB state is OPEN, your retry policy is hammering an open breaker — suspect wrong order.\n\n**Production default starting point:**\n- TimeLimiter 2s\n- CircuitBreaker 50% failure rate, 20-call sliding window, 30s cooldown\n- Retry 3 attempts, 500ms base, exp backoff ×2, 50% jitter\n- Bulkhead 10 concurrent (semaphore)\n- RateLimiter per downstream quota\n- Fallback: cached / queued / degraded\n\nTune from there based on real load behaviour."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Order is: TimeLimiter → CircuitBreaker → Retry → Bulkhead → RateLimiter → call** (outer to inner)\n- **TimeLimiter outermost** bounds total latency including all retries\n- **CircuitBreaker above Retry** short-circuits doomed calls — retries never bypass an open breaker\n- **Retry above Bulkhead** means each attempt acquires its own slot; backoff sleeps don't hold slots\n- **Bulkhead above RateLimiter** caps concurrency before consuming tokens\n- **Annotation order is fixed** by Spring integration — declare order doesn't change execution\n- **Programmatic `Decorators.ofSupplier(...)` chain reverses conceptual order** — innermost `.with...` first\n- **Fallback on the outermost decorator** — catches all throw paths uniformly\n- **`@TimeLimiter` requires `CompletableFuture`** — sync methods use HTTP client readTimeout\n- **Wrong order symptoms: retry storms (retry outside CB), latency overruns (TL inside retry), bulkhead starvation (bulkhead outside retry)**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**The canonical order**\n- TimeLimiter, CircuitBreaker, Retry, Bulkhead, RateLimiter, then the actual call — outermost to innermost\n- Read it as: the outermost primitive sees everything inside it, and nothing outside\n- Fallback attaches to the outermost decorator so it fires on any inner failure\n\n**Why TimeLimiter is outermost**\n- Users care about total latency, not per-attempt latency\n- A 2-second deadline should cover all retries and all waits\n- If TimeLimiter is inside Retry, each attempt gets a fresh 2 seconds and 3 retries blow the budget to 6 seconds\n- Requires CompletableFuture because it runs work on an executor and cancels on deadline\n\n**Why CircuitBreaker sits above Retry**\n- When the breaker is OPEN, it rejects calls immediately\n- If Retry were outside CircuitBreaker, the retry loop still runs three times bouncing off the breaker — wasted CPU and thread time\n- CircuitBreaker outside Retry means one short-circuit ends the whole flow\n- Also, CB sees one outcome per user-request, which is the user-visible failure signal\n\n**Why Retry sits above Bulkhead**\n- Each retry attempt acquires and releases its own bulkhead slot\n- Backoff sleeps between attempts free slots for other callers\n- If Bulkhead were outside Retry, one caller holds the slot across all attempts plus sleeps — a single retry chain starves the bulkhead\n\n**Why Bulkhead sits above RateLimiter**\n- Bulkhead decides if this attempt gets to try at all\n- RateLimiter paces the actual outbound call\n- Tokens are consumed only for real outbound traffic, not for bulkhead-rejected calls\n\n**Spring annotation reality**\n- Annotation declaration order does not change execution order\n- Spring integration has a fixed runtime wrapping: TimeLimiter, CircuitBreaker, RateLimiter, Retry, Bulkhead\n- To fully control order, use the programmatic Decorators.ofSupplier fluent API\n\n**Programmatic composition trap**\n- Decorators.ofSupplier chain is reversed conceptually\n- You call withRateLimiter first, then withBulkhead, withRetry, withCircuitBreaker\n- That's because each .with... wraps the previous supplier — innermost gets added first, outermost last\n- Read it bottom-up if the inner-to-outer flow confuses you\n\n**What each wrong order concretely breaks**\n- Retry outside CircuitBreaker: retry storms bouncing off an open breaker; prolonged outages\n- TimeLimiter inside Retry: latency overruns, deadline violations, downstream does 3x work\n- Bulkhead outside Retry: single retry chain holds slot for seconds; other callers see BulkheadFullException\n- Rate limiter outside retry: ambiguous; use it outside for per-user fairness, inside for downstream protection\n\n**Fallback placement**\n- Attach to the outermost decorator for a uniform catch-all\n- Attaching per-primitive gives confusing partial-degradation behaviour\n- Fallback should be fast, predictable, no external calls, log and metric every trigger\n\n**Metrics to watch for order bugs**\n- resilience4j_retry_calls successful_with_retry high while CB state is OPEN — retries hammering open breaker\n- resilience4j_bulkhead_available_concurrent_calls near zero while CB is CLOSED — retry storm inside bulkhead\n- resilience4j_timelimiter_calls timeout spiking with Retry counts — TimeLimiter should be outside Retry\n\n**The strategic answer**\n- Memorise the order: TimeLimiter, CircuitBreaker, Retry, Bulkhead, RateLimiter\n- Use annotations for the common case; use Decorators.ofSupplier when order-proof matters\n- Attach fallback once, on the outermost decorator\n- Tune starting from 2-second TimeLimiter, 50% CB threshold, 3 retries with jitter, 10-slot bulkhead, downstream-quota RateLimiter"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does annotation-declaration order compare to programmatic decorator order in Resilience4j?",
+        "What happens if you put TimeLimiter inside Retry — what metric tells you it's wrong?",
+        "Why must @TimeLimiter methods return CompletableFuture, and what is the risk of a mismatched HTTP readTimeout?",
+        "How would you compose the same five patterns in a reactive WebClient chain?"
+      ],
+      "seo": {
+        "metaTitle": "Resilience4j Decorator Order — TimeLimiter CircuitBreaker Retry Bulkhead RateLimiter",
+        "metaDescription": "Correct decorator order for Resilience4j in Spring Boot. Why TimeLimiter outermost, CircuitBreaker above Retry, what each wrong order breaks concretely."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "The canonical order TimeLimiter, CircuitBreaker, Retry, Bulkhead, RateLimiter, then the actual call — outermost to innermost Read it as: the outermost primitive sees everything inside it, and nothing outside Fallback attaches to the outermost decorator.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Resilience4j decorators are composable functions. Each one wraps the next and they execute as nested lambdas. The order you declare them — whether with annotations, the fluent Decorators.ofSupplier(...) API, or explicit .withCircuitBreaker(...) chains — determines what each primitive sees and therefore how the system behaves when a downstream dependency misbehaves. The canonical order, outside to inside, is: TimeLimiter, CircuitBreaker, Retry, Bulkhead, RateLimiter, then the call itself. Read it as 'the outermost primitive sees everything inside it, and nothing outside'. TimeLimiter."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Deep understanding of how resilience primitives compose; awareness that wrong order produces subtly broken behaviour under load"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Order is: TimeLimiter → CircuitBreaker → Retry → Bulkhead → RateLimiter → call (outer to inner) TimeLimiter outermost bounds total latency including all retries CircuitBreaker above Retry short-circuits doomed calls — retries never bypass an open breaker Retry above Bulkhead means each attempt acquires its own slot; backoff sleeps don't hold slots Bulkhead above RateLimiter caps concurrency before consuming tokens Annotation order is fixed by Spring integration — declare order doesn't change execution Programmatic Decorators",
+              "ofSupplier(",
+              ") chain reverses conceptual order — innermost",
+              "first Fallback on the outermost decorator — catches all throw paths uniformly @TimeLimiter requires CompletableFuture — sync methods use HTTP client readTimeout Wrong order symptoms: retry storms (retry outside CB), latency overruns (TL inside retry), bulkhead starvation (bulkhead outside retry)"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Resilience4j decorators are composable functions. Each one wraps the next and they execute as nested lambdas. The order you declare them — whether with annotations, the fluent Decorators.ofSupplier(...) API, or explicit .withCircuitBreaker(...) chains — determines what each primitive sees and therefore how the system behaves when a downstream dependency misbehaves. The canonical order, outside to inside, is: TimeLimiter, CircuitBreaker, Retry, Bulkhead, RateLimiter, then the call itself. Read it as 'the outermost primitive sees everything inside it, and nothing outside'. TimeLimiter outermost: the overall deadline is for the whole operation — including every retry attempt, every probe through a half-open breaker, every wait in the bulkhead queue. Users care about total latency, not per-attempt latency. If TimeLimiter is inside Retry, each."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Putting Retry outside CircuitBreaker (retries bypass a tripped breaker and amplify load)",
+              "putting TimeLimiter inside Retry (each attempt gets full timeout so total latency balloons)"
+            ]
+          }
+        ],
+        "cap": "wraps the previous supplier — innermost gets added first, outermost last Read it bottom-up if the inner-to-outer flow confuses you What each wrong order concretely breaks Retry outside CircuitBreaker:",
+        "familiarity_anchors": [
+          "Compose",
+          "TimeLimiter",
+          "CircuitBreaker"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does annotation-declaration order compare to programmatic decorator order in Resilience4j?",
+          "What happens if you put TimeLimiter inside Retry — what metric tells you it's wrong?",
+          "Why must @TimeLimiter methods return CompletableFuture, and what is the risk of a mismatched HTTP readTimeout?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "3-service Spring Boot system: orders, payments, inventory"
+      }
+    }
+  ]
+}

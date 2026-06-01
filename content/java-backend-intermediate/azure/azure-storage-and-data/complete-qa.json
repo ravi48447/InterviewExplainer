@@ -1,0 +1,247 @@
+{
+  "topic": "Gcp And Azure Overview",
+  "topicSlug": "gcp-and-azure-overview",
+  "questions": [
+    {
+      "id": "azure-005",
+      "slug": "azure-blob-storage-spring-boot",
+      "question": "How do you integrate Azure Blob Storage with a Spring Boot application?",
+      "title": "Azure Blob Storage with Spring Boot (azure-storage-blob)",
+      "direct_answer": "Use the Spring Cloud Azure starter for Blob Storage. Inject BlobServiceClient or BlobContainerClient, and call upload/download methods. Authenticate with Managed Identity — no connection strings in code.",
+      "layout_type": "recipe-builder",
+      "difficulty": "medium",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Practical knowledge of Azure storage SDK integration in Spring Boot, including authentication and streaming uploads.",
+        "common_mistake": "Using a storage account connection string instead of Managed Identity or SAS tokens, or loading the full blob into memory for large files.",
+        "to_stand_out": "Mention streaming uploads with BlockBlobClient, SAS token generation for temporary client access, and blob lifecycle management policies."
+      },
+      "company_tags": [
+        "Microsoft",
+        "media companies",
+        "SaaS startups",
+        "enterprise document management"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The OutOfMemoryError Waiting Inside Every Naive File Upload",
+            "content": "File handling in a Spring Boot application sounds simple until you upload a 2 GB video and the server runs out of heap memory. The default approach — `MultipartFile.getBytes()` — loads the entire file into the JVM heap before sending it to storage. For large files, this causes `OutOfMemoryError` or, worse, forces you to over-provision heap to handle peak file sizes. Azure Blob Storage solves the storage side; the integration challenge is keeping the data path streaming end-to-end.\n\nSpring Cloud Azure auto-configures `BlobServiceClient` and `BlobContainerClient` beans based on your `application.yml`. Authentication follows the same `DefaultAzureCredential` pattern as Key Vault — Managed Identity in Azure, `az login` locally. The configuration requires only the storage account name; no connection string or account key appears in your files.\n\nThe second pattern most candidates miss is **SAS token delegation**. Instead of proxying every file download through your Spring Boot server — which consumes bandwidth and thread pool capacity — you generate a time-limited Shared Access Signature URL and redirect the client directly to Blob Storage. The blob serves the file; your server just issues the signed URL."
+          },
+          {
+            "type": "step",
+            "title": "One Starter, One Property, Managed Identity for Auth",
+            "content": "The dependency and configuration mirror the Key Vault pattern: one starter, one property, Managed Identity for authentication.\n\n```xml\n<dependency>\n  <groupId>com.azure.spring</groupId>\n  <artifactId>spring-cloud-azure-starter-storage-blob</artifactId>\n</dependency>\n```\n\n```yaml\nspring:\n  cloud:\n    azure:\n      storage:\n        blob:\n          account-name: mystorageaccount\n```\n\nGrant the application's Managed Identity the `Storage Blob Data Contributor` role on the storage account. This role allows read, write, and delete operations on blobs. For read-only workloads, use `Storage Blob Data Reader` instead — least privilege matters.\n\n```bash\naz role assignment create \\\n  --role \"Storage Blob Data Contributor\" \\\n  --assignee <managed-identity-principal-id> \\\n  --scope /subscriptions/<sub>/resourceGroups/my-rg/providers/Microsoft.Storage/storageAccounts/mystorageaccount\n```\n\nWith this setup, Spring auto-configures a `BlobServiceClient` bean that you can inject into any service. The client handles connection pooling, retry policies, and authentication token refresh automatically."
+          },
+          {
+            "type": "step",
+            "title": "Streaming End-to-End — Never Buffer the Full File",
+            "content": "The critical pattern is streaming — never load the entire file into memory. `BlobClient.upload()` accepts a `BinaryData` built from an `InputStream`, and `BlobClient.openInputStream()` returns a stream you can pipe directly to the HTTP response.\n\n```java\n@Service\npublic class BlobStorageService {\n\n    private final BlobContainerClient container;\n\n    public BlobStorageService(BlobServiceClient client) {\n        this.container = client.getBlobContainerClient(\"uploads\");\n    }\n\n    public void upload(String name, InputStream data, long length) {\n        BlobClient blob = container.getBlobClient(name);\n        blob.upload(BinaryData.fromStream(data, length), true);\n    }\n\n    public InputStream download(String name) {\n        return container.getBlobClient(name).openInputStream();\n    }\n}\n```\n\nThe `true` parameter on `upload()` enables overwrite — without it, uploading to an existing blob name throws an exception. For files larger than 256 MB, the SDK automatically splits the upload into 4 MB blocks and uploads them in parallel. You can tune this with `ParallelTransferOptions`: set `setBlockSizeLong(8 * 1024 * 1024)` for 8 MB blocks and `setMaxConcurrency(4)` for four parallel upload streams.\n\nIn the REST controller, pipe `MultipartFile.getInputStream()` directly to the blob upload — never call `getBytes()`. This keeps memory usage constant regardless of file size."
+          },
+          {
+            "type": "step",
+            "title": "SAS Tokens — Let Azure Serve the File, Not Your Server",
+            "content": "Proxying every download through your Spring Boot server wastes bandwidth and server threads. A better pattern is generating a **Shared Access Signature (SAS)** URL with read-only permissions and a short expiration, then redirecting the client to fetch the blob directly from Azure.\n\n```java\npublic String generateDownloadUrl(String blobName, Duration validFor) {\n    BlobClient blob = container.getBlobClient(blobName);\n    BlobSasPermission perms = new BlobSasPermission()\n        .setReadPermission(true);\n    BlobServiceSasSignatureValues sasValues =\n        new BlobServiceSasSignatureValues(\n            OffsetDateTime.now().plus(validFor), perms);\n    return blob.getBlobUrl() + \"?\" + blob.generateSas(sasValues);\n}\n```\n\nThe SAS URL is scoped to a single blob with read-only access, and it expires after the duration you specify — typically 15 minutes to one hour. The client downloads directly from Azure's CDN-backed storage infrastructure, which is faster and cheaper than routing through your server.\n\nFor upload scenarios, you can generate SAS tokens with write permissions and let clients upload directly to Blob Storage, bypassing your server entirely. This is common for large file uploads in web applications — the frontend requests a write SAS URL from your API, uploads directly to Azure, and notifies your API when the upload completes. This pattern eliminates the file-too-large-for-server problem and scales downloads independently of your API servers."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **SAS URL for direct client upload avoids server bottleneck** — server generates a time-limited signed URL; client uploads directly to blob storage; server never handles the bytes; eliminates bandwidth and memory cost for large uploads\n- **`BlobServiceClient` from Spring Cloud Azure starter** — auto-configured with `spring.cloud.azure.storage.blob.account-name`; Managed Identity provides authentication; no storage account key in configuration\n- **`BlobClient.upload(inputStream, length)` for server-side uploads** — stream-based upload avoids loading large files into memory; set `Content-Type` and `Content-Disposition` for correct browser download behavior\n- **Lifecycle management for cost optimization** — configure policies to transition from Hot to Cool after 30 days, to Archive after 90 days; blob storage costs 10x less in Archive tier than Hot\n- **Soft delete recovers accidental overwrites** — enable with a 7-30 day retention window; blobs deleted or overwritten can be restored within the window; critical for user-generated content"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Azure Blob Storage integration with Spring Boot follows the same architectural decision as S3: proxy the bytes through your server, or generate a SAS URL and let the client upload directly.\n\n**Spring Cloud Azure setup**\n- Add `spring-cloud-azure-starter-storage-blob`; configure `spring.cloud.azure.storage.blob.account-name`; inject `BlobServiceClient` or the higher-level `StorageResource` as a Spring `Resource` — which means Spring's resource abstraction works with blob URLs using the `azure-blob://` prefix\n\n**SAS (Shared Access Signature) URLs — for direct client upload**\n- Generate a SAS URL on the server: `BlobServiceClient.generateAccountSas()` or `BlobClient.generateSas()` with a `BlobSasPermission` and expiry — the client receives a time-limited URL to upload directly to blob storage without passing bytes through your server\n- Which means your server avoids the bandwidth and memory cost of large file uploads; blob storage receives the data directly from the client\n\n**Direct upload via server**\n- When you need to validate, virus-scan, or transform content before storage: `blobClient.upload(inputStream, length, true)` streams the data to blob storage; set `Content-Type` and `Content-Disposition` on the upload to ensure correct browser download behavior\n- For large files, use `BlobClient.uploadFromFile()` or block blob upload with parallel transfers: `ParallelTransferOptions` configures block size and max concurrency\n\n**Access tiers**\n- Hot tier for frequently accessed data; Cool tier for data accessed infrequently (lower storage cost, higher access cost); Archive tier for data retained for compliance that's rarely accessed — lifecycle management policies transition blobs automatically between tiers based on last-modified date\n- Enable soft delete on the container so accidental overwrites or deletions can be recovered within the retention window"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you generate a SAS token for temporary blob access in Java?",
+        "What is the difference between block blobs, append blobs, and page blobs?",
+        "How do you configure blob lifecycle management to reduce storage costs?"
+      ],
+      "seo": {
+        "meta_title": "Azure Blob Storage Spring Boot Integration — Upload, Download, SAS",
+        "meta_description": "Integrate Azure Blob Storage with Spring Boot using Spring Cloud Azure. Covers streaming upload, download, SAS tokens, and Managed Identity.",
+        "keywords": [
+          "azure blob storage spring boot",
+          "spring cloud azure storage",
+          "azure storage java",
+          "blob upload java spring"
+        ],
+        "metaDescription": "Use the Spring Cloud Azure starter for Blob Storage. Inject BlobServiceClient or BlobContainerClient, and call upload/download methods.",
+        "metaTitle": "Azure Blob Storage with Spring Boot (azure-storage-blob)"
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P10",
+        "hook": "Azure Blob Storage integration with Spring Boot follows the same architectural decision as S3: proxy the bytes through your server, or generate a SAS URL and let the client upload directly.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "File handling in a Spring Boot application sounds simple until you upload a 2 GB video and the server runs out of heap memory. The default approach — MultipartFile.getBytes() — loads the entire file into the JVM heap before sending it to storage. For large files, this causes OutOfMemoryError or, worse, forces you to over-provision heap to handle peak file sizes. Azure Blob Storage solves the storage side; the integration."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "SAS URL for direct client upload avoids server bottleneck — server generates a time-limited signed URL; client uploads directly to blob storage; server never handles the bytes; eliminates bandwidth and memory cost for large uploads BlobServiceClient from Spring Cloud Azure starter — auto-configured with spring",
+              "account-name; Managed Identity provides authentication; no storage account key in configuration BlobClient",
+              "upload(inputStream, length) for server-side uploads — stream-based upload avoids loading large files into memory; set Content-Type and Content-Disposition for correct browser download behavior Lifecycle management for cost optimization — configure policies to transition from Hot to Cool after 30 days, to Archive after 90 days; blob storage costs 10x less in Archive tier than Hot Soft delete recovers accidental overwrites — enable with a 7-30 day retention window; blobs deleted or overwritten can be restored within the window; critical for user-generated content"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "File handling in a Spring Boot application sounds simple until you upload a 2 GB video and the server runs out of heap memory. The default approach — MultipartFile.getBytes() — loads the entire file into the JVM heap before sending it to storage. For large files, this causes OutOfMemoryError or, worse, forces you to over-provision heap to handle peak file sizes. Azure Blob Storage solves the storage side; the integration challenge is keeping the data path streaming end-to-end. Spring Cloud Azure auto-configures BlobServiceClient and BlobContainerClient beans based on your application.yml."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "File handling in a Spring Boot application sounds simple until you upload a 2 GB video and the server runs out of heap memory. The default approach — MultipartFile.getBytes() — loads the entire file into the JVM heap before sending it to storage. For large files, this causes OutOfMemoryError or, worse, forces you to over-provision heap to handle peak file."
+          }
+        ],
+        "cap": "Spring Cloud Azure setup Add spring-cloud-azure-starter-storage-blob; configure spring.cloud.azure.storage.blob.account-name; inject BlobServiceClient or the higher-level StorageResource as a Spring R",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "Azure"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you generate a SAS token for temporary blob access in Java?",
+          "What is the difference between block blobs, append blobs, and page blobs?",
+          "How do you configure blob lifecycle management to reduce storage costs?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed on Azure App Service"
+      }
+    },
+    {
+      "id": "azure-006",
+      "slug": "azure-sql-vs-cosmos-db-java",
+      "question": "How do you choose between Azure SQL Database and Azure Cosmos DB for a Java application?",
+      "title": "Azure SQL Database vs Cosmos DB for Java Apps",
+      "direct_answer": "Use Azure SQL Database for relational, transactional workloads where data consistency and SQL semantics matter. Use Cosmos DB for globally distributed, schema-flexible, high-throughput scenarios where eventual consistency is acceptable.",
+      "layout_type": "comparison-arena",
+      "difficulty": "medium",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Understanding of trade-offs between relational and NoSQL databases in a cloud context, not just API differences.",
+        "common_mistake": "Choosing Cosmos DB for its global distribution without factoring in Request Unit (RU) pricing complexity or the consistency level trade-offs.",
+        "to_stand_out": "Mention Cosmos DB's five consistency levels, the Spring Data Cosmos integration, and partition key design impact on performance and cost."
+      },
+      "company_tags": [
+        "Microsoft",
+        "global SaaS",
+        "gaming",
+        "IoT",
+        "retail"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "A Data Modeling Decision That's Expensive to Reverse",
+            "content": "The choice between Azure SQL Database and Cosmos DB is not a feature comparison — it's a data modeling decision that's expensive to reverse. **Azure SQL gives you joins, constraints, and multi-table ACID transactions at the cost of single-region write locality. Cosmos DB gives you global active-active writes with sub-10ms latency at the cost of careful partition key design and a fundamentally different consistency model.**\n\nMost candidates can recite that SQL is relational and Cosmos is NoSQL. What separates strong answers is understanding the second-order consequences. Azure SQL with JPA/Hibernate means your team writes standard JPQL queries, uses `@Transactional` for business logic spanning multiple tables, and benefits from decades of relational optimization tooling. Cosmos DB with Spring Data means your team designs access patterns around a partition key upfront, writes repository methods that always include the partition key, and chooses from five consistency levels — each with measurable latency and cost trade-offs.\n\nThe common mistake is choosing Cosmos DB for global distribution without understanding **Request Unit pricing** or partition key design. A poorly chosen partition key creates a hot partition that throttles writes regardless of how many RUs you've provisioned. And RU costs are opaque — a cross-partition query that scans 100 partitions can consume 50x more RUs than the same query restricted to one partition."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Relational Predictability vs Global Reach — The Dimensions That Matter",
+            "content": "The table below focuses on the dimensions that drive real architectural decisions rather than API-level differences. Pay particular attention to the transaction scope and pricing model — these create the most surprises in production.\n\n| Dimension | Azure SQL Database | Azure Cosmos DB |\n|---|---|---|\n| Data model | Relational (tables, joins, foreign keys) | Document, key-value, graph, column |\n| Transactions | Full ACID across tables | ACID within a single partition key only |\n| Global writes | Read replicas only (active-passive) | Active-active multi-region writes |\n| Consistency | Strong (serializable) always | Five levels: Strong → Eventual |\n| Schema | Fixed, requires migrations | Schema-flexible per document |\n| Scaling | Vertical (vCores/DTUs) | Horizontal (partition + RU/s) |\n| Spring integration | Spring Data JPA + Hibernate | Spring Data Azure Cosmos (custom repos) |\n| Query language | Full T-SQL with joins | SQL-like API (no cross-document joins) |\n| Pricing | Compute + storage, predictable | RU/s provisioned or serverless, variable |\n| Latency (single region) | 5–15ms typical | < 10ms guaranteed at p99 |"
+          },
+          {
+            "type": "when_to_use",
+            "title": "Relational Domains Stay Relational, Access-Pattern Domains Go Cosmos",
+            "content": "**Choose Azure SQL Database** when your domain has natural relational structure. Order management with orders, line items, products, and customers connected by foreign keys is the canonical example. JPA's ability to traverse these relationships with lazy loading, cascading operations, and JPQL joins means you model the domain naturally. Multi-table transactions are essential — deducting inventory and recording the order line must succeed or fail together.\n\nAzure SQL also fits when your team has deep Hibernate expertise. The migration from on-premises SQL Server to Azure SQL Database is near-zero friction — same T-SQL dialect, same JDBC driver, same Hibernate mappings.\n\n**Choose Cosmos DB** when data access patterns are partition-key-centric and global distribution matters. A user profile store accessed by `userId`, a product catalog queried by `categoryId`, or IoT telemetry partitioned by `deviceId` — each has a clear partition key with high cardinality. Cosmos DB's five consistency levels let you tune the trade-off per operation: use **Session consistency** for read-your-own-writes (the default and most common choice), **Bounded Staleness** for cross-region reads that lag by at most *k* versions or *t* seconds, or **Eventual** for maximum throughput on non-critical reads.\n\nThe partition key design is the single most important technical decision. A key with low cardinality — like `status` with values `active`/`inactive` — creates a hot partition that bottlenecks throughput. The ideal key distributes reads and writes evenly: `userId`, `orderId`, or `tenantId`."
+          },
+          {
+            "type": "warning",
+            "title": "RU Pricing and the Missing JPA — Two Traps That Catch Teams Late",
+            "content": "**Request Unit pricing catches teams by surprise.** Every Cosmos DB operation consumes RUs proportional to the document size, index complexity, and query scope. A point read by partition key and ID costs approximately 1 RU. A cross-partition query scanning 50 partitions can cost 200+ RUs for the same result set. If you provision 400 RU/s (the minimum) and a query consumes 80 RUs, five concurrent requests exhaust your budget and trigger 429 throttling.\n\nThe practical consequence is that **Cosmos DB requires upfront access pattern design**, not the ad-hoc querying that SQL databases support. Every query should include the partition key. Reports and analytics that scan across partitions belong in a separate system — use Change Feed to replicate data to Azure Synapse or Azure SQL for analytical queries.\n\nAnother trap: **Cosmos DB's Spring Data integration does not support JPA**. The `@Repository` interface looks similar, but there's no lazy loading, no entity relationships, no JPQL. Each document is a self-contained JSON object, and you query with SQL-like syntax against the document structure. Teams expecting to reuse their JPA entity model will need a complete data access layer rewrite. This isn't a limitation of the Spring library — it's fundamental to how document databases work."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Azure SQL for JDBC/JPA workloads; Cosmos DB for global distribution** — Azure SQL is full SQL Server or PostgreSQL compatibility; Cosmos DB is document-based with partition keys and no joins\n- **Cosmos DB partition key must align with query patterns** — every query without the partition key is a cross-partition scatter-gather; design the partition key to be the most common filter field\n- **Session consistency is the Cosmos DB default** — guarantees read-your-writes within one session; Strong consistency synchronously replicates before acknowledging, reducing availability; Eventual consistency may serve stale reads\n- **Spring Data Cosmos provides repository-style access** — derived query methods on the SQL API; `@PartitionKey` annotation on the entity field; `@EnableCosmosRepositories` in configuration\n- **Azure SQL elastic pool for multi-tenant SaaS** — multiple databases in a shared resource pool; cost-effective when tenants have variable and non-overlapping peak usage; simpler than per-tenant dedicated databases at moderate tenant counts"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Azure SQL Database and Cosmos DB solve different problems — Azure SQL for relational workloads where consistency and joins matter; Cosmos DB for global distribution and schema-flexible document data.\n\n**Azure SQL Database — relational, JDBC-compatible**\n- Azure SQL Database is a fully managed SQL Server (or PostgreSQL/MySQL via Azure Database for PostgreSQL/MySQL) — which means Spring Data JPA and Hibernate work without code changes; ACID transactions, foreign keys, and complex joins are first-class citizens\n- Built-in HA with Availability Zone redundancy; automatic failover; geo-replication for disaster recovery; elastic pools for cost-effective multi-tenant SaaS applications\n\n**Cosmos DB — globally distributed, multi-model NoSQL**\n- Cosmos DB replicates data across Azure regions with configurable consistency — from Strong (linearizable) to Eventual; reads from the nearest region give sub-10ms latency globally, which means a user in Tokyo reads from a Tokyo replica while a user in London reads from a London replica\n- Spring Data Cosmos provides repository-style access with derived query methods on the SQL API; the partition key design is critical — all queries that don't include the partition key do a cross-partition scan, which is expensive\n- Cosmos DB offers five consistency models: Strong, Bounded Staleness, Session, Consistent Prefix, Eventual — Session consistency (default) guarantees read-your-writes within one session, which is the right default for most applications\n\n**Choosing between them**\n- Azure SQL: transactional workloads, complex relational queries, existing JPA/Hibernate code, multi-table joins, strong ACID requirements\n- Cosmos DB: globally distributed applications where read latency in multiple regions matters, schema-flexible data (product catalogs, event logs, user profiles with varying attributes), workloads where the partition key design naturally aligns with query patterns"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What are Cosmos DB's five consistency levels and when would you use Session consistency?",
+        "How do you design a partition key for a Cosmos DB user profile store?",
+        "What are Cosmos DB Request Units and how do you estimate RU requirements?"
+      ],
+      "seo": {
+        "meta_title": "Azure SQL Database vs Cosmos DB for Java — When to Use Each",
+        "meta_description": "Compare Azure SQL Database and Cosmos DB for Java applications. Learn the consistency, scaling, and Spring Data integration differences.",
+        "keywords": [
+          "azure sql vs cosmos db",
+          "cosmos db spring boot",
+          "azure sql database java",
+          "cosmos db java spring"
+        ],
+        "metaDescription": "Use Azure SQL Database for relational, transactional workloads where data consistency and SQL semantics matter.",
+        "metaTitle": "Azure SQL Database vs Cosmos DB for Java Apps"
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P10",
+        "hook": "Azure SQL Database and Cosmos DB solve different problems — Azure SQL for relational workloads where consistency and joins matter; Cosmos DB for global distribution and schema-flexible document data.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The choice between Azure SQL Database and Cosmos DB is not a feature comparison — it's a data modeling decision that's expensive to reverse. Azure SQL gives you joins, constraints, and multi-table ACID transactions at the cost of single-region write locality. Cosmos DB gives you global active-active writes with sub-10ms latency at the cost of careful partition key design and a fundamentally different consistency model. Most candidates can recite that."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "The table below focuses on the dimensions that drive real architectural decisions rather than API-level differences",
+              "Pay particular attention to the transaction scope and pricing model — these create the most surprises in production",
+              "| Dimension | Azure SQL Database | Azure Cosmos DB | |---|---|---| | Data model | Relational (tables, joins, foreign keys) | Document, key-value, graph, column | | Transactions | Full ACID across tables | ACID within a single partition key only | | Global writes | Read replicas only (active-passive) | Active-active multi-region writes | | Consistency | Strong (serializable) always | Five levels: Strong → Eventual | | Schema | Fixed, requires migrations | Schema-flexible per document | | Scaling | Vertical (vCores/DTUs) | Horizontal (partition + RU/s) | | Spring integration | Spring Data JPA + Hibernate | Spring Data Azure Cosmos (custom repos) | | Query language | Full T-SQL with joins | SQL-like API (no cross-document joins) | | Pricing | Compute + storage, predictable | RU/s provisioned or serverless, variable | | Latency (single region) | 5–15ms typical | < 10ms guaranteed at p99 |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Choose Azure SQL Database when your domain has natural relational structure. Order management with orders, line items, products, and customers connected by foreign keys is the canonical example. JPA's ability to traverse these relationships with lazy loading, cascading operations, and JPQL joins means you model the domain naturally. Multi-table transactions are essential — deducting inventory and recording the order line must succeed or fail together. Azure SQL also fits when your team has deep Hibernate expertise. The migration from on-premises SQL Server to Azure SQL Database is near-zero friction —."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The choice between Azure SQL Database and Cosmos DB is not a feature comparison — it's a data modeling decision that's expensive to reverse. Azure SQL gives you joins, constraints, and multi-table ACID transactions at the cost of single-region write locality. Cosmos DB gives you global active-active writes with sub-10ms latency at the cost of careful partition key design and."
+          }
+        ],
+        "cap": "Azure SQL Database — relational, JDBC-compatible Azure SQL Database is a fully managed SQL Server (or PostgreSQL/MySQL via Azure Database for PostgreSQL/MySQL) — which means Spring Data JPA and Hibern",
+        "familiarity_anchors": [
+          "Azure",
+          "Database",
+          "Cosmos"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What are Cosmos DB's five consistency levels and when would you use Session consistency?",
+          "How do you design a partition key for a Cosmos DB user profile store?",
+          "What are Cosmos DB Request Units and how do you estimate RU requirements?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed on Azure App Service"
+      }
+    }
+  ]
+}

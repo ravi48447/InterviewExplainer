@@ -1,0 +1,1443 @@
+{
+  "topic": "Kafka Patterns",
+  "topicSlug": "kafka-patterns",
+  "questions": [
+    {
+      "id": "eda-002",
+      "slug": "outbox-pattern-reliable-event-publishing",
+      "question": "What is the Outbox pattern and how do you implement it in Spring Boot with PostgreSQL?",
+      "title": "Outbox Pattern: Reliable Event Publishing with Spring Boot",
+      "direct_answer": "The **outbox** pattern solves the dual-write problem by writing both the business entity and the outgoing event to the same database transaction. A separate process (poller or CDC with Debezium) reads the outbox table and publishes events to the **broker**, ensuring events are never lost even if the broker is temporarily unavailable.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether you understand the dual-write problem in distributed systems and know a production-proven solution",
+        "common_mistake": "Not knowing why 'save to DB then publish to Kafka' is unreliable — the broker publish can fail after the DB commit, leaving events unpublished",
+        "to_stand_out": "Mention Debezium CDC as an alternative to polling, discuss idempotency keys in the outbox table, and explain how to handle ordering guarantees"
+      },
+      "company_tags": [
+        "netflix",
+        "stripe",
+        "amazon",
+        "grab",
+        "LinkedIn",
+        "Uber"
+      ],
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The 50-Millisecond Crash Window That Loses Your Events",
+            "content": "You deploy what looks like solid code: save the order to PostgreSQL, publish the event to Kafka.\n- Two lines, both succeed 99.99% of the time.\n- But between those two lines sits a crash window — maybe 50 milliseconds where the database has committed but the Kafka publish hasn't happened yet.\n- Your service restarts.\n- The order exists in the database, but the event was never published.\n- Inventory was never reserved.\n- The confirmation email was never sent.\n- The customer has been charged for an order that downstream systems don't know about.\n\nThis isn't a theoretical edge case.\n- Under load, network blips between your service and Kafka happen multiple times per day.\n- A JVM garbage collection pause at the wrong moment produces the same result.\n- Reversing the order — publishing to Kafka first, then saving to the database — doesn't help.\n- If the database write fails, you've published an event for a transaction that never happened.\n\nThe Outbox pattern eliminates this window entirely.\n- Instead of publishing to Kafka directly, you write the event as a row in an **outbox table** within the same database transaction as your business entity.\n- Either both the order and the outbox row commit together, or both roll back.\n- A separate process reads unpublished rows from the outbox and publishes them to Kafka.\n- The event might be published late — but it will never be lost."
+          },
+          {
+            "type": "step",
+            "title": "The Outbox Table — Designing the Contract Between Your Service and the Broker",
+            "content": "The outbox table is a staging area for events that need to reach the message broker. Its schema captures everything the publisher process needs to route and deliver the event without reading from any other table.\n\n```sql\nCREATE TABLE outbox_events (\n    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    aggregate_type VARCHAR(100) NOT NULL,\n    aggregate_id   VARCHAR(100) NOT NULL,\n    event_type     VARCHAR(100) NOT NULL,\n    payload        JSONB NOT NULL,\n    created_at     TIMESTAMP NOT NULL DEFAULT NOW(),\n    published_at   TIMESTAMP,\n    retry_count    INT DEFAULT 0\n);\n\nCREATE INDEX idx_outbox_unpublished\n    ON outbox_events(created_at) WHERE published_at IS NULL;\n```\n\nThe `aggregate_id` column doubles as the Kafka partition key. All events for the same order land on the same partition, preserving causal ordering — `OrderPlaced` always arrives before `OrderShipped` for order #123. The partial index on `published_at IS NULL` keeps the publisher's query fast even when the table holds millions of already-published rows.\n\nThe business write and the outbox insert share the same `@Transactional` boundary. Spring's declarative transactions make this natural — both repository calls participate in the same JDBC connection.\n\n```java\n@Service\n@Transactional\npublic class OrderService {\n    private final OrderRepository orders;\n    private final OutboxRepository outbox;\n\n    public Order place(PlaceOrderCommand cmd) {\n        Order order = orders.save(Order.from(cmd));\n        outbox.save(OutboxEvent.builder()\n            .aggregateType(\"Order\")\n            .aggregateId(order.getId().toString())\n            .eventType(\"OrderPlaced\")\n            .payload(toJson(new OrderPlacedPayload(order)))\n            .build());\n        return order;\n    }\n}\n```\n\nIf the database is down, neither the order nor the event persists. If the application crashes after commit, both are durable. There is no window where one exists without the other."
+          },
+          {
+            "type": "step",
+            "title": "Polling Publisher — The Simplest Path to Reliable Delivery",
+            "content": "The polling publisher is a scheduled process that reads unpublished outbox rows and sends them to Kafka. It runs inside the same application or as a dedicated sidecar.\n\n```java\n@Component\npublic class OutboxPoller {\n    private final OutboxRepository outbox;\n    private final KafkaTemplate<String, String> kafka;\n\n    @Scheduled(fixedDelay = 500)\n    @Transactional\n    public void publishPending() {\n        List<OutboxEvent> pending = outbox\n            .findTop100ByPublishedAtIsNullOrderByCreatedAtAsc();\n\n        for (OutboxEvent event : pending) {\n            try {\n                kafka.send(\n                    topicFor(event.getAggregateType()),\n                    event.getAggregateId(),\n                    event.getPayload()\n                ).get(5, TimeUnit.SECONDS); // block for broker ack\n\n                event.setPublishedAt(Instant.now());\n                outbox.save(event);\n            } catch (Exception e) {\n                event.setRetryCount(event.getRetryCount() + 1);\n                log.warn(\"Outbox publish failed for {}: {}\",\n                    event.getId(), e.getMessage());\n            }\n        }\n    }\n}\n```\n\nThe `.get(5, SECONDS)` call blocks until Kafka acknowledges the write, ensuring the event actually reached the broker before marking it published. Without this, a fire-and-forget `send()` could lose events if the producer buffer is full or the broker is unreachable.\n\nThe polling approach delivers **at-least-once** semantics. If the poller crashes after Kafka acknowledges but before updating `published_at`, the next poll cycle publishes the event again. Downstream consumers must be idempotent — use the outbox event's UUID as a deduplication key. Tune the batch size and poll interval for your throughput: `findTop100` keeps each cycle fast, and running multiple poller instances requires partitioning aggregate IDs to prevent duplicate publishing."
+          },
+          {
+            "type": "step",
+            "title": "CDC With Debezium — When Polling Hits Its Ceiling",
+            "content": "Polling works for moderate event volumes, but it has inherent limitations.\n- At 500ms poll intervals, event delivery latency averages 250ms even when the broker is healthy.\n- Under high write throughput, the polling query competes with business transactions for database connections.\n- Scaling pollers horizontally requires coordination to prevent duplicate publishing.\n\n**Change Data Capture (CDC) with Debezium** eliminates these problems by reading the PostgreSQL Write-Ahead Log directly. Debezium is a Kafka Connect connector that monitors the database's transaction log and streams row-level changes to Kafka in near-real-time — typically under 100ms from commit to Kafka delivery.\n\nThe setup is infrastructure-level, not application code.\n- Configure a Debezium connector to watch the outbox table, and it streams every new row to Kafka.\n- The application code stays identical — it still writes to the outbox table in the same transaction.\n- Debezium's `outbox.event.router` SMT (Single Message Transform) extracts aggregate type, aggregate ID, and payload, then routes them to the correct Kafka topic with the right partition key.\n\nThe trade-off is operational complexity.\n- Debezium requires a Kafka Connect cluster, PostgreSQL logical replication slots, and monitoring for connector lag and WAL retention.\n- If the connector falls behind and the WAL segment is recycled, you lose events.\n- Set `wal_keep_size` in PostgreSQL and monitor connector lag metrics.\n- For teams already running Kafka Connect, Debezium is the better choice.\n- For simpler deployments, the polling publisher is operationally lighter and fully sufficient."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Same-transaction atomicity** — the outbox row and business entity commit or roll back together, closing the crash window between \"saved to DB\" and.\n- **`aggregate_id` as Kafka partition key** — all events for one entity land on the same partition, guaranteeing causal ordering without cross-partition.\n- **At-least-once delivery by design** — poller crashes after Kafka ack but before marking published cause re-delivery.\n- **Debezium WAL tailing delivers under 100ms** — compared to polling's average latency of half the poll interval.\n- **Outbox table retention** — published rows are dead weight; schedule deletion of rows older than 7 days to prevent unbounded table growth."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The Outbox pattern exists because of a crash window most developers don't think about.\n- You save an order to PostgreSQL, then publish an event to Kafka — two operations that look safe individually.\n- But if the application crashes between those two lines, the order exists in the database but the event was never published.\n- Inventory never gets reserved.\n- The confirmation email never sends.\n\n**How the Outbox pattern works:**\n- Write the event into an outbox table in the same database transaction as the business entity — if the order commits, the outbox row commits; if either fails, both roll back; there is no window where one exists without the other\n- A separate process — either a scheduled poller or Debezium CDC — reads unpublished outbox rows and sends them to Kafka, then marks them published\n- If the relay process crashes after Kafka acknowledges but before updating the row, the next cycle publishes again — this is why downstream consumers must be idempotent\n\n**Partition key and ordering:**\n- Use the aggregate ID as the Kafka partition key — all events for order #123 land on the same partition, preserving causal ordering so `OrderPlaced` always arrives before `OrderShipped`\n- The partition key choice is critical for consumers that need to maintain state per entity\n\n**Polling vs Debezium:**\n- Polling is simpler — a `@Scheduled` method querying for rows where `published_at` is null, every 500ms\n- Debezium tails the PostgreSQL WAL and delivers events in under 100ms, but it requires a Kafka Connect cluster and WAL retention monitoring\n- The retention window matters: schedule deletion of published rows older than 7 days to prevent unbounded table growth\n\nI recommend starting with scheduled polling and moving to Debezium only when event freshness or database polling load becomes a measurable bottleneck."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Debezium differ from polling the outbox table, and when would you choose each?",
+        "How do you handle outbox table cleanup to prevent it from growing indefinitely?",
+        "What happens if the outbox poller publishes the same event twice — how do consumers handle this?"
+      ],
+      "seo": {
+        "metaTitle": "Outbox Pattern Spring Boot PostgreSQL | Java Interview | InterviewExplainer",
+        "metaDescription": "Implement the Outbox pattern in Spring Boot with PostgreSQL. Solve the dual-write problem with atomic DB + event writes and reliable Kafka publishing."
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "The Outbox pattern exists because of a crash window most developers don't think about.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "You deploy what looks like solid code: save the order to PostgreSQL, publish the event to Kafka. Two lines, both succeed 99.99% of the time. But between those two lines sits a crash window — maybe 50 milliseconds where the database has committed but the Kafka publish hasn't happened yet. Your service restarts. The order exists in the database, but the event was never published. Inventory was never reserved. The confirmation email was never sent. The customer has been charged."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the dual-write problem in distributed systems and know a production-proven solution"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Same-transaction atomicity — the outbox row and business entity commit or roll back together, closing the crash window between \"saved to DB\" and",
+              "aggregate_id as Kafka partition key — all events for one entity land on the same partition, guaranteeing causal ordering without cross-partition",
+              "At-least-once delivery by design — poller crashes after Kafka ack but before marking published cause re-delivery",
+              "Debezium WAL tailing delivers under 100ms — compared to polling's average latency of half the poll interval",
+              "Outbox table retention — published rows are dead weight; schedule deletion of rows older than 7 days to prevent unbounded table growth"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "You deploy what looks like solid code: save the order to PostgreSQL, publish the event to Kafka. Two lines, both succeed 99.99% of the time. But between those two lines sits a crash window — maybe 50 milliseconds where the database has committed but the Kafka publish hasn't happened yet. Your service restarts. The order exists in the database, but the event was never published. Inventory was never reserved. The confirmation email was never sent. The customer has been charged for an order that downstream systems don't know about. This isn't a theoretical edge case. Under load, network blips between your service and Kafka happen multiple times per day. A JVM garbage collection pause at the wrong moment produces the."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Not knowing why 'save to DB then publish to Kafka' is unreliable",
+              "the broker publish can fail after the DB commit, leaving events unpublished"
+            ]
+          }
+        ],
+        "cap": "How the Outbox pattern works: Write the event into an outbox table in the same database transaction as the business entity — if the order commits, the outbox row commits; if either fails, both roll.",
+        "familiarity_anchors": [
+          "Debezium"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Debezium differ from polling the outbox table, and when would you choose each?",
+          "How do you handle outbox table cleanup to prevent it from growing indefinitely?",
+          "What happens if the outbox poller publishes the same event twice — how do consumers handle this?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "eda-010",
+      "slug": "consumer-group-fan-out-event-patterns",
+      "question": "How do consumer group patterns enable event fan-out in Kafka?",
+      "title": "Consumer Group Fan-Out: Multiple Services Consuming the Same Events",
+      "direct_answer": "**Kafka** topics enable fan-out by allowing multiple **consumer** groups to independently consume every message. Each **consumer group** maintains its own **offset**, so 'OrderPlaced' events can simultaneously feed the payment service, inventory service, and analytics service—each at their own pace, with no coordination. A single consumer group provides competing consumers (load balancing) within one service.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Understanding of Kafka consumer groups as the mechanism for event fan-out, and how it differs from point-to-point messaging",
+        "common_mistake": "Confusing consumer groups with competing consumers — within a group, partitions are divided among consumers; across groups, all groups see all messages",
+        "to_stand_out": "Explain the offset per consumer group, contrast with RabbitMQ's competing consumer model, and discuss how to add a new consumer without affecting existing ones"
+      },
+      "company_tags": [
+        "linkedin",
+        "netflix",
+        "uber",
+        "confluent",
+        "LinkedIn",
+        "Uber"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why a Kafka Topic Is a Replayable Log, Not a Disposable Queue",
+            "content": "The mental model that trips people up: they think of Kafka topics as queues where messages are consumed and gone. In a queue (RabbitMQ default), once a consumer acknowledges a message, it's deleted. If a second service also needs that message, you need a separate queue, a separate binding, and the broker sends a separate copy.\n\nKafka topics work fundamentally differently.\n- A topic is an **append-only log**.\n- Messages are retained for a configurable period (or forever with compaction), regardless of how many consumers have read them.\n- Each consumer group maintains its own **offset** — a pointer to its position in the log.\n- The payment service's consumer group is at offset 4,502.\n- The analytics service's consumer group is at offset 4,498 (it's a bit behind).\n- The inventory service's consumer group is at offset 4,502 (caught up).\n- All three read from the same log, at their own pace, with zero coordination.\n\nThis design makes fan-out free.\n- Adding a fifth consumer is a configuration change — assign a new `group.id` — and the new consumer starts reading from whatever offset you configure (latest for real-time processing, earliest to replay history).\n- No topic changes, no producer changes, no impact on existing consumer groups.\n- The producer publishes once, and any number of consumer groups consume independently.\n- That's the architectural property that makes event-driven microservices practical at scale."
+          },
+          {
+            "type": "phase",
+            "title": "Fan-Out Across Groups vs Load Balancing Within a Group",
+            "content": "Kafka's consumer model has two distinct modes that compose together: fan-out **between** groups and load balancing **within** a group. Confusing them is the most common mistake in Kafka architecture discussions.\n\n**Between groups:** Every consumer group receives every message. If the `orders` topic has consumer groups `payment-service`, `inventory-service`, and `analytics-service`, each group independently reads all messages. Group membership is identified by the `group.id` property. Each group tracks its own offset.\n\n```java\n@KafkaListener(topics = \"orders\", groupId = \"payment-service\")\npublic void handlePayment(OrderPlacedEvent event) {\n    paymentService.processPayment(event);  // every OrderPlaced event\n}\n\n@KafkaListener(topics = \"orders\", groupId = \"analytics-service\")\npublic void handleAnalytics(OrderPlacedEvent event) {\n    analyticsService.record(event);  // also every OrderPlaced event\n}\n```\n\nBoth listeners receive every message. The payment service can be slow, crash, or fall behind — the analytics service's progress is completely unaffected because each group's offset is independent.\n\n**Within a group:** Kafka divides partitions among consumers in the same group. If the `orders` topic has 12 partitions and the `payment-service` group has 3 instances, each instance handles 4 partitions. This is how you horizontally scale a single service — add more instances until you match the partition count. More instances than partitions means some sit idle."
+          },
+          {
+            "type": "phase",
+            "title": "Adding a Consumer Is a Zero-Impact Operation — Until the Rebalance",
+            "content": "One of Kafka's strongest architectural properties is that adding a new consumer group has **zero impact** on existing groups. The producer doesn't know or care. Existing consumer groups don't notice. The new group starts reading at its configured offset and progresses independently. This is what makes event-driven fan-out practical — you can add downstream capabilities (loyalty points, partner notifications, fraud models) without touching the producer or coordinating with other consumer teams.\n\nA new consumer group can start at `latest` (only process new events going forward) or `earliest` (replay the entire retained history). Replaying history is how you bootstrap a new read model, backfill a data warehouse, or rebuild a projection from scratch. The events are still in the log — Kafka doesn't delete them when they're consumed.\n\nThe operational nuance is **rebalancing within a group**. When you add or remove an instance within a consumer group (scaling a deployment, rolling restart), Kafka reassigns partitions among the remaining instances. During rebalancing, the affected partitions briefly pause processing. With the default `RangeAssignor`, a rebalance can take several seconds. For services processing latency-sensitive events, use `CooperativeStickyAssignor` — it performs incremental rebalances that only reassign the partitions that need to move, minimizing the pause.\n\nSet `group.instance.id` for **static membership** when running in Kubernetes. Without it, every pod restart triggers a full rebalance because Kafka sees a new consumer joining. With static membership, Kafka recognizes the returning instance and skips the rebalance if it reconnects within `session.timeout.ms`. For a 6-pod deployment doing rolling restarts, this eliminates 6 unnecessary rebalances."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Per-group offsets are independent** — analytics falling behind by 10,000 messages doesn't block the payment consumer.\n- **Instances within a group divide partitions** — 12 partitions and 3 instances means 4 partitions each.\n- **Adding a consumer group is zero-impact** — no producer changes, no existing-group disruption.\n- **`CooperativeStickyAssignor` minimizes rebalance pauses** — default `RangeAssignor` stops all partitions during rebalance.\n- **Static membership (`group.instance.id`) prevents spurious rebalances** — Kubernetes rolling restarts trigger full rebalances without it."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Kafka's consumer group model is what makes event-driven fan-out practical at scale.\n- The key insight is that a Kafka topic is an append-only log, not a queue.\n- Messages are not deleted when consumed — they are retained, and each consumer group maintains its own independent offset.\n- So when an `OrderPlaced` event is published, the payment service, inventory service, and analytics service each consume it independently at their own pace.\n\n**How fan-out works:**\n- Each consumer group has its own offset pointer into the topic; analytics falling behind by 10,000 messages doesn't block the payment consumer or affect any other group\n- Adding a new consumer group is operationally zero-impact — no producer changes, no effect on existing groups; the new group starts at whatever offset you choose, either latest for real-time or earliest to replay history\n- One `OrderPlaced` event fans out to all groups without the producer knowing how many consumers exist\n\n**Load balancing within a group:**\n- Within a single consumer group, each partition is assigned to exactly one consumer; 12 partitions and 3 instances means each handles 4 partitions\n- More instances than partitions means idle consumers — partition count is the parallelism ceiling and cannot be changed without rebalancing consumers\n- `CooperativeStickyAssignor` does incremental reassignment during scaling events instead of pausing all partitions\n\n**Operational concerns:**\n- Rebalancing pauses processing — when pods scale or do rolling restarts, Kafka reassigns partitions; static membership with `group.instance.id` prevents unnecessary rebalances during Kubernetes rolling restarts if pods reconnect within `session.timeout.ms`\n\nI recommend sizing partition count at deployment time based on your expected maximum parallelism — changing partition count after consumers are live is operationally complex."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens to partition assignment when a consumer in a group crashes?",
+        "How many partitions should a topic have, and how does it relate to consumer parallelism?",
+        "How do you reset a consumer group offset to replay historical events?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Consumer Groups Fan-Out Pattern Java | InterviewExplainer",
+        "metaDescription": "Kafka consumer groups for event fan-out in Java microservices. Multiple services consuming same events, load balancing vs fan-out, and zero-impact scaling."
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Kafka's consumer group model is what makes event-driven fan-out practical at scale.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The mental model that trips people up: they think of Kafka topics as queues where messages are consumed and gone. In a queue (RabbitMQ default), once a consumer acknowledges a message, it's deleted. If a second service also needs that message, you need a separate queue, a separate binding, and the broker sends a separate copy. Kafka topics work fundamentally differently. A topic is an append-only log. Messages are retained for a configurable period (or forever with compaction), regardless of."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of Kafka consumer groups as the mechanism for event fan-out, and how it differs from point-to-point messaging"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Per-group offsets are independent — analytics falling behind by 10,000 messages doesn't block the payment consumer",
+              "Instances within a group divide partitions — 12 partitions and 3 instances means 4 partitions each",
+              "Adding a consumer group is zero-impact — no producer changes, no existing-group disruption",
+              "CooperativeStickyAssignor minimizes rebalance pauses — default RangeAssignor stops all partitions during rebalance",
+              "Static membership (group"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The mental model that trips people up: they think of Kafka topics as queues where messages are consumed and gone. In a queue (RabbitMQ default), once a consumer acknowledges a message, it's deleted. If a second service also needs that message, you need a separate queue, a separate binding, and the broker sends a separate copy. Kafka topics work fundamentally differently. A topic is an append-only log. Messages are retained for a configurable period (or forever with compaction), regardless of how many consumers have read them. Each consumer group maintains its own offset — a pointer to its position in the log. The payment service's consumer group is at offset 4,502. The analytics service's consumer group is at offset 4,498."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing consumer groups with competing consumers — within a group, partitions are divided among consumers",
+              "across groups, all groups see all messages"
+            ]
+          }
+        ],
+        "cap": "How fan-out works: Each consumer group has its own offset pointer into the topic; analytics falling behind by 10,000 messages doesn't block the payment consumer or affect any other group Adding a new",
+        "familiarity_anchors": [
+          "Kafka",
+          "OrderPlaced"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens to partition assignment when a consumer in a group crashes?",
+          "How many partitions should a topic have, and how does it relate to consumer parallelism?",
+          "How do you reset a consumer group offset to replay historical events?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-001",
+      "slug": "kafka-template-producer-factory-config",
+      "question": "How do you configure a Kafka producer in Spring Boot using KafkaTemplate?",
+      "title": "KafkaTemplate and ProducerFactory Configuration",
+      "direct_answer": "Spring Boot auto-configures **KafkaTemplate** when spring-**Kafka** is on the classpath. Configure producers via spring.kafka.**producer**.* properties. For advanced needs, define a ProducerFactory bean with custom serializers and idempotence settings.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Practical knowledge of Spring Kafka producer setup",
+        "common_mistake": "Not configuring enable.idempotence=true, leading to duplicate messages on retry",
+        "to_stand_out": "Mention acks=all with min.insync.replicas for durability guarantees, and the difference between send() fire-and-forget and ListenableFuture callback"
+      },
+      "company_tags": [
+        "LinkedIn",
+        "Uber",
+        "Confluent",
+        "Twitter",
+        "Netflix",
+        "Airbnb"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "KafkaTemplate Hides the Kafka Producer API Behind Spring Abstractions — But You Still Need to Understand What Happens Underneath",
+            "content": "Spring Boot auto-configures a `KafkaTemplate` bean from `spring.kafka.producer.*` properties. You inject it and call `send()`. But the defaults are designed for safety, not performance — and understanding the underlying `ProducerFactory` configuration is what separates a developer who uses Kafka from one who operates it.\n\n`KafkaTemplate.send()` is **asynchronous by default.** It returns a `CompletableFuture<SendResult>` (Spring Kafka 3.x).\n- Messages are batched in memory and sent when the batch is full or `linger.ms` expires.\n- Calling `.get()` on the future blocks until the broker acknowledges the write.\n- Without `.get()`, you have **fire-and-forget semantics** — the message might fail silently.\n\nThe `ProducerFactory` creates the underlying Kafka `Producer` instances.\n- By default, it creates a new producer per thread.\n- For transactional producers, it pools them.\n- The serializer configuration (`key-serializer`, `value-serializer`) is set at the factory level and determines how Java objects are converted to bytes for transmission to the broker and deserialized back on the consumer side."
+          },
+          {
+            "type": "step",
+            "title": "Critical Producer Properties and Their Impact on Reliability",
+            "content": "**`acks`** controls durability guarantees. `acks=1` (default) means the leader acknowledged the write but replicas may not have it yet — leader failure before replication loses the message.\n- **`acks=all`** waits for all in-sync replicas to acknowledge, providing the strongest guarantee.\n- Pair with `min.insync.replicas=2` on the topic to ensure at least two replicas confirm.\n\n**`retries`** (default: `Integer.MAX_VALUE` in modern clients) and **`delivery.timeout.ms`** (default: 120 seconds) control retry behavior.\n- The producer retries failed sends within the delivery timeout.\n- **`enable.idempotence=true`** (default since Kafka 3.0) prevents duplicate messages from retries — the broker deduplicates based on producer ID and sequence number.\n\n**`max.in.flight.requests.per.connection`** defaults to 5. With idempotence enabled, the producer maintains ordering even with multiple in-flight requests because the broker rejects out-of-order writes. Without idempotence, multiple in-flight requests can cause message reordering during retries."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`KafkaTemplate` wraps the Kafka producer API with Spring abstractions. Auto-configured from `spring.kafka.producer.*` properties, you inject it and call `send()`.\n\n`send()` is **asynchronous** — returns a `CompletableFuture`. Messages batch in memory and send when the batch is full or `linger.ms` expires. Without calling `.get()`, failures are silent.\n\nThe critical configuration is **`acks`**. Default `acks=1` means only the leader confirms — leader failure before replication loses the message. **`acks=all`** waits for all in-sync replicas, providing the strongest guarantee.\n\n**Idempotence** (default since Kafka 3.0) prevents duplicates from retries using producer ID and sequence numbers.\n\nThe serializer choice (`StringSerializer`, `JsonSerializer`, Avro) is set at the `ProducerFactory` level.\n\nIn practice, I always set `acks=all`, verify `enable.idempotence=true`, and use `CompletableFuture` callbacks for error handling instead of fire-and-forget."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **KafkaTemplate.send() is asynchronous by default** — returns `CompletableFuture<SendResult>`; without calling `.get()` or adding a callback, send failures are silently ignored.\n- **acks=1 only waits for the leader** — leader failure before replication loses the message; `acks=all` waits for all in-sync replicas and provides the strongest durability guarantee.\n- **Idempotence is enabled by default since Kafka 3.0** — producer ID and sequence numbers prevent duplicate messages from retries; must be paired with `acks=all` and `max.in.flight.requests.per.connection ≤ 5`.\n- **ProducerFactory creates one producer per thread by default** — for transactional producers, it pools them; misconfiguring the pool size causes contention under load.\n- **delivery.timeout.ms (default 120s) bounds total retry time** — the producer retries within this window; after expiry, the `CompletableFuture` completes exceptionally with a `TimeoutException`."
+          },
+          {
+            "type": "code_example",
+            "title": "KafkaTemplate and ProducerFactory in Spring Boot",
+            "content": "`ProducerFactory` builds the `KafkaProducer` instance with all configs; `KafkaTemplate` wraps it with Spring-friendly send APIs (sync, async, transactional, callbacks).\n\n```yaml\n# application.yml — Spring Boot auto-configures one ProducerFactory + KafkaTemplate from these\nspring:\n  kafka:\n    bootstrap-servers: kafka1:9092,kafka2:9092\n    producer:\n      key-serializer: org.apache.kafka.common.serialization.StringSerializer\n      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer\n      acks: all                          # wait for all in-sync replicas (durability)\n      retries: 2147483647                # retry forever; combine with delivery.timeout.ms\n      properties:\n        enable.idempotence: true         # exactly-once on the broker side\n        max.in.flight.requests.per.connection: 5\n        delivery.timeout.ms: 120000\n        linger.ms: 10                    # batch up to 10ms for throughput\n        batch.size: 32768\n        compression.type: lz4\n```\n\n```java\n@Service\n@RequiredArgsConstructor\npublic class OrderEventPublisher {\n\n    private final KafkaTemplate<String, OrderEvent> template;\n\n    // Async with callback (recommended)\n    public void publish(OrderEvent event) {\n        template.send(\"orders\", event.orderId().toString(), event)\n            .whenComplete((result, ex) -> {\n                if (ex != null) log.error(\"Send failed for {}\", event.orderId(), ex);\n                else log.info(\"Sent to {} offset {}\",\n                    result.getRecordMetadata().topic(),\n                    result.getRecordMetadata().offset());\n            });\n    }\n\n    // Sync (only when you must block — e.g. on app shutdown)\n    public void publishSync(OrderEvent event) throws ExecutionException, InterruptedException {\n        template.send(\"orders\", event.orderId().toString(), event)\n            .get(5, TimeUnit.SECONDS);\n    }\n}\n\n// Custom factory when you need a second producer (e.g. transactional)\n@Configuration\nclass TxProducerConfig {\n    @Bean\n    public ProducerFactory<String, byte[]> txProducerFactory(KafkaProperties props) {\n        Map<String, Object> cfg = new HashMap<>(props.buildProducerProperties());\n        cfg.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, \"tx-orders-\" + UUID.randomUUID());\n        cfg.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);\n        DefaultKafkaProducerFactory<String, byte[]> f = new DefaultKafkaProducerFactory<>(cfg);\n        f.setTransactionIdPrefix(\"tx-orders-\");\n        return f;\n    }\n    @Bean public KafkaTemplate<String, byte[]> txTemplate(ProducerFactory<String, byte[]> f) {\n        return new KafkaTemplate<>(f);\n    }\n}\n```\n\n- One `ProducerFactory` builds many producers; Spring shares a single thread-safe `KafkaProducer` across all `KafkaTemplate.send()` calls (efficient — do not create one per request).\n- `acks=all` + `enable.idempotence=true` + finite `delivery.timeout.ms` is the durability sweet spot — no duplicates, no silent loss.\n- `linger.ms` and `batch.size` trade latency for throughput. Defaults are tuned for low latency; bump to 10-20 ms / 32 KB for high-throughput pipelines.\n- Use **two factories** if you mix transactional and non-transactional sends — a transactional producer cannot send non-tx records."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What does enable.idempotence do and why is it important?",
+        "What is the difference between acks=0, acks=1, and acks=all?",
+        "How do you implement transactional Kafka producers in Spring?"
+      ],
+      "seo": {
+        "metaTitle": "KafkaTemplate Producer Configuration Spring Boot — Java Interview",
+        "metaDescription": "Spring Kafka producer setup with KafkaTemplate and ProducerFactory. acks=all, idempotence, async send with callbacks, and compression configuration."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "KafkaTemplate wraps the Kafka producer API with Spring abstractions.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring Boot auto-configures a KafkaTemplate bean from spring.kafka.producer.* properties. You inject it and call send(). But the defaults are designed for safety, not performance — and understanding the underlying ProducerFactory configuration is what separates a developer who uses Kafka from one who operates it. KafkaTemplate.send() is asynchronous by default. It returns a CompletableFuture<SendResult> (Spring Kafka 3.x). Messages are batched in memory and sent when the batch is full or linger.ms expires. Calling .get() on the future blocks until the broker."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical knowledge of Spring Kafka producer setup"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "KafkaTemplate",
+              "send() is asynchronous by default — returns CompletableFuture<SendResult>; without calling",
+              "get() or adding a callback, send failures are silently ignored",
+              "acks=1 only waits for the leader — leader failure before replication loses the message; acks=all waits for all in-sync replicas and provides the strongest durability guarantee",
+              "Idempotence is enabled by default since Kafka 3"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "ProducerFactory builds the KafkaProducer instance with all configs; KafkaTemplate wraps it with Spring-friendly send APIs (sync, async, transactional, callbacks). ``yaml application.yml — Spring Boot auto-configures one ProducerFactory + KafkaTemplate from these spring: kafka: bootstrap-servers: kafka1:9092,kafka2:9092 producer: key-serializer: org.apache.kafka.common.serialization.StringSerializer value-serializer: org.springframework.kafka.support.serializer.JsonSerializer acks: all # wait for all in-sync replicas (durability) retries: 2147483647 # retry forever; combine with delivery.timeout.ms properties: enable.idempotence: true # exactly-once on the broker side max.in.flight.requests.per.connection: 5 delivery.timeout.ms: 120000 linger.ms: 10 # batch up to 10ms for throughput batch.size: 32768 compression.type: lz4 ` `java @Service @RequiredArgsConstructor public class OrderEventPublisher { private final KafkaTemplate<String, OrderEvent> template; // Async with callback (recommended) public void publish(OrderEvent event) { template.send(\"orders\", event.orderId().toString(), event) .whenComplete((result, ex) -> { if (ex != null) log.error(\"Send failed for."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Not configuring enable",
+              "idempotence=true, leading to duplicate messages on retry"
+            ]
+          }
+        ],
+        "cap": "In practice, I always set acks=all, verify enable.idempotence=true, and use CompletableFuture callbacks for error handling instead of fire-and-forget.",
+        "familiarity_anchors": [
+          "Spring",
+          "KafkaTemplate",
+          "Kafka"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What does enable.idempotence do and why is it important?",
+          "What is the difference between acks=0, acks=1, and acks=all?",
+          "How do you implement transactional Kafka producers in Spring?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-002",
+      "slug": "kafka-listener-partitions-groupid-concurrency",
+      "question": "How does @KafkaListener work? Explain partitions, consumer groups, and concurrency.",
+      "title": "@KafkaListener — Partitions, Consumer Groups, and Concurrency",
+      "direct_answer": "**@KafkaListener** creates a message-driven POJO **consumer**. Each listener is part of a **consumer group**; **Kafka** assigns partitions to consumers in the group. Concurrency = number of threads = max number of partitions that will be consumed in parallel.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of consumer group partition assignment and the concurrency-partition relationship",
+        "common_mistake": "Setting concurrency > number of partitions — extra threads are idle",
+        "to_stand_out": "Explain rebalancing when concurrency changes or instances scale, and the difference between group IDs for competing consumers vs fan-out"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Twitter",
+        "Uber",
+        "Netflix",
+        "Airbnb"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "@KafkaListener Runs on a Thread From a ConcurrentMessageListenerContainer — Not the Main Thread, Not a Web Thread",
+            "content": "When you annotate a method with `@KafkaListener`, Spring Kafka creates a **`ConcurrentMessageListenerContainer`** that manages consumer threads. Each consumer thread polls Kafka, receives records, and invokes your listener method. This happens completely outside the web request lifecycle — no `HttpServletRequest`, no Spring MVC context.\n\nThe **`concurrency`** property controls how many consumer threads run. `@KafkaListener(topics = \"orders\", concurrency = \"3\")` creates 3 consumer instances, each assigned a subset of partitions.\n- With 6 partitions and `concurrency=3`, each consumer handles 2 partitions.\n- **Consumers beyond the partition count sit idle** — `concurrency=8` on a 6-partition topic wastes 2 threads.\n\nThe **`groupId`** determines which consumer group this listener belongs to.\n- All listeners with the same `groupId` share the partitions of a topic.\n- Different `groupId` values create independent consumers — each group gets all messages independently.\n- This is how you have one group for order processing and another for analytics, both reading from the same topic without interfering with each other's offset management."
+          },
+          {
+            "type": "step",
+            "title": "Partition Assignment, Manual Assignment, and Consumer Thread Safety",
+            "content": "By default, Kafka uses the **`RangeAssignor`** to distribute partitions. When consumers join or leave the group, a **rebalance** reassigns partitions. During rebalance, all consumers in the group pause — no messages are processed. With many partitions and frequent scaling, rebalances cause latency spikes.\n\nThe **`CooperativeStickyAssignor`** (recommended) performs incremental rebalances — only the affected partitions are reassigned, and other consumers continue processing. Configure with `spring.kafka.consumer.properties.partition.assignment.strategy=org.apache.kafka.clients.consumer.CooperativeStickyAssignor`.\n\nFor fixed partition-to-consumer mapping, use `@KafkaListener(topicPartitions = @TopicPartition(topic = \"orders\", partitions = {\"0\", \"1\"}))`. This skips group management entirely — the consumer always reads from the specified partitions. Useful when partition ordering must map to specific processing logic.\n\n**Listener methods are called on the consumer thread** — blocking operations (database writes, HTTP calls) block the consumer from polling. If the method takes longer than `max.poll.interval.ms` (default 5 minutes), Kafka assumes the consumer is dead and triggers a rebalance."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@KafkaListener` creates a `ConcurrentMessageListenerContainer` that manages consumer threads. These threads poll Kafka and invoke your listener method — completely outside the web request lifecycle.\n\n**`concurrency`** controls consumer thread count. With 6 partitions and `concurrency=3`, each consumer handles 2 partitions. Consumers beyond the partition count sit idle.\n\n**`groupId`** determines partition sharing. Same group = partitions distributed. Different groups = each gets all messages. This is how you have separate processing and analytics consumers on the same topic.\n\nPartition assignment uses `RangeAssignor` by default. **`CooperativeStickyAssignor`** is better — incremental rebalances instead of stop-the-world.\n\nCritical gotcha: **listener methods run on the consumer thread.** If your method blocks longer than `max.poll.interval.ms` (default 5 minutes), Kafka triggers a rebalance because it thinks the consumer is dead.\n\nIn practice, I always set `CooperativeStickyAssignor`, match concurrency to partition count, and keep listener methods fast."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Consumers beyond the partition count sit idle** — `concurrency=8` on a 6-partition topic wastes 2 threads; maximum parallelism equals the partition count.\n- **CooperativeStickyAssignor performs incremental rebalances** — only affected partitions are reassigned; other consumers continue processing; default `RangeAssignor` stops all consumers during rebalance.\n- **Listener methods run on the consumer thread** — blocking operations prevent the consumer from polling; exceeding `max.poll.interval.ms` (default 5 minutes) triggers a rebalance.\n- **Different groupId values create independent consumers** — each group gets all messages; use separate groups for order processing and analytics reading from the same topic.\n- **Manual partition assignment skips group management** — `@TopicPartition(topic, partitions)` assigns fixed partitions; no rebalancing, but no automatic failover if the consumer dies."
+          },
+          {
+            "type": "code_example",
+            "title": "@KafkaListener Concurrency, Group ID and Partitions",
+            "content": "One topic with N partitions can be processed by up to N consumers in the same group, in parallel. `@KafkaListener(concurrency = …)` controls how many consumer threads each app instance runs.\n\n```yaml\nspring:\n  kafka:\n    consumer:\n      bootstrap-servers: kafka:9092\n      group-id: orders-processor                # same group = work splitting\n      auto-offset-reset: earliest\n      enable-auto-commit: false                  # commit manually after success\n      max-poll-records: 100\n      properties:\n        max.poll.interval.ms: 300000             # 5 min — must exceed worst-case processing\n```\n\n```java\n@Component\n@RequiredArgsConstructor\npublic class OrderListener {\n\n    private final OrderProcessor processor;\n\n    /**\n     * topic has 12 partitions; concurrency = 6 → this instance runs 6 consumer threads,\n     * each owning 2 partitions. Run two instances and you get 12-way parallelism (one\n     * thread per partition — the maximum without idle threads).\n     */\n    @KafkaListener(\n        topics = \"orders\",\n        groupId = \"orders-processor\",\n        concurrency = \"6\",\n        containerFactory = \"kafkaListenerContainerFactory\")\n    public void onOrder(OrderEvent event,\n                        @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,\n                        @Header(KafkaHeaders.OFFSET) long offset,\n                        Acknowledgment ack) {\n        log.info(\"partition={} offset={} order={}\", partition, offset, event.orderId());\n        processor.process(event);\n        ack.acknowledge();                       // commit AFTER success\n    }\n}\n\n@Configuration\nclass KafkaConsumerConfig {\n    @Bean\n    public ConcurrentKafkaListenerContainerFactory<String, OrderEvent>\n            kafkaListenerContainerFactory(ConsumerFactory<String, OrderEvent> cf) {\n        ConcurrentKafkaListenerContainerFactory<String, OrderEvent> f =\n            new ConcurrentKafkaListenerContainerFactory<>();\n        f.setConsumerFactory(cf);\n        f.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);\n        f.setBatchListener(false);\n        return f;\n    }\n}\n```\n\n- **Group ID = work-splitting key**: every consumer in the same `groupId` shares the partitions; consumers in different groups see **all** messages independently.\n- **Concurrency** never exceeds **partition count** — extra threads sit idle. Set partitions to your peak parallelism target (`concurrency × instances ≤ partitions`).\n- Order is preserved **per partition**, not across the topic. Key by something stable (`orderId`) so all events for one order land on one partition and process in order.\n- `max.poll.interval.ms` must be larger than the longest acceptable processing time — exceed it and the broker considers the consumer dead and reassigns its partitions (rebalance storm)."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens during a Kafka consumer group rebalance?",
+        "How do you implement a fan-out pattern so multiple services receive the same events?",
+        "What is the difference between poll-based and push-based consumption in Kafka?"
+      ],
+      "seo": {
+        "metaTitle": "@KafkaListener Consumer Groups Partitions — Spring Boot Java Interview",
+        "metaDescription": "@KafkaListener configuration with consumer groups, partitions, and concurrency. Fan-out vs competing consumers, rebalancing, and batch consumption."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "@KafkaListener creates a ConcurrentMessageListenerContainer that manages consumer threads.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When you annotate a method with @KafkaListener, Spring Kafka creates a ConcurrentMessageListenerContainer that manages consumer threads. Each consumer thread polls Kafka, receives records, and invokes your listener method. This happens completely outside the web request lifecycle — no HttpServletRequest, no Spring MVC context. The concurrency property controls how many consumer threads run. @KafkaListener(topics = \"orders\", concurrency = \"3\") creates 3 consumer instances, each assigned a subset of partitions. With 6 partitions and concurrency=3, each consumer handles 2 partitions. Consumers beyond."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of consumer group partition assignment and the concurrency-partition relationship"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Consumers beyond the partition count sit idle — concurrency=8 on a 6-partition topic wastes 2 threads; maximum parallelism equals the partition count",
+              "CooperativeStickyAssignor performs incremental rebalances — only affected partitions are reassigned; other consumers continue processing; default RangeAssignor stops all consumers during rebalance",
+              "Listener methods run on the consumer thread — blocking operations prevent the consumer from polling; exceeding max",
+              "ms (default 5 minutes) triggers a rebalance",
+              "Different groupId values create independent consumers — each group gets all messages; use separate groups for order processing and analytics reading from the same topic"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "One topic with N partitions can be processed by up to N consumers in the same group, in parallel. @KafkaListener(concurrency = …) controls how many consumer threads each app instance runs. ``yaml spring: kafka: consumer: bootstrap-servers: kafka:9092 group-id: orders-processor # same group = work splitting auto-offset-reset: earliest enable-auto-commit: false # commit manually after success max-poll-records: 100 properties: max.poll.interval.ms: 300000 # 5 min — must exceed worst-case processing ` `java @Component @RequiredArgsConstructor public class OrderListener { private final OrderProcessor processor; /** topic has 12 partitions; concurrency = 6 → this instance runs 6 consumer threads, each owning 2 partitions. Run two instances and you get 12-way parallelism (one thread per partition — the maximum without idle threads). */ @KafkaListener( topics =."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Setting concurrency > number of partitions",
+              "extra threads are idle"
+            ]
+          }
+        ],
+        "cap": "In practice, I always set CooperativeStickyAssignor, match concurrency to partition count, and keep listener methods fast.",
+        "familiarity_anchors": [
+          "KafkaListener",
+          "Kafka",
+          "Concurrency"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens during a Kafka consumer group rebalance?",
+          "How do you implement a fan-out pattern so multiple services receive the same events?",
+          "What is the difference between poll-based and push-based consumption in Kafka?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-003",
+      "slug": "acknowledgment-mode-manual-vs-auto",
+      "question": "What are Kafka acknowledgment modes in Spring? When should you use manual acknowledgment?",
+      "title": "Kafka Acknowledgment Modes — Manual vs Auto",
+      "direct_answer": "**Spring Kafka**'s AckMode determines when **consumer** offsets are committed. BATCH (default) commits after each poll batch. MANUAL requires calling Acknowledgment.acknowledge() explicitly, giving full control over exactly when a message is considered processed.",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of at-least-once delivery and offset commit timing",
+        "common_mistake": "Using auto-commit without realizing messages could be lost if the consumer crashes after commit but before processing",
+        "to_stand_out": "Explain the at-least-once vs at-most-once trade-off and how idempotent consumers handle redelivery"
+      },
+      "company_tags": [
+        "Confluent",
+        "Uber",
+        "LinkedIn",
+        "Stripe",
+        "Netflix",
+        "Airbnb"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Auto-Acknowledge Can Lose Messages — Manual Acknowledge Can Duplicate Them — There Is No Perfect Option",
+            "content": "Kafka offset management has a fundamental trade-off: **commit the offset before processing risks losing messages** (if processing fails after commit), and **commit after processing risks duplicates** (if the consumer crashes after processing but before commit). No acknowledgment mode provides exactly-once delivery on its own.\n\nSpring Kafka's default `AckMode.BATCH` commits offsets after all records returned by a single `poll()` are processed. If the listener throws on the third record, the first two are re-delivered on restart because the offset wasn't committed. **This is at-least-once delivery** — messages may be processed more than once but never lost.\n\n`AckMode.RECORD` commits after each individual record. More granular but slower — every commit is a network round-trip to the Kafka broker. For high-throughput topics, the commit overhead becomes significant.\n\n`AckMode.MANUAL` gives full control. The listener receives an `Acknowledgment` parameter and calls `acknowledge()` explicitly. This lets you commit after a database transaction succeeds, ensuring the offset advances only when processing is truly complete."
+          },
+          {
+            "type": "step",
+            "title": "Manual Acknowledgment Patterns and Exactly-Once Considerations",
+            "content": "With `MANUAL` mode, inject `Acknowledgment` into the listener method. Call `acknowledgment.acknowledge()` after successful processing. **If you don't call `acknowledge()`, the offset is never committed** — on restart, the consumer re-processes the same messages indefinitely.\n\n`MANUAL_IMMEDIATE` commits the offset as soon as `acknowledge()` is called, without waiting for the next `poll()`. `MANUAL` batches the commit until the next `poll()`. The immediate variant reduces the window for re-delivery on crash but adds commit latency.\n\nFor **exactly-once semantics**, use Kafka transactions.\n- The producer and consumer participate in a transaction — the consumed offset is committed in the same transaction as the produced message.\n- Configure `spring.kafka.consumer.properties.isolation.level=read_committed` and enable transactions on the producer.\n- This ensures that offsets and produced messages are committed or rolled back atomically.\n\nMake listeners **idempotent** regardless of the acknowledgment mode. Store a deduplication key (message ID, correlation ID) and check it before processing. This is the pragmatic defense against duplicates across all acknowledgment strategies."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Here's the tension most developers miss with Kafka acknowledgment. Commit before processing — message lost if processing fails. Commit after processing — message duplicated if consumer crashes between processing and commit. **No mode gives exactly-once alone.**\n\nSpring Kafka defaults to `AckMode.BATCH` — commits after all records from a single `poll()` are processed. If the listener throws, earlier records are re-delivered. This is at-least-once delivery.\n\n`AckMode.MANUAL` gives full control — inject `Acknowledgment` and call `acknowledge()` after your database transaction succeeds. **If you forget to call it, messages re-process indefinitely.**\n\nFor exactly-once, use Kafka transactions — consumed offset and produced messages commit atomically. Set `isolation.level=read_committed`.\n\nRegardless of mode, **make listeners idempotent.** Store a deduplication key and check before processing. This is the pragmatic defense.\n\nIn practice, I use `MANUAL` with idempotent listeners for critical data and `BATCH` for analytics/logging where occasional duplicates are acceptable."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **AckMode.BATCH commits after all records from poll() are processed** — if the listener throws on record 3, records 1-2 are re-delivered on restart because the batch offset wasn't committed.\n- **AckMode.MANUAL requires explicit acknowledge() call** — forgetting to call it means the offset never advances; on restart, the consumer re-processes the same messages indefinitely.\n- **MANUAL_IMMEDIATE commits on acknowledge(), MANUAL waits for next poll()** — immediate reduces the re-delivery window on crash but adds per-record commit latency.\n- **Exactly-once requires Kafka transactions** — consumed offset and produced messages commit atomically; consumer must set `isolation.level=read_committed` to avoid reading uncommitted records.\n- **Idempotent listeners are the pragmatic defense** — regardless of ack mode, check a deduplication key before processing; duplicates are inevitable during rebalances and crashes."
+          },
+          {
+            "type": "code_example",
+            "title": "Manual vs Auto Acknowledgment in Spring Kafka",
+            "content": "**Auto-commit** lets the consumer periodically commit offsets in the background — convenient but loses messages when processing fails after the commit fires. **Manual commit** waits for your business logic to succeed before acknowledging — at-least-once delivery, the safer default.\n\n```yaml\n# AUTO COMMIT (default) — DO NOT use when message loss is unacceptable\nspring:\n  kafka:\n    consumer:\n      enable-auto-commit: true\n      auto-commit-interval-ms: 5000     # commit every 5s in the background\n```\n\n```yaml\n# MANUAL — recommended for any business-critical pipeline\nspring:\n  kafka:\n    consumer:\n      enable-auto-commit: false\n    listener:\n      ack-mode: manual_immediate         # commit when you call ack.acknowledge()\n```\n\n```java\n@Configuration\nclass ManualAckConfig {\n    @Bean\n    public ConcurrentKafkaListenerContainerFactory<String, String> factory(\n            ConsumerFactory<String, String> cf) {\n        ConcurrentKafkaListenerContainerFactory<String, String> f = new ConcurrentKafkaListenerContainerFactory<>();\n        f.setConsumerFactory(cf);\n        f.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);\n        return f;\n    }\n}\n\n@Component\npublic class PaymentListener {\n\n    @KafkaListener(topics = \"payments\")\n    public void onPayment(PaymentEvent ev, Acknowledgment ack) {\n        try {\n            paymentService.process(ev);              // business logic\n            ack.acknowledge();                       // commit ONLY after success\n        } catch (TransientException e) {\n            // do NOT ack — Kafka will redeliver after consumer poll resumes\n            log.warn(\"Transient failure for {}, will retry\", ev.id(), e);\n            throw e;                                 // triggers configured ErrorHandler\n        } catch (PoisonMessageException e) {\n            log.error(\"Poison message {}, sending to DLT\", ev.id(), e);\n            ack.acknowledge();                       // ack so we don't reprocess forever\n            dltTemplate.send(\"payments.DLT\", ev);\n        }\n    }\n}\n```\n\n| Ack mode | Commit timing | Risk |\n| --- | --- | --- |\n| `RECORD` | after each record returns | lowest loss, slowest |\n| `BATCH` (default for batch listeners) | after the entire poll batch | small batch-loss window |\n| `TIME` | every N ms | up to N ms of replay on crash |\n| `COUNT` | every N messages | up to N messages replay on crash |\n| `MANUAL` | when `ack.acknowledge()` is called, deferred | gives you control |\n| `MANUAL_IMMEDIATE` | commit immediately on `ack.acknowledge()` | strongest at-least-once |\n\n- **Auto-commit** is fast and easy — but a crash *after* the auto-commit fires and *before* processing completes loses the message silently. Avoid for anything that touches money, inventory, or external systems.\n- **Manual immediate** is the production default for at-least-once processing — your handler must therefore be idempotent (use a dedup table keyed by `topic:partition:offset` or business key).\n- **Never** ack inside a `try` block before processing succeeds — that's \"silent loss masquerading as manual commit\".\n- For **exactly-once**, combine a transactional producer (`isolation.level=read_committed` on consumer) with the database write in the same Kafka transaction (`KafkaTransactionManager`)."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does idempotent consumer processing handle duplicate message delivery?",
+        "What is the difference between at-least-once and exactly-once delivery?",
+        "How do you implement exactly-once semantics with Kafka transactions?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Acknowledgment Modes Spring Boot — Java Interview",
+        "metaDescription": "Kafka AckMode comparison in Spring Boot. MANUAL vs BATCH acknowledgment, at-least-once delivery, offset commit timing, and idempotent consumers."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Here's the tension most developers miss with Kafka acknowledgment.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Kafka offset management has a fundamental trade-off: commit the offset before processing risks losing messages (if processing fails after commit), and commit after processing risks duplicates (if the consumer crashes after processing but before commit). No acknowledgment mode provides exactly-once delivery on its own. Spring Kafka's default AckMode.BATCH commits offsets after all records returned by a single poll() are processed. If the listener throws on the third record, the first two are re-delivered on restart because the offset wasn't committed."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of at-least-once delivery and offset commit timing"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "BATCH commits after all records from poll() are processed — if the listener throws on record 3, records 1-2 are re-delivered on restart because the batch offset wasn't committed",
+              "MANUAL requires explicit acknowledge() call — forgetting to call it means the offset never advances; on restart, the consumer re-processes the same messages indefinitely",
+              "MANUAL_IMMEDIATE commits on acknowledge(), MANUAL waits for next poll() — immediate reduces the re-delivery window on crash but adds per-record commit latency",
+              "Exactly-once requires Kafka transactions — consumed offset and produced messages commit atomically; consumer must set isolation",
+              "level=read_committed to avoid reading uncommitted records"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Auto-commit lets the consumer periodically commit offsets in the background — convenient but loses messages when processing fails after the commit fires. Manual commit waits for your business logic to succeed before acknowledging — at-least-once delivery, the safer default. ``yaml AUTO COMMIT (default) — DO NOT use when message loss is unacceptable spring: kafka: consumer: enable-auto-commit: true auto-commit-interval-ms: 5000 # commit every 5s in the background ` `yaml MANUAL — recommended for any business-critical pipeline spring: kafka: consumer: enable-auto-commit: false listener: ack-mode: manual_immediate # commit when you call ack.acknowledge() ` `java @Configuration class ManualAckConfig { @Bean public ConcurrentKafkaListenerContainerFactory<String, String> factory( ConsumerFactory<String, String> cf) { ConcurrentKafkaListenerContainerFactory<String, String> f = new ConcurrentKafkaListenerContainerFactory<>(); f.setConsumerFactory(cf); f.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE); return f; } } @Component public class PaymentListener."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using auto-commit without realizing messages could be lost if the consumer crashes after commit but before processing"
+            ]
+          }
+        ],
+        "cap": "In practice, I use MANUAL with idempotent listeners for critical data and BATCH for analytics/logging where occasional duplicates are acceptable.",
+        "familiarity_anchors": [
+          "Spring",
+          "Kafka",
+          "AckMode"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does idempotent consumer processing handle duplicate message delivery?",
+          "What is the difference between at-least-once and exactly-once delivery?",
+          "How do you implement exactly-once semantics with Kafka transactions?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-005",
+      "slug": "retryable-topic-non-blocking-retry",
+      "question": "What is the @RetryableTopic feature in Spring Kafka? How does non-blocking retry work?",
+      "title": "@RetryableTopic — Non-Blocking Retry in Spring Kafka",
+      "direct_answer": "@RetryableTopic implements non-blocking **retry** by routing failed messages to intermediate retry topics (e.g., orders-retry-0, orders-retry-1) with increasing delays, finally to a DLT. This avoids blocking the main **topic** **partition** during retry waits.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of why blocking retry (Thread.sleep) is problematic in Kafka consumers",
+        "common_mistake": "Using Thread.sleep() in a Kafka listener during retry — this stalls the entire partition",
+        "to_stand_out": "Explain the ordering implications: non-blocking retry means messages on the same key can be processed out of order during retries"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Zalando",
+        "Revolut",
+        "Uber",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Blocking Retry Holds Your Consumer Thread — @RetryableTopic Moves Failed Messages to Separate Topics So Processing Continues",
+            "content": "The fundamental problem with blocking retry (the default error handler) is that **while one failed record is being retried, no other records on that partition are processed.** If the retry takes 30 seconds (10 retries × 3s backoff), that partition is blocked for 30 seconds. Multiply by partitions and failure frequency, and throughput collapses.\n\n**`@RetryableTopic`** solves this by moving failed messages to separate retry topics: `orders-retry-0`, `orders-retry-1`, `orders-retry-2`, and finally `orders-dlt`.\n- The original consumer immediately moves to the next message.\n- Retry topics have their own consumers that process failed messages after a delay, and if they still fail, the message moves to the next retry topic with a longer delay.\n\nThis is **non-blocking retry** — the main consumer is never held up. The delay between retries is achieved by setting the consumer's `poll` interval on retry topics, not by sleeping the thread. After all retry topics are exhausted, the message lands in the DLT for manual intervention."
+          },
+          {
+            "type": "step",
+            "title": "Configuration, Delay Strategies, and When to Use Blocking vs Non-Blocking Retry",
+            "content": "Annotate the listener with `@RetryableTopic(attempts = 4, backoff = @Backoff(delay = 1000, multiplier = 2))`. This creates retry topics with delays of 1s, 2s, 4s before the DLT. **Spring Kafka automatically creates the retry and DLT topics** and wires the consumers.\n\n**Fixed delay** retries at the same interval. **Exponential backoff** increases the delay (1s, 2s, 4s, 8s). **The maximum delay should align with your SLA** — if the downstream system's SLA for recovery is 1 hour, your total retry window should match.\n\nUse `@DltHandler` on a method in the same class to define custom DLT processing logic — alerting, storing for manual review, or routing to a human queue.\n\n**Blocking retry is still appropriate for transient failures** where you expect immediate recovery (network blip, momentary lock contention).\n- One or two retries with short backoff is faster than the topic-routing overhead of `@RetryableTopic`.\n- Use non-blocking retry when failures might take minutes or hours to resolve (downstream outage, rate limiting, external API maintenance windows)."
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Boot: `@RetryableTopic` with Backoff and DLT Handler",
+            "content": "**1) Listener with `@RetryableTopic` — Spring auto-creates retry topics + DLT:**\n\n```java\n@Component\npublic class OrderEventListener {\n\n    @RetryableTopic(\n        attempts = \"4\",\n        backoff = @Backoff(\n            delay = 1_000,            // 1s initial delay\n            multiplier = 2.0,         // 1s, 2s, 4s\n            maxDelay = 30_000         // cap at 30s\n        ),\n        autoCreateTopics = \"true\",\n        topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE,\n        dltStrategy = DltStrategy.FAIL_ON_ERROR,\n        // Don't retry validation errors — they will never succeed.\n        exclude = { ValidationException.class, IllegalArgumentException.class },\n        // Only retry these and their subclasses.\n        include = { TransientDownstreamException.class,\n                    org.springframework.dao.TransientDataAccessException.class }\n    )\n    @KafkaListener(topics = \"orders\", groupId = \"order-svc\")\n    public void handle(\n            @Payload OrderEvent event,\n            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,\n            @Header(name = RetryTopicHeaders.DEFAULT_HEADER_ATTEMPTS,\n                    required = false) Integer attempt) {\n\n        log.info(\"Processing order {} from {} (attempt {})\",\n            event.orderId(), topic, attempt);\n\n        orderService.process(event);    // throws TransientDownstreamException to trigger retry\n    }\n\n    // Custom DLT handler — same class, runs when message exhausts retries.\n    @DltHandler\n    public void onDlt(\n            @Payload OrderEvent event,\n            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,\n            @Header(KafkaHeaders.EXCEPTION_MESSAGE) String exceptionMessage,\n            @Header(KafkaHeaders.EXCEPTION_FQCN) String exceptionClass) {\n\n        log.error(\"DLT: order {} from {} class={} msg={}\",\n            event.orderId(), topic, exceptionClass, exceptionMessage);\n        deadLetterStore.save(event, exceptionClass, exceptionMessage);\n        alerting.notify(\"OrderEvent landed in DLT: \" + event.orderId());\n    }\n}\n```\n\n**Generated topics for `topics = \"orders\"` with `attempts = 4`:**\n- `orders` — main topic\n- `orders-retry-0` — first retry (1s delay)\n- `orders-retry-1` — second retry (2s delay)\n- `orders-retry-2` — third retry (4s delay)\n- `orders-dlt` — final dead-letter destination\n\n**2) Configure retention for retry/DLT topics in `application.yml`:**\n\n```yaml\nspring:\n  kafka:\n    consumer:\n      enable-auto-commit: false\n    listener:\n      ack-mode: record\n    retry:\n      topic:\n        attempts: 4\n        delay: 1s\n        multiplier: 2.0\n        max-delay: 30s\n```\n\n**3) Customize topic creation if you don't want auto-create:**\n\n```java\n@Bean\npublic RetryTopicConfiguration retryTopicConfig(KafkaTemplate<String, Object> template) {\n    return RetryTopicConfigurationBuilder\n        .newInstance()\n        .maxAttempts(4)\n        .exponentialBackoff(1_000, 2.0, 30_000)\n        .retryTopicSuffix(\"-retry\")\n        .dltSuffix(\"-dlt\")\n        .dltHandlerMethod(\"orderEventListener\", \"onDlt\")\n        .replicationFactor((short) 3)\n        .create(template);\n}\n```\n\n**Critical points:**\n- `include` / `exclude` decide which exceptions are retryable — never retry validation or business-rule failures (they always fail).\n- The retry topics must have **enough partitions** (typically same count as the main topic) and a sensible **retention** (default 7 days is fine for most workloads).\n- Headers like `kafka_dlt-original-topic`, `kafka_dlt-original-partition`, `kafka_dlt-original-offset`, and the exception class/message are set automatically — invaluable for replay tooling.\n- Replay from DLT back to the main topic with a small admin tool that reads from `orders-dlt` and re-produces to `orders` once you've fixed the underlying issue."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Blocking retry holds the consumer thread while retrying. If a record fails 10 times with 3-second backoff, that **partition is blocked for 30 seconds.** No other messages are processed.\n\n`@RetryableTopic` solves this with **non-blocking retry.** Failed messages move to separate retry topics (`orders-retry-0`, `orders-retry-1`) with increasing delays. The original consumer immediately processes the next message.\n\nConfigure with `@RetryableTopic(attempts = 4, backoff = @Backoff(delay = 1000, multiplier = 2))`. Spring Kafka creates retry topics and DLT automatically.\n\nAfter all retry topics are exhausted, the message lands in the DLT. Use `@DltHandler` for custom DLT processing — alerting or storing for manual review.\n\n**Blocking retry is still appropriate for transient failures** — network blips that resolve in milliseconds. Non-blocking retry is for failures that might take minutes to resolve.\n\nIn practice, I use blocking retry with 2 attempts for transient errors and `@RetryableTopic` with exponential backoff for downstream outages."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Blocking retry holds the partition** — while one record retries, no other records on that partition are processed; throughput drops proportionally to failure rate and retry duration.\n- **@RetryableTopic creates separate retry topics with increasing delays** — `orders-retry-0`, `orders-retry-1`, `orders-dlt`; the main consumer immediately moves to the next message.\n- **Spring Kafka auto-creates retry and DLT topics** — no manual topic creation needed; topics are named by convention and wired to separate consumers automatically.\n- **@DltHandler defines custom Dead Letter Topic processing** — annotate a method in the same class as the listener; use for alerting, manual review queues, or compensating transactions.\n- **Use blocking retry for transient failures, non-blocking for prolonged outages** — 1-2 blocking retries with short backoff is faster than topic routing overhead; non-blocking is for downstream failures lasting minutes or hours."
+          }
+        ]
+      },
+      "followup_questions": [
+        "When does @RetryableTopic break message ordering?",
+        "How do you configure retention for retry and DLT topics?",
+        "How do you replay messages from a DLT back to the main topic?"
+      ],
+      "seo": {
+        "metaTitle": "@RetryableTopic Non-Blocking Retry Spring Kafka — Java Interview",
+        "metaDescription": "@RetryableTopic non-blocking retry in Spring Kafka. Retry topic chain, @DltHandler, exponential backoff, and ordering trade-offs."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Blocking retry holds the consumer thread while retrying.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The fundamental problem with blocking retry (the default error handler) is that while one failed record is being retried, no other records on that partition are processed. If the retry takes 30 seconds (10 retries × 3s backoff), that partition is blocked for 30 seconds. Multiply by partitions and failure frequency, and throughput collapses. @RetryableTopic solves this by moving failed messages to separate retry topics: orders-retry-0, orders-retry-1, orders-retry-2, and finally orders-dlt. The original consumer immediately moves to the next message."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of why blocking retry (Thread.sleep) is problematic in Kafka consumers"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Blocking retry holds the partition — while one record retries, no other records on that partition are processed; throughput drops proportionally to failure rate and retry duration",
+              "@RetryableTopic creates separate retry topics with increasing delays — orders-retry-0, orders-retry-1, orders-dlt; the main consumer immediately moves to the next message",
+              "Spring Kafka auto-creates retry and DLT topics — no manual topic creation needed; topics are named by convention and wired to separate consumers automatically",
+              "@DltHandler defines custom Dead Letter Topic processing — annotate a method in the same class as the listener; use for alerting, manual review queues, or compensating transactions",
+              "Use blocking retry for transient failures, non-blocking for prolonged outages — 1-2 blocking retries with short backoff is faster than topic routing overhead; non-blocking is for downstream failures lasting minutes or hours"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "1) Listener with @RetryableTopic — Spring auto-creates retry topics + DLT: ``java @Component public class OrderEventListener { @RetryableTopic( attempts = \"4\", backoff = @Backoff( delay = 1_000, // 1s initial delay multiplier = 2.0, // 1s, 2s, 4s maxDelay = 30_000 // cap at 30s ), autoCreateTopics = \"true\", topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE, dltStrategy = DltStrategy.FAIL_ON_ERROR, // Don't retry validation errors — they will never succeed. exclude = { ValidationException.class, IllegalArgumentException.class }, // Only retry these and their subclasses. include = { TransientDownstreamException.class, org.springframework.dao.TransientDataAccessException.class } ) @KafkaListener(topics = \"orders\", groupId = \"order-svc\") public void handle( @Payload OrderEvent event, @Header(KafkaHeaders.RECEIVED_TOPIC) String topic, @Header(name = RetryTopicHeaders.DEFAULT_HEADER_ATTEMPTS, required = false) Integer attempt) { log.info(\"Processing order {} from {} (attempt {})\", event.orderId(), topic, attempt); orderService.process(event)."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using Thread",
+              "sleep() in a Kafka listener during retry — this stalls the entire partition"
+            ]
+          }
+        ],
+        "cap": "In practice, I use blocking retry with 2 attempts for transient errors and @RetryableTopic with exponential backoff for downstream outages.",
+        "familiarity_anchors": [
+          "RetryableTopic"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "When does @RetryableTopic break message ordering?",
+          "How do you configure retention for retry and DLT topics?",
+          "How do you replay messages from a DLT back to the main topic?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-006",
+      "slug": "transactional-kafka-producers-spring",
+      "question": "How do you use Kafka transactions in Spring to ensure atomic produce-and-consume?",
+      "title": "Transactional Kafka with Spring — Consume-Process-Produce Atomically",
+      "direct_answer": "**Kafka** transactions (**exactly-once** semantics) ensure a consume-process-produce cycle is atomic. **Spring Kafka**'s @Transactional or KafkaTransactionManager makes this transparent. Requires a transactional **producer** with a unique transactional.id.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of exactly-once vs at-least-once and transaction overhead",
+        "common_mistake": "Using Kafka transactions with a relational database — you need a database XA transaction or the Outbox pattern instead",
+        "to_stand_out": "Explain that Kafka transactions only work between Kafka topics, not across Kafka + DB"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Uber",
+        "Revolut",
+        "Netflix",
+        "Airbnb"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Kafka Transactions Solve the 'Consumed But Not Committed' Problem — But They Add Significant Complexity",
+            "content": "The classic failure scenario: your consumer reads a message, writes to a database, produces a downstream message, and then crashes before committing the offset. On restart, **the message is consumed again, the database write is duplicated, and the downstream message is sent twice.** Manual acknowledgment alone doesn't prevent this.\n\nKafka transactions provide **atomicity across consumed offsets and produced messages.** The consumer offset commit and the produced messages are part of the same transaction. If the producer or consumer fails before committing, the entire transaction rolls back — the offset returns to the previous position, and the produced messages are invisible to downstream consumers (with `isolation.level=read_committed`).\n\nSpring Kafka enables transactions by setting `spring.kafka.producer.transaction-id-prefix`.\n- This activates the `KafkaTransactionManager`, which coordinates the transaction lifecycle. `@Transactional` on a listener method starts a Kafka transaction that includes both the consumed offset and any produced messages.\n- This means either everything commits atomically or nothing does."
+          },
+          {
+            "type": "step",
+            "title": "Configuring Transactions and the Kafka + Database Transaction Coordination Problem",
+            "content": "With `transaction-id-prefix` configured, `KafkaTemplate.send()` calls inside a `@Transactional` method participate in the Kafka transaction. The consumed offset is committed as part of the same transaction. If the method throws, both the produced messages and the offset commit are rolled back.\n\n**The challenge is coordinating Kafka transactions with database transactions.** Kafka and your database are separate systems — you can't have a true distributed transaction without a two-phase commit protocol.\n- The practical approach: use `ChainedKafkaTransactionManager` (deprecated in Spring Kafka 3.x) or nest the database transaction inside the Kafka transaction.\n- If the database commit fails, the Kafka transaction rolls back.\n- If the Kafka commit fails after the database commit, you have an inconsistency.\n\nThe **Outbox Pattern** is the recommended alternative.\n- Write both the business data and the outbound message to the database in a single ACID transaction.\n- A separate process (CDC with Debezium, or a poller) reads the outbox table and publishes to Kafka.\n- This provides exactly-once semantics without Kafka transactions by leveraging the database's ACID guarantees.\n\nKafka transactions also require **`isolation.level=read_committed`** on consumers. Without it, consumers see uncommitted messages — messages from transactions that might still roll back."
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Boot: Transactional Producer + KafkaTransactionManager",
+            "content": "**1) Producer factory with `transactional.id` prefix:**\n\n```java\n@Configuration\npublic class TransactionalKafkaConfig {\n\n    @Bean\n    public ProducerFactory<String, OrderEvent> producerFactory() {\n        Map<String, Object> props = new HashMap<>();\n        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,\n            \"kafka1:9092,kafka2:9092,kafka3:9092\");\n        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);\n        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);\n\n        // Required for transactions:\n        props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);\n        props.put(ProducerConfig.ACKS_CONFIG, \"all\");\n\n        DefaultKafkaProducerFactory<String, OrderEvent> pf =\n            new DefaultKafkaProducerFactory<>(props);\n\n        // Spring appends a per-instance suffix to make transactional.id unique\n        // across replicas while keeping the prefix stable for fencing.\n        pf.setTransactionIdPrefix(\"order-svc-tx-\");\n        return pf;\n    }\n\n    @Bean\n    public KafkaTransactionManager<String, OrderEvent> kafkaTxManager(\n            ProducerFactory<String, OrderEvent> pf) {\n        return new KafkaTransactionManager<>(pf);\n    }\n\n    @Bean\n    public KafkaTemplate<String, OrderEvent> kafkaTemplate(\n            ProducerFactory<String, OrderEvent> pf) {\n        return new KafkaTemplate<>(pf);\n    }\n\n    // Consumer side MUST use read_committed to skip uncommitted/aborted records.\n    @Bean\n    public ConcurrentKafkaListenerContainerFactory<String, OrderEvent>\n            kafkaListenerContainerFactory(ConsumerFactory<String, OrderEvent> cf,\n                                          KafkaTransactionManager<String, OrderEvent> tm) {\n        ConcurrentKafkaListenerContainerFactory<String, OrderEvent> f =\n            new ConcurrentKafkaListenerContainerFactory<>();\n        f.setConsumerFactory(cf);\n        f.getContainerProperties().setKafkaAwareTransactionManager(tm);\n        return f;\n    }\n}\n```\n\n**2) `application.yml`:**\n\n```yaml\nspring:\n  kafka:\n    consumer:\n      isolation-level: read_committed\n      enable-auto-commit: false\n      properties:\n        spring.json.trusted.packages: com.example.events\n```\n\n**3) Atomic consume-process-produce — `@Transactional` ties offset commit + sends together:**\n\n```java\n@Service\npublic class OrderProcessor {\n\n    private final KafkaTemplate<String, OrderEvent> kafka;\n\n    public OrderProcessor(KafkaTemplate<String, OrderEvent> kafka) {\n        this.kafka = kafka;\n    }\n\n    @KafkaListener(topics = \"orders\", groupId = \"order-svc\")\n    @Transactional(\"kafkaTxManager\")\n    public void process(OrderEvent in) {\n        // Both sends + the consumer offset commit are part of ONE Kafka transaction.\n        // If this method throws, ALL THREE roll back atomically.\n        kafka.send(\"inventory-updates\", in.orderId(), new InventoryAdjust(in));\n        kafka.send(\"email-queue\",       in.orderId(), new EmailRequest(in));\n    }\n}\n```\n\n**4) Programmatic alternative — `executeInTransaction` for one-off sends:**\n\n```java\n@Service\npublic class BatchOrderPublisher {\n\n    private final KafkaTemplate<String, OrderEvent> kafka;\n\n    public void publishBatch(List<OrderEvent> batch) {\n        kafka.executeInTransaction(t -> {\n            for (OrderEvent e : batch) {\n                t.send(\"orders\", e.orderId(), e);\n            }\n            return null; // commits if no exception; aborts on any throw\n        });\n    }\n}\n```\n\n**Critical points:**\n- `transactional.id` MUST be stable per logical producer instance — Spring's prefix + per-instance suffix handles this correctly. A changing `transactional.id` defeats the broker's zombie-fencing protection.\n- The consumer container needs the `KafkaAwareTransactionManager` so the offset commit becomes part of the transaction.\n- All downstream consumers MUST set `isolation.level=read_committed`, otherwise they will see records from transactions that are still in-flight or get aborted."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The failure scenario: consumer reads a message, processes it, produces a downstream message, then crashes before committing the offset. **On restart, everything happens again** — duplicate processing, duplicate downstream messages.\n\nKafka transactions make consumed offset commit and produced messages **atomic.** Both commit or both roll back. Configure with `spring.kafka.producer.transaction-id-prefix`.\n\n`@Transactional` on a listener starts a Kafka transaction. Downstream consumers must set **`isolation.level=read_committed`** to avoid reading uncommitted messages.\n\nThe hard problem is **Kafka + database coordination.** They're separate systems. If the database commits but the Kafka transaction fails, you have inconsistency.\n\nThe **Outbox Pattern** is the recommended solution: write business data and the outbound message to the database in one ACID transaction. A CDC tool (Debezium) publishes to Kafka separately. No Kafka transactions needed.\n\nIn practice, I use Kafka transactions for pure consume-transform-produce pipelines and the Outbox Pattern when a database is involved."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Kafka transactions make offset commit and produced messages atomic** — both commit or both roll back; prevents the 'consumed but not committed' failure scenario that causes duplicate processing.\n- **transaction-id-prefix activates the KafkaTransactionManager** — `KafkaTemplate.send()` inside `@Transactional` participates in the Kafka transaction; offset commit is part of the same transaction.\n- **isolation.level=read_committed is required on downstream consumers** — without it, consumers see messages from transactions that might roll back; leads to processing uncommitted and eventually rolled-back data.\n- **Kafka + database coordination requires the Outbox Pattern** — write business data and outbound messages to the database in one ACID transaction; CDC (Debezium) publishes to Kafka; avoids distributed transaction complexity.\n- **ChainedKafkaTransactionManager is deprecated in Spring Kafka 3.x** — nesting database transactions inside Kafka transactions is fragile; the Outbox Pattern provides stronger consistency guarantees."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why can't Kafka transactions span both Kafka and a relational database?",
+        "How does the Outbox pattern solve Kafka + database atomicity?",
+        "What is isolation.level=read_committed and why is it required for consumers?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Transactions Spring Boot Exactly-Once — Java Interview",
+        "metaDescription": "Kafka transactions in Spring for exactly-once semantics. Consume-process-produce atomicity, KafkaTransactionManager, limitations vs Outbox pattern."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "The failure scenario: consumer reads a message, processes it, produces a downstream message, then crashes before committing the offset.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The classic failure scenario: your consumer reads a message, writes to a database, produces a downstream message, and then crashes before committing the offset. On restart, the message is consumed again, the database write is duplicated, and the downstream message is sent twice. Manual acknowledgment alone doesn't prevent this. Kafka transactions provide atomicity across consumed offsets and produced messages. The consumer offset commit and the produced messages are part of the same transaction. If the producer or consumer fails before."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of exactly-once vs at-least-once and transaction overhead"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Kafka transactions make offset commit and produced messages atomic — both commit or both roll back; prevents the 'consumed but not committed' failure scenario that causes duplicate processing",
+              "transaction-id-prefix activates the KafkaTransactionManager — KafkaTemplate",
+              "send() inside @Transactional participates in the Kafka transaction; offset commit is part of the same transaction",
+              "level=read_committed is required on downstream consumers — without it, consumers see messages from transactions that might roll back; leads to processing uncommitted and eventually rolled-back data",
+              "Kafka + database coordination requires the Outbox Pattern — write business data and outbound messages to the database in one ACID transaction; CDC (Debezium) publishes to Kafka; avoids distributed transaction complexity"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "1) Producer factory with transactional.id prefix: ``java @Configuration public class TransactionalKafkaConfig { @Bean public ProducerFactory<String, OrderEvent> producerFactory() { Map<String, Object> props = new HashMap<>(); props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, \"kafka1:9092,kafka2:9092,kafka3:9092\"); props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class); props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class); // Required for transactions: props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true); props.put(ProducerConfig.ACKS_CONFIG, \"all\"); DefaultKafkaProducerFactory<String, OrderEvent> pf = new DefaultKafkaProducerFactory<>(props); // Spring appends a per-instance suffix to make transactional.id unique // across replicas while keeping the prefix stable for fencing. pf.setTransactionIdPrefix(\"order-svc-tx-\"); return pf; } @Bean public KafkaTransactionManager<String, OrderEvent> kafkaTxManager( ProducerFactory<String, OrderEvent> pf) { return new KafkaTransactionManager<>(pf); } @Bean public KafkaTemplate<String, OrderEvent> kafkaTemplate( ProducerFactory<String, OrderEvent> pf) { return new KafkaTemplate<>(pf); } // Consumer side MUST use read_committed to skip uncommitted/aborted records. @Bean public ConcurrentKafkaListenerContainerFactory<String, OrderEvent> kafkaListenerContainerFactory(ConsumerFactory<String, OrderEvent> cf, KafkaTransactionManager<String, OrderEvent> tm) { ConcurrentKafkaListenerContainerFactory<String, OrderEvent> f = new."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using Kafka transactions with a relational database",
+              "you need a database XA transaction or the Outbox pattern instead"
+            ]
+          }
+        ],
+        "cap": "In practice, I use Kafka transactions for pure consume-transform-produce pipelines and the Outbox Pattern when a database is involved.",
+        "familiarity_anchors": [
+          "Kafka",
+          "Spring",
+          "Transactional"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why can't Kafka transactions span both Kafka and a relational database?",
+          "How does the Outbox pattern solve Kafka + database atomicity?",
+          "What is isolation.level=read_committed and why is it required for consumers?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-007",
+      "slug": "kafka-json-avro-serialization-spring",
+      "question": "How do you serialize Kafka messages in Spring? When should you use Avro over JSON?",
+      "title": "Kafka Serialization — JSON vs Avro in Spring",
+      "direct_answer": "JsonSerializer/JsonDeserializer work out of the box with **Spring Kafka** and Jackson. **Avro** with **schema registry** enforces schema evolution contracts, provides compact binary encoding, and is preferred for production multi-team environments.",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of serialization format trade-offs and schema evolution",
+        "common_mistake": "Not handling type information in JsonDeserializer — receives a LinkedHashMap instead of the target class",
+        "to_stand_out": "Explain schema evolution rules in Avro (backward vs forward vs full compatibility) and how Schema Registry enforces them"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Twitter",
+        "Zalando",
+        "Uber",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "JSON Is Human-Readable But Has No Schema Contract — Avro Is Compact, Schema-Enforced, and Enables Evolution",
+            "content": "Most teams start with JSON because it's familiar and readable. Then the consumer breaks because a producer added a field. The choice between JSON and Avro isn't just about format — it's about **whether the producer and consumer agree on the message structure.**\n\nJSON (`JsonSerializer`/`JsonDeserializer`) is simple and human-readable.\n- But it has no schema enforcement — the producer can add, remove, or change fields without the consumer knowing.\n- The consumer discovers incompatibilities at runtime with `ClassCastException` or missing fields.\n- JSON also includes field names in every message, making messages significantly larger.\n\n**Avro** encodes data with a schema that defines the structure.\n- The schema is registered in a **Schema Registry** (Confluent).\n- Producers and consumers reference the schema by ID, not by embedding it in every message.\n- This means messages are **compact** (only values, no field names) and **schema-enforced** (the registry validates compatibility before allowing changes).\n- Avro supports **schema evolution** — adding an optional field doesn't break existing consumers."
+          },
+          {
+            "type": "comparison_table",
+            "title": "JSON vs Avro — Size, Schema, and Evolution Trade-offs",
+            "content": "The trade-off is simplicity vs governance.\n\n| Aspect | JSON | Avro |\n|---|---|---|\n| **Readability** | Human-readable | Binary (not readable) |\n| **Message size** | Large (includes field names) | Compact (schema ID + values only) |\n| **Schema** | None — implicit in code | Explicit — registered in Schema Registry |\n| **Evolution** | No guarantees — runtime failures | Controlled — forward/backward compatibility checks |\n| **Setup** | Zero infrastructure | Requires Schema Registry |\n| **Debugging** | Easy — read raw messages | Requires schema to decode |\n| **Spring config** | `JsonSerializer`/`JsonDeserializer` | `KafkaAvroSerializer`/`KafkaAvroDeserializer` |\n\n**Use JSON** for internal tools, prototyping, and low-throughput topics where readability matters. **Use Avro** for production event-driven systems where multiple teams consume the same topics, schema governance is needed, and message volume makes size matter."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "JSON is simple and human-readable, but it has **no schema contract.** The producer can change fields without the consumer knowing. Incompatibilities show up at runtime.\n\nAvro encodes data with an explicit schema registered in a Schema Registry. Messages are **compact** (schema ID + values, no field names) and **schema-enforced** (the registry validates compatibility before allowing changes).\n\nAvro supports **schema evolution** — adding an optional field with a default doesn't break existing consumers. Forward and backward compatibility checks happen at registration time, not at runtime.\n\nThe trade-off: Avro requires Schema Registry infrastructure. JSON requires nothing.\n\nIn Spring Kafka, configure `KafkaAvroSerializer` and point to the Schema Registry URL. For JSON, `JsonSerializer` with `JsonDeserializer` works with no infrastructure.\n\nMy recommendation: JSON for prototyping and internal tools. Avro for production event-driven architectures where multiple teams consume the same topics and schema governance matters."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **JSON includes field names in every message** — an Avro message with 10 fields can be 60-70% smaller because it stores only values with a schema ID reference.\n- **Avro schema evolution validates compatibility at registration time** — adding a field without a default value is rejected before any consumer sees it; JSON changes are discovered at runtime.\n- **Schema Registry is required for Avro** — producers and consumers fetch schemas by ID; no registry means no Avro; Confluent Schema Registry is the standard implementation.\n- **Forward compatibility means old consumers can read new producer data** — backward compatibility means new consumers can read old data; full compatibility requires both; configure at the subject level.\n- **JsonDeserializer needs trusted packages configuration** — `spring.kafka.consumer.properties.spring.json.trusted.packages=*` allows deserialization of any class; restrict to specific packages in production to prevent deserialization attacks."
+          },
+          {
+            "type": "code_example",
+            "title": "JSON vs Avro Serialization for Kafka",
+            "content": "**JSON** is human-readable and schema-loose — great for dev, painful at scale. **Avro** with a schema registry is binary, compact, and enforces forward/backward compatibility — the standard for production data pipelines.\n\n```yaml\n# ----- JSON (Spring's JsonSerializer) -----\nspring:\n  kafka:\n    producer:\n      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer\n    consumer:\n      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer\n      properties:\n        spring.json.trusted.packages: \"com.example.events\"   # security: avoid arbitrary class deserialization\n\n# ----- Avro + Confluent Schema Registry -----\nspring:\n  kafka:\n    producer:\n      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer\n    consumer:\n      value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer\n    properties:\n      schema.registry.url: http://schema-registry:8081\n      specific.avro.reader: true       # deserialize into generated POJOs (not GenericRecord)\n```\n\n```json\n// src/main/avro/OrderEvent.avsc — checked into git, code-gen via avro-maven-plugin\n{\n  \"namespace\": \"com.example.events\",\n  \"type\": \"record\",\n  \"name\": \"OrderEvent\",\n  \"fields\": [\n    { \"name\": \"orderId\", \"type\": \"string\" },\n    { \"name\": \"userId\",  \"type\": \"long\" },\n    { \"name\": \"total\",   \"type\": { \"type\": \"bytes\", \"logicalType\": \"decimal\", \"precision\": 10, \"scale\": 2 } },\n    { \"name\": \"status\",  \"type\": { \"type\": \"enum\", \"name\": \"Status\", \"symbols\": [\"NEW\",\"PAID\",\"CANCELLED\"] } },\n    { \"name\": \"createdAt\", \"type\": { \"type\": \"long\", \"logicalType\": \"timestamp-millis\" } },\n    { \"name\": \"promoCode\", \"type\": [\"null\", \"string\"], \"default\": null }   // optional → backward compatible\n  ]\n}\n```\n\n```java\n// Generated class is com.example.events.OrderEvent\n@KafkaListener(topics = \"orders\")\npublic void onOrder(OrderEvent ev) {            // strongly typed, schema-validated\n    log.info(\"order {} for user {} total {}\", ev.getOrderId(), ev.getUserId(), ev.getTotal());\n}\n```\n\n| Aspect | JSON | Avro + Schema Registry |\n| --- | --- | --- |\n| Wire size | text + field names | binary, schema by ID (3-5× smaller) |\n| Schema | implicit, in code | explicit, versioned, registry-enforced |\n| Compatibility checks | none | `BACKWARD` / `FORWARD` / `FULL` enforced at publish |\n| Tooling | curl + jq inspect easily | needs `kafka-avro-console-consumer` |\n| Best fit | dev, prototypes, low-volume topics | production pipelines, schema evolution |\n\n- **JSON** wins on developer ergonomics; payloads are debuggable with `kafkacat`. Always set `spring.json.trusted.packages` to a tight allowlist — JsonDeserializer can otherwise instantiate arbitrary classes from the headers.\n- **Avro** wins everywhere else at scale: 3-5× smaller payloads, binary encoding (CPU-cheap), and the schema registry **rejects incompatible schema changes** at publish time — production downtime from \"we forgot to coordinate the schema\" disappears.\n- Use **TopicNameStrategy** (default) when one schema per topic is fine; **TopicRecordNameStrategy** when one topic carries multiple event types.\n- Protobuf is the third option — similar trade-offs to Avro, with stronger code-gen ergonomics in Java/Go but weaker dynamic schema introspection."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is schema evolution and why does it matter for Kafka?",
+        "How do you handle a breaking schema change in Avro?",
+        "What is the Schema Registry wire format (magic byte + schema ID)?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka JSON Avro Serialization Spring Boot — Java Interview",
+        "metaDescription": "Kafka message serialization in Spring Boot. JSON vs Avro with Schema Registry comparison, schema evolution compatibility, and production setup."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "JSON is simple and human-readable, but it has no schema contract.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most teams start with JSON because it's familiar and readable. Then the consumer breaks because a producer added a field. The choice between JSON and Avro isn't just about format — it's about whether the producer and consumer agree on the message structure. JSON (JsonSerializer/JsonDeserializer) is simple and human-readable. But it has no schema enforcement — the producer can add, remove, or change fields without the consumer knowing. The consumer discovers incompatibilities at runtime with ClassCastException or missing fields. JSON."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of serialization format trade-offs and schema evolution"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "JSON includes field names in every message — an Avro message with 10 fields can be 60-70% smaller because it stores only values with a schema ID reference",
+              "Avro schema evolution validates compatibility at registration time — adding a field without a default value is rejected before any consumer sees it; JSON changes are discovered at runtime",
+              "Schema Registry is required for Avro — producers and consumers fetch schemas by ID; no registry means no Avro; Confluent Schema Registry is the standard implementation",
+              "Forward compatibility means old consumers can read new producer data — backward compatibility means new consumers can read old data; full compatibility requires both; configure at the subject level",
+              "JsonDeserializer needs trusted packages configuration — spring"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "JSON is human-readable and schema-loose — great for dev, painful at scale. Avro with a schema registry is binary, compact, and enforces forward/backward compatibility — the standard for production data pipelines. ``yaml ----- JSON (Spring's JsonSerializer) ----- spring: kafka: producer: value-serializer: org.springframework.kafka.support.serializer.JsonSerializer consumer: value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer properties: spring.json.trusted.packages: \"com.example.events\" # security: avoid arbitrary class deserialization ----- Avro + Confluent Schema Registry ----- spring: kafka: producer: value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer consumer: value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer properties: schema.registry.url: http://schema-registry:8081 specific.avro.reader: true # deserialize into generated POJOs (not GenericRecord) ` `json // src/main/avro/OrderEvent.avsc — checked into git, code-gen via avro-maven-plugin { \"namespace\": \"com.example.events\", \"type\": \"record\", \"name\": \"OrderEvent\", \"fields\": [ { \"name\": \"orderId\", \"type\": \"string\" }, { \"name\": \"userId\", \"type\": \"long\" }, { \"name\": \"total\", \"type\": { \"type\": \"bytes\"."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Not handling type information in JsonDeserializer",
+              "receives a LinkedHashMap instead of the target class"
+            ]
+          }
+        ],
+        "cap": "Avro for production event-driven architectures where multiple teams consume the same topics and schema governance matters.",
+        "familiarity_anchors": [
+          "JsonSerializer",
+          "JsonDeserializer",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is schema evolution and why does it matter for Kafka?",
+          "How do you handle a breaking schema change in Avro?",
+          "What is the Schema Registry wire format (magic byte + schema ID)?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-009",
+      "slug": "kafka-consumer-group-rebalancing",
+      "question": "What triggers a Kafka consumer group rebalance? How do you minimize rebalance impact?",
+      "title": "Consumer Group Rebalancing — Causes and Mitigation",
+      "direct_answer": "Rebalancing is triggered when consumers join or leave the group (scaling, restarts, crashes) or when a **consumer** misses heartbeats. During rebalancing, all consumers in the group stop consuming. Minimize with static membership, session.**timeout** tuning, and cooperative rebalancing.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of rebalancing as a production reliability concern",
+        "common_mistake": "Not knowing that long processing times (exceeding max.poll.interval.ms) trigger rebalance",
+        "to_stand_out": "Explain cooperative incremental rebalancing (Kafka 2.4+) and static membership as alternatives to eager rebalancing"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Uber",
+        "Spotify",
+        "Netflix",
+        "Airbnb"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Every Time a Consumer Joins or Leaves a Group, All Consumers Pause — This Is Why Rolling Deployments Cause Latency Spikes",
+            "content": "A Kafka consumer group rebalance reassigns partitions among consumers. During rebalance, **all consumers in the group stop processing** until the assignment is complete. No messages are consumed. For high-throughput topics, even a 30-second rebalance window causes significant message lag.\n\nRebalances are triggered by: a consumer joining the group (scaling up, deployment), a consumer leaving (scaling down, crash, exceeding `max.poll.interval.ms`), a consumer's `session.timeout.ms` expiring (missed heartbeats), or a topic partition count change.\n\n**Rolling deployments are the most common trigger** in production.\n- Each instance restart causes a leave-then-join, triggering two rebalances per instance.\n- With 10 instances, a rolling deployment triggers up to 20 rebalances.\n- The mitigation is `group.instance.id` — **static membership** — which gives each consumer a stable identity.\n- When a consumer with a static ID restarts, it reclaims its partitions without triggering a full rebalance, as long as it returns within `session.timeout.ms`."
+          },
+          {
+            "type": "step",
+            "title": "Cooperative Rebalancing and Static Membership — Reducing the Impact",
+            "content": "The default **eager rebalancing protocol** revokes all partitions from all consumers and reassigns them from scratch. Even if only one partition needs to move, every consumer stops.\n\n**Cooperative (incremental) rebalancing** (`CooperativeStickyAssignor`) only moves the affected partitions. Consumers that keep their partitions continue processing without interruption. This dramatically reduces the impact of rebalances during scaling or deployments.\n\n**Static membership** (`group.instance.id`) assigns a stable identity to each consumer.\n- Configure a unique, stable ID per instance (e.g., hostname or pod name).\n- When the consumer restarts and reconnects with the same ID, the broker reassigns its previous partitions immediately — no rebalance notification to other consumers.\n- Set `session.timeout.ms` high enough to cover your deployment window (e.g., 5 minutes).\n\n**Combine both strategies** for production: cooperative rebalancing for minimal disruption when partitions do move, and static membership to avoid triggering rebalances during rolling deployments entirely. Monitor consumer group lag during deployments to verify the impact."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Every consumer group rebalance **stops all consumers from processing** until partitions are reassigned. Rolling deployments are the most common trigger — each instance restart causes leave + join, potentially 20 rebalances for a 10-instance deployment.\n\nThree strategies to reduce impact:\n\n**Cooperative rebalancing** (`CooperativeStickyAssignor`) only moves affected partitions. Other consumers keep processing. The default eager protocol stops everyone.\n\n**Static membership** (`group.instance.id`) gives each consumer a stable identity. On restart, it reclaims its partitions without triggering a full rebalance. Set `session.timeout.ms` high enough to cover your deployment window.\n\n**Combine both** for production — cooperative rebalancing for minimal disruption when partitions move, static membership to avoid rebalances during deployments entirely.\n\nMonitor consumer lag during deployments to verify the impact.\n\nIn practice, I always configure `CooperativeStickyAssignor` and `group.instance.id` for production consumers. The difference between a smooth deployment and a lag spike is these two settings."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **All consumers stop processing during an eager rebalance** — even if only one partition needs to move; 30-second rebalance on a high-throughput topic causes significant message lag.\n- **Rolling deployments trigger up to 2 rebalances per instance** — leave (stop) and join (start); 10 instances = up to 20 rebalances; each one pauses all consumers.\n- **CooperativeStickyAssignor performs incremental rebalancing** — only affected partitions are reassigned; other consumers continue processing without interruption.\n- **Static membership (group.instance.id) avoids rebalance on restart** — consumer reclaims its previous partitions if it reconnects within `session.timeout.ms`; set timeout high enough to cover deployment window.\n- **Exceeding max.poll.interval.ms triggers a rebalance** — long-running listener processing makes the broker think the consumer is dead; increase the interval or process faster."
+          },
+          {
+            "type": "code_example",
+            "title": "Causes and Mitigation of Consumer Group Rebalances",
+            "content": "A rebalance reassigns partitions among consumers in a group. While it runs, **all consumers in the group pause** — every rebalance is downtime. The triggers are predictable and most are avoidable.\n\n```yaml\nspring:\n  kafka:\n    consumer:\n      group-id: orders-processor\n      properties:\n        # Heartbeat / liveness — KEEP THESE TUNED\n        heartbeat.interval.ms: 3000              # consumer sends heartbeat every 3s\n        session.timeout.ms: 45000                # broker considers consumer dead after 45s of no heartbeat\n        max.poll.interval.ms: 300000             # max gap between poll() calls (5 min)\n        max.poll.records: 100                    # smaller batches → faster poll cycle\n        # Cooperative rebalancing (lower impact than the legacy stop-the-world)\n        partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor\n```\n\n```java\n@KafkaListener(topics = \"orders\", groupId = \"orders-processor\", concurrency = \"4\")\npublic void onOrder(OrderEvent ev, Acknowledgment ack) {\n    // Long-running calls inside the listener push max.poll.interval.ms toward its limit\n    // — offload to async work and ack quickly, OR raise max.poll.interval.ms.\n    processor.process(ev);          // must complete inside max.poll.interval.ms\n    ack.acknowledge();\n}\n\n// Rebalance lifecycle hooks\n@Component\nclass RebalanceObserver implements ConsumerAwareRebalanceListener {\n\n    @Override\n    public void onPartitionsRevokedBeforeCommit(Consumer<?, ?> consumer,\n                                                 Collection<TopicPartition> parts) {\n        log.warn(\"Partitions REVOKED: {}\", parts);   // commit in-flight work here\n    }\n\n    @Override\n    public void onPartitionsAssigned(Consumer<?, ?> consumer,\n                                     Collection<TopicPartition> parts) {\n        log.info(\"Partitions ASSIGNED: {}\", parts);\n    }\n}\n```\n\n| Trigger | What causes it | Mitigation |\n| --- | --- | --- |\n| Consumer joins/leaves | scale-up/scale-down, deploy | use `CooperativeStickyAssignor` for incremental rebalances |\n| Heartbeat timeout | GC pause, thread starvation | tune `session.timeout.ms` / `heartbeat.interval.ms` ratio (3:1) |\n| `max.poll.interval.ms` exceeded | slow message processing | smaller `max.poll.records`, async work, or raise the limit |\n| Partition added | admin grew the topic | unavoidable; rebalance once and stable |\n| Static membership not used | rolling deploy creates \"new\" members | set `group.instance.id=<pod-name>` (Kafka 2.3+) for static membership |\n\n- **Cooperative Sticky Assignor** is the modern default — only the moving partitions pause, not the entire group. Switch off the legacy `RangeAssignor` / `StickyAssignor` for new deployments.\n- **Static membership** (`group.instance.id`) makes pod restarts a no-op for the rebalance protocol — the same pod ID rejoins and reclaims its partitions without triggering a full rebalance.\n- Keep listener processing time well under `max.poll.interval.ms`. If a single message can take 5 minutes (e.g. PDF generation), offload to a thread pool and ack the offset early; track completion separately.\n- A noisy rebalance metric (rebalance-rate-per-hour > a few) usually means GC, container CPU throttling, or processing time is the real problem — fix the root cause, not the timeouts."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between CooperativeStickyAssignor and RangeAssignor?",
+        "How does static membership prevent unnecessary rebalances on restart?",
+        "How do you monitor and alert on excessive consumer group rebalances?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Consumer Group Rebalancing Spring Boot — Java Interview",
+        "metaDescription": "Kafka consumer group rebalancing causes and mitigation. max.poll.interval.ms, static membership, cooperative rebalancing with Spring Kafka."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Every consumer group rebalance stops all consumers from processing until partitions are reassigned.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A Kafka consumer group rebalance reassigns partitions among consumers. During rebalance, all consumers in the group stop processing until the assignment is complete. No messages are consumed. For high-throughput topics, even a 30-second rebalance window causes significant message lag. Rebalances are triggered by: a consumer joining the group (scaling up, deployment), a consumer leaving (scaling down, crash, exceeding max.poll.interval.ms), a consumer's session.timeout.ms expiring (missed heartbeats), or a topic partition count change. Rolling deployments are the most common trigger in production."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of rebalancing as a production reliability concern"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "All consumers stop processing during an eager rebalance — even if only one partition needs to move; 30-second rebalance on a high-throughput topic causes significant message lag",
+              "Rolling deployments trigger up to 2 rebalances per instance — leave (stop) and join (start); 10 instances = up to 20 rebalances; each one pauses all consumers",
+              "CooperativeStickyAssignor performs incremental rebalancing — only affected partitions are reassigned; other consumers continue processing without interruption",
+              "Static membership (group",
+              "id) avoids rebalance on restart — consumer reclaims its previous partitions if it reconnects within session"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A rebalance reassigns partitions among consumers in a group. While it runs, all consumers in the group pause — every rebalance is downtime. The triggers are predictable and most are avoidable. ``yaml spring: kafka: consumer: group-id: orders-processor properties: # Heartbeat / liveness — KEEP THESE TUNED heartbeat.interval.ms: 3000 # consumer sends heartbeat every 3s session.timeout.ms: 45000 # broker considers consumer dead after 45s of no heartbeat max.poll.interval.ms: 300000 # max gap between poll() calls (5 min) max.poll.records: 100 # smaller batches → faster poll cycle # Cooperative rebalancing (lower impact than the legacy stop-the-world) partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor ` `java @KafkaListener(topics = \"orders\", groupId = \"orders-processor\", concurrency = \"4\") public void onOrder(OrderEvent ev, Acknowledgment ack) { // Long-running calls inside the listener."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Not knowing that long processing times (exceeding max",
+              "ms) trigger rebalance"
+            ]
+          }
+        ],
+        "cap": "The difference between a smooth deployment and a lag spike is these two settings.",
+        "familiarity_anchors": [
+          "Rebalancing",
+          "During",
+          "Minimize"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between CooperativeStickyAssignor and RangeAssignor?",
+          "How does static membership prevent unnecessary rebalances on restart?",
+          "How do you monitor and alert on excessive consumer group rebalances?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-010",
+      "slug": "kafka-producer-batching-compression",
+      "question": "How do you optimize Kafka producer throughput with batching and compression?",
+      "title": "Kafka Producer Throughput — Batching and Compression",
+      "direct_answer": "**Kafka** producers batch messages before sending. Tune linger.ms (wait time to fill batch) and batch.size (max bytes). Add snappy or lz4 compression for 3-5x payload reduction. These are the highest-impact **producer** throughput settings.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Awareness of producer throughput tuning at the configuration level",
+        "common_mistake": "Setting linger.ms=0 (default) for low-latency use cases while also needing high throughput — the two goals are in tension",
+        "to_stand_out": "Explain that linger.ms and batch.size are independent limits — whichever triggers first sends the batch"
+      },
+      "company_tags": [
+        "LinkedIn",
+        "Confluent",
+        "Twitter",
+        "Uber",
+        "Netflix",
+        "Airbnb"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Kafka Producers Don't Send Messages Immediately — They Batch Them, and the Tuning Determines Your Latency-Throughput Trade-off",
+            "content": "When you call `KafkaTemplate.send()`, the message doesn't go to the broker immediately.\n- It's added to a **per-partition buffer** in the producer.\n- The buffer is flushed when either the **batch is full** (`batch.size`, default 16KB) or the **linger time expires** (`linger.ms`, default 0ms).\n- With default settings, messages are sent almost immediately because `linger.ms=0` triggers a send as soon as any message is in the buffer.\n\nIncreasing `linger.ms` (e.g., to 5-20ms) allows more messages to accumulate in the batch, reducing the number of network round-trips. This **increases latency** (each message waits up to `linger.ms` before sending) but dramatically **improves throughput** (fewer, larger network requests).\n\n**Compression** (`compression.type`) compresses each batch before sending. `lz4` provides the best balance of compression ratio and CPU overhead. `snappy` is faster but compresses less. `gzip` compresses the most but uses the most CPU. Compression is applied per-batch, so larger batches compress more efficiently — another reason to increase `linger.ms`."
+          },
+          {
+            "type": "step",
+            "title": "Tuning for Throughput vs Latency — Production Configurations",
+            "content": "For **low-latency** scenarios (real-time event processing): `linger.ms=0` (default), `batch.size=16384` (default). Messages send immediately. Throughput is lower because each send is a separate network request.\n\nFor **high-throughput** scenarios (log aggregation, analytics): `linger.ms=20`, `batch.size=65536` (64KB), `compression.type=lz4`. Messages batch for up to 20ms, producing larger, compressed batches. Network requests drop by 10-50x.\n\n**`buffer.memory`** (default 32MB) is the total memory available for all buffers.\n- If the producer generates messages faster than the broker accepts them, buffers fill up.\n- When `buffer.memory` is exhausted, `send()` blocks for up to `max.block.ms` (default 60 seconds) and then throws `TimeoutException`.\n\nMonitor the `record-queue-time-avg` metric — it shows how long messages wait in the buffer before sending.\n- High values indicate that `linger.ms` is too high or the broker is slow.\n- Monitor `batch-size-avg` to verify that batches are being filled effectively.\n- A batch-size-avg much smaller than `batch.size` means `linger.ms` is flushing before batches are full."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Kafka producers batch messages instead of sending them individually. `send()` adds the message to a per-partition buffer. The buffer flushes when the **batch is full** (`batch.size`, default 16KB) or the **linger time expires** (`linger.ms`, default 0ms).\n\nWith `linger.ms=0`, messages send almost immediately — low latency, lower throughput. Setting `linger.ms=20` lets messages accumulate, producing larger batches with fewer network round-trips.\n\n**Compression** (`lz4` is the best default) compresses each batch before sending. Larger batches compress more efficiently — another reason to increase `linger.ms`.\n\nFor high throughput: `linger.ms=20`, `batch.size=65536`, `compression.type=lz4`. Network requests drop 10-50x.\n\n`buffer.memory` (default 32MB) is the total producer buffer. When exhausted, `send()` blocks and eventually throws `TimeoutException`.\n\nIn practice, I always set `compression.type=lz4` and tune `linger.ms` based on latency requirements — 5ms for near-real-time, 20ms for analytics."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **linger.ms=0 (default) sends messages immediately** — lowest latency but highest network overhead; setting 5-20ms lets messages batch, reducing network round-trips by 10-50x.\n- **batch.size (default 16KB) controls the maximum batch size per partition** — larger batches (64KB) improve throughput and compression efficiency; batch is sent when full or linger.ms expires.\n- **lz4 provides the best compression-to-CPU ratio** — snappy is faster but compresses less; gzip compresses more but uses significantly more CPU; compression is per-batch, so larger batches compress better.\n- **buffer.memory (default 32MB) limits total producer buffer** — when exhausted, `send()` blocks for up to `max.block.ms` (60 seconds) then throws TimeoutException; increase for high-throughput producers.\n- **Monitor record-queue-time-avg and batch-size-avg** — high queue time indicates linger.ms is too high or broker is slow; batch-size-avg much smaller than batch.size means linger.ms flushes before batches fill."
+          },
+          {
+            "type": "code_example",
+            "title": "Throughput-Tuning a Kafka Producer",
+            "content": "Producer throughput on Kafka is a function of **batching** (how many records per request) and **compression** (how small each batch is on the wire). Defaults are conservative; production-grade pipelines push 10× more.\n\n```yaml\nspring:\n  kafka:\n    producer:\n      acks: all\n      properties:\n        # ----- Batching -----\n        linger.ms: 20              # wait up to 20ms to fill a batch (default 0 = no batching)\n        batch.size: 65536          # 64 KB per batch (default 16 KB)\n        buffer.memory: 67108864    # 64 MB total in-flight buffer (default 32 MB)\n\n        # ----- Compression -----\n        compression.type: lz4      # lz4 = 2-3x compression at near-zero CPU cost\n        # alternatives: snappy (similar), zstd (higher ratio, slightly more CPU), gzip (highest, slowest)\n\n        # ----- Pipelining + safety -----\n        enable.idempotence: true\n        max.in.flight.requests.per.connection: 5\n        retries: 2147483647\n        delivery.timeout.ms: 120000\n```\n\n```java\n@Service\n@RequiredArgsConstructor\npublic class HighThroughputPublisher {\n\n    private final KafkaTemplate<String, OrderEvent> template;\n    private final MeterRegistry meter;\n\n    public void publish(OrderEvent ev) {\n        // Hot loop: do NOT block on .get() — use the async future\n        Timer.Sample sample = Timer.start(meter);\n        template.send(\"orders\", ev.orderId().toString(), ev)\n            .whenComplete((res, ex) -> {\n                sample.stop(meter.timer(\"kafka.send\", \"topic\", \"orders\"));\n                if (ex != null) meter.counter(\"kafka.send.fail\").increment();\n            });\n    }\n}\n```\n\n| Setting | Default | Tuned for throughput | Effect |\n| --- | --- | --- | --- |\n| `linger.ms` | 0 | 10-50 | tiny latency for huge batching gain |\n| `batch.size` | 16 KB | 64-256 KB | larger requests, fewer round-trips |\n| `buffer.memory` | 32 MB | 64-256 MB | more room for in-flight batches |\n| `compression.type` | none | `lz4` (or `zstd`) | 2-5× smaller wire payload |\n| `max.in.flight.requests.per.connection` | 5 | 5 (keep ≤5 with idempotence) | parallel pipelining without OOO |\n\n- **Compression is almost always free**. JSON / Avro typically compress 3-5×. `lz4` is near-zero CPU cost; `zstd` gives the best ratio at modest cost. The broker stores compressed batches as-is — saves disk, network, and consumer download.\n- **Linger.ms vs latency**: `linger.ms=20` adds at most 20 ms tail latency but can improve throughput 5-10× on bursty workloads. Tune it to your latency budget, not to zero.\n- **Batch size > 64 KB** has diminishing returns and bumps p99 latency. Watch `record-send-rate`, `batch-size-avg`, and `compression-rate-avg` in Micrometer — these tell you whether batching is actually happening.\n- Always pair these with **`acks=all` + `enable.idempotence=true`** so the throughput gain doesn't come at the cost of duplicates or silent loss."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the relationship between linger.ms and latency vs throughput?",
+        "How do you choose between snappy, lz4, gzip, and zstd compression?",
+        "How do you monitor producer batch fill rate and compression ratio?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Producer Batching Compression Spring Boot — Java Interview",
+        "metaDescription": "Kafka producer throughput optimization. linger.ms, batch.size, snappy/lz4 compression comparison, and production tuning guide for Spring Kafka."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Kafka producers batch messages instead of sending them individually.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When you call KafkaTemplate.send(), the message doesn't go to the broker immediately. It's added to a per-partition buffer in the producer. The buffer is flushed when either the batch is full (batch.size, default 16KB) or the linger time expires (linger.ms, default 0ms). With default settings, messages are sent almost immediately because linger.ms=0 triggers a send as soon as any message is in the buffer. Increasing linger.ms (e.g., to 5-20ms) allows more messages to accumulate in the batch, reducing the number."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Awareness of producer throughput tuning at the configuration level"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "ms=0 (default) sends messages immediately — lowest latency but highest network overhead; setting 5-20ms lets messages batch, reducing network round-trips by 10-50x",
+              "size (default 16KB) controls the maximum batch size per partition — larger batches (64KB) improve throughput and compression efficiency; batch is sent when full or linger",
+              "lz4 provides the best compression-to-CPU ratio — snappy is faster but compresses less; gzip compresses more but uses significantly more CPU; compression is per-batch, so larger batches compress better",
+              "memory (default 32MB) limits total producer buffer — when exhausted, send() blocks for up to max",
+              "ms (60 seconds) then throws TimeoutException; increase for high-throughput producers"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Producer throughput on Kafka is a function of batching (how many records per request) and compression (how small each batch is on the wire). Defaults are conservative; production-grade pipelines push 10× more. ``yaml spring: kafka: producer: acks: all properties: # ----- Batching ----- linger.ms: 20 # wait up to 20ms to fill a batch (default 0 = no batching) batch.size: 65536 # 64 KB per batch (default 16 KB) buffer.memory: 67108864 # 64 MB total in-flight buffer (default 32 MB) # ----- Compression ----- compression.type: lz4 # lz4 = 2-3x compression at near-zero CPU cost # alternatives: snappy (similar), zstd (higher ratio, slightly more CPU), gzip (highest, slowest) # ----- Pipelining + safety ----- enable.idempotence: true max.in.flight.requests.per.connection: 5 retries: 2147483647."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Setting linger",
+              "ms=0 (default) for low-latency use cases while also needing high throughput — the two goals are in tension"
+            ]
+          }
+        ],
+        "cap": "In practice, I always set compression.type=lz4 and tune linger.ms based on latency requirements — 5ms for near-real-time, 20ms for analytics.",
+        "familiarity_anchors": [
+          "Kafka",
+          "These"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the relationship between linger.ms and latency vs throughput?",
+          "How do you choose between snappy, lz4, gzip, and zstd compression?",
+          "How do you monitor producer batch fill rate and compression ratio?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-011",
+      "slug": "kafka-consumer-lag-monitoring",
+      "question": "How do you monitor and alert on Kafka consumer lag?",
+      "title": "Kafka Consumer Lag Monitoring and Alerting",
+      "direct_answer": "**consumer lag** (difference between latest **offset** and **consumer** position) indicates how far behind consumers are. Monitor via **Kafka** AdminClient, Confluent Control Center, or export to Prometheus with kafka-lag-exporter. Alert when lag consistently grows.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Operational awareness of Kafka consumer health monitoring",
+        "common_mistake": "Alerting on absolute lag value instead of lag trend — a constant lag is acceptable, growing lag is not",
+        "to_stand_out": "Distinguish between a lag spike (burst of messages) and a processing throughput issue, and how to diagnose each"
+      },
+      "company_tags": [
+        "Confluent",
+        "Datadog",
+        "Netflix",
+        "Spotify",
+        "LinkedIn",
+        "Uber"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Consumer Lag Is the Gap Between What's Produced and What's Consumed — If It Grows, Your System Is Falling Behind",
+            "content": "Consumer lag measures the difference between the **log-end offset** (latest message in the partition) and the **committed offset** (last message the consumer confirmed processing). A lag of 0 means the consumer is fully caught up. Growing lag means the consumer is processing slower than the producer is writing.\n\nLag is the **most important Kafka operational metric.** It directly indicates whether your system is keeping up with incoming data.\n- A consumer that's 1 million messages behind on an order topic means 1 million unprocessed orders.\n- The lag number doesn't tell you the time delay — that depends on the production rate.\n- If the producer writes 10,000 messages/second, a lag of 1 million means approximately 100 seconds behind.\n\nKafka provides lag data through the **`kafka-consumer-groups.sh` CLI tool** and through **JMX metrics** exposed by the consumer client.\n- Spring Boot Actuator with Micrometer exposes consumer metrics at the `kafka.consumer.*` namespace.\n- For production monitoring, **Burrow** (LinkedIn's open-source tool) evaluates lag trends and alerts on consumers that are falling behind rather than just on absolute lag values."
+          },
+          {
+            "type": "step",
+            "title": "Monitoring Strategies, Alerting, and Root Cause Analysis",
+            "content": "**Absolute lag alerts** trigger when lag exceeds a threshold (e.g., 10,000 messages).\n- This catches sudden spikes but doesn't account for temporary bursts that the consumer will catch up on.\n- **Lag trend alerts** (Burrow's approach) trigger when lag is consistently growing over time — the consumer is falling further behind, not just temporarily spiked.\n\nCommon root causes for growing lag: **slow listener processing** (database writes, HTTP calls blocking the consumer thread), **insufficient concurrency** (fewer consumers than partitions), **frequent rebalances** (during which no messages are processed), **GC pauses** (long pauses cause the consumer to miss poll deadlines).\n\nTo diagnose, check the **consumer's `records-consumed-rate`** and **`records-lag`** metrics. If consumed-rate is low but lag is high, the consumer is slow. If consumed-rate matches production rate but lag remains high, the consumer was behind and is catching up.\n\nFor Kubernetes, **scale consumers horizontally** based on lag. KEDA (Kubernetes Event-Driven Autoscaling) scales consumer deployments based on Kafka consumer lag — adding pods when lag exceeds a threshold and scaling down when the consumer catches up."
+          },
+          {
+            "type": "code_example",
+            "title": "Micrometer + Prometheus: Surface Consumer Lag and Alert on It",
+            "content": "**1) Maven dependencies:**\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-actuator</artifactId>\n</dependency>\n<dependency>\n    <groupId>io.micrometer</groupId>\n    <artifactId>micrometer-registry-prometheus</artifactId>\n</dependency>\n```\n\n**2) Bind Kafka client metrics into Micrometer (Spring Boot does this automatically when actuator + a Kafka client are on the classpath, but you can wire it explicitly):**\n\n```java\n@Configuration\npublic class KafkaMetricsConfig {\n\n    // Spring Kafka auto-registers `KafkaClientMetrics` per consumer/producer factory.\n    // For raw clients, bind manually:\n    @Bean\n    public KafkaClientMetrics consumerKafkaMetrics(ConsumerFactory<?, ?> cf,\n                                                   MeterRegistry registry) {\n        // The factory exposes its underlying KafkaConsumer's metrics() map;\n        // KafkaClientMetrics translates them to Micrometer gauges.\n        Consumer<?, ?> probe = cf.createConsumer();\n        KafkaClientMetrics metrics = new KafkaClientMetrics(probe);\n        metrics.bindTo(registry);\n        return metrics;\n    }\n}\n```\n\n**3) `application.yml` — expose Prometheus scrape endpoint:**\n\n```yaml\nmanagement:\n  endpoints:\n    web:\n      exposure:\n        include: health, info, prometheus, metrics\n  metrics:\n    tags:\n      application: ${spring.application.name}\n      environment: ${ENV:dev}\n```\n\n**4) The metrics that matter** (exposed at `/actuator/prometheus`):\n\n- `kafka_consumer_fetch_manager_records_lag` — current lag for one (client-id, topic, partition).\n- `kafka_consumer_fetch_manager_records_lag_max` — highest lag across all assigned partitions for this consumer; the **headline metric** for alerting.\n- `kafka_consumer_fetch_manager_records_consumed_rate` — throughput; useful to distinguish a slow consumer from one that simply has nothing to read.\n- `kafka_consumer_coordinator_rebalance_total` / `kafka_consumer_coordinator_rebalance_latency_avg` — rebalance frequency and pause duration.\n\n**5) Prometheus alert rules (`kafka-consumer-alerts.yml`):**\n\n```yaml\ngroups:\n  - name: kafka-consumer-lag\n    interval: 30s\n    rules:\n      # Headline alert: any consumer's max-lag is high AND still growing.\n      - alert: KafkaConsumerLagHighAndGrowing\n        expr: |\n          kafka_consumer_fetch_manager_records_lag_max > 10000\n          and\n          deriv(kafka_consumer_fetch_manager_records_lag_max[5m]) > 0\n        for: 10m\n        labels:\n          severity: warning\n        annotations:\n          summary: 'Consumer {{ $labels.client_id }} lag is {{ $value }} and growing'\n          description: |\n            Group {{ $labels.client_id }} on topic {{ $labels.topic }}\n            partition {{ $labels.partition }} has lag of {{ $value }} messages\n            and the trend over 5m is positive. Likely a slow consumer or\n            insufficient concurrency.\n\n      # Spike absorbed: lag is high but actively shrinking — informational.\n      - alert: KafkaConsumerLagShrinking\n        expr: |\n          kafka_consumer_fetch_manager_records_lag_max > 50000\n          and\n          deriv(kafka_consumer_fetch_manager_records_lag_max[5m]) < 0\n        for: 5m\n        labels: { severity: info }\n\n      # Rebalance churn — usually means session.timeout.ms is too tight\n      # or processing exceeds max.poll.interval.ms.\n      - alert: KafkaConsumerRebalanceChurn\n        expr: increase(kafka_consumer_coordinator_rebalance_total[10m]) > 5\n        for: 5m\n        labels: { severity: warning }\n        annotations:\n          summary: '{{ $labels.client_id }} rebalanced {{ $value }} times in 10m'\n\n      # Consumer is alive but processing nothing — possible deadlock or\n      # listener exception in a tight loop.\n      - alert: KafkaConsumerStalled\n        expr: |\n          rate(kafka_consumer_fetch_manager_records_consumed_total[5m]) == 0\n          and\n          kafka_consumer_fetch_manager_records_lag_max > 0\n        for: 5m\n        labels: { severity: critical }\n```\n\n**Critical points:**\n- Alert on **lag trend (`deriv`) + threshold**, not absolute lag alone — a steady lag of 50K during a known burst is fine; a growing lag of 5K is a problem.\n- Tag metrics with `application`, `environment`, `client_id`, `topic`, `partition` so dashboards can break down by team/topic and per-partition skew shows up.\n- For Kubernetes, hook the same `kafka_consumer_fetch_manager_records_lag_max` metric into KEDA's `kafka` scaler to autoscale consumer pods on lag.\n- Always also monitor **producer-side metrics** (`kafka_producer_record_send_rate`, `kafka_producer_outgoing_byte_rate`) — a 'consumer lag' alert often turns out to be a producer-side spike."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Consumer lag is the gap between the latest message in a partition and the last message the consumer confirmed processing. **Growing lag means your system is falling behind.**\n\nLag is the most important Kafka operational metric. A lag of 1 million on a topic producing 10K messages/second means you're approximately 100 seconds behind.\n\nMonitor lag via JMX metrics, Spring Boot Actuator (`kafka.consumer.*`), or Burrow (LinkedIn's tool that evaluates lag trends, not just absolute values).\n\nAlert on **lag trends, not just thresholds.** A temporary spike is fine if the consumer catches up. Consistently growing lag means a systemic problem.\n\nCommon causes: slow listener processing, insufficient concurrency (fewer consumers than partitions), frequent rebalances, or GC pauses causing missed poll deadlines.\n\nFor Kubernetes, **KEDA** scales consumer deployments based on lag — adds pods when lag exceeds a threshold.\n\nIn practice, I set lag trend alerts in Burrow and scale consumers horizontally based on lag metrics."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Consumer lag = log-end offset minus committed offset per partition** — lag of 0 means fully caught up; growing lag means the consumer processes slower than the producer writes.\n- **Lag trend is more important than absolute lag** — a temporary spike during a burst is normal; consistently growing lag indicates a systemic problem; Burrow evaluates trends.\n- **Slow listener processing is the most common cause** — blocking operations (database writes, HTTP calls) hold the consumer thread; optimize processing time or increase concurrency.\n- **Insufficient concurrency means idle partitions** — if you have 12 partitions but concurrency=3, each consumer handles 4 partitions sequentially; increase concurrency up to the partition count.\n- **KEDA auto-scales Kafka consumers in Kubernetes based on lag** — adds pods when lag exceeds a threshold, scales down when caught up; eliminates manual scaling decisions."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you diagnose which partition has the highest lag?",
+        "What is the difference between records-lag and records-lag-max?",
+        "How do you recover from a consumer group that is thousands of messages behind?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Consumer Lag Monitoring Spring Boot — Java Interview",
+        "metaDescription": "Kafka consumer lag monitoring and alerting. AdminClient, Prometheus metrics, alert strategy, and diagnosing growing lag in Spring Kafka applications."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Consumer lag is the gap between the latest message in a partition and the last message the consumer confirmed processing.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Consumer lag measures the difference between the log-end offset (latest message in the partition) and the committed offset (last message the consumer confirmed processing). A lag of 0 means the consumer is fully caught up. Growing lag means the consumer is processing slower than the producer is writing. Lag is the most important Kafka operational metric. It directly indicates whether your system is keeping up with incoming data. A consumer that's 1 million messages behind on an order topic means."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Operational awareness of Kafka consumer health monitoring"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Consumer lag = log-end offset minus committed offset per partition — lag of 0 means fully caught up; growing lag means the consumer processes slower than the producer writes",
+              "Lag trend is more important than absolute lag — a temporary spike during a burst is normal; consistently growing lag indicates a systemic problem; Burrow evaluates trends",
+              "Slow listener processing is the most common cause — blocking operations (database writes, HTTP calls) hold the consumer thread; optimize processing time or increase concurrency",
+              "Insufficient concurrency means idle partitions — if you have 12 partitions but concurrency=3, each consumer handles 4 partitions sequentially; increase concurrency up to the partition count",
+              "KEDA auto-scales Kafka consumers in Kubernetes based on lag — adds pods when lag exceeds a threshold, scales down when caught up; eliminates manual scaling decisions"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "1) Maven dependencies: ``xml <dependency> <groupId>org.springframework.boot</groupId> <artifactId>spring-boot-starter-actuator</artifactId> </dependency> <dependency> <groupId>io.micrometer</groupId> <artifactId>micrometer-registry-prometheus</artifactId> </dependency> ` 2) Bind Kafka client metrics into Micrometer (Spring Boot does this automatically when actuator + a Kafka client are on the classpath, but you can wire it explicitly): `java @Configuration public class KafkaMetricsConfig { // Spring Kafka auto-registers KafkaClientMetrics per consumer/producer factory. // For raw clients, bind manually: @Bean public KafkaClientMetrics consumerKafkaMetrics(ConsumerFactory<?, ?> cf, MeterRegistry registry) { // The factory exposes its underlying KafkaConsumer's metrics() map; // KafkaClientMetrics translates them to Micrometer gauges. Consumer<?, ?> probe = cf.createConsumer(); KafkaClientMetrics metrics = new KafkaClientMetrics(probe); metrics.bindTo(registry); return metrics; } } ` 3) application.yml — expose Prometheus scrape endpoint: `yaml management: endpoints: web: exposure: include: health, info, prometheus, metrics metrics."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Alerting on absolute lag value instead of lag trend",
+              "a constant lag is acceptable, growing lag is not"
+            ]
+          }
+        ],
+        "cap": "In practice, I set lag trend alerts in Burrow and scale consumers horizontally based on lag metrics.",
+        "familiarity_anchors": [
+          "Monitor",
+          "Kafka",
+          "AdminClient"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you diagnose which partition has the highest lag?",
+          "What is the difference between records-lag and records-lag-max?",
+          "How do you recover from a consumer group that is thousands of messages behind?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    },
+    {
+      "id": "sk-012",
+      "slug": "kafka-headers-message-metadata",
+      "question": "How do you use Kafka message headers in Spring Kafka for metadata propagation?",
+      "title": "Kafka Message Headers — Metadata and Context Propagation",
+      "direct_answer": "**Kafka** message headers are key-value byte pairs attached to each message. **Spring Kafka** uses them internally (type info, trace IDs) and exposes them via @Header in listeners. Use them for correlation IDs, event versioning, and **distributed tracing** context.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Awareness of Kafka headers for cross-cutting concerns without polluting message payloads",
+        "common_mistake": "Putting metadata like correlationId and eventVersion inside the message payload instead of headers",
+        "to_stand_out": "Explain that Spring Kafka's type header (__TypeId__) enables polymorphic deserialization and how to control it"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Zalando",
+        "Thoughtworks",
+        "Uber",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Kafka Headers Are Metadata Attached to Messages — Use Them for Tracing, Routing, and Schema IDs Without Polluting the Payload",
+            "content": "Kafka headers are key-value pairs attached to each record, separate from the key and value.\n- They carry metadata without modifying the message payload.\n- Common use cases: **trace IDs** for distributed tracing, **correlation IDs** for request tracking, **schema version** for deserialization, **content type** for format detection, and **source service** for audit trails.\n\nSpring Kafka's `KafkaTemplate` supports headers through `ProducerRecord` or `MessageBuilder`. `Message<OrderEvent> message = MessageBuilder.withPayload(event).setHeader(\"X-Trace-Id\", traceId).build(); kafkaTemplate.send(message);` attaches the trace ID as a header.\n\nOn the consumer side, `@Header(\"X-Trace-Id\") String traceId` extracts a specific header, or inject `ConsumerRecordMetadata` to access all headers. Spring Kafka's `DefaultKafkaHeaderMapper` automatically maps Spring `Message` headers to Kafka headers and back.\n\nHeaders are particularly useful for **dead letter topic processing** — Spring Kafka automatically adds headers to DLT records containing the original topic, partition, offset, exception class, and exception message. This metadata is essential for debugging and reprocessing failed messages."
+          },
+          {
+            "type": "step",
+            "title": "Common Header Patterns and the KafkaHeaderMapper",
+            "content": "**Distributed tracing headers** propagate trace context across Kafka boundaries.\n- Micrometer Tracing automatically adds `traceparent` and `tracestate` headers to produced messages and extracts them on the consumer side.\n- This enables end-to-end tracing across HTTP and Kafka without manual header management.\n\n**Routing headers** enable consumers to filter or route messages without deserializing the payload.\n- A `Content-Type` header can tell the consumer whether the payload is JSON, Avro, or Protobuf.\n- A `Message-Type` header (e.g., `OrderCreated`, `OrderCancelled`) enables a single listener to dispatch to different handlers based on the event type.\n\n`DefaultKafkaHeaderMapper` handles conversion between Spring `MessageHeaders` and Kafka `Headers`. It serializes non-`byte[]` header values to JSON automatically. **Be careful with header size** — headers count toward the message size limit (`max.message.bytes`, default 1MB). Large headers reduce the space available for the actual payload.\n\nFor custom header filtering on the consumer side, implement a `RecordFilterStrategy` that inspects headers before the message reaches the listener. This avoids deserializing messages that the consumer doesn't need."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Kafka headers carry metadata **separate from the payload** — trace IDs, correlation IDs, content types, source service names. They avoid polluting the message body with infrastructure concerns.\n\nIn Spring Kafka, use `MessageBuilder.withPayload(event).setHeader(\"X-Trace-Id\", traceId).build()` to attach headers. On the consumer side, `@Header(\"X-Trace-Id\") String traceId` extracts them.\n\nMicrometer Tracing **automatically propagates trace context** via headers — `traceparent` and `tracestate` added on produce, extracted on consume. End-to-end tracing across HTTP and Kafka without manual management.\n\nSpring Kafka adds **DLT headers automatically** — original topic, partition, offset, exception class, and message. Essential for debugging failed messages.\n\nHeaders count toward the message size limit (`max.message.bytes`, default 1MB). Keep them small.\n\nIn practice, I use headers for trace IDs, event type routing, and correlation IDs. The payload stays clean with only business data."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Headers carry metadata without modifying the payload** — trace IDs, correlation IDs, schema versions, and content types stay separate from business data; consumers can inspect headers without deserializing.\n- **Micrometer Tracing propagates trace context via headers automatically** — `traceparent` and `tracestate` headers enable end-to-end distributed tracing across HTTP and Kafka boundaries.\n- **Spring Kafka adds DLT headers with failure details** — original topic, partition, offset, exception class, and message; essential for debugging and reprocessing dead letter records.\n- **Headers count toward max.message.bytes (default 1MB)** — large headers reduce space for the payload; keep metadata small; use header references (IDs) instead of embedding large values.\n- **RecordFilterStrategy can filter messages by header before deserialization** — avoids deserializing messages the consumer doesn't need; improves throughput for consumers that process only specific event types."
+          },
+          {
+            "type": "code_example",
+            "title": "Kafka Message Headers for Tracing and Routing",
+            "content": "Headers are key-value byte pairs attached to a record alongside the body. Use them for **cross-cutting metadata** — tracing IDs, schema version, source system, idempotency key — that consumers need without unmarshalling the payload.\n\n```java\n// ---- Producer side: add headers ----\n@Service\n@RequiredArgsConstructor\npublic class TracedPublisher {\n\n    private final KafkaTemplate<String, OrderEvent> template;\n    private final Tracer tracer;\n\n    public void publish(OrderEvent ev) {\n        Span span = tracer.currentSpan();\n        ProducerRecord<String, OrderEvent> rec = new ProducerRecord<>(\n            \"orders\", null, ev.orderId().toString(), ev);\n\n        rec.headers()\n           .add(\"traceparent\", span.context().traceparent().getBytes())     // W3C trace context\n           .add(\"eventType\",   \"OrderPlaced\".getBytes())\n           .add(\"schemaVersion\", \"v3\".getBytes())\n           .add(\"sourceSystem\",  \"checkout-service\".getBytes())\n           .add(\"idempotencyKey\", ev.idempotencyKey().getBytes());\n\n        template.send(rec);\n    }\n}\n\n// ---- Consumer side: read headers ----\n@KafkaListener(topics = \"orders\")\npublic void onOrder(@Payload OrderEvent ev,\n                    @Header(name = \"eventType\")    String type,\n                    @Header(name = \"schemaVersion\") String version,\n                    @Header(name = \"traceparent\")  String trace,\n                    @Header(name = \"idempotencyKey\", required = false) String idempKey,\n                    ConsumerRecord<String, OrderEvent> raw) {\n\n    // Continue distributed trace\n    MDC.put(\"traceId\", parseTraceId(trace));\n\n    // Route by event type without parsing the body\n    switch (type) {\n        case \"OrderPlaced\"   -> handlePlaced(ev);\n        case \"OrderCancelled\"-> handleCancelled(ev);\n        default              -> log.warn(\"Unknown eventType={}\", type);\n    }\n\n    // Inspect ALL headers when needed\n    raw.headers().forEach(h ->\n        log.debug(\"header {}={}\", h.key(), new String(h.value())));\n}\n```\n\n```java\n// Spring Cloud Stream / Sleuth automatically propagate traceparent, but you can do it manually:\n@Component\nclass HeaderTracingInterceptor implements ProducerInterceptor<Object, Object> {\n    @Override public ProducerRecord<Object, Object> onSend(ProducerRecord<Object, Object> r) {\n        Optional.ofNullable(MDC.get(\"traceId\"))\n            .ifPresent(t -> r.headers().add(\"traceparent\", t.getBytes()));\n        return r;\n    }\n    @Override public void onAcknowledgement(RecordMetadata m, Exception e) {}\n    @Override public void close() {}\n    @Override public void configure(Map<String, ?> configs) {}\n}\n```\n\n- **Always include**: `traceparent` (W3C), `eventType`, `schemaVersion`, `sourceSystem`, optional `idempotencyKey`. Consumers can route, dedupe, and trace without deserializing the body — useful for poison messages and metrics.\n- Headers are **opaque bytes** — encode strings as UTF-8 by convention. Spring Kafka's `DefaultKafkaHeaderMapper` handles the conversions automatically.\n- Keep header payloads small (under a few KB total). They consume broker memory and bandwidth on every message.\n- Distributed tracing libraries (Micrometer Tracing, Brave, OpenTelemetry) propagate `traceparent` automatically when you use the auto-configured `KafkaTemplate` — manual injection is the fallback for code that builds raw `ProducerRecord`s."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you propagate distributed trace context through Kafka messages?",
+        "What is the __TypeId__ header and how can it cause deserialization issues?",
+        "How do you handle messages that have an unexpected or missing header?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Message Headers Spring Boot — Java Interview",
+        "metaDescription": "Kafka message headers in Spring Kafka for metadata propagation. Correlation IDs, built-in headers, distributed tracing, and @Header annotation usage."
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "Kafka headers carry metadata separate from the payload — trace IDs, correlation IDs, content types, source service names.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Kafka headers are key-value pairs attached to each record, separate from the key and value. They carry metadata without modifying the message payload. Common use cases: trace IDs for distributed tracing, correlation IDs for request tracking, schema version for deserialization, content type for format detection, and source service for audit trails. Spring Kafka's KafkaTemplate supports headers through ProducerRecord or MessageBuilder. Message<OrderEvent> message = MessageBuilder.withPayload(event).setHeader(\"X-Trace-Id\", traceId).build(); kafkaTemplate.send(message); attaches the trace ID as a header. On the consumer side, @Header(\"X-Trace-Id\") String traceId."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Awareness of Kafka headers for cross-cutting concerns without polluting message payloads"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Headers carry metadata without modifying the payload — trace IDs, correlation IDs, schema versions, and content types stay separate from business data; consumers can inspect headers without deserializing",
+              "Micrometer Tracing propagates trace context via headers automatically — traceparent and tracestate headers enable end-to-end distributed tracing across HTTP and Kafka boundaries",
+              "Spring Kafka adds DLT headers with failure details — original topic, partition, offset, exception class, and message; essential for debugging and reprocessing dead letter records",
+              "Headers count toward max",
+              "bytes (default 1MB) — large headers reduce space for the payload; keep metadata small; use header references (IDs) instead of embedding large values"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Headers are key-value byte pairs attached to a record alongside the body. Use them for cross-cutting metadata — tracing IDs, schema version, source system, idempotency key — that consumers need without unmarshalling the payload. ``java // ---- Producer side: add headers ---- @Service @RequiredArgsConstructor public class TracedPublisher { private final KafkaTemplate<String, OrderEvent> template; private final Tracer tracer; public void publish(OrderEvent ev) { Span span = tracer.currentSpan(); ProducerRecord<String, OrderEvent> rec = new ProducerRecord<>( \"orders\", null, ev.orderId().toString(), ev); rec.headers() .add(\"traceparent\", span.context().traceparent().getBytes()) // W3C trace context .add(\"eventType\", \"OrderPlaced\".getBytes()) .add(\"schemaVersion\", \"v3\".getBytes()) .add(\"sourceSystem\", \"checkout-service\".getBytes()) .add(\"idempotencyKey\", ev.idempotencyKey().getBytes()); template.send(rec); } } // ---- Consumer side: read headers ---- @KafkaListener(topics = \"orders\") public void onOrder(@Payload OrderEvent ev, @Header(name = \"eventType\") String type, @Header(name = \"schemaVersion\") String version, @Header(name."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Putting metadata like correlationId and eventVersion inside the message payload instead of headers"
+            ]
+          }
+        ],
+        "cap": "The payload stays clean with only business data.",
+        "familiarity_anchors": [
+          "Kafka",
+          "Spring",
+          "Header"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you propagate distributed trace context through Kafka messages?",
+          "What is the __TypeId__ header and how can it cause deserialization issues?",
+          "How do you handle messages that have an unexpected or missing header?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app publishing domain events to Kafka"
+      }
+    }
+  ]
+}

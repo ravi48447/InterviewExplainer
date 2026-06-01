@@ -1,0 +1,268 @@
+{
+  "topic": "Ecs And Fargate",
+  "topicSlug": "ecs-and-fargate",
+  "questions": [
+    {
+      "id": "aws-002",
+      "slug": "deploy-spring-boot-ecs-fargate",
+      "question": "How do you deploy a Spring Boot application to AWS ECS Fargate?",
+      "title": "Deploying Spring Boot to AWS ECS Fargate",
+      "direct_answer": "You containerise the Spring Boot app with Docker, push the image to ECR (Elastic Container Registry), create an ECS task definition referencing the image, create a Fargate service inside a VPC, and front it with an Application Load Balancer. IAM roles control what AWS services the container can access.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Practical cloud deployment knowledge and Docker + AWS familiarity",
+        "common_mistake": "Hardcoding credentials in the Docker image or Dockerfile instead of using IAM task roles",
+        "to_stand_out": "Mention health check endpoints (/actuator/health), container resource sizing (CPU/memory), and blue/green deployments via CodeDeploy"
+      },
+      "company_tags": [
+        "amazon",
+        "netflix",
+        "lyft",
+        "doordash",
+        "twilio"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Fargate Eliminates the Hardest Part of Container Deployment",
+            "content": "Before Fargate, deploying containers on AWS meant managing an ECS cluster backed by EC2 instances — choosing instance types, tuning capacity providers, patching AMIs, and handling instance draining during deployments. Fargate removes all of that: you define **CPU and memory for your container**, and AWS places, scales, and patches the underlying infrastructure.\n\nThe deployment flow has five concrete steps, but the part that trips most developers up isn't the deployment itself — it's the **IAM role distinction** between what ECS needs to run your container (execution role) and what your Spring Boot code needs to access AWS services (task role). Confusing these two produces identical-looking permission errors that are hard to debug without understanding the model.\n\nThe other production concern unique to Java is **resource sizing**. A Spring Boot app with typical dependencies needs at least 512 MB of memory for the JVM heap plus container overhead. Under-sizing causes OOMKilled restarts that look like application bugs."
+          },
+          {
+            "type": "step",
+            "title": "Containerize With a Multi-Stage Build That Keeps Images Small",
+            "content": "A multi-stage Dockerfile separates the build environment (JDK, Maven, source code) from the runtime environment (JRE only, final JAR). This typically cuts the image from ~800 MB to ~200 MB, which directly reduces pull time during deployments and cold starts.\n\n```dockerfile\nFROM maven:3.9-eclipse-temurin-21 AS build\nWORKDIR /app\nCOPY pom.xml .\nRUN mvn dependency:go-offline  # cached layer unless pom changes\nCOPY src ./src\nRUN mvn package -DskipTests\n\nFROM eclipse-temurin:21-jre-alpine\nWORKDIR /app\nCOPY --from=build /app/target/*.jar app.jar\nEXPOSE 8080\nENTRYPOINT [\"java\", \"-XX:MaxRAMPercentage=75.0\", \"-jar\", \"app.jar\"]\n```\n\nThe `-XX:MaxRAMPercentage=75.0` flag is critical for containers. Without it, the JVM calculates heap size based on the host machine's memory (potentially 64 GB on the underlying Fargate host), not the container's memory limit. With it, the JVM uses 75% of the container's allocated memory, leaving headroom for non-heap memory (metaspace, thread stacks, native buffers).\n\nAfter building, push to ECR — AWS's private container registry that integrates with ECS and IAM.\n\n```bash\naws ecr get-login-password --region us-east-1 | \\\n  docker login --username AWS --password-stdin 123456789.dkr.ecr.us-east-1.amazonaws.com\ndocker build -t my-spring-app . && \\\ndocker tag my-spring-app:latest 123456789.dkr.ecr.us-east-1.amazonaws.com/my-spring-app:latest && \\\ndocker push 123456789.dkr.ecr.us-east-1.amazonaws.com/my-spring-app:latest\n```"
+          },
+          {
+            "type": "step",
+            "title": "The Task Definition: Two Roles, Health Checks, and Secrets",
+            "content": "The task definition is the deployment descriptor — it specifies the container image, resource limits, IAM roles, secrets, and health check configuration. Getting the IAM roles right here prevents the most common Fargate permission errors.\n\nThe **execution role** is what ECS uses to pull your image from ECR and send container logs to CloudWatch. The **task role** is what your Spring Boot application assumes at runtime to access S3, SQS, Secrets Manager, and other services. These are separate IAM roles with separate policies.\n\n```json\n{\n  \"family\": \"order-service\",\n  \"networkMode\": \"awsvpc\",\n  \"requiresCompatibilities\": [\"FARGATE\"],\n  \"cpu\": \"512\",\n  \"memory\": \"1024\",\n  \"executionRoleArn\": \"arn:aws:iam::123456789:role/ecsTaskExecutionRole\",\n  \"taskRoleArn\": \"arn:aws:iam::123456789:role/order-service-task-role\",\n  \"containerDefinitions\": [{\n    \"name\": \"order-service\",\n    \"image\": \"123456789.dkr.ecr.us-east-1.amazonaws.com/order-service:v1.2\",\n    \"portMappings\": [{\"containerPort\": 8080}],\n    \"secrets\": [{\n      \"name\": \"DB_PASSWORD\",\n      \"valueFrom\": \"arn:aws:secretsmanager:us-east-1:123456789:secret:order-db-password\"\n    }],\n    \"healthCheck\": {\n      \"command\": [\"CMD-SHELL\", \"curl -f http://localhost:8080/actuator/health || exit 1\"],\n      \"interval\": 30,\n      \"retries\": 3,\n      \"startPeriod\": 60\n    }\n  }]\n}\n```\n\nThe `startPeriod: 60` gives Spring Boot 60 seconds to start before health checks begin — without this, a slow-starting JVM fails health checks during startup and ECS kills the task before it's ready. The `secrets` block pulls values from Secrets Manager at container start, injecting them as environment variables without exposing them in the task definition or image."
+          },
+          {
+            "type": "step",
+            "title": "Service Creation, ALB, and Auto Scaling for Production Traffic",
+            "content": "The ECS service maintains a desired count of running tasks, replaces unhealthy ones, and integrates with the Application Load Balancer for traffic routing. The ALB performs its own health checks against `/actuator/health` — only tasks that pass both the container health check and ALB health check receive traffic.\n\n```bash\naws ecs create-service \\\n  --cluster production \\\n  --service-name order-service \\\n  --task-definition order-service:3 \\\n  --desired-count 2 \\\n  --launch-type FARGATE \\\n  --network-configuration \"awsvpcConfiguration={\\\n    subnets=[subnet-private-1,subnet-private-2],\\\n    securityGroups=[sg-app],\\\n    assignPublicIp=DISABLED}\" \\\n  --load-balancers \"targetGroupArn=arn:aws:...,containerName=order-service,containerPort=8080\"\n```\n\nNotice `assignPublicIp=DISABLED` — the tasks run in private subnets and receive traffic only through the ALB. This is the standard production topology: ALB in public subnets, application tasks in private subnets, RDS in isolated subnets.\n\nFor auto-scaling, ECS Service Auto Scaling adjusts the task count based on CloudWatch metrics. Target tracking on CPU utilization is the simplest policy — it adds tasks when average CPU exceeds the target and removes them when it drops.\n\n```bash\naws application-autoscaling put-scaling-policy \\\n  --service-namespace ecs \\\n  --resource-id service/production/order-service \\\n  --scalable-dimension ecs:service:DesiredCount \\\n  --policy-name cpu-70-target \\\n  --policy-type TargetTrackingScaling \\\n  --target-tracking-scaling-policy-configuration \\\n    '{\"TargetValue\":70,\"PredefinedMetricSpecification\":{\"PredefinedMetricType\":\"ECSServiceAverageCPUUtilization\"}}'\n```\n\nFor zero-downtime deployments, configure the service with a **blue/green deployment** via CodeDeploy — it spins up new tasks with the new image, routes test traffic to them, then shifts production traffic only after the new tasks pass health checks."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Multi-stage Dockerfile keeps the image small** — build in a JDK stage, copy only the JAR to a JRE final stage; distroless or alpine base; smaller image = faster pulls and smaller attack surface\n- **ECR in the same region as ECS avoids transfer costs** — image pulls from ECR to ECS in the same region are free and fast; cross-region pulls incur data transfer charges\n- **Task definition: IAM task role, not instance role** — assign an IAM role to the task definition, not the EC2 instance; this scopes permissions to the specific service, not the entire host\n- **ALB health check on `/actuator/health`** — ECS deregisters tasks that fail health checks; configure the check path, interval, and unhealthy threshold before deploying\n- **Rolling deployment with `minimumHealthyPercent: 50`** — old tasks stay running until new tasks pass health checks; `maximumPercent: 200` allows running twice the desired count during the rollout"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Deploying a Spring Boot application to ECS Fargate follows four stages: containerize, push to a registry, define the task, and create the service. Each stage has one common mistake that causes deployment failures.\n\n**Containerize — multi-stage Dockerfile**\n- A multi-stage Dockerfile builds the JAR in a Maven or Gradle stage and copies only the JAR into the final image — which means the final container doesn't include the JDK build tools, keeping the image small and reducing the attack surface\n- Use a distroless or slim JRE base image for the final stage: `FROM eclipse-temurin:21-jre-alpine` gives a minimal runtime\n\n**Push to ECR**\n- Create an ECR repository with `aws ecr create-repository --repository-name my-service`; authenticate with `aws ecr get-login-password | docker login`; tag and push the image\n- ECR stores images in the same region as ECS, which means image pulls are fast and don't incur cross-region data transfer costs\n\n**Task definition — CPU, memory, environment**\n- The ECS task definition specifies the container image, CPU units, memory, port mappings, IAM task role, and environment variables — environment variables for database URLs and feature flags go here, secrets come from Secrets Manager via the `secrets` field\n- Set `essential: true` so ECS restarts the task if the container exits\n\n**Service — load balancing and health checks**\n- The ECS service maintains a desired count of running tasks, registers them with an ALB target group, and replaces unhealthy tasks automatically\n- Configure the ALB health check to call Spring Boot's `/actuator/health` endpoint — ECS marks tasks unhealthy if the health check fails, replacing them before taking traffic\n\nFor zero-downtime deployments: use the `ECS (Rolling update)` deployment type with `minimumHealthyPercent: 50` and `maximumPercent: 200` so old tasks remain until new ones pass health checks."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you do a blue/green deployment on ECS?",
+        "How do you configure Spring Boot to read secrets from AWS Secrets Manager at startup?",
+        "What IAM permissions does the ECS task role need versus the task execution role?"
+      ],
+      "seo": {
+        "meta_title": "Deploy Spring Boot to AWS ECS Fargate — Step by Step",
+        "meta_description": "Learn how to containerise a Spring Boot app, push to ECR, and deploy to ECS Fargate with an ALB, IAM roles, and auto scaling.",
+        "keywords": [
+          "spring boot ecs fargate",
+          "deploy java ecs",
+          "ecr spring boot",
+          "fargate spring boot deployment"
+        ],
+        "metaDescription": "You containerise the Spring Boot app with Docker, push the image to ECR (Elastic Container Registry), create an ECS task definition referencing the image, crea.",
+        "metaTitle": "Deploying Spring Boot to AWS ECS Fargate"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P10",
+        "hook": "Deploying a Spring Boot application to ECS Fargate follows four stages: containerize, push to a registry, define the task, and create the service.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Before Fargate, deploying containers on AWS meant managing an ECS cluster backed by EC2 instances — choosing instance types, tuning capacity providers, patching AMIs, and handling instance draining during deployments. Fargate removes all of that: you define CPU and memory for your container, and AWS places, scales, and patches the underlying infrastructure. The deployment flow has five concrete steps, but the part that trips most developers up isn't the deployment itself — it's the IAM role distinction between what ECS."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical cloud deployment knowledge and Docker + AWS familiarity"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Multi-stage Dockerfile keeps the image small — build in a JDK stage, copy only the JAR to a JRE final stage",
+              "distroless or alpine base",
+              "smaller image = faster pulls and smaller attack surface ECR in the same region as ECS avoids transfer costs — image pulls from ECR to ECS in the same region are free and fast",
+              "cross-region pulls incur data transfer charges Task definition: IAM task role, not instance role — assign an IAM role to the task definition, not the EC2 instance",
+              "this scopes permissions to the specific service, not the entire host ALB health check on /actuator/health — ECS deregisters tasks that fail health checks",
+              "configure the check path, interval, and unhealthy threshold before deploying Rolling deployment with minimumHealthyPercent: 50 — old tasks stay running until new tasks pass health checks",
+              "maximumPercent: 200 allows running twice the desired count during the rollout"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Before Fargate, deploying containers on AWS meant managing an ECS cluster backed by EC2 instances — choosing instance types, tuning capacity providers, patching AMIs, and handling instance draining during deployments. Fargate removes all of that: you define CPU and memory for your container, and AWS places, scales, and patches the underlying infrastructure. The deployment flow has five concrete steps, but the part that trips most developers up isn't the deployment itself — it's the IAM role distinction between what ECS needs to run your container (execution role) and what your Spring Boot code needs to access AWS services (task role). Confusing these two produces identical-looking permission errors that are hard to debug without understanding the model. The other production concern."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Hardcoding credentials in the Docker image or Dockerfile instead of using IAM task roles"
+            ]
+          }
+        ],
+        "cap": "Containerize — multi-stage Dockerfile A multi-stage Dockerfile builds the JAR in a Maven or Gradle stage and copies only the JAR into the final image — which means the final container doesn't include",
+        "familiarity_anchors": [
+          "Spring",
+          "Docker",
+          "Elastic"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you do a blue/green deployment on ECS?",
+          "How do you configure Spring Boot to read secrets from AWS Secrets Manager at startup?",
+          "What IAM permissions does the ECS task role need versus the task execution role?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed on AWS ECS with RDS"
+      }
+    },
+    {
+      "id": "aws-ecs-002",
+      "slug": "ecs-task-definition-deep-dive",
+      "question": "Walk through a production-grade ECS task definition — what every field does and why it matters.",
+      "title": "ECS Task Definition: Production Fields, Best Practices",
+      "direct_answer": "An ECS task definition is the blueprint for running containers: container images, CPU/memory, networking mode, IAM roles, logging, secrets, and health checks. For production: use Fargate platform version LATEST, `awsvpc` network mode, explicit task role + execution role, `awslogs` driver to CloudWatch or `firelens` to third-party, secrets from Secrets Manager (not env vars), container `healthCheck`, `stopTimeout: 30`, and appropriate CPU/memory pairs (Fargate has fixed valid combos). Revise task definitions via infrastructure as code (Terraform, CDK) — never the console.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Depth of practical ECS knowledge beyond 'I deployed something to Fargate'",
+        "common_mistake": "Using env vars for secrets; not setting stopTimeout, resulting in abrupt SIGKILL on deploys; using default awslogs retention (never expires = unbounded cost)",
+        "to_stand_out": "Discuss graceful shutdown (SIGTERM handling, stopTimeout), Fargate Spot capacity provider, EphemeralStorage for scratch space, and Service Connect vs ALB for service-to-service"
+      },
+      "company_tags": [
+        "aws",
+        "lyft",
+        "stripe",
+        "airbnb"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Task Definition Is Where Production Details Live or Die",
+            "content": "A task definition is the JSON blueprint ECS uses to launch containers. It covers everything: which images, how much CPU/memory, which IAM role, how logs get shipped, which secrets the container can read, how health is checked, how it shuts down.\n\nThe tutorial version (\"use this minimal task def\") is fine for a demo but hides the production details that distinguish a reliable deployment from a fragile one. Real task definitions address:\n\n- **Graceful shutdown** — `stopTimeout` + SIGTERM handling so in-flight requests complete during deploys\n- **Secret injection** — from Secrets Manager or Parameter Store, not env vars that show up in logs and `ecs-describe-tasks`\n- **Two IAM roles** — `taskRoleArn` for the application's AWS calls, `executionRoleArn` for ECS agent tasks (pull image, write logs)\n- **Health checks** — container-level and target-group-level, tuned so rolling deploys actually wait for health before cutting traffic\n- **Logging** — awslogs with retention set; firelens for third-party destinations; structured JSON logs\n- **Resource limits** — CPU/memory pairs that match Fargate's valid combos; ephemeralStorage for scratch\n- **Platform version** — LATEST for ongoing improvements, or pinned for reproducibility\n- **Network mode** — `awsvpc` for Fargate (mandatory); gives each task its own ENI\n\nGetting any of these wrong causes real production issues: deploys that drop traffic, secrets leaked in logs, containers that OOMKill, logs that cost thousands monthly."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Task Definition Fields Mapped to Runtime Behavior",
+            "content": "```mermaid\nflowchart TB\n    TD[Task Definition JSON] --> CD[Container Definitions]\n    TD --> Net[networkMode: awsvpc]\n    TD --> IAM[taskRoleArn + executionRoleArn]\n    TD --> Res[cpu + memory]\n    TD --> PV[platformVersion: LATEST]\n    CD --> Img[image: ECR tag]\n    CD --> Env[environment - public config]\n    CD --> Sec[secrets - from Secrets Manager]\n    CD --> HC[healthCheck - container probe]\n    CD --> Log[logConfiguration - awslogs or firelens]\n    CD --> ST[stopTimeout: 30]\n    CD --> Es[essential: true]\n    Img --> Pull[executionRole pulls image]\n    Sec --> Inject[executionRole reads secret, injects as env var]\n    Log --> CW[CloudWatch Logs or 3rd party]\n    HC --> Orch[ECS orchestration restarts if unhealthy]\n    ST --> Graceful[SIGTERM sent, 30s to drain, then SIGKILL]\n    style Sec fill:#c8e6c9\n    style ST fill:#fff9c4\n    style IAM fill:#e3f2fd\n```"
+          },
+          {
+            "type": "step",
+            "title": "A Production-Grade Task Definition, Field by Field",
+            "content": "```json\n{\n  \"family\": \"payment-service\",\n  \"networkMode\": \"awsvpc\",\n  \"requiresCompatibilities\": [\"FARGATE\"],\n  \"cpu\": \"1024\",\n  \"memory\": \"2048\",\n  \"ephemeralStorage\": { \"sizeInGiB\": 30 },\n  \"runtimePlatform\": {\n    \"operatingSystemFamily\": \"LINUX\",\n    \"cpuArchitecture\": \"ARM64\"\n  },\n  \"executionRoleArn\": \"arn:aws:iam::123:role/ecsTaskExecutionRole\",\n  \"taskRoleArn\": \"arn:aws:iam::123:role/paymentServiceTaskRole\",\n  \"containerDefinitions\": [{\n    \"name\": \"app\",\n    \"image\": \"123.dkr.ecr.us-east-1.amazonaws.com/payment-service:v1.2.3\",\n    \"essential\": true,\n    \"portMappings\": [{ \"containerPort\": 8080, \"protocol\": \"tcp\" }],\n    \"environment\": [\n      { \"name\": \"SPRING_PROFILES_ACTIVE\", \"value\": \"production\" },\n      { \"name\": \"JAVA_OPTS\", \"value\": \"-XX:MaxRAMPercentage=75 -XX:+UseG1GC\" }\n    ],\n    \"secrets\": [\n      { \"name\": \"DB_PASSWORD\", \"valueFrom\": \"arn:aws:secretsmanager:us-east-1:123:secret:payment-db-password-xyz:password::\" },\n      { \"name\": \"STRIPE_API_KEY\", \"valueFrom\": \"arn:aws:secretsmanager:us-east-1:123:secret:stripe-key-abc\" }\n    ],\n    \"healthCheck\": {\n      \"command\": [\"CMD-SHELL\", \"curl -f http://localhost:8080/actuator/health/liveness || exit 1\"],\n      \"interval\": 30,\n      \"timeout\": 5,\n      \"retries\": 3,\n      \"startPeriod\": 60\n    },\n    \"stopTimeout\": 30,\n    \"logConfiguration\": {\n      \"logDriver\": \"awslogs\",\n      \"options\": {\n        \"awslogs-group\": \"/ecs/payment-service\",\n        \"awslogs-region\": \"us-east-1\",\n        \"awslogs-stream-prefix\": \"app\",\n        \"awslogs-create-group\": \"true\"\n      }\n    },\n    \"ulimits\": [{ \"name\": \"nofile\", \"softLimit\": 65536, \"hardLimit\": 65536 }]\n  }]\n}\n```\n\n**Field-by-field:**\n\n- **`networkMode: awsvpc`** — mandatory for Fargate; each task gets its own ENI and IP; required for Security Group per task\n- **`cpu`/`memory`** — Fargate has fixed valid combos (1024/2048, 2048/4096, etc.); mismatched values fail at launch\n- **`ephemeralStorage`** — default 20GiB scratch; increase to 30–200GiB for containers that need more temp space\n- **`runtimePlatform.cpuArchitecture: ARM64`** — Graviton for 20% cheaper; most Java apps work on ARM (Temurin/Corretto have ARM builds)\n- **`executionRoleArn`** — ECS agent uses this to pull ECR images, read secrets, write logs; standard role\n- **`taskRoleArn`** — the application's IAM role; used by AWS SDK calls inside the container; per-service least privilege\n- **`secrets`** from Secrets Manager/SSM — ECS injects as env var at start; secret value never in the task def\n- **`healthCheck`** — container-level probe; failure triggers ECS to kill and restart; `startPeriod` gives Spring Boot time to boot\n- **`stopTimeout: 30`** — on deploy/scale-down, ECS sends SIGTERM and waits 30s for graceful shutdown before SIGKILL\n- **`logConfiguration`** — awslogs ships to CloudWatch; use firelens for third-party (Datadog, Splunk)\n- **`ulimits`** — file descriptor limit; raise for high-connection workloads (avoid EMFILE)\n\n**Corresponding service definition** (separate from task def):\n\n```json\n{\n  \"serviceName\": \"payment-service\",\n  \"taskDefinition\": \"payment-service:42\",\n  \"desiredCount\": 4,\n  \"capacityProviderStrategy\": [\n    { \"capacityProvider\": \"FARGATE\", \"weight\": 1, \"base\": 2 },\n    { \"capacityProvider\": \"FARGATE_SPOT\", \"weight\": 3 }\n  ],\n  \"deploymentConfiguration\": {\n    \"minimumHealthyPercent\": 100,\n    \"maximumPercent\": 200,\n    \"deploymentCircuitBreaker\": { \"enable\": true, \"rollback\": true }\n  },\n  \"loadBalancers\": [{\n    \"targetGroupArn\": \"arn:aws:...\",\n    \"containerName\": \"app\",\n    \"containerPort\": 8080\n  }],\n  \"healthCheckGracePeriodSeconds\": 120\n}\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Common Production Mistakes",
+            "content": "**Never use env vars for secrets.** Env vars appear in `ecs describe-tasks`, CloudFormation/Terraform state, Datadog traces, and sometimes stack traces. `secrets` from Secrets Manager/Parameter Store keep values out of the task definition and console. The only cost: extra IAM for `executionRole` to read the secret.\n\n**stopTimeout default is 30s — set it explicitly.** Without it, ECS still defaults to 30s on Fargate; but being explicit prevents accidental changes. For services that need more time to drain (long polling, large batches), raise to 60–120s. The max is 120s on Fargate.\n\n**Graceful shutdown requires SIGTERM handling in the app.** Spring Boot handles it via `server.shutdown=graceful` and `spring.lifecycle.timeout-per-shutdown-phase=25s`. Without this, SIGTERM kills immediately; in-flight requests drop.\n\n**`healthCheckGracePeriodSeconds` on the service matters.** Spring Boot takes 30–60s to start; if ALB marks unhealthy before startup, it kills the task. Set service-level grace period 2x expected startup.\n\n**`minimumHealthyPercent: 100` + `maximumPercent: 200` = zero-downtime deploy.** ECS starts new tasks before killing old; you briefly have 2x capacity; always at least 100% healthy. Lower percentages save capacity but risk downtime.\n\n**Deployment circuit breaker.** `deploymentCircuitBreaker.enable: true` + `rollback: true` aborts and rolls back a stuck deployment. Without it, a broken task def stuck in `DRAINING` requires manual intervention.\n\n**CloudWatch Logs cost.** Default retention is \"never expire\" which = unbounded cost. Set retention (7, 14, 30 days) via CloudWatch:\n\n```bash\naws logs put-retention-policy \\\n  --log-group-name /ecs/payment-service \\\n  --retention-in-days 14\n```\n\n**Fargate platform version.** `LATEST` gets rolling improvements; pin to a specific version (e.g., `1.4.0`) for reproducibility. Fargate deprecates old versions — don't pin forever.\n\n**Fargate Spot for non-critical.** Capacity provider `FARGATE_SPOT` offers 70% discount; tasks can be reclaimed with 2-minute notice. Use for async workers, dev, batch — not for latency-critical user-facing services.\n\n**Service Connect for service-to-service.** AWS's newer service mesh for ECS; alternative to internal ALB for east-west traffic. Lower cost (no ALB per service), built-in retries, client-side load balancing. Worth adopting for new multi-service architectures.\n\n**EphemeralStorage defaults to 20GiB.** Docker image + runtime scratch space. If your app writes temp files (Spring's embedded servers don't much), raise to 30–200GiB. Charged separately.\n\n**JVM memory settings matter.** Without `-XX:MaxRAMPercentage=75`, the JVM may use container memory limits incorrectly; heap grows until OOMKill. Always set JVM to respect container limits.\n\n**ECS Exec for debugging.** Enable `enableExecuteCommand: true` on service; use `aws ecs execute-command` to shell into running containers for troubleshooting. Requires task role permissions for SSM."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Task definition is the production blueprint** — every field matters; the minimal tutorial version hides real-world concerns\n- **`networkMode: awsvpc` + Fargate** — each task gets its own ENI, Security Group per task\n- **Two IAM roles** — `executionRoleArn` for ECS agent (pull image, read secrets), `taskRoleArn` for app's AWS calls\n- **Secrets from Secrets Manager, not env vars** — env vars show up in describe-tasks, traces, logs; always use `secrets` block\n- **`stopTimeout: 30` + graceful shutdown** — SIGTERM then 30s drain then SIGKILL; Spring Boot needs `server.shutdown=graceful`\n- **Container healthCheck + service healthCheckGracePeriodSeconds** — account for Spring Boot startup (60–120s) before ALB marks unhealthy\n- **Deployment circuit breaker** — auto-rollback on stuck deploys; otherwise manual intervention needed\n- **CloudWatch Logs retention** — default is never-expire (unbounded cost); always set 7–30 days\n- **Fargate Spot for 70% discount** on non-critical workloads; `FARGATE_SPOT` capacity provider with base + weight\n- **ARM64 + Graviton** — 20% cheaper for most Java workloads; Temurin/Corretto have ARM builds\n- **Infrastructure as code** — never edit task definitions in console; Terraform, CDK, CloudFormation only"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A task definition is the JSON blueprint ECS uses to launch containers — images, CPU/memory, networking, IAM, logging, secrets, health checks. The tutorial version hides the production details that distinguish a reliable deployment from a fragile one.\n\n**The fields that matter in production**\n\n*Networking*\n- networkMode: awsvpc is mandatory for Fargate; each task gets its own ENI and Security Group\n\n*IAM — two roles, not one*\n- executionRoleArn: ECS agent uses this to pull ECR images, read secrets, write logs; standard shared role\n- taskRoleArn: the application's IAM role for AWS SDK calls inside the container; per-service least privilege\n\n*Secrets — never env vars*\n- Use the `secrets` block referencing Secrets Manager or Parameter Store ARNs\n- Env vars show up in ecs describe-tasks, CloudFormation state, APM traces, stack traces; secrets block keeps values hidden\n- The executionRole needs permission to read the secret\n\n*Resources*\n- Fargate has fixed valid CPU/memory combos; mismatched values fail at launch\n- ephemeralStorage defaults to 20GiB; raise to 30–200GiB if your app writes temp files\n- Use ARM64 via runtimePlatform.cpuArchitecture: ARM64; Graviton is 20% cheaper for most Java workloads\n\n*Graceful shutdown*\n- stopTimeout: 30 means ECS sends SIGTERM, waits 30 seconds, then SIGKILL\n- Spring Boot requires `server.shutdown=graceful` and `spring.lifecycle.timeout-per-shutdown-phase=25s` to drain connections on SIGTERM\n- Without these, deploys drop in-flight requests\n\n*Health checks at two levels*\n- Container healthCheck: a command like curl the actuator health; ECS kills and restarts if it fails\n- Service healthCheckGracePeriodSeconds: 120 gives Spring Boot time to boot before ALB starts probing\n- Mismatched values kill healthy-but-still-booting tasks\n\n*Logging*\n- awslogs driver to CloudWatch Logs; always set retention (7 to 30 days) or costs are unbounded\n- firelens for third-party (Datadog, Splunk); more flexibility, slight overhead\n\n**The service-level configuration**\n- minimumHealthyPercent: 100 plus maximumPercent: 200 gives zero-downtime rolling deploy — new tasks start before old are killed\n- deploymentCircuitBreaker with rollback: true auto-rolls back stuck deployments\n- Capacity providers: 25% FARGATE + 75% FARGATE_SPOT for 70% Spot discount on non-critical workloads\n\n**The JVM detail most teams miss**\n- Without -XX:MaxRAMPercentage=75, the JVM may not respect container memory limits\n- Heap grows until OOMKill\n- Always pass JAVA_OPTS with MaxRAMPercentage and UseG1GC\n\n**Operational discipline**\n- Never edit task definitions in the console; always Terraform, CDK, or CloudFormation\n- Pin image tags to immutable SHAs or explicit versions, never `:latest`\n- Enable enableExecuteCommand for ECS Exec debugging into running containers via SSM\n- Service Connect is worth evaluating for new multi-service architectures — lower cost than internal ALBs, built-in retries and client-side load balancing\n\n**The strategic answer**\n- Task definition reviews are a critical gate; a malformed task def causes real outages\n- Standardize via Terraform modules or CDK constructs so every service inherits good defaults\n- Audit existing task defs for: env var secrets, missing stopTimeout, missing circuit breaker, log retention, health check grace period, JVM memory settings"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you configure graceful shutdown in a Spring Boot container on Fargate?",
+        "What's the difference between task role and execution role?",
+        "When should you use Fargate Spot and what are the risks?",
+        "How does ECS Service Connect differ from using an internal ALB?"
+      ],
+      "seo": {
+        "meta_title": "ECS Task Definition Deep Dive: Production Fields and Best Practices",
+        "meta_description": "Walk through a production-grade ECS task definition. IAM roles, secrets, health checks, stopTimeout, logging, Fargate Spot, ARM64, and JVM memory settings.",
+        "keywords": [
+          "ecs task definition",
+          "fargate production",
+          "ecs best practices",
+          "ecs task role",
+          "fargate spring boot"
+        ],
+        "metaDescription": "An ECS task definition is the blueprint for running containers: container images, CPU/memory, networking mode, IAM roles, logging, secrets, and health checks.",
+        "metaTitle": "ECS Task Definition: Production Fields, Best Practices"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P10",
+        "hook": "A task definition is the JSON blueprint ECS uses to launch containers — images, CPU/memory, networking, IAM, logging, secrets, health checks.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A task definition is the JSON blueprint ECS uses to launch containers. It covers everything: which images, how much CPU/memory, which IAM role, how logs get shipped, which secrets the container can read, how health is checked, how it shuts down. The tutorial version (\"use this minimal task def\") is fine for a demo but hides the production details that distinguish a reliable deployment from a fragile one. Real task definitions address: Graceful shutdown — stopTimeout + SIGTERM handling so."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Depth of practical ECS knowledge beyond 'I deployed something to Fargate'"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Task definition is the production blueprint — every field matters; the minimal tutorial version hides real-world concerns networkMode: awsvpc + Fargate — each task gets its own ENI, Security Group per task Two IAM roles — executionRoleArn for ECS agent (pull image, read secrets), taskRoleArn for app's AWS calls Secrets from Secrets Manager, not env vars — env vars show up in describe-tasks, traces, logs; always use secrets block stopTimeout: 30 + graceful shutdown — SIGTERM then 30s drain then SIGKILL; Spring Boot needs server",
+              "shutdown=graceful Container healthCheck + service healthCheckGracePeriodSeconds — account for Spring Boot startup (60–120s) before ALB marks unhealthy Deployment circuit breaker — auto-rollback on stuck deploys; otherwise manual intervention needed CloudWatch Logs retention — default is never-expire (unbounded cost); always set 7–30 days Fargate Spot for 70% discount on non-critical workloads; FARGATE_SPOT capacity provider with base + weight ARM64 + Graviton — 20% cheaper for most Java workloads; Temurin/Corretto have ARM builds Infrastructure as code — never edit task definitions in console; Terraform, CDK, CloudFormation only"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A task definition is the JSON blueprint ECS uses to launch containers. It covers everything: which images, how much CPU/memory, which IAM role, how logs get shipped, which secrets the container can read, how health is checked, how it shuts down. The tutorial version (\"use this minimal task def\") is fine for a demo but hides the production details that distinguish a reliable deployment from a fragile one. Real task definitions address: Graceful shutdown — stopTimeout + SIGTERM handling so in-flight requests complete during deploys Secret injection — from Secrets Manager or Parameter Store, not env vars that show up in logs and ecs-describe-tasks Two IAM roles — taskRoleArn for the application's AWS calls, executionRoleArn for ECS agent tasks (pull."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using env vars for secrets",
+              "not setting stopTimeout, resulting in abrupt SIGKILL on deploys",
+              "using default awslogs retention (never expires = unbounded cost)"
+            ]
+          }
+        ],
+        "cap": "The fields that matter in production Networking networkMode: awsvpc is mandatory for Fargate; each task gets its own ENI and Security Group IAM — two roles, not one executionRoleArn: ECS agent uses th",
+        "familiarity_anchors": [
+          "Fargate",
+          "LATEST",
+          "CloudWatch"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you configure graceful shutdown in a Spring Boot container on Fargate?",
+          "What's the difference between task role and execution role?",
+          "When should you use Fargate Spot and what are the risks?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed on AWS ECS with RDS"
+      }
+    }
+  ]
+}

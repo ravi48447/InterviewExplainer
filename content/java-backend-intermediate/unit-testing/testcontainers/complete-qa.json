@@ -1,0 +1,341 @@
+{
+  "topic": "Testcontainers",
+  "topicSlug": "testcontainers",
+  "questions": [
+    {
+      "id": "test-004",
+      "slug": "datajpatest-with-testcontainers",
+      "question": "How do you write a repository integration test using @DataJpaTest with Testcontainers against a real database?",
+      "title": "Testing with @DataJpaTest and Testcontainers",
+      "direct_answer": "Use @DataJpaTest with @AutoConfigureTestDatabase(replace = NONE) to prevent Spring from replacing your DataSource with H2. Declare a PostgreSQLContainer as a static @Container field and use @DynamicPropertySource to inject the container's JDBC URL, username, and password into the Spring context before it starts. This gives you tests that run against real Postgres with the same dialect, indexes, and constraints as production.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether you can set up real-database integration tests and understand why H2 is an inadequate substitute",
+        "common_mistake": "Forgetting @AutoConfigureTestDatabase(replace = NONE) — without it Spring replaces your DataSource with H2 even when Testcontainers is configured",
+        "to_stand_out": "Mention @Testcontainers and @Container for JUnit 5 lifecycle management, and using a shared static container to avoid restarting Postgres for every test class"
+      },
+      "company_tags": [
+        "Atlassian",
+        "GitLab",
+        "Shopify"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "H2 Lies About Your Queries — Testcontainers Runs the Real Database",
+            "content": "`@DataJpaTest` auto-configures an embedded H2 database by default. This is fast but deceptive — H2's SQL dialect differs from MySQL and PostgreSQL in subtle ways. A query that works in H2 fails in production because H2 supports syntax that your production database doesn't, or handles NULLs differently, or has different collation rules.\n\nTestcontainers launches a real database in a Docker container during the test. Your JPA queries run against the actual database engine you deploy to production — same SQL dialect, same type system, same edge cases. The setup takes a few seconds for container startup, but the queries execute against truth, not approximation.\n\nThe critical annotation: **`@AutoConfigureTestDatabase(replace = NONE)`** tells Spring Boot NOT to replace your DataSource with an embedded database. Without it, `@DataJpaTest` ignores your `application-test.yml` DataSource configuration and uses H2 regardless of what you've configured.\n\nThe investment pays off when a production bug traces back to a query that worked in H2 but fails in PostgreSQL. Common examples: H2 accepts `GROUP BY 1` (positional reference) while some MySQL modes reject it. H2's `CONCAT` handles NULL differently than PostgreSQL. H2's `LIMIT/OFFSET` syntax works, but pagination edge cases with custom sorting behave differently. Testing against the real database catches these before production."
+          },
+          {
+            "type": "step",
+            "title": "The Testcontainers + @DataJpaTest Pattern",
+            "content": "The production-ready pattern uses a shared container across all `@DataJpaTest` classes to avoid starting a new database for each test class.\n\n```java\n@DataJpaTest\n@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)\n@Testcontainers\nclass OrderRepositoryTest {\n    @Container\n    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(\"postgres:15\")\n            .withDatabaseName(\"testdb\");\n    \n    @DynamicPropertySource\n    static void configureProperties(DynamicPropertyRegistry registry) {\n        registry.add(\"spring.datasource.url\", postgres::getJdbcUrl);\n        registry.add(\"spring.datasource.username\", postgres::getUsername);\n        registry.add(\"spring.datasource.password\", postgres::getPassword);\n    }\n    \n    @Autowired OrderRepository orderRepository;\n    \n    @Test\n    void shouldFindOrdersByStatus() {\n        orderRepository.save(new Order(\"ORD-1\", Status.PENDING));\n        orderRepository.save(new Order(\"ORD-2\", Status.SHIPPED));\n        \n        List<Order> pending = orderRepository.findByStatus(Status.PENDING);\n        assertThat(pending).hasSize(1);\n        assertThat(pending.get(0).getOrderId()).isEqualTo(\"ORD-1\");\n    }\n}\n```\n\n`@DynamicPropertySource` injects the container's JDBC URL, username, and password into Spring's environment — overriding whatever is in application properties. The container starts once per test class (`static` field), and each `@Test` method gets its own transaction that's rolled back after the test (`@DataJpaTest` enables `@Transactional` by default).\n\nFor sharing a container across ALL test classes (not just one), define the container in a base class or use Testcontainers' reuse feature with `testcontainers.reuse.enable=true` in `~/.testcontainers.properties`. A single PostgreSQL container takes ~3 seconds to start — starting one per test class multiplies this across dozens of classes."
+          },
+          {
+            "type": "step",
+            "title": "What to Actually Test in Repository Tests — Beyond findAll()",
+            "content": "Repository tests should focus on queries that could break — not trivial CRUD that Spring Data generates correctly.\n\n```java\n@Test\nvoid shouldFindOverdueOrdersWithJoinFetch() {\n    Customer customer = customerRepository.save(new Customer(\"John\"));\n    Order overdue = orderRepository.save(\n        new Order(customer, Status.PENDING, LocalDate.now().minusDays(30)));\n    Order recent = orderRepository.save(\n        new Order(customer, Status.PENDING, LocalDate.now()));\n    \n    List<Order> result = orderRepository.findOverdueWithCustomer(LocalDate.now().minusDays(7));\n    \n    assertThat(result).containsExactly(overdue);\n    assertThat(result.get(0).getCustomer().getName()).isEqualTo(\"John\");\n}\n```\n\nTest **custom `@Query` methods** (the SQL could be wrong), **derived queries with multiple conditions** (the generated SQL might not match your expectation), and **pagination/sorting** (edge cases with empty results, single pages). Don't test `save()` and `findById()` — Spring Data has its own test suite for those.\n\nAlso test **constraint violations**: inserting a duplicate unique key should throw `DataIntegrityViolationException`. This verifies that your JPA annotations (`@Column(unique = true)`) and database constraints are aligned — a mismatch between entity annotations and Flyway migrations is a common bug that only surfaces in integration tests."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@DataJpaTest` with the default H2 is fast but dangerous — H2's SQL dialect differs from production databases in subtle ways. A query that passes in H2 can fail in PostgreSQL due to different NULL handling, type casting, or function support.\n\nTestcontainers runs the real database in Docker. Add `@AutoConfigureTestDatabase(replace = NONE)` to prevent Spring from replacing your DataSource with H2, then use `@DynamicPropertySource` to inject the container's JDBC URL.\n\nThe key pattern: make the container `static` so it starts once per test class, not once per test method. For large test suites, share a single container across all `@DataJpaTest` classes using a base class — the ~3 second container startup pays once instead of per class.\n\n`@DataJpaTest` enables `@Transactional` by default, so each test method gets its own transaction that rolls back — tests don't pollute each other's data."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **H2 lies about production queries** — different NULL handling, different function support, different collation rules; a green H2 test can fail in PostgreSQL/MySQL in production.\n- **`@AutoConfigureTestDatabase(replace = NONE)` is required with Testcontainers** — without it, `@DataJpaTest` ignores your DataSource config and uses embedded H2 regardless.\n- **`@DynamicPropertySource` injects container URLs into Spring properties** — replaces hardcoded test URLs with the container's dynamically assigned JDBC URL, username, and password.\n- **Make the container `static` to share across test methods** — a non-static container restarts for every test method; `static` starts once per class; a shared base class starts once for the entire suite.\n- **`@DataJpaTest` rolls back transactions by default** — each `@Test` method runs in its own transaction that's rolled back; tests are isolated without manual cleanup."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you reset database state between tests in Testcontainers?",
+        "What is @Sql and when would you use it?",
+        "How do you test database transactions that should roll back?"
+      ],
+      "seo": {
+        "metaTitle": "@DataJpaTest Testcontainers Real Database Spring Boot | Java Interview",
+        "metaDescription": "Learn how to write @DataJpaTest integration tests with Testcontainers against real Postgres. Step-by-step setup with code examples."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P08",
+        "hook": "@DataJpaTest with the default H2 is fast but dangerous — H2's SQL dialect differs from production databases in subtle ways.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "@DataJpaTest auto-configures an embedded H2 database by default. This is fast but deceptive — H2's SQL dialect differs from MySQL and PostgreSQL in subtle ways. A query that works in H2 fails in production because H2 supports syntax that your production database doesn't, or handles NULLs differently, or has different collation rules. Testcontainers launches a real database in a Docker container during the test. Your JPA queries run against the actual database engine you deploy to production — same SQL."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can set up real-database integration tests and understand why H2 is an inadequate substitute"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "H2 lies about production queries — different NULL handling, different function support, different collation rules; a green H2 test can fail in PostgreSQL/MySQL in production",
+              "@AutoConfigureTestDatabase(replace = NONE) is required with Testcontainers — without it, @DataJpaTest ignores your DataSource config and uses embedded H2 regardless",
+              "@DynamicPropertySource injects container URLs into Spring properties — replaces hardcoded test URLs with the container's dynamically assigned JDBC URL, username, and password",
+              "Make the container static to share across test methods — a non-static container restarts for every test method; static starts once per class; a shared base class starts once for the entire suite",
+              "@DataJpaTest rolls back transactions by default — each @Test method runs in its own transaction that's rolled back; tests are isolated without manual cleanup"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "@DataJpaTest auto-configures an embedded H2 database by default. This is fast but deceptive — H2's SQL dialect differs from MySQL and PostgreSQL in subtle ways. A query that works in H2 fails in production because H2 supports syntax that your production database doesn't, or handles NULLs differently, or has different collation rules. Testcontainers launches a real database in a Docker container during the test. Your JPA queries run against the actual database engine you deploy to production — same SQL dialect, same type system, same edge cases. The setup takes a few seconds for container startup, but the queries execute against truth, not approximation. The critical annotation: @AutoConfigureTestDatabase(replace = NONE) tells Spring Boot NOT to replace your DataSource with an."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Forgetting @AutoConfigureTestDatabase(replace = NONE)",
+              "without it Spring replaces your DataSource with H2 even when Testcontainers is configured"
+            ]
+          }
+        ],
+        "cap": "@DataJpaTest enables @Transactional by default, so each test method gets its own transaction that rolls back — tests don't pollute each other's data.",
+        "familiarity_anchors": [
+          "DataJpaTest",
+          "AutoConfigureTestDatabase",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you reset database state between tests in Testcontainers?",
+          "What is @Sql and when would you use it?",
+          "How do you test database transactions that should roll back?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot service class tested with JUnit 5 and Mockito"
+      }
+    },
+    {
+      "id": "test-007",
+      "slug": "testcontainers-real-database-integration",
+      "question": "How do Testcontainers work, and what are the best practices for using them in a Spring Boot test suite?",
+      "title": "Testcontainers: Real Databases in Integration Tests",
+      "direct_answer": "Testcontainers is a Java library that programmatically manages Docker containers from within JUnit tests. It starts a real database (Postgres, MySQL, MongoDB, etc.) before tests run and stops it afterward. Best practices: use a static container shared across test classes to avoid repeated starts, use @DynamicPropertySource to inject the container's connection details, and add @AutoConfigureTestDatabase(replace = NONE) to prevent Spring from replacing your DataSource with H2.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether you have practical Testcontainers experience and understand the lifecycle and performance implications",
+        "common_mistake": "Starting a new container per test class — this multiplies startup time; a shared static container is almost always the right approach",
+        "to_stand_out": "Mention Testcontainers Cloud for CI environments where Docker is not available, and the ryuk container that handles automatic cleanup"
+      },
+      "company_tags": [
+        "Stripe",
+        "Square",
+        "HashiCorp"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "A New Container Per Test Class Turns a 3-Second Startup Into a 3-Minute Suite",
+            "content": "Testcontainers launches real infrastructure (PostgreSQL, Redis, Kafka, Elasticsearch) in Docker containers during tests. The setup is straightforward: declare a container, start it, inject the connection URL, run your tests. The complexity is in **lifecycle management** — specifically, when containers start and stop.\n\nThe default pattern (`@Container` on a non-static field) starts a new container for every test method. A static `@Container` starts once per test class. But a test suite with 20 `@DataJpaTest` classes, each starting its own PostgreSQL container, spends 60 seconds just on container startups — the actual tests might take 10 seconds.\n\nThe solution is **shared containers across test classes.** Define the container in a base class (or use Testcontainers' reuse feature), start it once for the entire suite, and reuse the same container across all test classes. The container starts in ~3 seconds, the suite runs in ~15 seconds instead of ~75 seconds.\n\nOne subtlety: `@DataJpaTest` rolls back transactions by default, so test isolation is automatic. For containers without transaction support (Redis, Elasticsearch), you need explicit cleanup between tests — `@BeforeEach` with a `flushAll()` or `deleteAll()`.\n\nThe container reuse feature (`testcontainers.reuse.enable=true`) is particularly valuable during development. Without reuse, every `mvn test` invocation starts fresh containers. With reuse, the containers persist between runs — your second test run starts instantly. In CI, reuse is typically disabled because each build should start clean. This dual mode (reuse locally, fresh in CI) gives the best of both worlds: fast developer iteration and clean CI verification."
+          },
+          {
+            "type": "step",
+            "title": "The Shared Container Pattern — One Container for All Tests",
+            "content": "The most effective pattern uses a static container in a base class that all test classes extend.\n\n```java\npublic abstract class PostgresTestBase {\n    static final PostgreSQLContainer<?> POSTGRES =\n        new PostgreSQLContainer<>(\"postgres:15\")\n            .withDatabaseName(\"testdb\")\n            .withReuse(true);\n    \n    static {\n        POSTGRES.start();\n    }\n    \n    @DynamicPropertySource\n    static void configureProperties(DynamicPropertyRegistry registry) {\n        registry.add(\"spring.datasource.url\", POSTGRES::getJdbcUrl);\n        registry.add(\"spring.datasource.username\", POSTGRES::getUsername);\n        registry.add(\"spring.datasource.password\", POSTGRES::getPassword);\n    }\n}\n```\n\nThe `static {}` initializer starts the container when the class loads — once for the entire test run. `withReuse(true)` keeps the container running between test executions (requires `testcontainers.reuse.enable=true` in `~/.testcontainers.properties`), eliminating startup time even across separate `mvn test` invocations during development.\n\nFor multi-container setups (PostgreSQL + Redis + Kafka), define all containers in the base class. Docker Compose integration is available via `DockerComposeContainer` for complex environments, but individual containers are simpler to manage and parallelize."
+          },
+          {
+            "type": "step",
+            "title": "Best Practices That Prevent Flaky Tests and Slow Suites",
+            "content": "**Pin container image versions.** `new PostgreSQLContainer<>(\"postgres:15.4\")` not `\"postgres:latest\"`. Latest changes without warning, introducing test failures from image updates, not code changes.\n\n**Use `@DynamicPropertySource` over hardcoded ports.** Testcontainers assigns random ports to avoid conflicts. Hardcoding `jdbc:postgresql://localhost:5432/test` fails when another test or service uses port 5432.\n\n**Pre-pull images in CI.** Container startup includes image download time on first run. Add a CI step that pulls images before running tests: `docker pull postgres:15.4`. This moves the download time out of the test execution.\n\n**Limit container resource usage.** In CI environments with limited resources, set memory limits: `.withCreateContainerCmdModifier(cmd -> cmd.getHostConfig().withMemory(512 * 1024 * 1024))`. A runaway container consuming all CI memory causes all tests to fail.\n\n**Test data isolation matters.** `@DataJpaTest` rolls back transactions automatically. For Redis tests, call `redisTemplate.getConnectionFactory().getConnection().flushAll()` in `@BeforeEach`. For Elasticsearch, delete and recreate the index. Without cleanup, tests pass individually but fail when run together."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Testcontainers runs real infrastructure in Docker — PostgreSQL, Redis, Kafka — during tests. The biggest mistake is starting a new container per test class. A 3-second container startup multiplied by 20 test classes adds a minute of pure overhead.\n\nThe fix: shared containers. Define a static container in a base class, start it once for the entire suite, and reuse it. With `withReuse(true)` and `testcontainers.reuse.enable=true`, the container even survives between test runs during development.\n\nAlways pin image versions — `postgres:15.4` not `postgres:latest`. Use `@DynamicPropertySource` for connection URLs because Testcontainers assigns random ports. And handle test isolation explicitly: `@DataJpaTest` rolls back transactions automatically, but Redis and Elasticsearch need manual cleanup between tests.\n\nPre-pull images in CI to avoid download time during test execution."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Starting a new container per test class multiplies startup time** — 20 classes with individual PostgreSQL containers = 60 seconds of startup; a shared static container in a base class starts once in 3 seconds.\n- **`withReuse(true)` keeps containers running between test executions** — requires `testcontainers.reuse.enable=true` in `~/.testcontainers.properties`; eliminates startup time during iterative development.\n- **Pin image versions: `postgres:15.4` not `postgres:latest`** — `latest` changes without warning; test failures from image updates, not code changes, are impossible to diagnose quickly.\n- **`@DynamicPropertySource` handles random port assignment** — Testcontainers assigns random ports to avoid conflicts; hardcoded ports fail in CI where other services may use the same port.\n- **`@DataJpaTest` rolls back transactions; Redis/Elasticsearch need explicit cleanup** — without `flushAll()` or index recreation in `@BeforeEach`, tests pass individually but fail in suite order."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle schema migrations in Testcontainers tests with Flyway or Liquibase?",
+        "What is the difference between @Container on a static vs instance field?",
+        "How do you test a service that depends on both a database and Redis cache?"
+      ],
+      "seo": {
+        "metaTitle": "Testcontainers Spring Boot Best Practices | Java Interview",
+        "metaDescription": "Master Testcontainers in Spring Boot tests: shared containers, @DynamicPropertySource, multi-container setups, and CI/CD considerations."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P08",
+        "hook": "Testcontainers runs real infrastructure in Docker — PostgreSQL, Redis, Kafka — during tests.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Testcontainers launches real infrastructure (PostgreSQL, Redis, Kafka, Elasticsearch) in Docker containers during tests. The setup is straightforward: declare a container, start it, inject the connection URL, run your tests. The complexity is in lifecycle management — specifically, when containers start and stop. The default pattern (@Container on a non-static field) starts a new container for every test method. A static @Container starts once per test class. But a test suite with 20 @DataJpaTest classes, each starting its own PostgreSQL container."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you have practical Testcontainers experience and understand the lifecycle and performance implications"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Starting a new container per test class multiplies startup time — 20 classes with individual PostgreSQL containers = 60 seconds of startup; a shared static container in a base class starts once in 3 seconds",
+              "withReuse(true) keeps containers running between test executions — requires testcontainers",
+              "enable=true in ~/",
+              "testcontainers",
+              "properties; eliminates startup time during iterative development"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Testcontainers launches real infrastructure (PostgreSQL, Redis, Kafka, Elasticsearch) in Docker containers during tests. The setup is straightforward: declare a container, start it, inject the connection URL, run your tests. The complexity is in lifecycle management — specifically, when containers start and stop. The default pattern (@Container on a non-static field) starts a new container for every test method. A static @Container starts once per test class. But a test suite with 20 @DataJpaTest classes, each starting its own PostgreSQL container, spends 60 seconds just on container startups — the actual tests might take 10 seconds. The solution is shared containers across test classes. Define the container in a base class (or use Testcontainers' reuse feature), start it once for the."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Starting a new container per test class — this multiplies startup time",
+              "a shared static container is almost always the right approach"
+            ]
+          }
+        ],
+        "cap": "Pre-pull images in CI to avoid download time during test execution.",
+        "familiarity_anchors": [
+          "Testcontainers",
+          "Docker",
+          "JUnit"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle schema migrations in Testcontainers tests with Flyway or Liquibase?",
+          "What is the difference between @Container on a static vs instance field?",
+          "How do you test a service that depends on both a database and Redis cache?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot service class tested with JUnit 5 and Mockito"
+      }
+    },
+    {
+      "id": "test-testcontainers",
+      "slug": "testcontainers-spring-boot",
+      "question": "Testcontainers — Running Real Databases in Tests",
+      "title": "Testcontainers — Running Real Databases in Tests",
+      "direct_answer": "Testcontainers runs real databases in Docker during tests. Use @DynamicPropertySource for connection URLs, share containers via static fields, and enable reuse for development speed.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows how to use Testcontainers effectively for realistic integration tests.",
+        "common_mistake": "Starting a new container per test class instead of sharing across the suite.",
+        "to_stand_out": "Explain container reuse, @DynamicPropertySource, and Testcontainers' Docker Compose support for multi-service testing."
+      },
+      "company_tags": [],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "A New Container Per Test Class Turns a 3-Second Startup Into a 3-Minute Suite",
+            "content": "Testcontainers launches real infrastructure (PostgreSQL, Redis, Kafka, Elasticsearch) in Docker containers during tests. The setup is straightforward: declare a container, start it, inject the connection URL, run your tests. The complexity is in **lifecycle management** — specifically, when containers start and stop.\n\nThe default pattern (`@Container` on a non-static field) starts a new container for every test method. A static `@Container` starts once per test class. But a test suite with 20 `@DataJpaTest` classes, each starting its own PostgreSQL container, spends 60 seconds just on container startups — the actual tests might take 10 seconds.\n\nThe solution is **shared containers across test classes.** Define the container in a base class (or use Testcontainers' reuse feature), start it once for the entire suite, and reuse the same container across all test classes. The container starts in ~3 seconds, the suite runs in ~15 seconds instead of ~75 seconds.\n\nOne subtlety: `@DataJpaTest` rolls back transactions by default, so test isolation is automatic. For containers without transaction support (Redis, Elasticsearch), you need explicit cleanup between tests — `@BeforeEach` with a `flushAll()` or `deleteAll()`.\n\nThe container reuse feature (`testcontainers.reuse.enable=true`) is particularly valuable during development. Without reuse, every `mvn test` invocation starts fresh containers. With reuse, the containers persist between runs — your second test run starts instantly. In CI, reuse is typically disabled because each build should start clean. This dual mode (reuse locally, fresh in CI) gives the best of both worlds: fast developer iteration and clean CI verification."
+          },
+          {
+            "type": "step",
+            "title": "The Shared Container Pattern — One Container for All Tests",
+            "content": "The most effective pattern uses a static container in a base class that all test classes extend.\n\n```java\npublic abstract class PostgresTestBase {\n    static final PostgreSQLContainer<?> POSTGRES =\n        new PostgreSQLContainer<>(\"postgres:15\")\n            .withDatabaseName(\"testdb\")\n            .withReuse(true);\n    \n    static {\n        POSTGRES.start();\n    }\n    \n    @DynamicPropertySource\n    static void configureProperties(DynamicPropertyRegistry registry) {\n        registry.add(\"spring.datasource.url\", POSTGRES::getJdbcUrl);\n        registry.add(\"spring.datasource.username\", POSTGRES::getUsername);\n        registry.add(\"spring.datasource.password\", POSTGRES::getPassword);\n    }\n}\n```\n\nThe `static {}` initializer starts the container when the class loads — once for the entire test run. `withReuse(true)` keeps the container running between test executions (requires `testcontainers.reuse.enable=true` in `~/.testcontainers.properties`), eliminating startup time even across separate `mvn test` invocations during development.\n\nFor multi-container setups (PostgreSQL + Redis + Kafka), define all containers in the base class. Docker Compose integration is available via `DockerComposeContainer` for complex environments, but individual containers are simpler to manage and parallelize."
+          },
+          {
+            "type": "step",
+            "title": "Best Practices That Prevent Flaky Tests and Slow Suites",
+            "content": "**Pin container image versions.** `new PostgreSQLContainer<>(\"postgres:15.4\")` not `\"postgres:latest\"`. Latest changes without warning, introducing test failures from image updates, not code changes.\n\n**Use `@DynamicPropertySource` over hardcoded ports.** Testcontainers assigns random ports to avoid conflicts. Hardcoding `jdbc:postgresql://localhost:5432/test` fails when another test or service uses port 5432.\n\n**Pre-pull images in CI.** Container startup includes image download time on first run. Add a CI step that pulls images before running tests: `docker pull postgres:15.4`. This moves the download time out of the test execution.\n\n**Limit container resource usage.** In CI environments with limited resources, set memory limits: `.withCreateContainerCmdModifier(cmd -> cmd.getHostConfig().withMemory(512 * 1024 * 1024))`. A runaway container consuming all CI memory causes all tests to fail.\n\n**Test data isolation matters.** `@DataJpaTest` rolls back transactions automatically. For Redis tests, call `redisTemplate.getConnectionFactory().getConnection().flushAll()` in `@BeforeEach`. For Elasticsearch, delete and recreate the index. Without cleanup, tests pass individually but fail when run together."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Testcontainers runs real infrastructure in Docker — PostgreSQL, Redis, Kafka — during tests. The biggest mistake is starting a new container per test class. A 3-second container startup multiplied by 20 test classes adds a minute of pure overhead.\n\nThe fix: shared containers. Define a static container in a base class, start it once for the entire suite, and reuse it. With `withReuse(true)` and `testcontainers.reuse.enable=true`, the container even survives between test runs during development.\n\nAlways pin image versions — `postgres:15.4` not `postgres:latest`. Use `@DynamicPropertySource` for connection URLs because Testcontainers assigns random ports. And handle test isolation explicitly: `@DataJpaTest` rolls back transactions automatically, but Redis and Elasticsearch need manual cleanup between tests.\n\nPre-pull images in CI to avoid download time during test execution."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Starting a new container per test class multiplies startup time** — 20 classes with individual PostgreSQL containers = 60 seconds of startup; a shared static container in a base class starts once in 3 seconds.\n- **`withReuse(true)` keeps containers running between test executions** — requires `testcontainers.reuse.enable=true` in `~/.testcontainers.properties`; eliminates startup time during iterative development.\n- **Pin image versions: `postgres:15.4` not `postgres:latest`** — `latest` changes without warning; test failures from image updates, not code changes, are impossible to diagnose quickly.\n- **`@DynamicPropertySource` handles random port assignment** — Testcontainers assigns random ports to avoid conflicts; hardcoded ports fail in CI where other services may use the same port.\n- **`@DataJpaTest` rolls back transactions; Redis/Elasticsearch need explicit cleanup** — without `flushAll()` or index recreation in `@BeforeEach`, tests pass individually but fail in suite order."
+          }
+        ]
+      },
+      "followup_questions": [],
+      "seo": {
+        "metaTitle": "Testcontainers — Running Real Databases in Tests",
+        "metaDescription": "Testcontainers runs real databases in Docker during tests."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P08",
+        "hook": "Testcontainers runs real infrastructure in Docker — PostgreSQL, Redis, Kafka — during tests.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Testcontainers launches real infrastructure (PostgreSQL, Redis, Kafka, Elasticsearch) in Docker containers during tests. The setup is straightforward: declare a container, start it, inject the connection URL, run your tests. The complexity is in lifecycle management — specifically, when containers start and stop. The default pattern (@Container on a non-static field) starts a new container for every test method. A static @Container starts once per test class. But a test suite with 20 @DataJpaTest classes, each starting its own PostgreSQL container."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows how to use Testcontainers effectively for realistic integration tests."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Starting a new container per test class multiplies startup time — 20 classes with individual PostgreSQL containers = 60 seconds of startup; a shared static container in a base class starts once in 3 seconds",
+              "withReuse(true) keeps containers running between test executions — requires testcontainers",
+              "enable=true in ~/",
+              "testcontainers",
+              "properties; eliminates startup time during iterative development"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Testcontainers launches real infrastructure (PostgreSQL, Redis, Kafka, Elasticsearch) in Docker containers during tests. The setup is straightforward: declare a container, start it, inject the connection URL, run your tests. The complexity is in lifecycle management — specifically, when containers start and stop. The default pattern (@Container on a non-static field) starts a new container for every test method. A static @Container starts once per test class. But a test suite with 20 @DataJpaTest classes, each starting its own PostgreSQL container, spends 60 seconds just on container startups — the actual tests might take 10 seconds. The solution is shared containers across test classes. Define the container in a base class (or use Testcontainers' reuse feature), start it once for the."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Starting a new container per test class instead of sharing across the suite"
+            ]
+          }
+        ],
+        "cap": "Pre-pull images in CI to avoid download time during test execution.",
+        "familiarity_anchors": [
+          "Testcontainers",
+          "Docker",
+          "DynamicPropertySource"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot service class tested with JUnit 5 and Mockito"
+      }
+    }
+  ]
+}

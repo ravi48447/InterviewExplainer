@@ -1,0 +1,124 @@
+{
+  "topic": "Health Checks And Probes",
+  "topicSlug": "health-checks-and-probes",
+  "questions": [
+    {
+      "id": "obs-010",
+      "slug": "health-checks-vs-readiness-checks-actuator-health",
+      "question": "What is the difference between a health check and a readiness check in Spring Boot, and what should you expose on /actuator/health?",
+      "title": "Health Checks vs Readiness Checks — What to Expose on /actuator/health",
+      "direct_answer": "Health checks report whether the application is alive (used by process supervisors to decide whether to restart). Readiness checks report whether the application is ready to receive traffic (used by load balancers and Kubernetes to decide whether to send requests). Spring Boot 2.3+ separates these into `/actuator/health/liveness` and `/actuator/health/readiness`.",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the operational difference between liveness and readiness and the consequences of misconfiguring them.",
+        "common_mistake": "Using the same endpoint for both liveness and readiness, causing a pod to be restarted when it is temporarily overloaded rather than just removed from the load balancer rotation.",
+        "to_stand_out": "Explain the startup probe as a third probe type in Kubernetes and how to use it with slow-starting Spring Boot applications to avoid false liveness failures on boot."
+      },
+      "company_tags": [
+        "Google",
+        "Red Hat",
+        "AWS",
+        "Heroku",
+        "Pivotal"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Restart Storm That Turns a Database Outage Into a Full Application Outage",
+            "content": "The most dangerous misconfiguration in Kubernetes-deployed Spring Boot services is including database connectivity in the **liveness probe**. When the database goes down, the liveness check fails, Kubernetes kills the pod, a new pod starts and also fails the liveness check because the database is still down, Kubernetes kills that pod too — and within minutes, every pod in the deployment is stuck in a restart loop. A database outage that should have been recoverable becomes a full application outage that persists even after the database recovers, because all pods are now in CrashLoopBackOff.\n\nThe fix requires understanding that Kubernetes asks **two fundamentally different questions** about your application. Liveness: is this process functioning at all, or should I restart it? Readiness: is this pod able to serve traffic right now, or should I remove it from the load balancer? The consequences of failure are radically different — liveness failure kills the pod, readiness failure just removes it from rotation.\n\nSpring Boot 2.3+ provides separate endpoints for each: `/actuator/health/liveness` and `/actuator/health/readiness`. Getting the probe configuration right is one of the most operationally important decisions you make when deploying to Kubernetes."
+          },
+          {
+            "type": "comparison_table",
+            "title": "The Two Questions Kubernetes Asks — And Why the Answers Must Be Different",
+            "content": "The distinction between liveness and readiness is subtle but has enormous operational consequences. This table captures the key differences.\n\n| Aspect | Liveness Check | Readiness Check |\n|---|---|---|\n| **Question** | Is the app process functioning? | Is the pod ready for traffic? |\n| **Failure action** | Kubernetes restarts the pod | Kubernetes removes pod from Service endpoints |\n| **Spring Boot endpoint** | `/actuator/health/liveness` | `/actuator/health/readiness` |\n| **Should check** | Internal state (deadlock, OOM, corrupted state) | External dependencies (DB, cache, message broker) |\n| **Should NOT check** | External dependencies | Internal app state unrelated to serving |\n| **Recovery** | Pod restart only | Automatic re-addition when dependency recovers |\n| **Wrong config risk** | Restart storm during dependency outage | Traffic sent to unhealthy pods |\n\nThe critical rule is: **never put external dependency health in the liveness probe**. Database down should not restart your pod — it should remove the pod from the load balancer. When the database recovers, the readiness check passes again and the pod re-enters rotation automatically. No restart, no reinitialization, no startup cost."
+          },
+          {
+            "type": "when_to_use",
+            "title": "Configuring Probes That Protect Instead of Destroy",
+            "content": "**Liveness probe** — expose only internal health. The liveness endpoint should return UP as long as the JVM is responsive and not in a broken internal state (deadlocked thread pool, corrupted in-memory data structure). Keep the check cheap and fast — a slow liveness check that depends on network calls can itself cause false restarts under load.\n\n**Readiness probe** — include downstream dependencies. Database connectivity, Redis availability, message broker connection — these belong in readiness. When any dependency is unavailable, the pod is removed from rotation but stays alive. Once the dependency recovers, the pod re-enters automatically.\n\n**Startup probe** — use for slow-starting Spring Boot applications. Applications with Flyway migrations, large dependency graphs, or pre-loaded caches can take 60+ seconds to start. Without a startup probe, the liveness probe runs during startup and kills the pod before it finishes initializing. The startup probe disables the liveness probe until the application reports healthy for the first time.\n\n```yaml\nlivenessProbe:\n  httpGet:\n    path: /actuator/health/liveness\n    port: 8080\n  initialDelaySeconds: 30\n  periodSeconds: 10\nreadinessProbe:\n  httpGet:\n    path: /actuator/health/readiness\n    port: 8080\n  initialDelaySeconds: 20\n  periodSeconds: 5\nstartupProbe:\n  httpGet:\n    path: /actuator/health/liveness\n    port: 8080\n  failureThreshold: 30       # 30 × 10s = 5 minutes to start\n  periodSeconds: 10\n```\n\nThe startup probe points at the same liveness endpoint but with a high `failureThreshold`. During startup, Kubernetes checks this probe instead of the liveness probe. Once the startup probe succeeds for the first time, Kubernetes switches to the regular liveness probe. This gives slow-starting applications up to 5 minutes to initialize without being prematurely killed."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Liveness failure = container restart; readiness failure = remove from load balancer** — never put transient dependency health in liveness; a dependency outage makes liveness fail, causing a restart loop that doesn't fix the dependency\n- **Database health belongs in readiness, not liveness** — database unavailable: readiness fails, traffic stops, pod waits; liveness still passes; database recovers: readiness passes, traffic resumes; no unnecessary restarts\n- **`management.health.probes.enabled=true` enables Spring Boot's Liveness and Readiness endpoints** — `/actuator/health/liveness` and `/actuator/health/readiness` as separate paths; configure Kubernetes probes to these paths\n- **Startup probe for slow Spring Boot initialization** — `startupProbe` allows longer startup (60-120s) before liveness begins checking; without it, Kubernetes kills the pod during ApplicationContext initialization\n- **Custom `HealthIndicator` for business-critical dependencies** — downstream service health, message broker connectivity, external API availability; assign to readiness group if the service can't serve traffic without it"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Kubernetes uses two distinct health check types for different purposes — liveness checks determine if the process should be restarted; readiness checks determine if the pod should receive traffic. Confusing the two causes the most common Kubernetes availability issues.\n\n**Liveness vs readiness — the key distinction**\n- A liveness probe failure causes Kubernetes to restart the container — which means it should only fail if the application is in an unrecoverable state (deadlock, JVM OOM, corrupted state machine); if a transient dependency failure makes the liveness probe fail, Kubernetes restarts the pod, which doesn't fix the dependency and causes a restart loop\n- A readiness probe failure removes the pod from the load balancer's backend pool — which means the pod is still running but receives no traffic; it recovers when the dependency becomes available, and Kubernetes adds it back to rotation automatically\n\n**Spring Boot Actuator configuration**\n- Spring Boot 2.3+ exposes `/actuator/health/liveness` and `/actuator/health/readiness` separately; configure `management.health.probes.enabled=true` to enable them\n- Liveness: `LivenessStateHealthIndicator` reports `CORRECT` (healthy) or `BROKEN` (restart needed); database connectivity should NOT be in the liveness group\n- Readiness: `ReadinessStateHealthIndicator` plus any custom indicators for dependencies that affect traffic serving ability; database and downstream service health belong here\n\n**Database in the readiness probe**\n- Put database connectivity in the readiness probe, not the liveness probe — if the database is temporarily unavailable, the pod should stop receiving traffic (readiness fails), but not restart (liveness should still pass)\n- When the database recovers, the readiness probe succeeds and the pod re-enters rotation; restarting the pod doesn't fix a database outage and causes unnecessary restarts\n\n**Custom health indicators**\n- `@Component class OrderServiceHealthIndicator implements HealthIndicator { public Health health() { ... } }` adds a custom health check that appears in `/actuator/health` and can be assigned to the readiness group"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is a startup probe and how does it differ from a liveness probe?",
+        "How do you write a custom HealthIndicator in Spring Boot?",
+        "What is the risk of including external dependency health in a liveness probe?"
+      ],
+      "seo": {
+        "title": "Health Checks vs Readiness Checks in Spring Boot — Actuator Health Interview Answer",
+        "description": "Understand the difference between liveness and readiness checks in Spring Boot Actuator and how to configure them correctly for Kubernetes.",
+        "keywords": [
+          "spring boot health check readiness",
+          "actuator health liveness readiness",
+          "kubernetes spring boot probes",
+          "spring boot 2.3 health groups"
+        ],
+        "metaDescription": "Health checks report whether the application is alive (used by process supervisors to decide whether to restart).",
+        "metaTitle": "Health Checks vs Readiness Checks — What to Expose on /actuator/health"
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P11",
+        "hook": "Kubernetes uses two distinct health check types for different purposes — liveness checks determine if the process should be restarted; readiness checks determine if the pod should receive traffic.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The most dangerous misconfiguration in Kubernetes-deployed Spring Boot services is including database connectivity in the liveness probe. When the database goes down, the liveness check fails, Kubernetes kills the pod, a new pod starts and also fails the liveness check because the database is still down, Kubernetes kills that pod too — and within minutes, every pod in the deployment is stuck in a restart loop. A database outage that."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "The distinction between liveness and readiness is subtle but has enormous operational consequences",
+              "This table captures the key differences",
+              "| Aspect | Liveness Check | Readiness Check | |---|---|---| | Question | Is the app process functioning? | Is the pod ready for traffic? | | Failure action | Kubernetes restarts the pod | Kubernetes removes pod from Service endpoints | | Spring Boot endpoint | /actuator/health/liveness | /actuator/health/readiness | | Should check | Internal state (deadlock, OOM, corrupted state) | External dependencies (DB, cache, message broker) | | Should NOT check | External dependencies | Internal app state unrelated to serving | | Recovery | Pod restart only | Automatic re-addition when dependency recovers | | Wrong config risk | Restart storm during dependency outage | Traffic sent to unhealthy pods | The critical rule is: never put external dependency health in the liveness probe",
+              "Database down should not restart your pod — it should remove the pod from the load balancer",
+              "When the database recovers, the readiness check passes again and the pod re-enters rotation automatically"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Liveness probe — expose only internal health. The liveness endpoint should return UP as long as the JVM is responsive and not in a broken internal state (deadlocked thread pool, corrupted in-memory data structure). Keep the check cheap and fast — a slow liveness check that depends on network calls can itself cause false restarts under load. Readiness probe — include downstream dependencies. Database connectivity, Redis availability, message broker connection — these belong in readiness. When any dependency is unavailable, the pod is removed from rotation but stays alive. Once."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The most dangerous misconfiguration in Kubernetes-deployed Spring Boot services is including database connectivity in the liveness probe. When the database goes down, the liveness check fails, Kubernetes kills the pod, a new pod starts and also fails the liveness check because the database is still down, Kubernetes kills that pod too — and within minutes, every pod in the deployment."
+          }
+        ],
+        "cap": "} } adds a custom health check that appears in /actuator/health and can be assigned to the readiness group",
+        "familiarity_anchors": [
+          "Health",
+          "Readiness",
+          "Kubernetes"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is a startup probe and how does it differ from a liveness probe?",
+          "How do you write a custom HealthIndicator in Spring Boot?",
+          "What is the risk of including external dependency health in a liveness probe?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with Micrometer and OpenTelemetry"
+      }
+    }
+  ]
+}

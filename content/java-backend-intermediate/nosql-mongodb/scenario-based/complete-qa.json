@@ -1,0 +1,403 @@
+{
+  "topic": "NoSQL / MongoDB Scenarios",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "nosql-sc-001",
+      "slug": "mongodb-hot-shard-investigation-remediation",
+      "question": "Your MongoDB cluster has a hot shard taking 80% of writes and throttling — how do you diagnose and fix it?",
+      "title": "Hot Shard in MongoDB: Diagnose and Fix",
+      "direct_answer": "A **hot shard** means one shard gets disproportionate writes while others sit idle — root cause is almost always a **bad shard key** (monotonically increasing `_id`, low-cardinality fields like `status`, or one dominant tenant). **Diagnose** with `sh.status()`, `getShardDistribution()`, `db.currentOp()`, and the profiler. **Short-term mitigation**: vertical scale the hot shard, split jumbo chunks, throttle problem producers, pin whales to their own zone. **Long-term fix**: run `reshardCollection` (5.0+) with a hashed or compound key so writes spread evenly. The lasting lesson is that **shard-key choice is the single most important design decision in MongoDB sharding** — it defines your scaling ceiling.",
+      "layout_type": "scenario-walkthrough",
+      "difficulty": "hard",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Production NoSQL troubleshooting, shard-key diagnosis, and understanding of MongoDB cluster operations under load",
+        "common_mistake": "Blaming hardware, ignoring shard-key choice, or adding shards without redistributing hot chunks",
+        "to_stand_out": "Discuss hashed vs ranged shard keys, compound keys, `reshardCollection`, jumbo chunks, zones, and write sharding as a stopgap"
+      },
+      "company_tags": [
+        "mongodb",
+        "atlas",
+        "meta",
+        "lyft",
+        "ebay"
+      ],
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Situation",
+            "content": "You're paged: Atlas cluster, 6 shards, `shard03` at 80% CPU and 90% write queue depth, p99 write latency jumped from 10ms to 2s while other shards sit near-idle. Users see timeouts on write endpoints.\n\nThis is the **classic hot-shard failure**.\n- Sharding scales only when writes distribute evenly across shards; when one shard owns the hottest chunks, capacity on the others is wasted.\n- The culprit is nearly always **shard-key choice** — monotonically increasing keys (ObjectId, timestamp), low-cardinality keys (status enum), or a dominant single value (whale tenant, celebrity user).\n\nThe immediate goal is to restore service; the lasting goal is to pick a better shard key via `reshardCollection` and prevent recurrence through capacity monitoring and shard-key review in design docs."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Hot Shard Before and After Reshard",
+            "content": "```mermaid\nflowchart TB\n    subgraph before[\"Before: Hot Shard\"]\n        w1[\"Writes\"] --> m1[\"mongos router\"]\n        m1 -->|\"80%\"| s3[\"shard03 OVERLOADED\"]\n        m1 -->|\"5%\"| s1[\"shard01\"]\n        m1 -->|\"5%\"| s2[\"shard02\"]\n        m1 -->|\"5%\"| s4[\"shard04\"]\n        m1 -->|\"3%\"| s5[\"shard05\"]\n        m1 -->|\"2%\"| s6[\"shard06\"]\n    end\n    subgraph after[\"After: reshardCollection hashed key\"]\n        w2[\"Writes\"] --> m2[\"mongos router\"]\n        m2 -->|\"~17%\"| n1[\"shard01\"]\n        m2 -->|\"~17%\"| n2[\"shard02\"]\n        m2 -->|\"~17%\"| n3[\"shard03\"]\n        m2 -->|\"~17%\"| n4[\"shard04\"]\n        m2 -->|\"~16%\"| n5[\"shard05\"]\n        m2 -->|\"~16%\"| n6[\"shard06\"]\n    end\n```"
+          },
+          {
+            "type": "step",
+            "title": "Phase 1: Rapid Diagnosis",
+            "content": "**Confirm it's a hot shard, not general saturation**\n- Atlas/OpsManager metrics: per-shard CPU, write queue, IOPS\n- One shard > 2× the average is the tell\n\n**Inspect sharding state**\n\n```javascript\nuse admin\nsh.status({ verbose: true });\n\nuse mydb\ndb.orders.getShardDistribution();\n```\n\n**Find the shard key and chunk distribution**\n\n```javascript\nuse config\ndb.collections.findOne({ _id: \"mydb.orders\" });\n// Look for: unbalanced chunk counts, jumbo chunks, recent splits on one shard\ndb.chunks.find({ jumbo: true });\n```\n\n**Identify the hot operations**\n\n```javascript\ndb.currentOp({ secs_running: { $gt: 2 }, ns: \"mydb.orders\" });\ndb.setProfilingLevel(1, { slowms: 50 });\ndb.system.profile.find().sort({ ts: -1 }).limit(20);\n```\n\n**Typical findings**\n- Orders sharded on `_id` (ObjectId) — monotonic timestamp prefix → latest chunk always grows on one shard\n- Events sharded on `tenantId` — one whale tenant produces 80% of traffic\n- Users sharded on `country` — US/India dominate; 2 shards hot, others idle\n- Messages sharded on `userId` — celebrity user gets all the writes"
+          },
+          {
+            "type": "step",
+            "title": "Phase 2: Immediate Mitigation",
+            "content": "**Vertical scale the hot shard (temporary)**\n- Atlas: bump instance size; self-hosted: bigger VM\n- Buys time while you plan the real fix\n\n**Add shards only if the key is reasonable**\n- `sh.addShard(\"rs-new/host1,host2,host3\")` — balancer moves chunks\n- Doesn't help if the hot key itself is the problem\n\n**Manually split jumbo or hot chunks**\n\n```javascript\nsh.splitAt(\"mydb.orders\", { orderId: \"midpoint_value\" });\nsh.moveChunk(\"mydb.orders\", { orderId: \"some_value\" }, \"shard02\");\n```\n\n**Throttle the problem producer**\n- Identify the misbehaving job/service; rate-limit at source\n- Often 1–2 batch jobs or a runaway client\n\n**Zone sharding for known whales**\n\n```javascript\nsh.addShardToZone(\"shard05\", \"whale_tenant\");\nsh.updateZoneKeyRange(\"mydb.orders\",\n    { tenantId: \"tenant_abc\" }, { tenantId: \"tenant_abd\" }, \"whale_tenant\");\n```\n\n**Absorb spikes with a queue**\n- Put Kafka in front of MongoDB; consumers drain at a sustainable rate"
+          },
+          {
+            "type": "step",
+            "title": "Phase 3: Long-Term Fix — Reshard",
+            "content": "**Characteristics of a good shard key**\n- **High cardinality** — millions of distinct values\n- **Low frequency** — no single value dominates (< 1–2% of writes)\n- **Non-monotonic** or hashed to avoid last-chunk bias\n- **Query-aligned** — common queries include it so ops are targeted\n- **Immutable** (preferred; 4.2+ allows mutable with cost)\n\n**Common good keys**\n- **Hashed `_id`** — random, no hot spots; range queries fan out\n- **Compound** `{ tenantId: 1, orderId: 1 }` — tenant locality + within-tenant split\n- **Compound + hash (4.4+)** `{ tenantId: 1, _id: \"hashed\" }` — hashed within tenant; tenant queries targeted\n\n**Reshard online (5.0+)**\n\n```javascript\ndb.adminCommand({\n  reshardCollection: \"mydb.orders\",\n  key: { tenantId: 1, _id: \"hashed\" }\n});\n```\n\n- Background, online; high I/O during — monitor\n- Pause/resume/abort supported\n\n**Write sharding when reshard isn't an option**\n- Append random suffix: `tenantId#0..9`\n- Spreads writes across 10 key values\n- Reads fan out — accept that cost"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Prevention and Ongoing Guardrails",
+            "content": "**When sharding actually helps:**\n- Data exceeds single-node working set (roughly > 2TB)\n- Sustained writes > 10K/sec beyond one replica set\n- Multi-region locality requirements (zones)\n\n**When it hurts:**\n- Small dataset — vertical scaling is simpler and cheaper\n- Access patterns are relational — use Postgres\n- Team lacks operational experience\n\n**Watch for:**\n- **Jumbo chunks** — single shard-key value exceeds max chunk size; can't split or move; indicates low-cardinality shard key\n- **Balancer off** — `sh.getBalancerState()`; re-enable with `sh.startBalancer()`\n- **Cross-shard queries** — scatter-gather; design queries to include the shard key\n- **Multi-doc transactions across shards** are supported but slower — avoid when possible\n- **Monitoring you need**: per-shard throughput, CPU, IOPS, chunk distribution ratio, jumbo chunk count, balancer activity"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Hot shard almost always = bad shard key** (monotonic, low cardinality, whale value)\n- **Diagnose** with per-shard metrics, `sh.status()`, `getShardDistribution()`, profiler, jumbo chunk check\n- **Mitigate** with vertical scale, manual splits, zones, producer throttling, queue buffering\n- **Fix** with `reshardCollection` (5.0+) using hashed or compound keys\n- **Good shard key** = high cardinality, low frequency, non-monotonic, query-aligned\n- **Write sharding** (random suffix) is a stopgap when reshard isn't available\n- **Shard-key choice is your scaling ceiling** — test with production-scale data before going live"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Name the pattern fast**\n- Hot shard = one shard owns the hottest chunks; almost always a bad shard key\n- Monotonic keys, low-cardinality keys, or whale values are the classic causes\n\n**Walk through diagnosis**\n- Per-shard metrics, `sh.status()`, `getShardDistribution()`\n- Profiler and `currentOp()` for hot ops\n- Check jumbo chunks and the actual shard key\n\n**Offer immediate mitigation**\n- Vertical scale the hot shard, manual splits, throttle producers, zones for whales, Kafka buffer\n\n**Propose the long-term fix**\n- `reshardCollection` (5.0+) with hashed or compound key\n- Before 5.0: dual-write migration\n- Good keys: high cardinality, low frequency, non-monotonic, query-aligned\n\n**Close with prevention**\n- Shard-key review in design docs\n- Load test with representative data\n- Alert on chunk distribution imbalance and jumbo chunks"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between hashed and ranged shard keys and when do you pick each?",
+        "How does `reshardCollection` work under the hood in MongoDB 5.0+?",
+        "What is a jumbo chunk and how do you recover from them?",
+        "When is zone sharding the right answer vs a compound shard key?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Hot Shard: Diagnose and Fix with Shard Key Redesign",
+        "metaDescription": "Fix MongoDB hot shards — diagnose with sh.status and profiler, mitigate with zones and splits, long-term resharding with hashed compound keys."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P03",
+        "hook": "Name the pattern fast Hot shard = one shard owns the hottest chunks; almost always a bad shard key Monotonic keys, low-cardinality keys, or whale values are the classic causes Walk through diagnosis P",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "You're paged: Atlas cluster, 6 shards, shard03 at 80% CPU and 90% write queue depth, p99 write latency jumped from 10ms to 2s while other shards sit near-idle. Users see timeouts on write endpoints. This is the classic hot-shard failure. Sharding scales only when writes distribute evenly across shards; when."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Production NoSQL troubleshooting, shard-key diagnosis, and understanding of MongoDB cluster operations under load"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Confirm it's a hot shard, not general saturation Atlas/OpsManager metrics: per-shard CPU, write queue, IOPS One shard > 2× the average is the tell Inspect sharding state ``javascript use admin sh.status({ verbose: true }); use mydb db.orders.getShardDistribution(); ` Find the shard key and chunk distribution `javascript use config db.collections.findOne({ _id: \"mydb.orders\" }); // Look for: unbalanced chunk counts, jumbo chunks, recent splits on one shard db.chunks.find({ jumbo: true }); ` Identify the hot operations `javascript db.currentOp({ secs_running: { $gt: 2 }, ns: \"mydb.orders\" }); db.setProfilingLevel(1, { slowms: 50 }); db.system.profile.find().sort({ ts: -1 }).limit(20); ` Typical findings Orders sharded on _id (ObjectId) — monotonic timestamp prefix → latest chunk always grows on one shard Events sharded on tenantId — one whale tenant produces 80% of traffic Users sharded on country — US/India dominate; 2 shards hot, others idle Messages sharded on userId` — celebrity user gets all the writes Vertical scale the hot shard (temporary) Atlas: bump instance size; self-hosted: bigger VM Buys time while you plan the real fix Add."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "Hot shard almost always = bad shard key (monotonic, low cardinality, whale value) Diagnose with per-shard metrics, sh",
+              "status(), getShardDistribution(), profiler, jumbo chunk check Mitigate with vertical scale, manual splits, zones, producer throttling, queue buffering Fix with reshardCollection (5",
+              "0+) using hashed or compound keys Good shard key = high cardinality, low frequency, non-monotonic, query-aligned Write sharding (random suffix) is a stopgap when reshard isn't available Shard-key choice is your scaling ceiling — test with production-scale data before going live"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "When sharding actually helps: Data exceeds single-node working set (roughly > 2TB) Sustained writes > 10K/sec beyond one replica set Multi-region locality requirements (zones) When it hurts: Small dataset — vertical scaling is simpler and cheaper Access patterns are relational — use Postgres Team lacks operational experience Watch for: Jumbo chunks — single shard-key value exceeds max chunk size; can't split or move; indicates low-cardinality shard key Balancer off —."
+          }
+        ],
+        "cap": "Name the pattern fast Hot shard = one shard owns the hottest chunks; almost always a bad shard key Monotonic keys, low-cardinality keys, or whale values are the classic causes Walk through diagnosis P",
+        "familiarity_anchors": [
+          "Diagnose",
+          "Short",
+          "MongoDB"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between hashed and ranged shard keys and when do you pick each?",
+          "How does `reshardCollection` work under the hood in MongoDB 5.0+?",
+          "What is a jumbo chunk and how do you recover from them?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "nosql-sc-002",
+      "slug": "migrating-mongodb-to-postgres-jsonb",
+      "question": "Your team decides to migrate a live MongoDB collection to Postgres JSONB — how do you plan and execute with zero downtime?",
+      "title": "Migrating MongoDB to Postgres JSONB",
+      "direct_answer": "The migration runs as a **three-phase online cutover**: (1) set up Postgres with a JSONB column and GIN indexes, backfill historical data with a one-shot batch job, and verify row counts and checksums; (2) **dual-write** from the application or via **Debezium CDC + Kafka** so new writes land in both stores, then reconcile; (3) **switch reads** gradually (10% → 50% → 100%) behind a feature flag, monitor parity and latency, then retire MongoDB. Key discipline is **idempotent writes**, **checksum-based reconciliation**, and rolling back per-read-path instead of big-bang. The migration is easy when the Mongo schema is reasonable; messy when documents have legacy shapes — so run a **schema audit first** and normalize flat fields out of JSONB into real columns only where query patterns demand it.",
+      "layout_type": "scenario-walkthrough",
+      "difficulty": "hard",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Whether you can orchestrate a zero-downtime heterogeneous data-store migration with correctness and rollback guarantees",
+        "common_mistake": "Big-bang cutover, assuming MongoDB and Postgres indexes are equivalent, or forgetting to reconcile lost writes",
+        "to_stand_out": "Use Debezium CDC + Kafka for dual-write, checksum-based reconciliation, feature-flagged read cutover, and a decision on which JSON fields to promote to real columns"
+      },
+      "company_tags": [
+        "postgres",
+        "shopify",
+        "gitlab",
+        "basecamp",
+        "stripe"
+      ],
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Migrate and What to Plan For",
+            "content": "Teams migrate from MongoDB to Postgres for predictable reasons: **relational queries got painful**, ops cost grew faster than MongoDB features needed, or **JSONB + GIN + pg_trgm + pgvector** now covers 90% of original MongoDB motivations. Done right, the migration is an engineering project, not a cliff — it needs careful phasing and observability.\n\nThe **zero-downtime recipe** is three phases: historical backfill, dual-write (or CDC) to keep both stores in sync, and progressive read cutover behind a feature flag. Correctness comes from **idempotent writes**, **checksum reconciliation**, and monitoring parity continuously. Rollback means flipping the flag back — not reverting a deployment.\n\nBefore the move, run a **schema audit**: which fields are queried by equality, which by range, which never queried? Fields queried by equality/range benefit from being promoted to real Postgres columns; the rest can live in a JSONB blob with a GIN index."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Migration Architecture",
+            "content": "```mermaid\nflowchart LR\n    app[\"Application\"] --> flag[\"Read/Write Feature Flags\"]\n    flag --> mongo[\"MongoDB (source of truth)\"]\n    flag --> pg[\"Postgres + JSONB (target)\"]\n    mongo --> oplog[\"Oplog / Change Stream\"]\n    oplog --> debezium[\"Debezium Connector\"]\n    debezium --> kafka[\"Kafka topic\"]\n    kafka --> sink[\"JDBC Sink / Consumer\"]\n    sink --> pg\n    pg <--> recon[\"Nightly reconcile job (counts + checksums)\"]\n    mongo <--> recon\n```"
+          },
+          {
+            "type": "step",
+            "title": "Phase 1: Target Schema and Historical Backfill",
+            "content": "**Define the Postgres table**\n\n```sql\nCREATE TABLE orders (\n  id              TEXT PRIMARY KEY,\n  tenant_id       TEXT NOT NULL,\n  status          TEXT NOT NULL,\n  total_cents     BIGINT NOT NULL,\n  created_at      TIMESTAMPTZ NOT NULL,\n  updated_at      TIMESTAMPTZ NOT NULL,\n  data            JSONB NOT NULL,\n  schema_version  INT  NOT NULL DEFAULT 1\n);\n\nCREATE INDEX orders_tenant_status_idx ON orders (tenant_id, status);\nCREATE INDEX orders_data_gin          ON orders USING GIN (data jsonb_path_ops);\nCREATE INDEX orders_created_at_idx    ON orders (created_at DESC);\n```\n\n**Promote hot fields out of JSONB**\n- `tenant_id`, `status`, `total_cents`, `created_at` are queried constantly → real columns\n- Everything else (nested detail, addresses, items) stays in `data` JSONB\n\n**Backfill with a throttled batch**\n\n```java\n// Spring Batch chunk: Mongo → Postgres\nItemReader<Document>  reader = new MongoItemReaderBuilder<Document>().collection(\"orders\")...\nItemProcessor<Document, OrderRow> map = doc -> OrderRow.fromMongo(doc);\nItemWriter<OrderRow>  writer = rows -> jdbc.batchUpdate(\n  \"INSERT INTO orders (id, tenant_id, status, total_cents, created_at, updated_at, data) \" +\n  \"VALUES (?, ?, ?, ?, ?, ?, ?::jsonb) ON CONFLICT (id) DO NOTHING\", rows);\n```\n\n**Verify after backfill**\n- Row counts per tenant match within tolerance\n- Sample checksums agree (e.g., SHA256 over canonical JSON)"
+          },
+          {
+            "type": "step",
+            "title": "Phase 2: Dual-Write with CDC",
+            "content": "**Option A — Application dual-write (simpler, coupled)**\n\n```java\n@Transactional\npublic void createOrder(Order o) {\n  orders.insertOne(toDoc(o));\n  try {\n    jdbc.update(\"INSERT INTO orders (...) VALUES (...)\", ...);\n  } catch (Exception e) {\n    // record to reconcile queue; do not rollback the Mongo write\n    reconcileQueue.publish(o.getId());\n  }\n}\n```\n\n**Option B — Debezium CDC (preferred, decoupled)**\n\n```yaml\n# Debezium MongoDB connector (picks up oplog)\nconnector.class: io.debezium.connector.mongodb.MongoDbConnector\nmongodb.connection.string: mongodb+srv://cluster0/...\ndatabase.include.list: mydb\ncollection.include.list: mydb.orders\ncapture.mode: change_streams_update_full\n```\n\nDebezium emits Kafka events for every insert/update/delete on MongoDB. A Kafka Connect **JDBC sink** (or a custom consumer) upserts into Postgres idempotently keyed on `_id`.\n\n**Idempotency is non-negotiable**\n\n```sql\nINSERT INTO orders (id, tenant_id, status, data, updated_at)\nVALUES (:id, :t, :s, :d::jsonb, :u)\nON CONFLICT (id) DO UPDATE SET\n  tenant_id  = EXCLUDED.tenant_id,\n  status     = EXCLUDED.status,\n  data       = EXCLUDED.data,\n  updated_at = EXCLUDED.updated_at\nWHERE orders.updated_at < EXCLUDED.updated_at;\n```\n\nThe `WHERE orders.updated_at <` guard prevents out-of-order events from overwriting fresher state."
+          },
+          {
+            "type": "step",
+            "title": "Phase 3: Read Cutover and Decommission",
+            "content": "**Read cutover behind a flag**\n\n```java\nOrder read(String id) {\n  if (flags.isEnabledForTenant(\"read-from-postgres\", tenantOf(id))) {\n    return pgOrderRepo.findById(id);\n  }\n  return mongoOrderRepo.findById(id);\n}\n```\n\n**Ramp up**\n- 1% traffic → shadow-compare against MongoDB; log mismatches\n- 10% → 50% → 100% over days, not minutes\n- Monitor: p99 latency, 4xx/5xx rate, parity failures\n\n**Shadow-compare in production**\n- For each read served by MongoDB, async-fetch Postgres and diff\n- Emit a metric on mismatch; investigate before ramping further\n\n**Retire MongoDB**\n- Once 100% reads and writes on Postgres for a holding period (1–2 weeks)\n- Stop Debezium; put MongoDB in read-only; archive; decommission\n\n**Rollback plan**\n- If parity or latency regresses, flip the flag back to MongoDB\n- Dual-write continues until root cause is fixed"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Migration Pitfalls",
+            "content": "**When the move helps:**\n- Queries became relational and `$lookup` is slow\n- You want SQL transactions without MongoDB's multi-doc cost\n- Ops cost favors managed Postgres\n- You need JSONB + GIN + pgvector + full-text in one store\n\n**When it hurts:**\n- Working set exceeds single-node Postgres capacity (then consider Citus, Aurora, CockroachDB)\n- Heavy time-series where MongoDB 5.0+ time-series or Timescale wins\n- Team depends on specific MongoDB features (change streams with server-side filtering)\n\n**Watch for:**\n- Legacy document shapes — run the schema-versioning pattern before migrating\n- Index parity — MongoDB compound ≠ Postgres composite in every case; re-tune\n- Oplog retention — keep wider than your expected CDC lag window\n- Casing/encoding — BSON types (Decimal128, ObjectId, Date) need explicit mapping\n- Failed Kafka events must go to a DLQ with reconciliation tooling"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Three phases**: backfill → dual-write (CDC preferred) → gradual read cutover\n- **Promote hot fields to real columns**; keep the rest in JSONB with a GIN index\n- **Debezium + Kafka + JDBC sink** is the canonical CDC path\n- **Idempotent upserts** with `updated_at` guard prevent out-of-order overwrites\n- **Feature flags per tenant** enable safe rollback at any step\n- **Shadow-compare** in production before ramping reads to 100%\n- **Hold for 1–2 weeks** on Postgres-only before decommissioning MongoDB"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Frame the migration**\n- Zero downtime in three phases: backfill, dual-write, read cutover\n- Always have rollback behind a feature flag\n\n**Describe each phase**\n- Phase 1: target schema with hot fields promoted, rest in JSONB + GIN; throttled backfill; row-count and checksum verification\n- Phase 2: dual-write via Debezium CDC or app-level; idempotent upserts with `updated_at` guard; DLQ for failed events\n- Phase 3: read cutover 1% → 10% → 50% → 100% with shadow-compare; retire MongoDB after a holding period\n\n**Call out pitfalls**\n- Schema drift — audit before; version if needed\n- Oplog retention must exceed CDC lag\n- BSON types need explicit mapping\n- Index parity is not automatic; re-tune\n\n**Close**\n- The migration is mechanical if the schema is clean; messy if it isn't — so schema-audit first"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Which JSON fields would you promote to real columns and which keep in JSONB?",
+        "How do you reconcile documents where MongoDB and Postgres diverge during dual-write?",
+        "Why use Debezium CDC over application-level dual-write?",
+        "How does `pg_trgm` compare to MongoDB text indexes for fuzzy search post-migration?"
+      ],
+      "seo": {
+        "metaTitle": "Zero-Downtime Migration from MongoDB to Postgres JSONB",
+        "metaDescription": "Migrate a live MongoDB collection to Postgres JSONB with backfill, Debezium CDC dual-write, feature-flag read cutover, and shadow reconciliation."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P03",
+        "hook": "Frame the migration Zero downtime in three phases: backfill, dual-write, read cutover Always have rollback behind a feature flag Describe each phase Phase 1: target schema with hot fields promoted, re",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "Teams migrate from MongoDB to Postgres for predictable reasons: relational queries got painful, ops cost grew faster than MongoDB features needed, or JSONB + GIN + pg_trgm + pgvector now covers 90% of original MongoDB motivations. Done right, the migration is an engineering project, not a cliff — it needs."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Whether you can orchestrate a zero-downtime heterogeneous data-store migration with correctness and rollback guarantees"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Define the Postgres table ``sql CREATE TABLE orders ( id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, status TEXT NOT NULL, total_cents BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL, data JSONB NOT NULL, schema_version INT NOT NULL DEFAULT 1 ); CREATE INDEX orders_tenant_status_idx ON orders (tenant_id, status); CREATE INDEX orders_data_gin ON orders USING GIN (data jsonb_path_ops); CREATE INDEX orders_created_at_idx ON orders (created_at DESC); ` Promote hot fields out of JSONB tenant_id, status, total_cents, created_at are queried constantly → real columns Everything else (nested detail, addresses, items) stays in data JSONB Backfill with a throttled batch `java // Spring Batch chunk: Mongo → Postgres ItemReader<Document> reader = new MongoItemReaderBuilder<Document>().collection(\"orders\")...",
+              "ItemProcessor<Document, OrderRow> map = doc -> OrderRow.fromMongo(doc); ItemWriter<OrderRow> writer = rows -> jdbc.batchUpdate( \"INSERT INTO orders (id, tenant_id, status, total_cents, created_at, updated_at, data) \" + \"VALUES (?, ?, ?, ?, ?, ?, ?::jsonb) ON CONFLICT (id) DO NOTHING\", rows); `` Verify after backfill Row counts per tenant match within tolerance Sample checksums agree (e.g., SHA256 over canonical JSON)."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "Three phases: backfill → dual-write (CDC preferred) → gradual read cutover Promote hot fields to real columns",
+              "keep the rest in JSONB with a GIN index Debezium + Kafka + JDBC sink is the canonical CDC path Idempotent upserts with updated_at guard prevent out-of-order overwrites Feature flags per tenant enable safe rollback at any step Shadow-compare in production before ramping reads to 100% Hold for 1–2 weeks on Postgres-only before decommissioning MongoDB"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "When the move helps: Queries became relational and $lookup is slow You want SQL transactions without MongoDB's multi-doc cost Ops cost favors managed Postgres You need JSONB + GIN + pgvector + full-text in one store When it hurts: Working set exceeds single-node Postgres capacity (then consider Citus, Aurora, CockroachDB) Heavy time-series where MongoDB 5.0+ time-series or Timescale wins Team depends on specific MongoDB features (change streams with server-side filtering)."
+          }
+        ],
+        "cap": "Frame the migration Zero downtime in three phases: backfill, dual-write, read cutover Always have rollback behind a feature flag Describe each phase Phase 1: target schema with hot fields promoted, re",
+        "familiarity_anchors": [
+          "Postgres",
+          "JSONB",
+          "Debezium"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Which JSON fields would you promote to real columns and which keep in JSONB?",
+          "How do you reconcile documents where MongoDB and Postgres diverge during dual-write?",
+          "Why use Debezium CDC over application-level dual-write?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "nosql-sc-003",
+      "slug": "handling-mongodb-schema-evolution-in-prod",
+      "question": "A required field was renamed on a live MongoDB collection used by three services — how do you handle schema evolution safely?",
+      "title": "Handling MongoDB Schema Evolution in Production",
+      "direct_answer": "Safe schema evolution in MongoDB follows an **expand–migrate–contract** cycle. **Expand**: writers emit both old and new field names and readers accept either, so services can deploy independently. **Migrate**: a background job backfills old documents to the new shape at a throttled rate, and a `$jsonSchema` validator enforces new writes. **Contract**: once every reader is on the new shape and backfill is complete, remove old-field handling and tighten validation. A `schemaVersion` field on every document makes the state of migration observable. The risks to manage are **service-deployment ordering**, **rollback safety**, and **long-tail legacy documents** — all of which the expand–contract cycle absorbs cleanly.",
+      "layout_type": "scenario-walkthrough",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Whether you can coordinate schema changes across services with zero downtime and safe rollback",
+        "common_mistake": "Renaming the field and shipping all services at once, or running a big-bang migration on a live collection",
+        "to_stand_out": "Describe expand–migrate–contract, anti-corruption layer, `$jsonSchema` with `moderate` validation, and change-stream-driven consumer sync"
+      },
+      "company_tags": [
+        "mongodb",
+        "hubspot",
+        "zendesk",
+        "twilio",
+        "cloudflare"
+      ],
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Expand–Migrate–Contract Cycle",
+            "content": "A field rename on a shared MongoDB collection looks small but touches three live services and millions of existing documents.\n- Doing it as a single coordinated release creates a **deploy-order nightmare** — the first service deployed breaks against documents written by the last.\n- The only safe technique is **expand–migrate–contract**, the same pattern used for SQL column renames and API versioning.\n\n**Expand**: writers output both field names; readers accept either. Services can deploy in any order.\n- **Migrate**: a throttled background job rewrites old documents to the new shape.\n- **Contract**: after a holding period, remove old-field handling from writers first, then from readers, and enforce the new shape with `$jsonSchema`.\n\nEvery document carries a `schemaVersion` so you can track migration progress and dispatch reader logic correctly."
+          },
+          {
+            "type": "step",
+            "title": "Phase 1: Expand (Dual-Write, Dual-Read)",
+            "content": "**Writers emit both old and new fields**\n\n```javascript\n// Old: { customerName: \"Asha\" }\n// New: { customer: { firstName: \"Asha\", lastName: \"Patel\" } }\n\nfunction toDoc(input) {\n  const firstName = input.firstName;\n  const lastName  = input.lastName;\n  return {\n    customerName: `${firstName} ${lastName}`,         // old, deprecated\n    customer: { firstName, lastName },                 // new\n    schemaVersion: 2\n  };\n}\n```\n\n**Readers accept either shape via an anti-corruption layer**\n\n```javascript\nfunction fromDoc(doc) {\n  if (doc.customer) {\n    return { firstName: doc.customer.firstName, lastName: doc.customer.lastName };\n  }\n  const [firstName, ...rest] = (doc.customerName ?? \"\").split(\" \");\n  return { firstName, lastName: rest.join(\" \") };\n}\n```\n\n**Why this is safe**\n- Order of service deploys doesn't matter — every reader can parse every write\n- Rollback is a pure config flip; no data fix-up needed"
+          },
+          {
+            "type": "step",
+            "title": "Phase 2: Migrate (Backfill and Validator)",
+            "content": "**Background job throttled for safety**\n\n```javascript\nconst cursor = db.customers.find({ schemaVersion: { $lt: 2 } }).batchSize(500);\n\nfor await (const d of cursor) {\n  const [firstName, ...rest] = (d.customerName ?? \"\").split(\" \");\n  await db.customers.updateOne(\n    { _id: d._id, schemaVersion: { $lt: 2 } },\n    {\n      $set: {\n        customer: { firstName, lastName: rest.join(\" \") },\n        schemaVersion: 2\n      }\n    }\n  );\n  await sleep(25);\n}\n```\n\n**Change-stream-driven sync for downstream consumers**\n\n```javascript\nconst stream = db.customers.watch(\n  [{ $match: { \"updateDescription.updatedFields.customer\": { $exists: true } } }],\n  { fullDocument: \"updateLookup\" }\n);\nstream.on(\"change\", change => downstream.publish(change.fullDocument));\n```\n\n**Validator in `moderate` mode — enforce only new writes**\n\n```javascript\ndb.runCommand({\n  collMod: \"customers\",\n  validator: {\n    $jsonSchema: {\n      bsonType: \"object\",\n      required: [\"customer\", \"schemaVersion\"],\n      properties: {\n        customer: {\n          bsonType: \"object\",\n          required: [\"firstName\", \"lastName\"],\n          properties: {\n            firstName: { bsonType: \"string\" },\n            lastName:  { bsonType: \"string\" }\n          }\n        },\n        schemaVersion: { bsonType: \"int\", minimum: 2 }\n      }\n    }\n  },\n  validationLevel:  \"moderate\",\n  validationAction: \"error\"\n});\n```\n\n**`moderate`** skips validation for legacy documents until they are updated, which is exactly what you want mid-migration."
+          },
+          {
+            "type": "step",
+            "title": "Phase 3: Contract (Remove the Old Shape)",
+            "content": "**Check backfill is complete**\n\n```javascript\ndb.customers.countDocuments({ schemaVersion: { $lt: 2 } });\n// Must be 0 before proceeding\n```\n\n**Remove old-field output from writers first**\n\n```javascript\nfunction toDoc(input) {\n  return {\n    customer: { firstName: input.firstName, lastName: input.lastName },\n    schemaVersion: 2\n  };\n}\n```\n\n**Then remove old-field handling from readers**\n\n```javascript\nfunction fromDoc(doc) {\n  return { firstName: doc.customer.firstName, lastName: doc.customer.lastName };\n}\n```\n\n**Tighten the validator**\n\n```javascript\ndb.runCommand({\n  collMod: \"customers\",\n  validationLevel: \"strict\"\n});\n```\n\n**Drop the old index on the deprecated field** if it existed."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Expand–Migrate–Contract vs Big-Bang",
+            "content": "| Aspect | Big-Bang Rename | Expand–Migrate–Contract |\n|---|---|---|\n| Downtime | Often unavoidable | Zero |\n| Deploy ordering | Must be coordinated across services | Independent |\n| Rollback | Redeploy + restore | Flip a flag |\n| Legacy docs | Rewritten at once under lock | Backfilled gradually |\n| Risk | High — one bug breaks everyone | Low — stages are reversible |\n| Time in production | Minutes | Days to weeks |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Apply Which Cycle",
+            "content": "**When expand–migrate–contract helps:**\n- Field rename or reshape on a shared live collection\n- Multi-service reader/writer topology\n- Compliance requires no downtime\n- Large collection (> 1M docs) where big-bang would take too long\n\n**When it hurts:**\n- Change is additive-only (add a new field) — plain `$set` on write is enough\n- Collection is small (< 100K docs) and owned by one service — a brief maintenance window is simpler\n- Breaking semantic change that can't be backfilled without ambiguity\n\n**Watch for:**\n- Readers that materialize data downstream (search index, warehouse) — update their consumer logic too\n- Forgetting to drop the old field from writers — infinite dual-write\n- Validator too strict too early — legacy reads start erroring\n- Change streams missing events during backfill — use resumable tokens"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Expand–Migrate–Contract** is the canonical zero-downtime schema change pattern\n- **`schemaVersion`** tags every document with its shape\n- **Anti-corruption layer** in every reader handles both shapes\n- **Throttled backfill** rewrites old docs without saturating the cluster\n- **Validator `moderate` mode** enforces new writes while tolerating legacy docs\n- **Contract only after backfill = 0 old docs** — verify with a count\n- **Change streams** keep downstream consumers (search, warehouse) in sync"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**State the pattern**\n- Expand–Migrate–Contract is the canonical zero-downtime schema change\n- Every document tagged with schemaVersion\n\n**Walk the phases**\n- Expand: writers emit both old and new fields; readers accept either; services deploy independently\n- Migrate: throttled backfill rewrites old docs; `$jsonSchema` validator in `moderate` mode enforces new writes\n- Contract: once backfill = 0, remove old output from writers, then old reads, then tighten validator to `strict`\n\n**Call out the risks**\n- Downstream consumers (search, warehouse) need their own dual-handling\n- Validator too strict too early breaks legacy reads\n- Change streams with resumable tokens for consumer sync\n\n**Close**\n- Rollback is flipping a flag, not restoring a backup\n- The pattern is worth days of slow ramp for zero-downtime safety"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do change streams with resumable tokens help downstream consumers during migration?",
+        "When is additive-only schema change safe to ship without the full cycle?",
+        "What's the role of `$jsonSchema` validation level `moderate` vs `strict`?",
+        "How do you coordinate schema evolution across a Mongo + Elasticsearch dual-system?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Schema Evolution: Expand-Migrate-Contract in Production",
+        "metaDescription": "Safely rename and reshape MongoDB fields across services with expand-migrate-contract, schemaVersion tagging, validators, and change streams."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P03",
+        "hook": "State the pattern Expand–Migrate–Contract is the canonical zero-downtime schema change Every document tagged with schemaVersion Walk the phases Expand: writers emit both old and new fields; readers ac",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "A field rename on a shared MongoDB collection looks small but touches three live services and millions of existing documents. Doing it as a single coordinated release creates a deploy-order nightmare — the first service deployed breaks against documents written by the last. The only safe technique is expand–migrate–contract, the."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Whether you can coordinate schema changes across services with zero downtime and safe rollback"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Writers emit both old and new fields ``javascript // Old: { customerName: \"Asha\" } // New: { customer: { firstName: \"Asha\", lastName: \"Patel\" } } function toDoc(input) { const firstName = input.firstName; const lastName = input.lastName; return { customerName: ${firstName} ${lastName}, // old, deprecated customer: { firstName, lastName }, // new schemaVersion: 2 }; } ` Readers accept either shape via an anti-corruption layer `javascript function fromDoc(doc) { if (doc.customer) { return { firstName: doc.customer.firstName, lastName: doc.customer.lastName }; } const [firstName, ...rest] = (doc.customerName ??",
+              "\"\").split(\" \"); return { firstName, lastName: rest.join(\" \") }; } `` Why this is safe Order of service deploys doesn't matter — every reader can parse every write Rollback is a pure config flip; no data fix-up needed Background job throttled for safety ``javascript const cursor = db.customers.find({ schemaVersion: { $lt: 2 } }).batchSize(500); for await (const d of cursor) { const [firstName, ...rest] = (d.customerName ??",
+              "\"\").split(\" \"); await db.customers.updateOne( { _id: d._id, schemaVersion: { $lt: 2 } }, { $set: { customer: {."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "Expand–Migrate–Contract is the canonical zero-downtime schema change pattern schemaVersion tags every document with its shape Anti-corruption layer in every reader handles both shapes Throttled backfill rewrites old docs without saturating the cluster Validator moderate mode enforces new writes while tolerating legacy docs Contract only after backfill = 0 old docs",
+              "verify with a count Change streams keep downstream consumers (search, warehouse) in sync"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "When expand–migrate–contract helps: Field rename or reshape on a shared live collection Multi-service reader/writer topology Compliance requires no downtime Large collection (> 1M docs) where big-bang would take too long When it hurts: Change is additive-only (add a new field) — plain $set on write is enough Collection is small (< 100K docs) and owned by one service — a brief maintenance window is simpler Breaking semantic change that can't."
+          }
+        ],
+        "cap": "State the pattern Expand–Migrate–Contract is the canonical zero-downtime schema change Every document tagged with schemaVersion Walk the phases Expand: writers emit both old and new fields; readers ac",
+        "familiarity_anchors": [
+          "MongoDB",
+          "Expand",
+          "Migrate"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do change streams with resumable tokens help downstream consumers during migration?",
+          "When is additive-only schema change safe to ship without the full cycle?",
+          "What's the role of `$jsonSchema` validation level `moderate` vs `strict`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    }
+  ]
+}

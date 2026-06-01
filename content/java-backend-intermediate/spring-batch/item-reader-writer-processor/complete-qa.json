@@ -1,0 +1,254 @@
+{
+  "topic": "Item Reader Writer Processor",
+  "topicSlug": "item-reader-writer-processor",
+  "questions": [
+    {
+      "id": "sb-002",
+      "slug": "spring-batch-itemreader-itemprocessor-itemwriter-chunk-processing",
+      "question": "How do ItemReader, ItemProcessor, and ItemWriter work together in Spring Batch chunk processing?",
+      "title": "ItemReader, ItemProcessor, and ItemWriter: Chunk Processing in Spring Batch",
+      "direct_answer": "In chunk-oriented processing, **`ItemReader`** reads one item at a time until the chunk size is reached, **`ItemProcessor`** optionally transforms or filters each item (returning `null` to skip), and **`ItemWriter`** receives the entire chunk as a list to persist in **one transaction**. This separation makes each piece independently testable and swappable. The contract details — `read()` returns `null` at end-of-data, `process()` returns `null` to filter, `write()` receives `Chunk<T>` (Spring Batch 5) so a single bulk INSERT replaces N round-trips — are what make chunk steps fast and restart-safe.",
+      "layout_type": "recipe-builder",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can wire a real-world data pipeline and understands the transaction boundary at the write phase",
+        "common_mistake": "Returning null from `ItemProcessor` to skip an item is correct, but many candidates try to throw an exception instead, which triggers retry/skip logic unintentionally",
+        "to_stand_out": "Explain that `ItemReader.read()` returns null to signal end-of-data, and that `ItemWriter` receives a `Chunk<O>` (Spring Batch 5) rather than a plain List, plus the single-item retry behaviour on write failure"
+      },
+      "company_tags": [
+        "TCS",
+        "Wipro",
+        "Accenture",
+        "Deutsche Bank",
+        "Barclays"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Chunk Pipeline Is a Transaction Loop, Not a Stream",
+            "content": "**`ItemReader`**, **`ItemProcessor`**, and **`ItemWriter`** are the three roles in Spring Batch's chunk-oriented processing pipeline. What makes the model non-obvious is the **transaction boundary**: read happens outside the commit scope, but the write of all processed items in a chunk happens inside one atomic transaction.\n\n**Per-chunk flow at a glance:**\n- Call `ItemReader.read()` until chunk size is reached (or `null` signals end-of-data)\n- Pass each item through `ItemProcessor.process()`; collect surviving items\n- Call `ItemWriter.write(chunk)` with the entire list in one transaction\n- Commit transaction; update `StepExecution` counts; loop\n\n**The contract details that catch candidates:**\n- `ItemReader.read()` returns `null` for end-of-data, **not** an exception\n- `ItemProcessor.process()` returns `null` to **silently filter** the item out\n- `ItemWriter.write(chunk)` receives a list — one call per chunk; bulk INSERT is the point\n- Spring Batch 5 changed the writer signature from `write(List<T>)` to `write(Chunk<T>)`; the `Chunk` carries `ChunkContext` for step metadata access\n\nThe transaction boundary is also why **write-phase failures are expensive**. If `ItemWriter` fails partway through a chunk, the entire chunk rolls back — Spring Batch then re-reads the chunk one item at a time to isolate the bad row. Every item in the failed chunk is reprocessed; **make processors idempotent** to tolerate this safely."
+          },
+          {
+            "type": "step",
+            "title": "Wiring Reader, Processor, and Writer with @StepScope",
+            "content": "Each role has multiple built-in implementations chosen by data source and volume.\n\n**Choosing a reader**\n- `FlatFileItemReader` — CSV / fixed-width / delimited files\n- `JdbcCursorItemReader` — opens a single JDBC cursor for the entire step; great for large datasets but holds a connection open\n- `JdbcPagingItemReader` / `JpaPagingItemReader` — offset-based paging; releases the connection between pages; safer for very large datasets but vulnerable to data drift mid-step\n- `KafkaItemReader` — consumes from a Kafka topic\n\n**`@StepScope` is non-negotiable for parameterized readers and writers**\n- Without `@StepScope`, the reader bean is a singleton — two concurrent job executions share state and corrupt each other\n- `@StepScope` defers bean creation until the step starts; `@Value(\"#{jobParameters['inputFile']}\")` resolves at that point\n\n```java\n@Bean\n@StepScope\npublic FlatFileItemReader<Order> orderReader(\n        @Value(\"#{jobParameters['inputFile']}\") String inputFile) {\n    return new FlatFileItemReaderBuilder<Order>()\n            .name(\"orderReader\")\n            .resource(new FileSystemResource(inputFile))\n            .delimited().names(\"id\", \"customerId\", \"amount\")\n            .targetType(Order.class)\n            .saveState(true)\n            .build();\n}\n```\n\n**Composing processors**\n- `CompositeItemProcessor` chains multiple processors in order; each receives the output of the previous one\n- Cleaner than one monolithic processor with mixed concerns — validate, enrich, transform as separate units\n\n```java\n@Bean\npublic CompositeItemProcessor<Order, Invoice> processor(\n        ValidationProcessor validate,\n        EnrichmentProcessor enrich,\n        TransformProcessor transform) {\n    CompositeItemProcessor<Order, Invoice> composite = new CompositeItemProcessor<>();\n    composite.setDelegates(List.of(validate, enrich, transform));\n    return composite;\n}\n```\n\n**Choosing a writer**\n- `JdbcBatchItemWriter` — uses `PreparedStatement.addBatch()` / `executeBatch()`; one round-trip per chunk\n- `JpaItemWriter` — flushes the EntityManager; set `hibernate.jdbc.batch_size=50` and `hibernate.order_inserts=true` to actually batch\n- `FlatFileItemWriter` / `StaxEventItemWriter` — for file output\n- **Never loop and write one at a time** inside a custom writer — defeats chunk batching\n\n**Testing chunk components**\n- `@SpringBatchTest` provides `JobLauncherTestUtils` for end-to-end and `launchStep(\"name\")` for isolated step tests\n- `ListItemReader<>(List.of(item1, item2))` is a quick mock reader\n- Assert on writer output (in-memory writer) or on database state via TestContainers"
+          },
+          {
+            "type": "step",
+            "title": "Fault Tolerance — Retry, Skip, and Single-Item Recovery",
+            "content": "Spring Batch's fault tolerance operates at two levels: **retry** (attempt the same item again) and **skip** (discard the item and continue). Both interact with the transaction boundary in non-obvious ways.\n\n**Retry — for transient failures**\n- DB deadlocks (`DeadlockLoserDataAccessException`), network blips, upstream 503s\n- `faultTolerant().retry(DeadlockLoserDataAccessException.class).retryLimit(3)`\n- Combine with `ExponentialBackOffPolicy` to avoid retry storms\n\n**Skip — for poison records**\n- `faultTolerant().skip(ValidationException.class).skipLimit(100)`\n- Skipped items are recorded in `StepExecution` for audit; pair with a `SkipListener` that writes to a dead-letter destination\n\n**The single-item recovery cycle (the part candidates miss)**\n- When write fails, Spring Batch can't know which item caused it\n- It rolls back the chunk transaction\n- Then re-reads each item one at a time, processing and writing individually\n- The good items succeed; the bad one is skipped (if configured) or fails the step\n- This is why **processors must be idempotent** — they may run twice for the same input\n\n```java\n.faultTolerant()\n    .skip(FlatFileParseException.class)\n    .skip(ValidationException.class)\n    .skipLimit(500)\n    .listener(new SkipListener<Order, Invoice>() {\n        @Override public void onSkipInRead(Throwable t) { dlq.send(\"READ\", t); }\n        @Override public void onSkipInProcess(Order i, Throwable t) { dlq.send(i, t); }\n        @Override public void onSkipInWrite(Invoice i, Throwable t) { dlq.send(i, t); }\n    })\n    .retry(DeadlockLoserDataAccessException.class)\n    .retryLimit(3)\n    .backOffPolicy(new ExponentialBackOffPolicy())\n```\n\n**Non-transactional side effects under rollback**\n- Sending emails, calling external APIs, publishing Kafka events — **rollback does not undo these**\n- Move side effects to a final tasklet that runs only after the chunk step completes\n- Or use the **outbox pattern** — write a row inside the chunk transaction; a separate step dispatches it"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`ItemReader.read()` returns `null` for end-of-data** — not an exception; throwing is for genuine errors.\n- **`ItemProcessor.process()` returns `null` to silently filter** — the item is removed from the chunk and never reaches the writer.\n- **`ItemWriter.write(chunk)` receives the entire chunk** — one call; bulk INSERT/UPDATE is the whole point.\n- **`@StepScope` is required for parameterized readers/writers** — also makes them safe under concurrent job executions.\n- **`CompositeItemProcessor` chains processors** — validate → enrich → transform as composable units.\n- **Single-item recovery on write failure** — the chunk re-reads one at a time to isolate the bad row; processors must be idempotent.\n- **Readers are not thread-safe by default** — wrap with `SynchronizedItemStreamReader` for multi-threaded steps."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The chunk-oriented step has three roles, each with a precise contract.\n\n**`ItemReader` — read one item at a time**\n- Spring Batch calls `read()` repeatedly until it returns `null`\n- `null` is the normal end-of-data signal; throwing is for errors\n- Built-in readers: `FlatFileItemReader`, `JdbcCursorItemReader`, `JdbcPagingItemReader`, `JpaPagingItemReader`, `KafkaItemReader`\n\n**`ItemProcessor` — transform or filter one item**\n- Receives one item; returns the transformed item or `null` to skip\n- `null` silently removes the item from the chunk — never reaches the writer\n- Stateless by design; compose with `CompositeItemProcessor`\n\n**`ItemWriter` — write the entire chunk**\n- Receives `Chunk<T>` (Spring Batch 5) — all processed items\n- Bulk INSERT/UPDATE in one DB call; never loop and write one at a time\n- Built-in writers: `JdbcBatchItemWriter`, `JpaItemWriter`, `FlatFileItemWriter`, `KafkaItemWriter`\n\n**Fault tolerance subtlety:**\n- Skip on write failure triggers a chunk rollback and single-item replay to isolate the bad row\n- Every item in the failed chunk reprocesses — processors must be idempotent\n- Non-transactional side effects (emails, API calls) are NOT rolled back; use a final tasklet or outbox pattern\n\n**Thread safety:**\n- `FlatFileItemReader` and `JdbcCursorItemReader` maintain cursor state — wrap in `SynchronizedItemStreamReader` for multi-threaded steps\n- Paging readers are safer for concurrency since each page is independent\n\nIn an interview I'd emphasize the null-return semantics and the single-item retry behaviour — those are what catch candidates."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you chain multiple ItemProcessors together for different transformation stages?",
+        "What is the difference between ItemWriter receiving a List versus a Chunk in Spring Batch 5?",
+        "How does Spring Batch handle a scenario where ItemProcessor throws a runtime exception mid-chunk?",
+        "Why must ItemProcessors be idempotent when fault tolerance is enabled?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch ItemReader, ItemProcessor, ItemWriter Guide",
+        "metaDescription": "How ItemReader, ItemProcessor, and ItemWriter collaborate in Spring Batch chunk processing — null semantics, transaction boundary, and single-item recovery."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "The chunk-oriented step has three roles, each with a precise contract.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "ItemReader, ItemProcessor, and ItemWriter are the three roles in Spring Batch's chunk-oriented processing pipeline. What makes the model non-obvious is the transaction boundary: read happens outside the commit scope, but the write of all processed items in a chunk happens inside one atomic transaction. Per-chunk flow at a glance: Call ItemReader.read() until chunk size is reached (or null signals end-of-data) Pass each item through ItemProcessor.process(); collect surviving items Call ItemWriter.write(chunk) with the entire list in one transaction Commit transaction; update."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate can wire a real-world data pipeline and understands the transaction boundary at the write phase"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "read() returns null for end-of-data — not an exception; throwing is for genuine errors",
+              "ItemProcessor",
+              "process() returns null to silently filter — the item is removed from the chunk and never reaches the writer",
+              "write(chunk) receives the entire chunk — one call; bulk INSERT/UPDATE is the whole point",
+              "@StepScope is required for parameterized readers/writers — also makes them safe under concurrent job executions"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "ItemReader, ItemProcessor, and ItemWriter are the three roles in Spring Batch's chunk-oriented processing pipeline. What makes the model non-obvious is the transaction boundary: read happens outside the commit scope, but the write of all processed items in a chunk happens inside one atomic transaction. Per-chunk flow at a glance: Call ItemReader.read() until chunk size is reached (or null signals end-of-data) Pass each item through ItemProcessor.process(); collect surviving items Call ItemWriter.write(chunk) with the entire list in one transaction Commit transaction; update StepExecution counts; loop The contract details that catch candidates: ItemReader.read() returns null for end-of-data, not an exception ItemProcessor.process() returns null to silently filter the item out ItemWriter.write(chunk) receives a list — one call per chunk; bulk INSERT is the point."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Returning null from ItemProcessor to skip an item is correct, but many candidates try to throw an exception instead, which triggers retry/skip logic unintentionally"
+            ]
+          }
+        ],
+        "cap": "ItemReader — read one item at a time Spring Batch calls read() repeatedly until it returns null null is the normal end-of-data signal; throwing is for errors Built-in readers: FlatFileItemReader, Jdbc",
+        "familiarity_anchors": [
+          "ItemReader",
+          "ItemProcessor",
+          "ItemWriter"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you chain multiple ItemProcessors together for different transformation stages?",
+          "What is the difference between ItemWriter receiving a List versus a Chunk in Spring Batch 5?",
+          "How does Spring Batch handle a scenario where ItemProcessor throws a runtime exception mid-chunk?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    },
+    {
+      "id": "sb-002b",
+      "slug": "composite-itemwriter-and-classifier-pattern",
+      "question": "How do you route items to multiple destinations in Spring Batch using `CompositeItemWriter` and `ClassifierCompositeItemWriter`? When does each apply?",
+      "title": "CompositeItemWriter and ClassifierCompositeItemWriter Patterns",
+      "direct_answer": "**`CompositeItemWriter`** delegates each chunk to **every** wrapped writer in order — use it when every item must be persisted to multiple sinks (DB plus audit file plus Kafka). **`ClassifierCompositeItemWriter`** uses a `Classifier<T, ItemWriter<? super T>>` to route each item to **exactly one** writer based on a property — use it when items split into categories (valid vs invalid, high-priority vs normal, region A vs region B). Both patterns let you keep the chunk-step transaction model while fan-out or splitting writes; both must implement `ItemStream` correctly so restart and `ExecutionContext` flow through the wrapped writers.",
+      "layout_type": "deep-dive",
+      "difficulty": "hard",
+      "importance": "medium",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can compose writers for fan-out and routing requirements without leaving the chunk-step transaction model",
+        "common_mistake": "Using a custom `ItemWriter` that loops over items and calls services inline, losing chunk batching and transaction semantics",
+        "to_stand_out": "Discuss `ItemStream` propagation in composite writers, the `BackToBackPatternClassifier`, and the transaction boundary across multiple sinks (one TX manager per writer is incorrect)"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "JP Morgan",
+        "Bloomberg",
+        "Stripe",
+        "Coinbase"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Composite Writers Keep the Chunk Model When You Need Fan-Out or Routing",
+            "content": "Real batch jobs rarely write to a single destination.\n- A typical financial-import job persists records to a primary database, writes an audit copy to a flat file, and publishes events to Kafka.\n- A user-import job writes valid users to the user table and invalid rows to a quarantine file for review.\n- Both patterns are well served by Spring Batch's composite writers.\n\n**`CompositeItemWriter`** — fan-out semantics. Every wrapped writer receives the entire chunk. Order of delegation matches the order in which writers were registered.\n\n**`ClassifierCompositeItemWriter`** — routing semantics. A `Classifier<T, ItemWriter<? super T>>` examines each item and selects one writer. Items destined for the same writer are batched together and handed off as a sub-chunk.\n\nBoth preserve the **chunk-step transaction model** — all writes happen inside the same transaction managed by the step's `PlatformTransactionManager`.\n- This is critical: if any write fails, the entire chunk rolls back across all destinations.\n- Mixing transaction managers (e.g. one for DB, one for Kafka) breaks atomicity; use the **outbox pattern** instead when you need eventual delivery to non-transactional sinks."
+          },
+          {
+            "type": "step",
+            "title": "CompositeItemWriter — Fan-Out to Multiple Sinks",
+            "content": "`CompositeItemWriter` delegates each chunk to every wrapped writer. Use it when **every item** must reach **multiple sinks**.\n\n**Configuration**\n\n```java\n@Bean\npublic CompositeItemWriter<Order> compositeWriter(\n        JdbcBatchItemWriter<Order> dbWriter,\n        FlatFileItemWriter<Order> auditWriter,\n        KafkaItemWriter<String, Order> kafkaWriter) {\n    CompositeItemWriter<Order> writer = new CompositeItemWriter<>();\n    writer.setDelegates(List.of(dbWriter, auditWriter, kafkaWriter));\n    return writer;\n}\n```\n\n**Delegation behavior**\n- Each delegate's `write(chunk)` is called in registration order\n- All delegates see the **same chunk**\n- If any delegate throws, the chunk is rolled back; remaining delegates are not called\n\n**`ItemStream` propagation**\n- `CompositeItemWriter` implements `ItemStream` and delegates `open`, `update`, `close` to wrapped writers that implement `ItemStream`\n- `FlatFileItemWriter` saves position in `ExecutionContext` via `update()`\n- Without proper `ItemStream` propagation, restart breaks for stateful writers\n- This is automatic with `CompositeItemWriter` — but custom composite implementations must do it explicitly\n\n**Transaction model**\n- All writes happen inside the step's transaction\n- A `JdbcBatchItemWriter` enrolls in the transaction via `DataSourceTransactionManager`\n- A `KafkaItemWriter` does NOT enroll in JDBC transactions — Kafka writes commit immediately\n- This is the dangerous case: DB rollback does not undo the Kafka publish\n\n**The outbox pattern when atomicity matters**\n- Insert a row into an `outbox` table inside the chunk transaction\n- A separate dispatcher step (or service) reads outbox rows and publishes to Kafka, marking them dispatched\n- Guarantees at-least-once delivery; the DB transaction is the source of truth\n\n**Common fan-out pitfalls**\n- **Order of delegates matters for failure semantics** — put the most-likely-to-fail writer first to fail fast\n- **Mixing transactional and non-transactional sinks without outbox** — silent inconsistency on rollback\n- **Custom writers that loop and call REST APIs** — defeats batching, defeats transaction; use a tasklet or outbox"
+          },
+          {
+            "type": "step",
+            "title": "ClassifierCompositeItemWriter — Routing Items by Property",
+            "content": "`ClassifierCompositeItemWriter` routes each item to **exactly one** writer based on a `Classifier`. Items destined for the same writer are grouped and handed off as a sub-chunk — preserving batching for each destination.\n\n**The Classifier interface**\n\n```java\npublic interface Classifier<C, T> {\n    T classify(C classifiable);\n}\n```\n\n**Wiring with a classifier function**\n\n```java\n@Bean\npublic ClassifierCompositeItemWriter<User> classifyingWriter(\n        JdbcBatchItemWriter<User> validUsersWriter,\n        FlatFileItemWriter<User> quarantineWriter) {\n    ClassifierCompositeItemWriter<User> writer = new ClassifierCompositeItemWriter<>();\n    writer.setClassifier((Classifier<User, ItemWriter<? super User>>) user -> {\n        if (user.isValid()) return validUsersWriter;\n        return quarantineWriter;\n    });\n    return writer;\n}\n```\n\n**`BackToBackPatternClassifier` for pattern-based routing**\n- A `BackToBackPatternClassifier` lets you map property values (or regex patterns) to destinations declaratively\n- Useful when the routing key is a string code (`region`, `status`)\n\n```java\n@Bean\npublic Classifier<Order, ItemWriter<? super Order>> orderClassifier(\n        ItemWriter<Order> usWriter,\n        ItemWriter<Order> euWriter,\n        ItemWriter<Order> apacWriter) {\n    BackToBackPatternClassifier classifier = new BackToBackPatternClassifier();\n    PatternMatchingClassifier<String> router = new PatternMatchingClassifier<>(\n        Map.of(\"US*\", \"us\", \"EU*\", \"eu\", \"APAC*\", \"apac\"));\n    SubclassClassifier<Order, String> regionMapper = new SubclassClassifier<>();\n    classifier.setRouterDelegate(router);\n    classifier.setMatcherMap(Map.of(\n        \"us\", usWriter, \"eu\", euWriter, \"apac\", apacWriter));\n    return (Classifier) classifier;\n}\n```\n\n**`ItemStream` propagation requires extra wiring**\n- `ClassifierCompositeItemWriter` does NOT automatically propagate `ItemStream` calls\n- Wrap it in `CompositeItemStream` or register the delegate writers as separate listeners on the step\n\n```java\n@Bean\npublic Step classifyStep(JobRepository repo, PlatformTransactionManager tx,\n                          ItemReader<User> reader,\n                          ClassifierCompositeItemWriter<User> writer,\n                          FlatFileItemWriter<User> quarantineWriter) {\n    return new StepBuilder(\"classifyStep\", repo)\n            .<User, User>chunk(500, tx)\n            .reader(reader)\n            .writer(writer)\n            .stream(quarantineWriter)\n            .build();\n}\n```\n\n**Restart and partial-write semantics**\n- A failed chunk rolls back ALL sub-chunks across all destinations\n- On restart, the entire chunk is re-read and re-classified; idempotency required\n- Make sure each destination writer can handle re-writes (UPSERT, idempotency keys)"
+          },
+          {
+            "type": "comparison_table",
+            "title": "CompositeItemWriter vs ClassifierCompositeItemWriter",
+            "content": "Pick the writer pattern that matches the routing intent.\n\n| Aspect | `CompositeItemWriter` | `ClassifierCompositeItemWriter` |\n|---|---|---|\n| Semantics | Every item to every writer | Each item to one writer |\n| Use case | Fan-out (DB + audit + Kafka) | Routing (valid vs invalid, region split) |\n| ItemStream propagation | Automatic | Manual via `.stream(writer)` on step |\n| Sub-batching | Single chunk to each writer | Sub-chunks per destination, batched |\n| Failure | Rollback everything | Rollback everything across destinations |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When Composite Writers Help, When They Hurt",
+            "content": "**When composite writers help:**\n- Multi-destination requirements without leaving the chunk transaction model\n- Audit-and-persist patterns common in financial and compliance jobs\n- Quarantine flows for invalid records\n- Region-based or category-based routing\n\n**When composite writers hurt:**\n- Mixing transactional and non-transactional sinks (DB + Kafka) without an outbox — silent inconsistency on rollback\n- Routing logic that becomes complex enough to warrant a separate step (extract the classifier as a processor first)\n- Per-item small destinations that defeat batching (e.g., 100 destinations with 1 item each)\n\n**Watch for:**\n- **Missing `ItemStream` registration** for `ClassifierCompositeItemWriter` delegates — restart silently breaks\n- **Mixed transaction managers** — DB rollback does not undo Kafka or REST side effects\n- **Custom composite writer that loops over delegates** — easy to forget chunk semantics; use the framework's `CompositeItemWriter`\n- **Classifier with side effects** — must be a pure function; expensive classifiers slow down every chunk\n- **No idempotency on destinations** — restart re-writes the chunk; non-idempotent writers create duplicates"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`CompositeItemWriter`** — fan-out; every wrapped writer receives the chunk in registration order.\n- **`ClassifierCompositeItemWriter`** — routing; each item goes to exactly one writer based on a `Classifier`.\n- **All writes share the step's transaction** — rollback affects all destinations.\n- **`ItemStream` propagation is automatic for `CompositeItemWriter`** — must be wired manually for `ClassifierCompositeItemWriter` via `.stream(writer)`.\n- **Mixing transactional and non-transactional sinks** — DB rollback does not undo Kafka publishes; use the outbox pattern.\n- **`BackToBackPatternClassifier`** lets you declaratively map property values to destinations.\n- **Idempotency is required** — failed chunks re-execute on restart; destinations must tolerate re-writes (UPSERT, keys)."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch has two composite-writer patterns that cover almost every multi-destination requirement.\n\n**`CompositeItemWriter` — fan-out:**\n- Delegates each chunk to every wrapped writer in registration order\n- Use when every item must reach multiple sinks (DB plus audit file plus Kafka)\n- All writes share the step's transaction — a failure rolls back all destinations\n- Implements `ItemStream` and propagates `open`/`update`/`close` to wrapped writers\n\n**`ClassifierCompositeItemWriter` — routing:**\n- Uses a `Classifier<T, ItemWriter<? super T>>` to route each item to exactly one writer\n- Use when items split into categories — valid vs invalid, region A vs region B\n- Items destined for the same writer are batched into sub-chunks, preserving batching\n- `ItemStream` does NOT propagate automatically; register destination writers via `.stream(writer)` on the step\n\n**Transaction subtlety:**\n- All writers enrolled in the JDBC `PlatformTransactionManager` participate in rollback\n- Kafka or REST writers do NOT — they commit immediately\n- For atomicity across DB and Kafka, use the outbox pattern: write a row inside the chunk transaction, dispatch from a separate step\n\n**Pattern-matching classifier:**\n- `BackToBackPatternClassifier` maps property values (or regex) to destinations declaratively\n- Useful for region-based or category-based routing\n\n**Idempotency required:**\n- Failed chunks re-execute on restart\n- Destinations must tolerate re-writes — UPSERT, idempotency keys, or downstream deduplication\n\nIn an interview I'd flag the mixed-transaction-manager pitfall — that's the production bug composite writers most often produce."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does ItemStream propagation differ between CompositeItemWriter and ClassifierCompositeItemWriter?",
+        "What happens to a Kafka publish when the chunk transaction rolls back, and how do you fix it?",
+        "When would you prefer a routing step with a JobExecutionDecider over ClassifierCompositeItemWriter?",
+        "How would you implement a composite writer that dynamically discovers destinations at runtime?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch CompositeItemWriter and Classifier Patterns",
+        "metaDescription": "How to fan-out and route items in Spring Batch using CompositeItemWriter and ClassifierCompositeItemWriter. Transaction model, ItemStream propagation, and outbox patterns."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Batch has two composite-writer patterns that cover almost every multi-destination requirement.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Real batch jobs rarely write to a single destination. A typical financial-import job persists records to a primary database, writes an audit copy to a flat file, and publishes events to Kafka. A user-import job writes valid users to the user table and invalid rows to a quarantine file for review. Both patterns are well served by Spring Batch's composite writers. CompositeItemWriter — fan-out semantics. Every wrapped writer receives the entire chunk. Order of delegation matches the order in which."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can compose writers for fan-out and routing requirements without leaving the chunk-step transaction model"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "CompositeItemWriter — fan-out; every wrapped writer receives the chunk in registration order",
+              "ClassifierCompositeItemWriter — routing; each item goes to exactly one writer based on a Classifier",
+              "All writes share the step's transaction — rollback affects all destinations",
+              "ItemStream propagation is automatic for CompositeItemWriter — must be wired manually for ClassifierCompositeItemWriter via",
+              "stream(writer)"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Real batch jobs rarely write to a single destination. A typical financial-import job persists records to a primary database, writes an audit copy to a flat file, and publishes events to Kafka. A user-import job writes valid users to the user table and invalid rows to a quarantine file for review. Both patterns are well served by Spring Batch's composite writers. CompositeItemWriter — fan-out semantics. Every wrapped writer receives the entire chunk. Order of delegation matches the order in which writers were registered. ClassifierCompositeItemWriter — routing semantics. A Classifier<T, ItemWriter<? super T>> examines each item and selects one writer. Items destined for the same writer are batched together and handed off as a sub-chunk. Both preserve the chunk-step transaction model."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using a custom ItemWriter that loops over items and calls services inline, losing chunk batching and transaction semantics"
+            ]
+          }
+        ],
+        "cap": "CompositeItemWriter — fan-out: Delegates each chunk to every wrapped writer in registration order Use when every item must reach multiple sinks (DB plus audit file plus Kafka) All writes share the ste",
+        "familiarity_anchors": [
+          "CompositeItemWriter",
+          "Kafka",
+          "ClassifierCompositeItemWriter"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does ItemStream propagation differ between CompositeItemWriter and ClassifierCompositeItemWriter?",
+          "What happens to a Kafka publish when the chunk transaction rolls back, and how do you fix it?",
+          "When would you prefer a routing step with a JobExecutionDecider over ClassifierCompositeItemWriter?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Batch job processing 1M records nightly"
+      }
+    }
+  ]
+}

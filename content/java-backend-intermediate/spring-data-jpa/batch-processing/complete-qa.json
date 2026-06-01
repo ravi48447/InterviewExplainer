@@ -1,0 +1,146 @@
+{
+  "topic": "Batch Processing",
+  "topicSlug": "batch-processing",
+  "questions": [
+    {
+      "id": "sdj-bp-001",
+      "slug": "jpa-hibernate-batch-insert-update-best-practices",
+      "question": "How do you efficiently batch insert/update with JPA/Hibernate, and when should you drop to raw JDBC?",
+      "title": "JPA Batch Processing — Inserts, Updates, StatelessSession, COPY",
+      "direct_answer": "Default Hibernate sends **one SQL per `persist`/`merge`** — catastrophic for large batches. Enable batching with **`hibernate.jdbc.batch_size=50`** plus **`order_inserts`** and **`order_updates=true`**, switch generated IDs to **SEQUENCE** (IDENTITY blocks batching), and call **`em.flush(); em.clear()`** every N records to prevent first-level cache OOM. For very large loads, drop to **`StatelessSession`** (no persistence context), **`JdbcClient.batchUpdate`** (5–10× faster than JPA batch), or **Postgres `COPY`** (10M+ rows/minute). Wrap in a single transaction with chunked commits, disable second-level cache during imports, and consider dropping non-essential indexes for one-off migrations.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows that JPA's default save-in-a-loop is broken for large batches and can name the specific Hibernate flags, ID generation strategy, and alternatives (StatelessSession, JdbcClient, COPY) that fix it",
+        "common_mistake": "Calling `repository.save()` in a loop, leaving `@GeneratedValue(strategy = IDENTITY)` (which silently disables JDBC batching), and never clearing the EntityManager — producing both linear network round-trips and unbounded heap growth",
+        "to_stand_out": "Discuss `StatelessSession`, Postgres `COPY` via `CopyManager`, dropping indexes during initial migrations, chunked-commit transaction sizing, and idempotent/resumable batch design"
+      },
+      "company_tags": [
+        "Hibernate",
+        "Spring",
+        "Netflix",
+        "Stripe",
+        "Adyen",
+        "Shopify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Naive `save()` in a Loop Is the Single Worst Pattern in JPA",
+            "content": "The textbook beginner code — `for (var dto : million) repo.save(toEntity(dto));` — looks innocent and is **catastrophically slow** in production.\n- Every `save` triggers a round-trip: 1 million rows means 1 million SQL statements and 1 million network hops.\n- Even on localhost the loop takes 10–30 minutes; over a managed cloud database it can run for hours.\n\nThe failure mode compounds.\n- Hibernate's **first-level cache** retains every persisted entity in the persistence context, so memory grows linearly with the batch.\n- **Dirty checking** at each flush iterates the entire managed set, turning a single large transaction into O(N²) CPU.\n- And `@GeneratedValue(strategy = IDENTITY)` **silently disables JDBC batching** because Hibernate must read each generated key before issuing the next INSERT.\n\nThe fix is two-tiered: tune JPA batch settings for moderate volumes, and **drop down to `StatelessSession`, `JdbcClient.batchUpdate`, or Postgres `COPY`** when row counts cross hundreds of thousands. Knowing where each tool sits on the throughput curve is the difference between a 30-minute job and a 30-second one."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Approach Comparison — Throughput by Strategy",
+            "content": "```mermaid\nflowchart LR\n    subgraph Naive[\"Naive JPA save loop\"]\n        n1[\"1M rows -> 10K-50K rows/min\"]\n        n2[\"OOM risk from cache growth\"]\n    end\n    subgraph Tuned[\"Tuned JPA batch\"]\n        t1[\"batch_size=50\"]\n        t2[\"flush + clear every N\"]\n        t3[\"sequence IDs\"]\n        t1 --> t4[\"100K-500K rows/min\"]\n        t2 --> t4\n        t3 --> t4\n    end\n    subgraph Stateless[\"StatelessSession\"]\n        s1[\"no persistence context\"] --> s2[\"500K-800K rows/min\"]\n    end\n    subgraph Jdbc[\"JdbcClient batchUpdate\"]\n        j1[\"raw JDBC batch, no ORM\"] --> j2[\"1M-2M rows/min\"]\n    end\n    subgraph Copy[\"Postgres COPY\"]\n        c1[\"CopyManager streaming\"] --> c2[\"10M+ rows/min\"]\n    end\n```"
+          },
+          {
+            "type": "step",
+            "title": "Tuning JPA Batch — Configuration, Entity Mapping, and Loop Pattern",
+            "content": "**Required `application.yml`:**\n\n```yaml\nspring:\n  jpa:\n    properties:\n      hibernate:\n        jdbc.batch_size: 50\n        order_inserts: true\n        order_updates: true\n        batch_versioned_data: true\n```\n\n**Why each flag matters:**\n- **`batch_size: 50`** — instructs the JDBC driver to group statements into batched round-trips.\n- **`order_inserts: true`** — reorders pending INSERTs so same-table rows are contiguous; cross-table interleaving breaks batches.\n- **`order_updates: true`** — same for UPDATEs.\n- **`batch_versioned_data: true`** — required for batching when entities use `@Version` (optimistic locking).\n\n**Entity mapping must use SEQUENCE, not IDENTITY:**\n\n```java\n@Entity\n@Table(name = \"orders\")\npublic class Order {\n    @Id\n    @GeneratedValue(strategy = SEQUENCE, generator = \"order_seq\")\n    @SequenceGenerator(name = \"order_seq\", sequenceName = \"order_seq\",\n                       allocationSize = 50)\n    private Long id;\n}\n```\n\n**Why SEQUENCE wins:**\n- **`allocationSize = 50`** matches `batch_size`, so Hibernate pre-allocates a block of IDs in one round-trip.\n- IDENTITY forces Hibernate to read each generated key after every INSERT — batching is impossible.\n- TABLE strategy works but is slower; SEQUENCE is the right default on Postgres/Oracle.\n\n**The loop pattern that actually performs:**\n\n```java\n@Transactional\npublic void importOrders(List<OrderDto> dtos) {\n    int i = 0;\n    for (var dto : dtos) {\n        em.persist(toEntity(dto));\n        if (++i % 50 == 0) {\n            em.flush();   // sends batched SQL\n            em.clear();   // evicts managed entities\n        }\n    }\n    em.flush();\n}\n```\n\n**Why `flush + clear` is non-negotiable:**\n- **`flush()`** drains the pending action queue to JDBC.\n- **`clear()`** detaches every managed entity from the persistence context.\n- Without `clear`, the cache grows until the heap exhausts — and dirty checking becomes O(N²).\n\n**Bulk UPDATE/DELETE via JPQL `@Modifying`:**\n\n```java\n@Modifying(clearAutomatically = true, flushAutomatically = true)\n@Query(\"UPDATE Order o SET o.status = 'ARCHIVED' WHERE o.createdAt < :cutoff\")\nint archiveOld(Instant cutoff);\n\n@Modifying\n@Query(\"DELETE FROM Order o WHERE o.status = 'ARCHIVED'\")\nint deleteArchived();\n```\n\n**When to use bulk DML:**\n- Single SQL hits millions of rows; no per-entity round-trip.\n- **Bypasses cascades, lifecycle callbacks, and `@Version` checks** — accept those trade-offs deliberately."
+          },
+          {
+            "type": "step",
+            "title": "When to Drop to StatelessSession, JdbcClient, or Postgres COPY",
+            "content": "**Hibernate `StatelessSession` — bypass the persistence context entirely:**\n\n```java\n@Autowired SessionFactory sf;\n\npublic void bulkImport(List<OrderDto> dtos) {\n    try (StatelessSession s = sf.openStatelessSession()) {\n        Transaction tx = s.beginTransaction();\n        int i = 0;\n        for (var dto : dtos) {\n            s.insert(toEntity(dto));\n            if (++i % 50 == 0) { s.getTransaction().commit(); tx = s.beginTransaction(); }\n        }\n        tx.commit();\n    }\n}\n```\n\n**StatelessSession trade-offs:**\n- **No first-level cache**, no dirty checking, no lifecycle callbacks (`@PrePersist`, `@PostLoad`).\n- **Roughly 2× faster** than tuned JPA batch on the same workload.\n- Caveat: you lose `@CreatedDate`, `@LastModifiedBy`, and any `@EntityListeners` — set those fields manually.\n\n**`JdbcClient.batchUpdate` (Spring Framework 6.1+):**\n\n```java\n@Service\npublic class OrderImport {\n    private final JdbcClient jdbc;\n\n    @Transactional\n    public int[] bulkInsert(List<OrderRow> rows) {\n        return jdbc.sql(\"\"\"\n                INSERT INTO orders (customer_id, status, amount, created_at)\n                VALUES (:cid, :status, :amount, :createdAt)\n                \"\"\")\n            .paramSourceBatch(rows.stream()\n                .map(r -> new MapSqlParameterSource()\n                    .addValue(\"cid\", r.customerId())\n                    .addValue(\"status\", r.status())\n                    .addValue(\"amount\", r.amount())\n                    .addValue(\"createdAt\", r.createdAt()))\n                .toList())\n            .batchUpdate();\n    }\n}\n```\n\n**JdbcClient highlights:**\n- **5–10× faster than JPA batch** — no ORM overhead at all.\n- Cleaner ergonomics than the older `JdbcTemplate.batchUpdate(...)`.\n- Use when domain entities are not needed (pure data ingest).\n\n**Postgres `COPY` — the fastest path for true bulk loads:**\n\n```java\npublic void copyFromCsv(InputStream csv) throws Exception {\n    try (Connection c = dataSource.getConnection()) {\n        BaseConnection pg = c.unwrap(BaseConnection.class);\n        CopyManager cm = pg.getCopyAPI();\n        cm.copyIn(\"COPY orders (customer_id, status, amount, created_at) \"\n                 + \"FROM STDIN WITH (FORMAT csv, HEADER true)\", csv);\n    }\n}\n```\n\n**COPY characteristics:**\n- Streams data into Postgres without per-row protocol overhead.\n- **10M+ rows/minute** is realistic on commodity hardware.\n- Bypasses every JDBC abstraction — use for migrations, ETL, and bulk seed loads.\n\n**Decision rule for tool choice:**\n- **Up to 10K rows with domain logic** — tuned JPA batch.\n- **10K–100K rows** — JPA batch or `StatelessSession`.\n- **100K–1M rows** — `JdbcClient.batchUpdate`.\n- **1M+ rows** — `COPY` or vendor bulk-load tooling."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Batch Strategies Side-by-Side",
+            "content": "Pick the strategy that matches the row count, the need for domain logic, and the audit/cache requirements.\n\n| Strategy | Throughput | Persistence context | Lifecycle callbacks | Best for |\n|---|---|---|---|---|\n| Naive `repository.save()` loop | 10K–50K/min | Grows unboundedly | Fire | Demo code only |\n| Tuned JPA batch (`batch_size=50` + flush/clear) | 100K–500K/min | Cleared per chunk | Fire | Domain entities, moderate volume |\n| `StatelessSession` | 500K–800K/min | None | Skip | High-throughput inserts without callbacks |\n| `JdbcClient.batchUpdate` | 1M–2M/min | None | Skip | Pure data ingest, no ORM needed |\n| Postgres `COPY` | 10M+/min | None | Skip | Migrations, ETL, seed loads |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "The Pitfalls That Quietly Kill Batch Performance",
+            "content": "**When tuning helps:**\n- **Throughput jumps 10–50×** as soon as `batch_size`, `order_inserts`, and SEQUENCE IDs are aligned.\n- **Heap stays flat** because `flush + clear` evicts entities each chunk.\n- **Connection usage stays predictable** — one transaction, one connection, batched round-trips.\n\n**When tuning hurts:**\n- **`@DynamicUpdate` on hot entities** bypasses the prepared-statement cache and slows down high-frequency UPDATEs.\n- **Oversized `batch_size`** (e.g., 10000) saturates the network buffer without improving throughput; sweet spot is 20–100.\n- **Aggressive parallel workers** can deadlock on the same hot rows; serialize or partition by key.\n\n**Pitfalls to watch for:**\n- **`@GeneratedValue(IDENTITY)`** silently disables batching — switch to SEQUENCE.\n- **Bidirectional `@OneToMany` with cascade** fires extra SQL per child; persist children explicitly or denormalize.\n- **Second-level cache during import** — disable via `em.setProperty(QueryHints.HINT_CACHE_STOREMODE, CacheStoreMode.BYPASS)`.\n- **Indexes on huge initial loads** — drop non-essential indexes, load, recreate; bulk index build is far faster.\n- **Transaction sizing** — per-row commit is wasted overhead; one transaction per million rows produces WAL pressure and rollback risk; sweet spot is **10K–50K rows per commit**.\n- **`@Version` columns** force `WHERE version = ?` on every UPDATE; keep `batch_versioned_data: true` enabled.\n- **Lazy relationships triggered mid-batch** fire ad-hoc queries; use `StatelessSession` or fetch only the columns needed.\n- **Auto-flush at query time** can drain the action queue prematurely — set `FlushModeType.COMMIT` in batch loops.\n- **Memory pressure** — stream the source instead of holding all DTOs in memory; smaller batches (10–20) help on tight heaps.\n- **No observability** — emit a `rows.imported` counter and log progress every chunk; alert when throughput drops."
+          },
+          {
+            "type": "code_example",
+            "title": "Production Bulk-Import Template with Per-Row Error Handling",
+            "content": "A reusable service that combines `StatelessSession`, chunked commits, dead-letter handling, and progress metrics.\n\n```java\n@Service\npublic class BulkImportService {\n    @Autowired SessionFactory sf;\n    private static final int BATCH = 50;\n\n    public ImportResult importStream(Stream<OrderDto> stream) {\n        AtomicInteger ok = new AtomicInteger();\n        AtomicInteger fail = new AtomicInteger();\n\n        try (StatelessSession s = sf.openStatelessSession()) {\n            Transaction tx = s.beginTransaction();\n            int i = 0;\n            var iter = stream.iterator();\n            while (iter.hasNext()) {\n                var dto = iter.next();\n                try {\n                    s.insert(toEntity(dto));\n                    if (++i % BATCH == 0) {\n                        s.getTransaction().commit();\n                        tx = s.beginTransaction();\n                    }\n                    ok.incrementAndGet();\n                } catch (Exception e) {\n                    fail.incrementAndGet();\n                    log.warn(\"import fail: {}\", dto, e);\n                }\n            }\n            tx.commit();\n        }\n        return new ImportResult(ok.get(), fail.get());\n    }\n}\n```\n\nProduction additions to layer on top:\n- **Dead-letter table** capturing failed rows with the original payload and exception message.\n- **Idempotency** via `INSERT ... ON CONFLICT DO NOTHING` (Postgres) or a unique constraint that lets reruns skip already-loaded rows.\n- **Checkpointing** — persist the last successful offset so a restart resumes mid-file.\n- **Spring Batch** for complex pipelines that need restart, retry, skip policies, and parallel step execution."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Naive save-in-a-loop** sends one SQL per row — switch to batch config plus flush/clear.\n- **`hibernate.jdbc.batch_size=50` + `order_inserts` + `order_updates`** is the minimum viable tuning.\n- **`@GeneratedValue(SEQUENCE)`** with `allocationSize` matching batch size; IDENTITY blocks batching entirely.\n- **`em.flush(); em.clear()`** every batch prevents first-level cache OOM and O(N²) dirty checks.\n- **Bulk JPQL `@Modifying`** issues one SQL but skips cascades, callbacks, and versioning.\n- **`StatelessSession`** bypasses the persistence context — roughly 2× faster than tuned JPA batch.\n- **`JdbcClient.batchUpdate`** is 5–10× faster than JPA batch for pure data ingest.\n- **Postgres `COPY`** can load 10M+ rows/minute when domain logic is not required."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Default Hibernate sends one SQL per `persist` or `merge`, which is catastrophic for large batches. The fix is to tune the JDBC batch settings, change the ID generator, and clear the persistence context periodically.\n\n**Why naive save-in-a-loop fails:**\n- One round-trip per save — 1M rows is 1M SQL statements over the wire\n- First-level cache grows unboundedly — multi-GB heap, then OOM\n- Dirty checking at flush time is O(N²) over the managed set\n- `@GeneratedValue(IDENTITY)` disables JDBC batching because Hibernate must read each ID first\n\n**Tuning JPA batch:**\n- `hibernate.jdbc.batch_size: 50` plus `order_inserts: true` and `order_updates: true`\n- Switch to `@GeneratedValue(SEQUENCE)` with `allocationSize` matching batch size\n- Loop with `em.persist(...)`, then `em.flush(); em.clear()` every 50 rows\n- For UPDATE/DELETE on millions of rows, use `@Modifying @Query` for one-SQL bulk DML\n\n**When to bypass JPA:**\n- `StatelessSession` — no persistence context, no dirty checking; roughly 2× faster\n- `JdbcClient.batchUpdate` (Spring 6.1+) — 5–10× faster, fluent API, no ORM overhead\n- Postgres `COPY` via `CopyManager` — 10M+ rows per minute for migrations and ETL\n\n**Production guard rails:**\n- Commit every 10K–50K rows — balance atomicity against WAL pressure\n- Disable second-level cache during imports (`CacheStoreMode.BYPASS`)\n- Drop non-essential indexes for one-off migrations and recreate after\n- Make the job idempotent with unique constraints or `ON CONFLICT DO NOTHING`\n- Emit `rows.imported` and `rows.failed` metrics; alert when throughput drops"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why does `@GeneratedValue(IDENTITY)` prevent Hibernate batching, and what changes with SEQUENCE?",
+        "When would you choose `StatelessSession` over `JdbcClient.batchUpdate` over Postgres `COPY`?",
+        "How do you design a restartable, resumable batch import that survives partial failures?",
+        "What is the right transaction size for bulk imports — and why is one giant transaction wrong?"
+      ],
+      "seo": {
+        "metaTitle": "JPA Hibernate Batch Processing — StatelessSession, JdbcClient, COPY",
+        "metaDescription": "Tune Hibernate batch inserts/updates, switch IDs to SEQUENCE, flush + clear the persistence context, and drop to StatelessSession, JdbcClient, or Postgres COPY for extreme volumes."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Default Hibernate sends one SQL per persist or merge, which is catastrophic for large batches.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The textbook beginner code — for (var dto : million) repo.save(toEntity(dto)); — looks innocent and is catastrophically slow in production. Every save triggers a round-trip: 1 million rows means 1 million SQL statements and 1 million network hops. Even on localhost the loop takes 10–30 minutes; over a managed cloud database it can run for hours. The failure mode compounds. Hibernate's first-level cache retains every persisted entity in the persistence context, so memory grows linearly with the batch. Dirty checking at each flush iterates the entire managed set, turning a."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Required application.yml: ``yaml spring: jpa: properties: hibernate: jdbc.batch_size: 50 order_inserts: true order_updates: true batch_versioned_data: true ` Why each flag matters: batch_size: 50 — instructs the JDBC driver to group statements into batched round-trips.",
+              "order_inserts: true — reorders pending INSERTs so same-table rows are contiguous; cross-table interleaving breaks batches.",
+              "order_updates: true — same for UPDATEs.",
+              "batch_versioned_data: true — required for batching when entities use @Version (optimistic locking).",
+              "Entity mapping must use SEQUENCE, not IDENTITY: `java @Entity @Table(name = \"orders\") public class Order { @Id @GeneratedValue(strategy = SEQUENCE, generator = \"order_seq\") @SequenceGenerator(name = \"order_seq\", sequenceName = \"order_seq\", allocationSize = 50) private Long id; } ` Why SEQUENCE wins: allocationSize = 50 matches batch_size, so Hibernate pre-allocates a block of IDs in one round-trip.",
+              "IDENTITY forces Hibernate to read each generated key after every INSERT — batching is impossible."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Naive save-in-a-loop sends one SQL per row — switch to batch config plus flush/clear",
+              "batch_size=50 + order_inserts + order_updates is the minimum viable tuning",
+              "@GeneratedValue(SEQUENCE) with allocationSize matching batch size; IDENTITY blocks batching entirely",
+              "flush(); em",
+              "clear() every batch prevents first-level cache OOM and O(N²) dirty checks"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Calling repository.save() in a loop, leaving @GeneratedValue(strategy = IDENTITY) (which silently disables JDBC batching), and never clearing the EntityManager — producing both linear network round-trips and unbounded heap growth"
+          }
+        ],
+        "cap": "Why naive save-in-a-loop fails: One round-trip per save — 1M rows is 1M SQL statements over the wire First-level cache grows unboundedly — multi-GB heap, then OOM Dirty checking at flush time is O(N²)",
+        "familiarity_anchors": [
+          "Default",
+          "Hibernate",
+          "Enable"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why does `@GeneratedValue(IDENTITY)` prevent Hibernate batching, and what changes with SEQUENCE?",
+          "When would you choose `StatelessSession` over `JdbcClient.batchUpdate` over Postgres `COPY`?",
+          "How do you design a restartable, resumable batch import that survives partial failures?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    }
+  ]
+}

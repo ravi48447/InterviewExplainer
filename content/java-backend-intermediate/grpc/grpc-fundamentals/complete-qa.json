@@ -1,0 +1,1056 @@
+{
+  "topic": "Grpc Basics",
+  "topicSlug": "grpc-basics",
+  "questions": [
+    {
+      "id": "grpc-003",
+      "slug": "grpc-service-types-java",
+      "question": "What are the four gRPC service types and when do you use each?",
+      "title": "gRPC Service Types — Unary, Server Streaming, Client Streaming, Bidirectional",
+      "direct_answer": "**gRPC** supports four RPC patterns: **unary** (one request, one response — like a normal function call), **server streaming** (one request, stream of responses — e.g. live updates), **client streaming** (stream of requests, one response — e.g. file upload), and **bidirectional** **streaming** (both sides stream concurrently — e.g. chat or real-time trading feeds). All four are expressed in the `.proto` file using the `stream` keyword.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you know the four RPC shapes (unary, server-streaming, client-streaming, bidirectional), can map each to a real use case, and can write both the `.proto` declaration and the Java `StreamObserver` wiring for any of them.",
+        "common_mistake": "Using unary for everything and polling for updates, when server-streaming is the natural fit. Or writing a bidirectional RPC and never calling `onCompleted()` on the server side, leaving the client's stream open forever.",
+        "to_stand_out": "Discuss cancellation via `Context.current().isCancelled()`, back-pressure in client-streaming, flow control via `CallStreamObserver.setOnReadyHandler`, and when gRPC bidirectional streaming displaces WebSocket for service-to-service real-time."
+      },
+      "company_tags": [
+        "Google",
+        "Uber",
+        "Twitch",
+        "Bloomberg",
+        "Netflix",
+        "Square"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Request-Response Isn't Enough — The Problem That Created Streaming RPCs",
+            "content": "REST APIs give you one pattern: send a request, wait for a response.\n- When your order-tracking UI needs live updates, you poll every 2 seconds — 30 requests per minute per user, most returning \"no change.\" When your IoT gateway receives 10,000 sensor readings per second, each one becomes a separate HTTP request with full headers, TLS handshake overhead, and connection setup.\n- The request-response model wasn't designed for continuous data flow.\n\ngRPC solves this with four RPC patterns built on HTTP/2's native stream support.\n- The `stream` keyword in your `.proto` file controls the direction of data flow.\n- No `stream` keyword means unary — one request, one response.\n- Add `stream` to the response and the server can push multiple messages on a single connection.\n- Add it to the request and the client streams data to the server.\n- Add it to both and you get a full-duplex channel.\n\nThe design insight is that all four patterns share the same connection.\n- HTTP/2 multiplexes streams over a single TCP connection, so a server-streaming RPC and a unary RPC to the same service share one connection — no additional TCP setup.\n- In Java, all four patterns map to the same abstraction: `StreamObserver<T>`.\n- Unary and server-streaming methods receive a `StreamObserver<Response>` to push results.\n- Client-streaming and bidirectional methods return a `StreamObserver<Request>` that the framework writes incoming messages to.\n- The difference is how many times you call `onNext()` and from which side."
+          },
+          {
+            "type": "step",
+            "title": "Unary and Server Streaming — The Patterns You'll Use 90% of the Time",
+            "content": "**Unary** is the bread and butter — one request, one response, analogous to a REST GET or POST. Use it for CRUD operations, lookups, and any interaction where the client expects a single answer. In Java, it looks identical to a normal method call wrapped in `StreamObserver`.\n\n**Server streaming** is where gRPC first differentiates from REST. The client sends one request and the server pushes back a stream of responses — the server calls `onNext()` multiple times before calling `onCompleted()`. This is the pattern for live order tracking, log tailing, streaming query results, or pushing price updates to a trading UI.\n\n```java\n// Proto: rpc ListUpdates (OrderRequest) returns (stream OrderEvent);\n@Override\npublic void listUpdates(OrderRequest req,\n                        StreamObserver<OrderEvent> responseObserver) {\n  for (OrderEvent event : eventStore.getEvents(req.getOrderId())) {\n    if (Context.current().isCancelled()) {\n      responseObserver.onError(Status.CANCELLED.asRuntimeException());\n      return;                         // stop if client disconnected\n    }\n    responseObserver.onNext(event);   // push each event to the client\n  }\n  responseObserver.onCompleted();     // signal end of stream\n}\n```\n\nThe critical detail is cancellation checking inside the loop. Without `Context.current().isCancelled()`, a disconnected client's stream keeps producing events that nobody receives — wasting CPU and potentially holding database cursors open."
+          },
+          {
+            "type": "step",
+            "title": "Client Streaming and Bidirectional — When Both Sides Need to Push Data",
+            "content": "**Client streaming** flips the direction: the client sends a sequence of messages and gets one response after the server has received everything. The canonical use case is chunked file uploads — the client streams file chunks, and the server returns an upload summary after processing them all. In Java, the method returns a `StreamObserver<Request>` instead of receiving one.\n\n**Bidirectional streaming** opens a full-duplex channel where both sides send messages independently — neither waits for the other. Chat applications, real-time collaborative editing, and trading feeds with acknowledgments all use this pattern.\n\n```java\n// Proto: rpc Chat (stream ChatMessage) returns (stream ChatMessage);\n@Override\npublic StreamObserver<ChatMessage> chat(\n    StreamObserver<ChatMessage> responseObserver) {\n  return new StreamObserver<>() {\n    @Override\n    public void onNext(ChatMessage msg) {\n      // Process incoming message and push a response\n      responseObserver.onNext(ChatMessage.newBuilder()\n          .setContent(\"Echo: \" + msg.getContent()).build());\n    }\n    @Override\n    public void onError(Throwable t) {\n      responseObserver.onError(t);    // propagate error to client\n    }\n    @Override\n    public void onCompleted() {\n      responseObserver.onCompleted(); // close when client closes\n    }\n  };\n}\n```\n\nThe lifecycle management trap is that both `onError()` and `onCompleted()` are terminal — calling either one after the other throws `IllegalStateException`. In streaming RPCs, always handle `onError()` from the peer gracefully. If the client disconnects unexpectedly, the server's `onError()` callback fires — use it to clean up resources like open database connections or pending timers."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Four gRPC Service Types — Data Flow",
+            "diagram_format": "mermaid",
+            "content": "```mermaid\nflowchart LR\n    subgraph Unary[\"Unary RPC\"]\n        uc[\"Client\"] -->|\"1 Request\"| us[\"Server\"]\n        us -->|\"1 Response\"| uc\n    end\n\n    subgraph ServerStream[\"Server-Streaming RPC\"]\n        sc[\"Client\"] -->|\"1 Request\"| ss[\"Server\"]\n        ss -->|\"Response 1\"| sc\n        ss -->|\"Response 2\"| sc\n        ss -->|\"Response N\"| sc\n        ss -->|\"onCompleted()\"| sc\n    end\n\n    subgraph ClientStream[\"Client-Streaming RPC\"]\n        cc[\"Client\"] -->|\"Request 1\"| cs[\"Server\"]\n        cc -->|\"Request 2\"| cs\n        cc -->|\"Request N\"| cs\n        cc -->|\"onCompleted()\"| cs\n        cs -->|\"1 Response\"| cc\n    end\n\n    subgraph BiDi[\"Bidirectional-Streaming RPC\"]\n        bc[\"Client\"] -->|\"Request A\"| bs[\"Server\"]\n        bs -->|\"Response 1\"| bc\n        bc -->|\"Request B\"| bs\n        bs -->|\"Response 2\"| bc\n        bc -->|\"Request C\"| bs\n        bs -->|\"Response 3\"| bc\n        bc -->|\"onCompleted()\"| bs\n        bs -->|\"onCompleted()\"| bc\n    end\n```"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Bidirectional Streaming — Lifecycle Sequence",
+            "diagram_format": "mermaid",
+            "content": "```mermaid\nsequenceDiagram\n    autonumber\n    participant Client\n    participant Stub as Client Stub\n    participant Net as HTTP/2 Stream\n    participant Srv as Server Handler\n    participant App as Application\n\n    Client ->> Stub: stub.chat(responseObserver)\n    Stub ->> Net: HEADERS (path = /Chat/chat, :method=POST)\n    Net ->> Srv: open stream, invoke handler\n    Srv ->> App: chat(responseObserver) returns StreamObserver<req>\n\n    par Client sends\n        Client ->> Stub: reqObserver.onNext(msgA)\n        Stub ->> Net: DATA frame\n        Net ->> Srv: deliver msgA to App\n    and Server pushes\n        App ->> Srv: responseObserver.onNext(replyA)\n        Srv ->> Net: DATA frame\n        Net ->> Stub: deliver replyA\n        Stub ->> Client: responseObserver.onNext(replyA)\n    end\n\n    par More concurrent messages\n        Client ->> Stub: reqObserver.onNext(msgB)\n        Stub ->> Net: DATA\n        Net ->> Srv: deliver msgB\n    and\n        App ->> Srv: responseObserver.onNext(replyB)\n        Srv ->> Net: DATA\n        Net ->> Stub: deliver replyB\n    end\n\n    Note over Client,App: Either side may stop first.\n    Calling onError() or onCompleted() is terminal on that direction.\n\n    Client ->> Stub: reqObserver.onCompleted()\n    Stub ->> Net: END_STREAM on request side\n    Net ->> Srv: onCompleted on server request observer\n    App ->> Srv: responseObserver.onCompleted()\n    Srv ->> Net: TRAILERS (grpc-status=0)\n    Net ->> Stub: close response stream\n    Stub ->> Client: responseObserver.onCompleted()\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`stream` keyword controls direction** — no `stream` = unary, `stream` on response = server streaming, `stream` on request = client streaming, both =.\n- **Server streaming replaces polling** — push updates on a single connection instead of clients polling every 2 seconds.\n- **`StreamObserver` is the universal abstraction** — unary receives it, streaming returns it.\n- **`onError()` and `onCompleted()` are terminal** — calling either one after the other throws `IllegalStateException`.\n- **Start with unary, add streaming when justified** — streaming adds lifecycle complexity."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "gRPC gives you four RPC patterns built on HTTP/2 streaming, and the `stream` keyword in the `.proto` file controls which one you get. Each pattern suits different communication needs.\n\n**Unary — the default for most calls:**\n- One request, one response — exactly like REST; use it for 90% of service calls including lookups, CRUD operations, and anything request-response\n- The simplest lifecycle: call the method, get a result, done; no streaming complexity or cancellation management required\n\n**Server streaming — replacing polling:**\n- The client sends one request and the server pushes a stream of responses — live order tracking, log tailing, streaming large query results\n- Instead of clients polling every 2 seconds with full request overhead each time, the server pushes updates on a single connection at any rate; the single connection eliminates repeated TLS and HTTP setup costs\n\n**Client streaming:**\n- The client sends a sequence of messages and gets one response at the end; natural for chunked file uploads and telemetry batching where you send many small pieces and get a summary confirmation\n\n**Bidirectional streaming:**\n- Both sides push independently over a full-duplex channel; chat applications, collaborative editing, and trading feeds with acknowledgments all use this pattern\n- The most complex lifecycle: both sides can send or close at any time, so error handling and cancellation require careful design\n\n**Lifecycle safety rules:**\n- `onError` and `onCompleted` are both terminal on `StreamObserver` — call either twice and you get `IllegalStateException`\n- Always check `Context.current().isCancelled()` in server-streaming loops or you'll keep producing data for disconnected clients\n\nI recommend starting with unary and only adding streaming when polling overhead or per-call latency is a measured problem, not a theoretical one — streaming adds real lifecycle complexity."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle backpressure in a server-streaming gRPC call in Java?",
+        "What happens to an open streaming RPC when the server restarts?",
+        "Can you convert a bidirectional streaming RPC to use reactive streams (Project Reactor or RxJava)?"
+      ],
+      "seo": {
+        "meta_title": "gRPC Service Types Java — Unary, Streaming, Bidirectional",
+        "meta_description": "Understand all four gRPC RPC patterns in Java: unary, server streaming, client streaming, and bidirectional streaming with proto and code examples.",
+        "keywords": [
+          "grpc service types java",
+          "grpc streaming java",
+          "bidirectional streaming grpc",
+          "grpc StreamObserver"
+        ],
+        "metaDescription": "gRPC supports four RPC patterns: unary (one request, one response — like a normal function call), server streaming (one request, stream of responses — e.g.",
+        "metaTitle": "gRPC Service Types — Unary, Server Streaming, Client Streaming"
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "gRPC gives you four RPC patterns built on HTTP/2 streaming, and the stream keyword in the .proto file controls which one you get.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "REST APIs give you one pattern: send a request, wait for a response. When your order-tracking UI needs live updates, you poll every 2 seconds — 30 requests per minute per user, most returning \"no change.\" When your IoT gateway receives 10,000 sensor readings per second, each one becomes a separate HTTP request with full headers, TLS handshake overhead, and connection setup. The request-response model wasn't designed for continuous data flow. gRPC solves this with four RPC patterns built on."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you know the four RPC shapes (unary, server-streaming, client-streaming, bidirectional), can map each to a real use case, and can write both the .proto declaration and the Java StreamObserver wiring for any of them."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "stream keyword controls direction — no stream = unary, stream on response = server streaming, stream on request = client streaming, both =",
+              "Server streaming replaces polling — push updates on a single connection instead of clients polling every 2 seconds",
+              "StreamObserver is the universal abstraction — unary receives it, streaming returns it",
+              "onError() and onCompleted() are terminal — calling either one after the other throws IllegalStateException",
+              "Start with unary, add streaming when justified — streaming adds lifecycle complexity"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "REST APIs give you one pattern: send a request, wait for a response. When your order-tracking UI needs live updates, you poll every 2 seconds — 30 requests per minute per user, most returning \"no change.\" When your IoT gateway receives 10,000 sensor readings per second, each one becomes a separate HTTP request with full headers, TLS handshake overhead, and connection setup. The request-response model wasn't designed for continuous data flow. gRPC solves this with four RPC patterns built on HTTP/2's native stream support. The stream keyword in your .proto file controls the direction of data flow. No stream keyword means unary — one request, one response. Add stream to the response and the server can push multiple messages on."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using unary for everything and polling for updates, when server-streaming is the natural fit",
+              "Or writing a bidirectional RPC and never calling onCompleted() on the server side, leaving the client's stream open forever"
+            ]
+          }
+        ],
+        "cap": "Unary — the default for most calls: One request, one response — exactly like REST; use it for 90% of service calls including lookups, CRUD operations, and anything request-response The simplest lifecy",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle backpressure in a server-streaming gRPC call in Java?",
+          "What happens to an open streaming RPC when the server restarts?",
+          "Can you convert a bidirectional streaming RPC to use reactive streams (Project Reactor or RxJava)?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot gRPC service with Protocol Buffers"
+      }
+    },
+    {
+      "id": "grpc-004",
+      "slug": "grpc-server-spring-boot-setup",
+      "question": "How do you set up a gRPC server in Spring Boot using grpc-spring-boot-starter?",
+      "title": "Setting Up a gRPC Server in Spring Boot",
+      "direct_answer": "Add the `**gRPC**-spring-boot-starter` dependency (by LogNet or net.devh), place your `.proto` files under `src/main/proto`, configure the plugin to generate Java stubs, annotate your service implementation with `@GrpcService`, and configure the port in `application.yml`. Spring Boot auto-configures the gRPC server lifecycle, **interceptor** wiring, and health checks.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Evaluates practical experience integrating gRPC into the Spring Boot ecosystem.",
+        "common_mistake": "Interviewers want to see you know the full setup — dependencies, code generation, annotation, and configuration — not just the theory.",
+        "to_stand_out": "Interviewers want to see you know the full setup — dependencies, code generation, annotation, and configuration — not just the theory."
+      },
+      "company_tags": [
+        "Pivotal",
+        "Salesforce",
+        "SAP",
+        "Deutsche Bank",
+        "Google",
+        "Netflix"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem with Raw gRPC Setup — And Why the Starter Exists",
+            "content": "Setting up a gRPC server without Spring integration means hand-wiring `ServerBuilder`, manually registering services, managing the server lifecycle alongside your application context, and writing your own interceptor plumbing. In a Spring Boot world where `@RestController` auto-registers HTTP endpoints with zero boilerplate, that manual ceremony feels wrong.\n\nThe `grpc-spring-boot-starter` from `net.devh` bridges gRPC's runtime with Spring Boot's conventions.\n- It scans for beans annotated with `@GrpcService`, registers them with a Netty-based gRPC `Server` instance, and starts that server on a configurable port (default 9090) alongside Spring Boot's HTTP server.\n- Your gRPC service implementation is a regular Spring bean — constructor injection, `@Value` properties, `@Transactional` methods all work exactly as you'd expect.\n\nThe architectural consequence is that your application now runs **two servers in one process** — the servlet-based HTTP server on port 8080 and the gRPC server on port 9090.\n- This means two health checks, two sets of TLS certificates if you're doing mTLS, and two port mappings in your Kubernetes service definition.\n- Understanding this dual-server model is the key to avoiding production surprises — from forgotten port mappings to health probes that only check one protocol while the other is unresponsive."
+          },
+          {
+            "type": "step",
+            "title": "Step 1 — Add the Starter and Protobuf Dependencies",
+            "content": "The `grpc-spring-boot-starter` bundles `grpc-netty-shaded` as the transport layer, so you don't need to manage Netty dependencies separately. You still need the `protobuf-java` runtime and the `protobuf-maven-plugin` for code generation from your `.proto` files. The starter version tracks Spring Boot's release cadence, so check the compatibility matrix before upgrading.\n\n```xml\n<dependencies>\n  <dependency>\n    <groupId>net.devh</groupId>\n    <artifactId>grpc-spring-boot-starter</artifactId>\n    <version>2.15.0.RELEASE</version>\n  </dependency>\n  <dependency>\n    <groupId>com.google.protobuf</groupId>\n    <artifactId>protobuf-java</artifactId>\n    <version>3.25.1</version>\n  </dependency>\n</dependencies>\n```\n\nThe production footgun is version compatibility — using Spring Boot 3.2 with a starter built for 2.7 produces cryptic `NoSuchMethodError` exceptions at startup because the starter references Spring APIs that moved between Boot 2 and Boot 3. Always verify the starter version against the project README's compatibility matrix before upgrading Spring Boot."
+          },
+          {
+            "type": "step",
+            "title": "Step 2 — Configure the gRPC Server Port and Properties",
+            "content": "By default, the gRPC server binds to port 9090, separate from Spring's HTTP server on 8080. Override this in `application.yml` along with TLS and keepalive settings.\n\n```yaml\ngrpc:\n  server:\n    port: 9090                    # dedicated gRPC port\n    # security:                   # uncomment for mTLS\n    #   certificate-chain: classpath:server.crt\n    #   private-key: classpath:server.key\n\nspring:\n  application:\n    name: order-service\n```\n\nRunning gRPC on a separate port means your Kubernetes `Service` needs two port definitions, your Ingress or load balancer needs a separate listener for HTTP/2 traffic, and your network policies must allow traffic on both ports. This is the most commonly forgotten step when migrating a REST-only service to dual REST+gRPC — the gRPC port works locally but is unreachable in the cluster because the `Service` manifest only exposes port 8080.\n\nFor tests, always set `grpc.server.port: 0` to get a random available port. Hardcoded test ports cause CI failures when two test suites run in parallel and both try to bind 9090."
+          },
+          {
+            "type": "step",
+            "title": "Step 3 — Annotate Your Service and Optionally Wire a Client",
+            "content": "Mark your service implementation with `@GrpcService` — the starter discovers it at startup and registers it with the gRPC server. The service is a full Spring bean, so you can inject any Spring-managed dependency.\n\n```java\nimport net.devh.boot.grpc.server.service.GrpcService;\nimport io.grpc.stub.StreamObserver;\n\n@GrpcService\npublic class OrderServiceImpl\n    extends OrderServiceGrpc.OrderServiceImplBase {\n\n  private final OrderRepository repository;\n\n  public OrderServiceImpl(OrderRepository repository) {\n    this.repository = repository;  // constructor injection works normally\n  }\n\n  @Override\n  public void getOrder(OrderRequest req,\n                       StreamObserver<OrderReply> obs) {\n    Order order = repository.findById(req.getOrderId())\n        .orElseThrow(() -> Status.NOT_FOUND\n            .withDescription(\"Order not found\")\n            .asRuntimeException());\n    obs.onNext(toProto(order));\n    obs.onCompleted();\n  }\n}\n```\n\nFor the client side, the starter provides `@GrpcClient` to inject managed stubs. Configure the target address in YAML under `grpc.client.<name>.address` and the starter handles channel lifecycle, load balancing, and TLS negotiation.\n\n```yaml\ngrpc:\n  client:\n    order-service:\n      address: static://localhost:9090\n      negotiation-type: plaintext\n```\n\n```java\n@Service\npublic class OrderClient {\n  @GrpcClient(\"order-service\")\n  private OrderServiceGrpc.OrderServiceBlockingStub stub;\n\n  public String getOrder(String id) {\n    return stub.getOrder(OrderRequest.newBuilder()\n        .setOrderId(id).build()).getStatus();\n  }\n}\n```\n\nThe `@GrpcClient` annotation supports three stub types: `BlockingStub` for synchronous calls, `Stub` for async callbacks, and `FutureStub` for `ListenableFuture`-based responses. Use blocking stubs in tests and simple consumers; use async stubs in production services that need to handle concurrent requests without thread-per-call blocking."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Dual-server model** — the app runs HTTP on port 8080 and gRPC on port 9090 simultaneously.\n- **`@GrpcService` = auto-registration** — the starter discovers annotated beans, registers them with the Netty gRPC server, and manages startup/shutdown.\n- **`grpc.server.port: 0` in tests** — always use random ports in test properties to avoid CI failures from parallel test suites binding the same port.\n- **`@GrpcClient` + YAML addresses** — logical service names map to addresses and TLS negotiation per environment without recompiling.\n- **Starter version must match Spring Boot version** — Boot 2.x and 3.x have different Spring APIs."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Setting up a gRPC server in Spring Boot with `grpc-spring-boot-starter` is clean once you understand the dual-server model. Your application runs two servers simultaneously, and both need to be configured correctly.\n\n**The basic setup:**\n- Add `net.devh:grpc-spring-boot-starter` dependency, set `grpc.server.port` in `application.yml` — typically 9090 — and annotate your service implementation with `@GrpcService`\n- The starter handles Netty server startup, service registration, and lifecycle management alongside the Spring context; your service class is a regular Spring bean with full support for constructor injection, `@Transactional`, and configuration properties\n- On the client side, `@GrpcClient` injects a managed stub with a logical service name configured in YAML — addresses can switch from `static://` for dev to `dns://` for production service discovery without recompiling\n\n**The dual-server model — the critical detail:**\n- Your application runs HTTP on port 8080 and gRPC on port 9090; that means two health checks, potentially two TLS certificate sets for mTLS, and two port entries in your Kubernetes Service definition\n- A common deployment mistake: the K8s manifest exposes only port 8080, so gRPC is unreachable in the cluster with no obvious error — the service starts fine but all gRPC clients get connection refused\n\n**Test configuration:**\n- Always set `grpc.server.port: 0` in test properties to use a random port; parallel test suites binding the same port is a frequent CI failure source that's hard to debug\n\nI recommend verifying both ports appear in your Kubernetes Service manifest before the first cluster deployment — and confirming the starter version matches your Spring Boot major version, since Boot 2.x and 3.x have different APIs that cause `NoSuchMethodError` on startup if mismatched."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you enable TLS for the gRPC server in Spring Boot?",
+        "How does grpc-spring-boot-starter integrate with Spring Security?",
+        "What is the difference between blocking stubs, async stubs, and future stubs?"
+      ],
+      "seo": {
+        "meta_title": "gRPC Spring Boot Setup — grpc-spring-boot-starter Guide",
+        "meta_description": "Step-by-step guide to setting up a gRPC server and client in Spring Boot using net.devh grpc-spring-boot-starter with @GrpcService and @GrpcClient.",
+        "keywords": [
+          "grpc spring boot setup",
+          "grpc-spring-boot-starter",
+          "GrpcService annotation",
+          "spring boot grpc server"
+        ],
+        "metaDescription": "Add the grpc-spring-boot-starter dependency (by LogNet or net.devh), place your .proto files under src/main/proto, configure the plugin to generate Java stubs,.",
+        "metaTitle": "Setting Up a gRPC Server in Spring Boot"
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "Setting up a gRPC server in Spring Boot with grpc-spring-boot-starter is clean once you understand the dual-server model.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Setting up a gRPC server without Spring integration means hand-wiring ServerBuilder, manually registering services, managing the server lifecycle alongside your application context, and writing your own interceptor plumbing. In a Spring Boot world where @RestController auto-registers HTTP endpoints with zero boilerplate, that manual ceremony feels wrong. The grpc-spring-boot-starter from net.devh bridges gRPC's runtime with Spring Boot's conventions. It scans for beans annotated with @GrpcService, registers them with a Netty-based gRPC Server instance, and starts that server on a configurable port."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Evaluates practical experience integrating gRPC into the Spring Boot ecosystem."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Dual-server model — the app runs HTTP on port 8080 and gRPC on port 9090 simultaneously",
+              "@GrpcService = auto-registration — the starter discovers annotated beans, registers them with the Netty gRPC server, and manages startup/shutdown",
+              "port: 0 in tests — always use random ports in test properties to avoid CI failures from parallel test suites binding the same port",
+              "@GrpcClient + YAML addresses — logical service names map to addresses and TLS negotiation per environment without recompiling",
+              "Starter version must match Spring Boot version — Boot 2"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Setting up a gRPC server without Spring integration means hand-wiring ServerBuilder, manually registering services, managing the server lifecycle alongside your application context, and writing your own interceptor plumbing. In a Spring Boot world where @RestController auto-registers HTTP endpoints with zero boilerplate, that manual ceremony feels wrong. The grpc-spring-boot-starter from net.devh bridges gRPC's runtime with Spring Boot's conventions. It scans for beans annotated with @GrpcService, registers them with a Netty-based gRPC Server instance, and starts that server on a configurable port (default 9090) alongside Spring Boot's HTTP server. Your gRPC service implementation is a regular Spring bean — constructor injection, @Value properties, @Transactional methods all work exactly as you'd expect. The architectural consequence is that your application now runs two servers."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Interviewers want to see you know the full setup",
+              "dependencies, code generation, annotation, and configuration",
+              "not just the theory"
+            ]
+          }
+        ],
+        "cap": "The basic setup: Add net.devh:grpc-spring-boot-starter dependency, set grpc.server.port in application.yml — typically 9090 — and annotate your service implementation with @GrpcService The starter han",
+        "familiarity_anchors": [
+          "LogNet",
+          "GrpcService",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you enable TLS for the gRPC server in Spring Boot?",
+          "How does grpc-spring-boot-starter integrate with Spring Security?",
+          "What is the difference between blocking stubs, async stubs, and future stubs?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot gRPC service with Protocol Buffers"
+      }
+    },
+    {
+      "id": "grpc-005",
+      "slug": "grpc-interceptors-auth-logging",
+      "question": "How do you implement gRPC interceptors for authentication and logging in Spring Boot?",
+      "title": "gRPC Interceptors for Auth and Logging",
+      "direct_answer": "Implement `ServerInterceptor` (or `ClientInterceptor`) and register it with `@GrpcGlobalServerInterceptor` or per-service via `@GrpcService(interceptors = ...)`. Inside the **interceptor**, access the `Metadata` (headers) for tokens, call `Context` for propagating values, and delegate to the next handler or abort with a `Status.UNAUTHENTICATED` error.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Tests cross-cutting concern design in gRPC — equivalent to Servlet filters or Spring AOP.",
+        "common_mistake": "Interviewers want to see you can centralise auth and observability without cluttering service logic.",
+        "to_stand_out": "Interviewers want to see you can centralise auth and observability without cluttering service logic."
+      },
+      "company_tags": [
+        "Netflix",
+        "Stripe",
+        "Lyft",
+        "Coinbase",
+        "Google",
+        "Square"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Cross-Cutting Concerns Can't Live in Service Methods",
+            "content": "Imagine adding JWT validation to a gRPC service with 15 RPC methods.\n- Without interceptors, every method starts with the same 10 lines — extract the token from metadata, validate it, check roles, abort if invalid.\n- When the auth logic changes (new token format, different header name, additional claims check), you update 15 methods.\n- Miss one, and that endpoint is unauthenticated in production.\n\ngRPC interceptors solve this the same way servlet filters solve it for HTTP — they wrap every RPC call in a chain that executes before and after the service method.\n- A `ServerInterceptor` receives three things: the `ServerCall` (representing the RPC), the `Metadata` (gRPC's equivalent of HTTP headers), and a `ServerCallHandler` (the next interceptor or the service itself).\n- The interceptor can inspect headers, reject the call entirely, modify the request, or attach values to the `Context` for downstream use.\n\nThe `grpc-spring-boot-starter` makes registration trivial: annotate an interceptor bean with `@GrpcGlobalServerInterceptor` to apply it to every service, or pass specific interceptor classes to `@GrpcService(interceptors = ...)` for per-service scoping.\n- The critical difference from Spring's `SecurityContextHolder` is context propagation — gRPC uses explicit `Context` objects instead of `ThreadLocal`, which is essential because streaming RPCs can process messages across different threads.\n- Using `ThreadLocal` for auth state in gRPC silently breaks the moment you handle a streaming call."
+          },
+          {
+            "type": "step",
+            "title": "Step 1 — Build a Logging Interceptor That Captures Entry and Exit",
+            "content": "The logging interceptor wraps the `ServerCall` using `ForwardingServerCall` to capture the status code when the call closes. This gives you structured request-response logging — method name at entry, status code at exit — without touching any service method.\n\n```java\nimport io.grpc.*;\nimport net.devh.boot.grpc.server.interceptor.GrpcGlobalServerInterceptor;\nimport org.slf4j.Logger;\nimport org.slf4j.LoggerFactory;\n\n@GrpcGlobalServerInterceptor\npublic class LoggingInterceptor implements ServerInterceptor {\n\n  private static final Logger log =\n      LoggerFactory.getLogger(LoggingInterceptor.class);\n\n  @Override\n  public <Req, Resp> ServerCall.Listener<Req> interceptCall(\n      ServerCall<Req, Resp> call, Metadata headers,\n      ServerCallHandler<Req, Resp> next) {\n\n    String method = call.getMethodDescriptor().getFullMethodName();\n    long start = System.nanoTime();\n    log.info(\"gRPC call started: {}\", method);\n\n    ServerCall<Req, Resp> wrapped =\n        new ForwardingServerCall.SimpleForwardingServerCall<>(call) {\n          @Override\n          public void close(Status status, Metadata trailers) {\n            long elapsed = (System.nanoTime() - start) / 1_000_000;\n            log.info(\"gRPC call completed: {} status={} time={}ms\",\n                method, status.getCode(), elapsed);\n            super.close(status, trailers);\n          }\n        };\n    return next.startCall(wrapped, headers);\n  }\n}\n```\n\nThe `ForwardingServerCall` pattern is important — it delegates all methods to the original call and only overrides `close()`. This avoids accidentally breaking flow control, cancellation, or message delivery by intercepting methods you didn't intend to."
+          },
+          {
+            "type": "step",
+            "title": "Step 2 — Build an Auth Interceptor That Validates JWT and Propagates Identity",
+            "content": "The auth interceptor reads the `Authorization` header from `Metadata`, validates the JWT, and either rejects the call immediately with `Status.UNAUTHENTICATED` or attaches the validated principal to a `Context.Key`. The `Context` mechanism is gRPC's way of propagating request-scoped values without thread-local state.\n\n```java\n@GrpcGlobalServerInterceptor\npublic class AuthInterceptor implements ServerInterceptor {\n\n  static final Metadata.Key<String> AUTH_HEADER =\n      Metadata.Key.of(\"authorization\", Metadata.ASCII_STRING_MARSHALLER);\n  static final Context.Key<String> USER_CTX = Context.key(\"user\");\n\n  private final JwtDecoder jwtDecoder;\n\n  public AuthInterceptor(JwtDecoder jwtDecoder) {\n    this.jwtDecoder = jwtDecoder;\n  }\n\n  @Override\n  public <Req, Resp> ServerCall.Listener<Req> interceptCall(\n      ServerCall<Req, Resp> call, Metadata headers,\n      ServerCallHandler<Req, Resp> next) {\n\n    String token = headers.get(AUTH_HEADER);\n    if (token == null || !token.startsWith(\"Bearer \")) {\n      call.close(Status.UNAUTHENTICATED\n          .withDescription(\"Missing Bearer token\"), new Metadata());\n      return new ServerCall.Listener<>() {};  // no-op — service never executes\n    }\n\n    try {\n      String userId = jwtDecoder.decode(token.substring(7)).getSubject();\n      Context ctx = Context.current().withValue(USER_CTX, userId);\n      return Contexts.interceptCall(ctx, call, headers, next);\n    } catch (Exception e) {\n      call.close(Status.UNAUTHENTICATED\n          .withDescription(\"Invalid token\"), new Metadata());\n      return new ServerCall.Listener<>() {};\n    }\n  }\n}\n```\n\nTwo critical details: the no-op `ServerCall.Listener` after closing the call prevents the service method from executing. And `Contexts.interceptCall()` attaches the `Context` to the call so that streaming message handlers — which may run on different threads — still see the authenticated user via `USER_CTX.get()`. If you used `ThreadLocal` instead, the value would be visible on the interceptor thread but invisible in the `StreamObserver.onNext()` callback thread."
+          },
+          {
+            "type": "step",
+            "title": "Step 3 — Access the Authenticated User in Service Methods",
+            "content": "Inside any `@GrpcService` method, retrieve the authenticated user from the `Context` without any dependency on the auth mechanism.\n\n```java\n@GrpcService\npublic class OrderServiceImpl\n    extends OrderServiceGrpc.OrderServiceImplBase {\n\n  @Override\n  public void getOrder(OrderRequest req,\n                       StreamObserver<OrderReply> obs) {\n    String userId = AuthInterceptor.USER_CTX.get();\n    // userId is available regardless of which thread handles this call\n    Order order = repository.findByIdAndOwner(\n        req.getOrderId(), userId);\n    if (order == null) {\n      obs.onError(Status.NOT_FOUND\n          .withDescription(\"Order not found\").asRuntimeException());\n      return;\n    }\n    obs.onNext(toProto(order));\n    obs.onCompleted();\n  }\n}\n```\n\nThe service has no knowledge of JWT parsing, `Metadata` keys, or the interceptor implementation. It only knows about the `Context.Key` — a clean separation that lets you swap JWT for mTLS or API keys by changing the interceptor alone. The `Context.Key` acts as the interface contract between auth infrastructure and business logic, not unlike Spring Security's `SecurityContextHolder` — but explicitly propagated through gRPC's threading model instead of relying on `ThreadLocal`."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`Context.Key` over `ThreadLocal`** — gRPC streaming RPCs process messages across threads.\n- **No-op `ServerCall.Listener` after rejection** — return `new ServerCall.Listener<>() {}` after calling `call.close(UNAUTHENTICATED)` to prevent the.\n- **`@GrpcGlobalServerInterceptor` vs per-service** — global applies to all services automatically.\n- **`ForwardingServerCall` for wrapping** — override only the methods you need (typically `close()` for logging).\n- **Interceptor ordering matters** — auth should run before logging so rejected calls still get logged."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Interceptors are gRPC's equivalent of servlet filters — they wrap every RPC call so you can centralize logging, authentication, and metrics without touching service methods. Implement `ServerInterceptor`, annotate with `@GrpcGlobalServerInterceptor`, and the starter applies it to every service automatically.\n\n**Logging interceptor:**\n- Wrap the `ServerCall` with `ForwardingServerCall` to capture the method name at entry and the status code at exit; override only the methods you need — typically `close()` for response logging — and delegate everything else to avoid breaking flow control or cancellation propagation\n- This gives structured request-response logs without modifying any service code\n\n**Auth interceptor:**\n- Read the `Authorization` header from gRPC's `Metadata`, validate the JWT, and either close the call with `Status.UNAUTHENTICATED` or attach the principal to a `Context.Key` using `Contexts.interceptCall()`\n- Return a no-op `new ServerCall.Listener<>() {}` after calling `call.close()` to prevent the service method from executing on rejected calls — without this, the service still runs after rejection\n\n**The context propagation model — the most important detail:**\n- Unlike Spring Security's `SecurityContextHolder` which uses `ThreadLocal`, gRPC's `Context` is explicitly propagated through `Contexts.interceptCall()`\n- If you use `ThreadLocal` for auth state, it works fine for unary calls but silently breaks on streaming RPCs where message handlers run on different threads — `Context.Key` propagates correctly across all gRPC execution models\n\nI recommend always using `Context.Key` for anything request-scoped in gRPC, and setting `@Order` on interceptors so auth runs before logging — rejected calls should still appear in access logs."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you apply an interceptor to only one specific gRPC service?",
+        "How do you integrate gRPC interceptors with Spring Security's SecurityContextHolder?",
+        "How do you propagate OpenTelemetry trace context through gRPC interceptors?"
+      ],
+      "seo": {
+        "meta_title": "gRPC Interceptors Spring Boot — Auth and Logging",
+        "meta_description": "Learn how to implement gRPC server interceptors in Spring Boot for JWT authentication, logging, and context propagation using grpc-spring-boot-starter.",
+        "keywords": [
+          "grpc interceptor spring boot",
+          "grpc authentication java",
+          "grpc server interceptor",
+          "grpc logging interceptor"
+        ],
+        "metaDescription": "Implement ServerInterceptor (or ClientInterceptor) and register it with @GrpcGlobalServerInterceptor or per-service via @GrpcService(interceptors = ...).",
+        "metaTitle": "gRPC Interceptors for Auth and Logging"
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "Interceptors are gRPC's equivalent of servlet filters — they wrap every RPC call so you can centralize logging, authentication, and metrics without touching service methods.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Imagine adding JWT validation to a gRPC service with 15 RPC methods. Without interceptors, every method starts with the same 10 lines — extract the token from metadata, validate it, check roles, abort if invalid. When the auth logic changes (new token format, different header name, additional claims check), you update 15 methods. Miss one, and that endpoint is unauthenticated in production. gRPC interceptors solve this the same way servlet filters solve it for HTTP — they wrap every RPC."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Tests cross-cutting concern design in gRPC — equivalent to Servlet filters or Spring AOP."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Key over ThreadLocal — gRPC streaming RPCs process messages across threads",
+              "No-op ServerCall",
+              "Listener after rejection — return new ServerCall",
+              "Listener<>() {} after calling call",
+              "close(UNAUTHENTICATED) to prevent the"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Imagine adding JWT validation to a gRPC service with 15 RPC methods. Without interceptors, every method starts with the same 10 lines — extract the token from metadata, validate it, check roles, abort if invalid. When the auth logic changes (new token format, different header name, additional claims check), you update 15 methods. Miss one, and that endpoint is unauthenticated in production. gRPC interceptors solve this the same way servlet filters solve it for HTTP — they wrap every RPC call in a chain that executes before and after the service method. A ServerInterceptor receives three things: the ServerCall (representing the RPC), the Metadata (gRPC's equivalent of HTTP headers), and a ServerCallHandler (the next interceptor or the service itself). The."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Interviewers want to see you can centralise auth and observability without cluttering service logic"
+            ]
+          }
+        ],
+        "cap": "Logging interceptor: Wrap the ServerCall with ForwardingServerCall to capture the method name at entry and the status code at exit; override only the methods you need — typically close() for response",
+        "familiarity_anchors": [
+          "Implement",
+          "ServerInterceptor",
+          "ClientInterceptor"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you apply an interceptor to only one specific gRPC service?",
+          "How do you integrate gRPC interceptors with Spring Security's SecurityContextHolder?",
+          "How do you propagate OpenTelemetry trace context through gRPC interceptors?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot gRPC service with Protocol Buffers"
+      }
+    },
+    {
+      "id": "grpc-006",
+      "slug": "grpc-error-handling-status-codes",
+      "question": "How does gRPC error handling work and what are the key Status codes?",
+      "title": "gRPC Error Handling with Status Codes",
+      "direct_answer": "**gRPC** uses a well-defined set of `Status` codes (0–16) instead of HTTP status codes. The server signals errors by calling `responseObserver.onError(StatusRuntimeException)` or by closing the call with a non-OK `Status`. The client receives a `StatusRuntimeException` that it can catch and inspect. You should always map your domain exceptions to meaningful gRPC status codes rather than letting raw Java exceptions propagate.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Checks that you understand gRPC's error model rather than assuming it works like HTTP.",
+        "common_mistake": "Interviewers want to see you can communicate rich error information to clients and handle errors gracefully.",
+        "to_stand_out": "Interviewers want to see you can communicate rich error information to clients and handle errors gracefully."
+      },
+      "company_tags": [
+        "Google",
+        "Lyft",
+        "Stripe",
+        "Spotify",
+        "Netflix",
+        "Square"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "gRPC Has Its Own Error Language — And It's Not HTTP Status Codes",
+            "content": "The most common mistake developers make when starting with gRPC is assuming errors work like REST.\n- In REST, a 404 means \"not found,\" a 401 means \"unauthenticated,\" and your HTTP client framework parses these automatically. gRPC runs over HTTP/2, but it **does not use HTTP status codes for application errors**.\n- Every gRPC call returns HTTP 200 at the transport layer — even failures.\n- The actual result lives in the `grpc-status` and `grpc-message` trailers appended to the HTTP/2 response.\n\ngRPC defines 17 canonical status codes (0 through 16), each with precise semantics. `OK`\n- means success. `NOT_FOUND`.\n- means the requested entity doesn't exist. `INVALID_ARGUMENT`.\n- means the client sent bad input. `UNAVAILABLE`.\n- means the service is temporarily down — **safe to retry**. `INTERNAL`.\n- means an unexpected server error — retrying won't help.\n\nThe distinction between `UNAVAILABLE` and `INTERNAL` is critical for production clients.\n- Client retry logic branches on the status code — `UNAVAILABLE` triggers exponential backoff retries, while `INTERNAL` surfaces the error to the caller immediately.\n- If your server returns `INTERNAL` for a transient database connection timeout instead of `UNAVAILABLE`, clients won't retry and users see errors that would have resolved on the next attempt.\n\nIn Java, servers signal errors by calling `responseObserver.onError()` with a `StatusRuntimeException`.\n- Clients catch `StatusRuntimeException` and inspect `getStatus().getCode()`.\n- The pattern is clean, but the trap is letting raw Java exceptions (NPE, IllegalState) propagate — gRPC wraps them as `UNKNOWN` with the exception message as the description, potentially leaking internal class names and stack traces to the client."
+          },
+          {
+            "type": "step",
+            "title": "Server-Side Error Mapping — Inline and Centralized Approaches",
+            "content": "The simplest approach maps domain errors to gRPC status codes directly in the service method. This works for small services but creates duplication across methods as the service grows.\n\n```java\n@GrpcService\npublic class UserServiceImpl\n    extends UserServiceGrpc.UserServiceImplBase {\n\n  @Override\n  public void getUser(UserRequest req,\n                      StreamObserver<UserResponse> obs) {\n    if (req.getUserId().isBlank()) {\n      obs.onError(Status.INVALID_ARGUMENT\n          .withDescription(\"userId must not be blank\")\n          .asRuntimeException());\n      return;\n    }\n    User user = repository.findById(req.getUserId()).orElse(null);\n    if (user == null) {\n      obs.onError(Status.NOT_FOUND\n          .withDescription(\"User \" + req.getUserId() + \" not found\")\n          .asRuntimeException());\n      return;\n    }\n    obs.onNext(toProto(user));\n    obs.onCompleted();\n  }\n}\n```\n\nFor larger services, a centralized exception-mapping interceptor catches domain exceptions and translates them to status codes uniformly. Service methods throw normal Java exceptions, and the interceptor handles translation — identical to Spring's `@ControllerAdvice` pattern.\n\n```java\n@GrpcGlobalServerInterceptor\npublic class ExceptionMapper implements ServerInterceptor {\n  @Override\n  public <Req, Resp> ServerCall.Listener<Req> interceptCall(\n      ServerCall<Req, Resp> call, Metadata headers,\n      ServerCallHandler<Req, Resp> next) {\n    return new ForwardingServerCallListener.SimpleForwardingServerCallListener<>(\n        next.startCall(call, headers)) {\n      @Override\n      public void onHalfClose() {\n        try {\n          super.onHalfClose();\n        } catch (EntityNotFoundException e) {\n          call.close(Status.NOT_FOUND.withDescription(e.getMessage()),\n              new Metadata());\n        } catch (IllegalArgumentException e) {\n          call.close(Status.INVALID_ARGUMENT.withDescription(e.getMessage()),\n              new Metadata());\n        } catch (Exception e) {\n          call.close(Status.INTERNAL.withDescription(\"Unexpected error\"),\n              new Metadata());   // never leak class names or stack traces\n        }\n      }\n    };\n  }\n}\n```\n\nThe catch-all for `Exception` intentionally uses a generic description. Leaking `NullPointerException at UserServiceImpl.java:47` to clients is both a security risk (internal implementation exposure) and useless for the client. Log the full stack trace server-side and return a safe description."
+          },
+          {
+            "type": "step",
+            "title": "Client-Side Handling — Branching on Status Codes for Retry Decisions",
+            "content": "Clients catch `StatusRuntimeException` and branch on the status code to determine behavior. The retry/no-retry distinction is the most important decision.\n\n```java\ntry {\n  UserResponse user = stub.getUser(request);\n} catch (StatusRuntimeException e) {\n  switch (e.getStatus().getCode()) {\n    case NOT_FOUND ->\n        log.warn(\"User not found: {}\", e.getStatus().getDescription());\n    case INVALID_ARGUMENT ->\n        throw new BadRequestException(e.getStatus().getDescription());\n    case UNAVAILABLE -> {\n        log.warn(\"Service temporarily unavailable, retrying...\");\n        retryWithBackoff(() -> stub.getUser(request));\n    }\n    case DEADLINE_EXCEEDED ->\n        log.error(\"Request timed out\");\n    default -> throw e;  // propagate unexpected status codes\n  }\n}\n```\n\n`UNAVAILABLE` signals a transient failure — the server is temporarily overloaded or a network glitch occurred. Retry with exponential backoff. `INTERNAL` signals a bug — the server threw an unexpected exception. Retrying won't fix the bug. `DEADLINE_EXCEEDED` means the client's deadline passed before the server responded — check whether the deadline was too aggressive or the server is genuinely slow.\n\nFor structured error details beyond a string description, gRPC supports the `google.rpc.Status` proto with an `Any`-typed `details` field. This lets servers attach domain-specific payloads — field validation errors, retry-after hints — that clients can deserialize. The `ErrorInfo`, `BadRequest`, and `RetryInfo` protos from `google/rpc/error_details.proto` provide standardized structures."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Every gRPC call returns HTTP 200** — the real status lives in `grpc-status` and `grpc-message` trailers.\n- **`UNAVAILABLE` = retry, `INTERNAL` = don't** — using the wrong code causes clients to either retry hopelessly or give up on transient failures.\n- **Raw exceptions propagate as `UNKNOWN`** — an uncaught `NullPointerException` becomes `UNKNOWN` with the exception message, leaking internal class names.\n- **Centralized exception-mapping interceptor** — catches domain exceptions and translates to gRPC status codes uniformly, like Spring's.\n- **`StatusRuntimeException.getStatus().getCode()`** — the client-side API for inspecting errors."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "gRPC uses its own 17-status-code system for application errors, not HTTP status codes. Every gRPC call returns HTTP 200 at the transport layer — the actual result lives in the `grpc-status` trailer. Understanding these codes is essential for both server-side error mapping and client-side retry decisions.\n\n**Key status codes and their semantics:**\n- `NOT_FOUND` for missing entities, `INVALID_ARGUMENT` for bad input, `PERMISSION_DENIED` for authorization failures, `UNAUTHENTICATED` for missing credentials\n- `UNAVAILABLE` means transient failure — safe to retry with backoff; `INTERNAL` means something is genuinely broken — retrying won't help; using the wrong one causes clients to either retry hopelessly or give up on recoverable failures\n- `DEADLINE_EXCEEDED` signals the client's deadline passed before the server responded — the correct signal for timeout scenarios\n\n**Centralized error mapping:**\n- On the server, signal errors by calling `responseObserver.onError()` with a `StatusRuntimeException`; for larger services, centralize this with a global interceptor that catches domain exceptions and maps them to status codes — the same concept as Spring's `@ControllerAdvice`\n- The production rule: never let raw Java exceptions propagate to clients; an uncaught `NullPointerException` becomes `UNKNOWN` with the stack trace in the description — a security risk and useless to clients\n\n**Client-side error handling:**\n- `StatusRuntimeException.getStatus().getCode()` is the client-side API; always switch on the code enum, not the description string which is human-readable and may change\n\nI recommend logging the full stack trace server-side while keeping error descriptions informative but safe for clients — the goal is a client that can react programmatically to the code, not one that parses error messages."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you attach structured error details to a gRPC error using `google.rpc.Status` and `ErrorInfo`?",
+        "What is the difference between `UNAVAILABLE` and `INTERNAL` status codes in terms of retry behaviour?",
+        "How do you propagate a gRPC error code across service boundaries in a microservices architecture?"
+      ],
+      "seo": {
+        "meta_title": "gRPC Error Handling Java — Status Codes Guide",
+        "meta_description": "Learn gRPC status codes and error handling patterns in Java. Server-side status throwing, centralised exception mapping, and client-side StatusRuntimeException handling.",
+        "keywords": [
+          "grpc error handling java",
+          "grpc status codes",
+          "StatusRuntimeException",
+          "grpc NOT_FOUND INVALID_ARGUMENT"
+        ],
+        "metaDescription": "gRPC uses a well-defined set of Status codes (0–16) instead of HTTP status codes.",
+        "metaTitle": "gRPC Error Handling with Status Codes"
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "gRPC uses its own 17-status-code system for application errors, not HTTP status codes.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The most common mistake developers make when starting with gRPC is assuming errors work like REST. In REST, a 404 means \"not found,\" a 401 means \"unauthenticated,\" and your HTTP client framework parses these automatically. gRPC runs over HTTP/2, but it does not use HTTP status codes for application errors. Every gRPC call returns HTTP 200 at the transport layer — even failures. The actual result lives in the grpc-status and grpc-message trailers appended to the HTTP/2 response. gRPC defines."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Checks that you understand gRPC's error model rather than assuming it works like HTTP."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Every gRPC call returns HTTP 200 — the real status lives in grpc-status and grpc-message trailers",
+              "UNAVAILABLE = retry, INTERNAL = don't — using the wrong code causes clients to either retry hopelessly or give up on transient failures",
+              "Raw exceptions propagate as UNKNOWN — an uncaught NullPointerException becomes UNKNOWN with the exception message, leaking internal class names",
+              "Centralized exception-mapping interceptor — catches domain exceptions and translates to gRPC status codes uniformly, like Spring's",
+              "StatusRuntimeException"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The most common mistake developers make when starting with gRPC is assuming errors work like REST. In REST, a 404 means \"not found,\" a 401 means \"unauthenticated,\" and your HTTP client framework parses these automatically. gRPC runs over HTTP/2, but it does not use HTTP status codes for application errors. Every gRPC call returns HTTP 200 at the transport layer — even failures. The actual result lives in the grpc-status and grpc-message trailers appended to the HTTP/2 response. gRPC defines 17 canonical status codes (0 through 16), each with precise semantics. OK means success. NOT_FOUND. means the requested entity doesn't exist. INVALID_ARGUMENT. means the client sent bad input. UNAVAILABLE. means the service is temporarily down — safe to retry. INTERNAL."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Interviewers want to see you can communicate rich error information to clients and handle errors gracefully"
+            ]
+          }
+        ],
+        "cap": "Key status codes and their semantics: NOT_FOUND for missing entities, INVALID_ARGUMENT for bad input, PERMISSION_DENIED for authorization failures, UNAUTHENTICATED for missing credentials UNAVAILABLE",
+        "familiarity_anchors": [
+          "Status",
+          "StatusRuntimeException"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you attach structured error details to a gRPC error using `google.rpc.Status` and `ErrorInfo`?",
+          "What is the difference between `UNAVAILABLE` and `INTERNAL` status codes in terms of retry behaviour?",
+          "How do you propagate a gRPC error code across service boundaries in a microservices architecture?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot gRPC service with Protocol Buffers"
+      }
+    },
+    {
+      "id": "grpc-007",
+      "slug": "grpc-vs-rest-performance",
+      "question": "Why is gRPC generally faster than REST, and when does that advantage matter?",
+      "title": "gRPC vs REST Performance Comparison",
+      "direct_answer": "**gRPC** is typically 5–10x faster than **REST**/JSON for the same payload because it uses **Protocol Buffers** (binary, compact, no parsing overhead) over HTTP/2 (multiplexed, header compression, persistent connection). The performance advantage is most significant in high-throughput internal **microservice** communication, latency-sensitive paths, and mobile/IoT scenarios. For low-traffic public APIs the difference is often negligible.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Whether you can quantify gRPC's performance story (protobuf size, HTTP/2 multiplexing, HPACK) with ballpark numbers, and know when the overhead of REST/JSON actually matters versus when it is irrelevant.",
+        "common_mistake": "Claiming \"gRPC is 10× faster\" without context — on small payloads over LAN the difference is tiny; on large nested objects over the internet it can be significant. Or forgetting that gRPC-Web and browser clients erase much of the raw perf advantage.",
+        "to_stand_out": "Distinguish protobuf-on-the-wire savings from HTTP/2 multiplexing savings, explain where REST+HTTP/2+zstd closes most of the gap, and how persistent connection pooling makes both protocols competitive for service-to-service."
+      },
+      "company_tags": [
+        "Google",
+        "Netflix",
+        "Uber",
+        "Twitter",
+        "Cloudflare"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Independent Performance Layers That Compound Under Load",
+            "content": "Saying \"gRPC is faster than REST\" without quantifying where the speed comes from is the kind of answer that makes interviewers stop listening. The performance gap exists for two independent reasons, and each one matters at a different scale.\n\n**Layer 1: Serialization.** Protocol Buffers produces binary messages that are 3–10× smaller than equivalent JSON.\n- JSON repeats field names in every single object — a list of 1,000 users includes the string `\"username\"` 1,000 times.\n- Protobuf uses field numbers (1 byte each) instead.\n- JSON requires runtime parsing — the deserializer scans characters, handles string escaping, infers types dynamically.\n- Protobuf's schema is compiled at build time, so deserialization is a direct memory copy with known offsets — no reflection, no type guessing.\n- On a service processing 10K messages per second, the CPU savings from avoiding JSON parsing alone can free 20–30% of a core.\n\n**Layer 2: Transport.** gRPC runs over HTTP/2, which multiplexes all RPC calls on a single TCP connection and compresses headers with HPACK.\n- REST over HTTP/1.1 requires a new TCP connection per request (or careful connection pooling) and repeats headers verbatim on every call.\n- The TLS handshake alone — 1–2 round trips, 50–100ms — disappears when a single persistent HTTP/2 connection handles all calls.\n- HPACK header compression is particularly effective for gRPC because most calls to the same service carry identical metadata — after the first request establishes the header table, subsequent requests encode headers in as few as 5 bytes.\n\nThese advantages compound in a service mesh.\n- When a single user request fans out to 5 downstream services, each saving 5ms of serialization overhead and avoiding per-request connection setup, the aggregate latency reduction reaches 25ms — visible in p99 latency dashboards.\n- Teams switching internal hot-path REST calls to gRPC commonly report 60–70% latency reductions.\n\nBut context matters.\n- For a low-traffic admin API serving 100 requests per minute, the difference is unmeasurable — and REST's ability to debug with curl, test with Postman, and cache with CDNs is worth more than the microseconds you'd save.\n- The performance advantage is real but situational — it pays off on high-RPS internal paths and is irrelevant at the edge."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Where Each Millisecond Comes From — gRPC vs REST/JSON",
+            "content": "| Performance Factor | gRPC/Protobuf | REST/JSON |\n|---|---|---|\n| Payload size (typical message) | ~50–100 bytes (binary) | ~500–1000 bytes (text + field names) |\n| Serialization CPU | Compiled schema, direct memory copy | Runtime parsing, string escaping, type inference |\n| Connection setup | One persistent HTTP/2 connection per peer | New connection per request or managed pool |\n| Header overhead | HPACK compressed (first request ~full, subsequent ~5 bytes) | Full headers repeated every request (~500 bytes) |\n| Concurrent calls | Multiplexed on single connection | One request per connection (HTTP/1.1) or multiplexed (HTTP/2) |\n| TLS handshake | Once per connection lifecycle | Once per connection, but more connections = more handshakes |\n| Debugging ease | Requires grpcurl / Bloom RPC | curl, Postman, browser DevTools |\n| When advantage matters | >1K RPS, service mesh fan-out, mobile/IoT | <100 RPS, external APIs, developer workflows |"
+          },
+          {
+            "type": "code_example",
+            "title": "Measurable Size and Round-Trip Differences",
+            "language": "bash",
+            "content": "# Same logical payload: an Order with 20 fields, nested Address, 3 line items.\n# Wire sizes (uncompressed, with default encoders):\n\n#   REST/JSON (Jackson, pretty=false) : ~620 bytes\n#   REST/JSON + gzip                  : ~330 bytes\n#   REST/JSON + brotli-4              : ~280 bytes\n#   gRPC / protobuf (default)         : ~220 bytes\n#   gRPC / protobuf + gzip            : ~190 bytes   (usually not worth the CPU at this size)\n\n# Per-call overhead (typical intra-DC round trip, m5.large, 1GbE):\n#\n#   REST/JSON         : 0.8 - 1.5 ms parse + 0.3 ms TLS reuse\n#   gRPC/protobuf     : 0.1 - 0.3 ms parse + 0.1 ms HTTP/2 header frame\n#\n# For *small* request/response pairs the difference is often < 1 ms; it only\n# dominates when you either (a) fan out many calls per request, or (b) send\n# large nested payloads where protobuf's varints + field numbers save a lot.\n\n# --- Quick benchmark harness (ghz for gRPC vs wrk for REST) ------------------\n\n# gRPC:  https://github.com/bojand/ghz\nghz --insecure \\\n    --proto ./order.proto \\\n    --call acme.order.v1.OrderService.GetOrder \\\n    -d '{\"order_id\": \"ord_42\"}' \\\n    -c 50 -n 50000 \\\n    localhost:50051\n\n# REST:\nwrk -t4 -c50 -d30s \\\n    -s ./post.lua \\\n    --latency \\\n    https://localhost:8443/v1/orders/ord_42\n\n# Key takeaways from real measurements:\n#   * Binary protobuf wins on payload size and parse speed\n#   * HTTP/2 multiplexing wins when you open many concurrent RPCs on one TCP conn\n#   * HPACK header compression matters a lot for chatty APIs (tiny bodies, big headers)\n#   * REST + HTTP/2 + brotli closes most of the gap for public APIs\n#   * Browser clients of gRPC need gRPC-Web and an Envoy proxy, erasing part of the advantage"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Protobuf payloads are 3–10× smaller than JSON** — field numbers replace repeated field names.\n- **Serialization CPU savings reach 20–30% of a core at 10K msg/sec** — protobuf's compiled schema uses direct memory offsets.\n- **HTTP/2 multiplexing eliminates per-request TCP/TLS setup** — one persistent connection carries all concurrent RPCs.\n- **Advantages compound in service mesh fan-out** — 5ms saved per hop × 5 downstream services = 25ms aggregate improvement on a single user request.\n- **Below ~1K RPS the difference is negligible** — REST's debuggability (curl, Postman, browser) outweighs microsecond savings for low-traffic or."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "gRPC is faster than REST for internal service calls for two compounding reasons: smaller payloads from Protocol Buffers and connection efficiency from HTTP/2. At scale, these savings compound in ways that REST's simplicity cannot offset.\n\n**Protocol Buffers — the payload advantage:**\n- Binary encoding with field numbers instead of repeated key names produces payloads 3–10× smaller than JSON; a list of 1,000 objects avoids repeating field names like \"orderId\", \"customerId\", \"amount\" for every element\n- The compiled schema means deserialization is a direct memory copy instead of runtime character scanning, string escaping, and type inference; at 10K messages per second, the CPU savings alone are measurable — roughly 20–30% of a CPU core\n\n**HTTP/2 multiplexing — the connection advantage:**\n- All RPCs share one persistent TCP connection with full multiplexing — multiple in-flight requests without head-of-line blocking\n- REST over HTTP/1.1 needs a new connection per request or connection pooling to approach similar efficiency; every new connection repeats the TCP and TLS handshake cost\n\n**Where the advantages compound:**\n- In service mesh scenarios with multiple hops, saving 5ms per hop across five services produces 25ms aggregate improvement on a single user request — the deeper the call chain, the larger the total payoff\n- Teams have reported cutting internal latency by 60–70% switching high-frequency REST calls to gRPC on measured hot paths\n\n**When gRPC's advantages don't matter:**\n- Below roughly 1,000 requests per second, the performance difference is unmeasurable; REST's debuggability with curl, Postman, and browser tooling is a real advantage that gRPC cannot match\n\nI recommend gRPC for east-west traffic on high-RPS internal paths where the performance savings are measurable, and REST at the edge and for low-traffic internal endpoints where debuggability matters more than microseconds."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you benchmark gRPC vs REST for your specific use case?",
+        "Does HTTP/2 bring any performance benefits to REST that narrow the gap?",
+        "What tools can you use to profile protobuf serialisation overhead in a Java application?"
+      ],
+      "seo": {
+        "meta_title": "gRPC vs REST Performance Java — Why gRPC is Faster",
+        "meta_description": "Deep dive into why gRPC outperforms REST/JSON: Protocol Buffers vs JSON serialisation, HTTP/2 vs HTTP/1.1, and when the performance difference actually matters.",
+        "keywords": [
+          "grpc vs rest performance",
+          "grpc faster than rest",
+          "protobuf vs json speed",
+          "grpc http2 performance java"
+        ],
+        "metaDescription": "gRPC is typically 5–10x faster than REST/JSON for the same payload because it uses Protocol Buffers (binary, compact, no parsing overhead) over HTTP/2 (multipl.",
+        "metaTitle": "gRPC vs REST Performance Comparison"
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "gRPC is faster than REST for internal service calls for two compounding reasons: smaller payloads from Protocol Buffers and connection efficiency from HTTP/2.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Saying \"gRPC is faster than REST\" without quantifying where the speed comes from is the kind of answer that makes interviewers stop listening. The performance gap exists for two independent reasons, and each one matters at a different scale. Layer 1: Serialization. Protocol Buffers produces binary messages that are 3–10× smaller than equivalent JSON. JSON repeats field names in every single object — a list of 1,000 users includes the string \"username\" 1,000 times. Protobuf uses field numbers (1 byte."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can quantify gRPC's performance story (protobuf size, HTTP/2 multiplexing, HPACK) with ballpark numbers, and know when the overhead of REST/JSON actually matters versus when it is irrelevant."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Protobuf payloads are 3–10× smaller than JSON — field numbers replace repeated field names",
+              "Serialization CPU savings reach 20–30% of a core at 10K msg/sec — protobuf's compiled schema uses direct memory offsets",
+              "HTTP/2 multiplexing eliminates per-request TCP/TLS setup — one persistent connection carries all concurrent RPCs",
+              "Advantages compound in service mesh fan-out — 5ms saved per hop × 5 downstream services = 25ms aggregate improvement on a single user request",
+              "Below ~1K RPS the difference is negligible — REST's debuggability (curl, Postman, browser) outweighs microsecond savings for low-traffic or"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Same logical payload: an Order with 20 fields, nested Address, 3 line items. Wire sizes (uncompressed, with default encoders): REST/JSON (Jackson, pretty=false) : ~620 bytes REST/JSON + gzip : ~330 bytes REST/JSON + brotli-4 : ~280 bytes gRPC / protobuf (default) : ~220 bytes gRPC / protobuf + gzip : ~190 bytes (usually not worth the CPU at this size) Per-call overhead (typical intra-DC round trip, m5.large, 1GbE): REST/JSON : 0.8 - 1.5 ms parse + 0.3 ms TLS reuse gRPC/protobuf : 0.1 - 0.3 ms parse + 0.1 ms HTTP/2 header frame For small request/response pairs the difference is often < 1 ms; it only dominates when you either (a) fan out many calls per request, or (b) send."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Claiming \"gRPC is 10× faster\" without context — on small payloads over LAN the difference is tiny; on large nested objects over the internet it can be significant",
+              "Or forgetting that gRPC-Web and browser clients erase much of the raw perf advantage"
+            ]
+          }
+        ],
+        "cap": "Protocol Buffers — the payload advantage: Binary encoding with field numbers instead of repeated key names produces payloads 3–10× smaller than JSON; a list of 1,000 objects avoids repeating field nam",
+        "familiarity_anchors": [
+          "Protocol",
+          "Buffers"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you benchmark gRPC vs REST for your specific use case?",
+          "Does HTTP/2 bring any performance benefits to REST that narrow the gap?",
+          "What tools can you use to profile protobuf serialisation overhead in a Java application?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot gRPC service with Protocol Buffers"
+      }
+    },
+    {
+      "id": "grpc-008",
+      "slug": "grpc-deadlines-cancellation-java",
+      "question": "How do deadlines and cancellation work in gRPC, and why are they important?",
+      "title": "Deadlines and Cancellation in gRPC",
+      "direct_answer": "A **gRPC** **deadline** is a point in time by which a client expects a response. It is propagated through the entire call chain as part of the context. If the deadline expires, gRPC cancels the call with `Status.DEADLINE_EXCEEDED` on the client and sets the context as cancelled on the server. Every service should respect deadlines — checking `Context.current().isCancelled()` — to avoid doing unnecessary work after the client has already given up.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Tests understanding of resilience patterns.",
+        "common_mistake": "Deadlines are critical to preventing cascade failures — if a downstream service hangs, a client without a deadline will hold a thread or connection indefinitely, causing resource exhaustion upstream.",
+        "to_stand_out": "Deadlines are critical to preventing cascade failures — if a downstream service hangs, a client without a deadline will hold a thread or connection indefinitely, causing resource exhaustion upstream."
+      },
+      "company_tags": [
+        "Google",
+        "Netflix",
+        "Lyft",
+        "Square",
+        "Dropbox",
+        "Uber"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Cascade Failure That Deadlines Exist to Prevent",
+            "content": "Picture a common microservice call chain: the API gateway calls the order service, which calls the inventory service, which calls the warehouse database.\n- The warehouse database starts running slow — queries that normally take 50ms now take 30 seconds.\n- Without deadlines, every layer waits.\n- The inventory service holds a thread for 30 seconds.\n- The order service holds a thread for 30 seconds.\n- The gateway holds a thread for 30 seconds.\n- At 100 concurrent requests, that's 300 blocked threads across three services — and none of them can serve new traffic.\n\nThis is the **cascade failure** that deadlines prevent.\n- A deadline is an **absolute wall-clock timestamp** — not a relative timeout — by which the client expects a response.\n- The critical distinction matters: if Service A sets a 500ms deadline and spends 300ms doing local work before calling Service B, Service B inherits only 200ms of remaining budget.\n- A naive per-hop timeout of 500ms would give B a fresh window, masking the fact that A's client has already waited 300ms.\n\ngRPC transmits the deadline as the `grpc-timeout` header on every hop, and each downstream service sees the shrinking budget.\n- When the deadline expires, two things happen simultaneously: the client receives `Status.DEADLINE_EXCEEDED` and stops waiting, and the server's `Context` is marked as cancelled.\n- The server is responsible for checking `Context.current().isCancelled()` — gRPC doesn't kill server threads automatically.\n- Without that check, the server finishes processing a request whose result nobody will ever read, wasting CPU, database connections, and queue capacity."
+          },
+          {
+            "type": "step",
+            "title": "Setting Deadlines on the Client — And What Happens When They Expire",
+            "content": "Clients set deadlines with `withDeadlineAfter()` on the stub. gRPC converts the relative duration to an absolute timestamp on the wire. If the deadline passes before the server responds, the client receives a `StatusRuntimeException` with code `DEADLINE_EXCEEDED`.\n\n```java\ntry {\n  UserResponse response = stub\n      .withDeadlineAfter(500, TimeUnit.MILLISECONDS)\n      .getUser(UserRequest.newBuilder()\n          .setUserId(\"u-123\").build());\n} catch (StatusRuntimeException e) {\n  if (e.getStatus().getCode() == Status.Code.DEADLINE_EXCEEDED) {\n    log.warn(\"getUser timed out after 500ms\");\n    return fallbackResponse();       // degrade gracefully\n  }\n  throw e;\n}\n```\n\nThe choice of deadline value depends on the call's expected latency plus a safety margin. A service that typically responds in 50ms might get a 200ms deadline — enough headroom for occasional GC pauses or slow queries, but tight enough that a genuinely stuck service doesn't hold threads for minutes. Setting deadlines too aggressively causes spurious failures during normal load spikes; setting them too loosely defeats the purpose.\n\nWhen chaining downstream calls, the deadline propagates automatically through the `Context`. You can also set a tighter sub-deadline with `withDeadlineAfter()` on the downstream stub to reserve budget for your own post-processing. If you don't set an explicit sub-deadline, the downstream call inherits whatever budget remains from the original client deadline."
+          },
+          {
+            "type": "step",
+            "title": "Cooperative Cancellation — The Server's Responsibility",
+            "content": "When a deadline expires, gRPC cancels the client side immediately but does **not** interrupt the server thread. The server must cooperate by checking cancellation inside loops or before expensive operations.\n\n```java\n@GrpcService\npublic class ReportServiceImpl\n    extends ReportServiceGrpc.ReportServiceImplBase {\n\n  @Override\n  public void generateReport(ReportRequest req,\n      StreamObserver<ReportChunk> obs) {\n\n    for (DataPage page : dataSource.pages(req.getQuery())) {\n      if (Context.current().isCancelled()) {\n        obs.onError(Status.CANCELLED\n            .withDescription(\"Client disconnected\")\n            .asRuntimeException());\n        return;                      // stop immediately\n      }\n      obs.onNext(processPage(page)); // send processed chunk\n    }\n    obs.onCompleted();\n  }\n}\n```\n\nWithout the `isCancelled()` check, a report generation that processes 100 pages would complete all 100 even if the client timed out after page 3 — burning CPU and database I/O for 97 pages of results that nobody receives. At scale, this wasted work consumes 30–40% of server capacity during peak load when deadlines are firing frequently.\n\nFor non-streaming RPCs that make a single expensive call (database query, external API), the cancellation check should happen before the call starts. If the remaining deadline budget is less than the call's expected latency, fail fast with `DEADLINE_EXCEEDED` rather than starting work you know will time out. You can read the remaining budget with `Context.current().getDeadline().timeRemaining(TimeUnit.MILLISECONDS)` and compare it against the operation's expected duration. This preemptive check is especially important for database queries — starting a 2-second query with only 500ms of budget remaining wastes a database connection and returns a timeout that could have been reported immediately."
+          },
+          {
+            "type": "code_example",
+            "title": "Deadlines, Context, and Cancellation — Client and Server",
+            "language": "java",
+            "content": "// =========== Client side: set a deadline on every call ===================\n// WRONG: timeouts hidden in gRPC defaults = hang forever on slow upstream.\n// RIGHT: every outbound RPC has a deadline; deadline propagates automatically\n//        across further gRPC calls made inside the service.\n\nOrderServiceGrpc.OrderServiceBlockingStub stub = OrderServiceGrpc\n    .newBlockingStub(channel)\n    .withDeadlineAfter(400, TimeUnit.MILLISECONDS);   // per-call ceiling\n\ntry {\n    OrderReply reply = stub.getOrder(OrderRequest.newBuilder()\n        .setOrderId(\"ord_42\").build());\n    handle(reply);\n} catch (StatusRuntimeException ex) {\n    if (ex.getStatus().getCode() == Status.Code.DEADLINE_EXCEEDED) {\n        // don't retry without a new deadline and an idempotency guarantee\n        metrics.counter(\"order.deadline.exceeded\").increment();\n        throw new UpstreamTimeoutException(ex);\n    }\n    throw ex;\n}\n\n// Async variant — returns a ListenableFuture; deadline still enforced\nListenableFuture<OrderReply> future = OrderServiceGrpc.newFutureStub(channel)\n    .withDeadlineAfter(400, TimeUnit.MILLISECONDS)\n    .getOrder(OrderRequest.newBuilder().setOrderId(\"ord_42\").build());\n\n// =========== Server side: always respect the deadline ====================\n// The incoming deadline is available on the current Context and is\n// automatically propagated to any child gRPC call on the same thread.\n\n@GrpcService\npublic class OrderServiceImpl extends OrderServiceGrpc.OrderServiceImplBase {\n\n    @Override\n    public void getOrder(OrderRequest req, StreamObserver<OrderReply> resp) {\n        Context ctx = Context.current();\n\n        // 1) Check before expensive work\n        if (ctx.isCancelled()) {\n            resp.onError(Status.CANCELLED\n                .withDescription(\"client cancelled before handler ran\")\n                .asRuntimeException());\n            return;\n        }\n\n        // 2) Useful for long ops — observe cancellation via a listener\n        ctx.addListener(c -> log.info(\"order call cancelled mid-flight\"),\n                        MoreExecutors.directExecutor());\n\n        // 3) Cross-check a child call's deadline manually if needed\n        Deadline deadline = ctx.getDeadline();\n        if (deadline != null) {\n            long remainingMs = deadline.timeRemaining(TimeUnit.MILLISECONDS);\n            if (remainingMs < 20) {                        // not enough budget\n                resp.onError(Status.DEADLINE_EXCEEDED.asRuntimeException());\n                return;\n            }\n        }\n\n        // 4) Downstream call automatically inherits the caller's deadline\n        Payment payment = paymentStub.getPayment(\n            PaymentRequest.newBuilder().setOrderId(req.getOrderId()).build());\n\n        // 5) Loop that may take time — check cancellation between iterations\n        for (Line line : loadLines(req.getOrderId())) {\n            if (ctx.isCancelled()) {\n                resp.onError(Status.CANCELLED.asRuntimeException());\n                return;\n            }\n            // ...\n        }\n\n        resp.onNext(toReply(payment));\n        resp.onCompleted();\n    }\n}\n\n// =========== Deadline vs timeout — two common mistakes ===================\n//  * Setting an HTTP-ish timeout (fixed duration in the Channel builder)\n//    instead of per-call .withDeadlineAfter(...). Channel-level does not\n//    propagate through nested RPCs; deadlines do.\n//  * Catching StatusRuntimeException(DEADLINE_EXCEEDED) and retrying\n//    without a fresh (larger) deadline — retries inherit the expired one\n//    and immediately fail again."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Deadline = absolute timestamp, not relative timeout** — `grpc-timeout` propagates one wall-clock budget across all hops.\n- **Budget subtraction at each hop** — if Service A sets 500ms and uses 300ms before calling B, Service B inherits only 200ms.\n- **Server threads keep running after cancellation** — gRPC marks the Context as cancelled but does not interrupt the thread.\n- **Wasted work burns 30–40% of capacity at peak** — without cancellation checks, servers complete processing for requests whose results are discarded.\n- **An RPC without a deadline is a resource leak** — a hung downstream service holds threads indefinitely, causing thread pool exhaustion that cascades to."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Deadlines are gRPC's primary resilience mechanism and are fundamentally different from per-hop timeouts. A deadline is an absolute wall-clock timestamp, not a relative duration — this distinction drives every cascading behavior in a distributed call chain.\n\n**How deadlines propagate:**\n- When you call `stub.withDeadlineAfter(500, MILLISECONDS)`, gRPC converts that to a wall-clock timestamp and propagates it in the `grpc-timeout` header to every downstream hop in the call chain\n- Budget subtraction: if Service A sets a 500ms deadline and spends 300ms doing local work before calling Service B, Service B inherits only 200ms — not a fresh 500ms window; this prevents the common pattern where each service gives a fresh timeout and the client's patience is exhausted invisibly\n\n**Server-side cancellation checking:**\n- gRPC marks the context as cancelled when the deadline expires but does not interrupt the server thread; without explicit checks, the server continues processing for results nobody will receive\n- Always check `Context.current().isCancelled()` inside loops and before expensive operations like database queries; without this, servers waste 30–40% of compute at peak completing work for disconnected clients\n\n**The cascade failure scenario:**\n- Without deadlines, a hung downstream service holds threads in every upstream service indefinitely — thread pool exhaustion cascades across the entire call chain\n- An RPC without a deadline is a resource leak; every thread waiting for a response that will never come is capacity unavailable for legitimate requests\n\nI recommend establishing a rule that every gRPC stub call gets a deadline — no exceptions — and enforcing it through code review and architecture standards rather than leaving it to individual developer discipline."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a deadline and a retry timeout?",
+        "How do you implement deadline propagation when mixing gRPC and REST calls in the same request path?",
+        "How does `Context.withCancellation()` differ from a deadline in gRPC?"
+      ],
+      "seo": {
+        "meta_title": "gRPC Deadlines and Cancellation Java — Best Practices",
+        "meta_description": "Learn how gRPC deadlines and cancellation work in Java. Setting withDeadlineAfter, propagating deadlines across services, and checking Context cancellation on the server.",
+        "keywords": [
+          "grpc deadline java",
+          "grpc cancellation",
+          "grpc withDeadlineAfter",
+          "grpc DEADLINE_EXCEEDED",
+          "grpc context cancellation"
+        ],
+        "metaDescription": "A gRPC deadline is a point in time by which a client expects a response. It is propagated through the entire call chain as part of the context.",
+        "metaTitle": "Deadlines and Cancellation in gRPC"
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "Deadlines are gRPC's primary resilience mechanism and are fundamentally different from per-hop timeouts.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Picture a common microservice call chain: the API gateway calls the order service, which calls the inventory service, which calls the warehouse database. The warehouse database starts running slow — queries that normally take 50ms now take 30 seconds. Without deadlines, every layer waits. The inventory service holds a thread for 30 seconds. The order service holds a thread for 30 seconds. The gateway holds a thread for 30 seconds. At 100 concurrent requests, that's 300 blocked threads across three."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Tests understanding of resilience patterns."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Deadline = absolute timestamp, not relative timeout — grpc-timeout propagates one wall-clock budget across all hops",
+              "Budget subtraction at each hop — if Service A sets 500ms and uses 300ms before calling B, Service B inherits only 200ms",
+              "Server threads keep running after cancellation — gRPC marks the Context as cancelled but does not interrupt the thread",
+              "Wasted work burns 30–40% of capacity at peak — without cancellation checks, servers complete processing for requests whose results are discarded",
+              "An RPC without a deadline is a resource leak — a hung downstream service holds threads indefinitely, causing thread pool exhaustion that cascades to"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "// =========== Client side: set a deadline on every call =================== // WRONG: timeouts hidden in gRPC defaults = hang forever on slow upstream. // RIGHT: every outbound RPC has a deadline; deadline propagates automatically // across further gRPC calls made inside the service. OrderServiceGrpc.OrderServiceBlockingStub stub = OrderServiceGrpc .newBlockingStub(channel) .withDeadlineAfter(400, TimeUnit.MILLISECONDS); // per-call ceiling try { OrderReply reply = stub.getOrder(OrderRequest.newBuilder() .setOrderId(\"ord_42\").build()); handle(reply); } catch (StatusRuntimeException ex) { if (ex.getStatus().getCode() == Status.Code.DEADLINE_EXCEEDED) { // don't retry without a new deadline and an idempotency guarantee metrics.counter(\"order.deadline.exceeded\").increment(); throw new UpstreamTimeoutException(ex); } throw ex; } // Async variant — returns a ListenableFuture; deadline still enforced ListenableFuture<OrderReply> future = OrderServiceGrpc.newFutureStub(channel) .withDeadlineAfter(400, TimeUnit.MILLISECONDS) .getOrder(OrderRequest.newBuilder().setOrderId(\"ord_42\").build()); // =========== Server side: always respect the deadline ==================== // The incoming."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Deadlines are critical to preventing cascade failures",
+              "if a downstream service hangs, a client without a deadline will hold a thread or connection indefinitely, causing resource exhaustion upstream"
+            ]
+          }
+        ],
+        "cap": "How deadlines propagate: When you call stub.withDeadlineAfter(500, MILLISECONDS), gRPC converts that to a wall-clock timestamp and propagates it in the grpc-timeout header to every downstream hop in t",
+        "familiarity_anchors": [
+          "Status",
+          "Every",
+          "Context"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a deadline and a retry timeout?",
+          "How do you implement deadline propagation when mixing gRPC and REST calls in the same request path?",
+          "How does `Context.withCancellation()` differ from a deadline in gRPC?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot gRPC service with Protocol Buffers"
+      }
+    },
+    {
+      "id": "grpc-009",
+      "slug": "grpc-health-checking-protocol",
+      "question": "What is the gRPC health checking protocol and how do you implement it in Spring Boot?",
+      "title": "gRPC Health Checking Protocol",
+      "direct_answer": "The **gRPC** Health Checking Protocol is a standard gRPC service defined by Google (`grpc.health.v1.Health`) that exposes a `Check` (**unary**) and `Watch` (**server streaming**) RPC for liveness and readiness probes. Load balancers and orchestrators (Kubernetes, **Envoy**) call `Check` to determine whether a service is ready to accept traffic. The `grpc-spring-boot-starter` auto-configures this service and integrates it with Spring's `HealthIndicator` beans.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Checks production awareness.",
+        "common_mistake": "Running gRPC in Kubernetes without health checks means the orchestrator cannot detect unhealthy pods.",
+        "to_stand_out": "Interviewers want to see you know both the protocol standard and the Spring Boot integration."
+      },
+      "company_tags": [
+        "Google",
+        "Kubernetes",
+        "HashiCorp",
+        "Lyft",
+        "Netflix",
+        "Square"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why HTTP Health Endpoints Don't Work for gRPC Services",
+            "content": "When Kubernetes needs to check if a REST service is healthy, it sends an HTTP GET to `/actuator/health` and checks for a 200 response. Simple. But a gRPC server speaks HTTP/2 with binary protobuf — an HTTP/1.1 GET request to a gRPC port returns garbage or a connection error. The orchestrator thinks the service is dead when it's perfectly healthy.\n\nBefore Kubernetes 1.24, teams worked around this by running a sidecar HTTP health endpoint or using `grpc_health_probe` as a custom exec command.\n- Both approaches were fragile — the sidecar could be healthy while the gRPC server was crashed, and the exec probe had a cold-start cost on every check.\n- Kubernetes 1.24 added **native gRPC probes** that speak the protocol directly, eliminating these workarounds.\n\nThe gRPC Health Checking Protocol is defined in `grpc.health.v1.Health` — a standard `.proto` file that all gRPC implementations understand. It exposes two RPCs: `Check` returns the current health status as one of `SERVING`, `NOT_SERVING`, `UNKNOWN`, or `SERVICE_UNKNOWN`. `Watch` is a server-streaming RPC that pushes status changes in real time — useful for load balancers like Envoy that want to react to health transitions without constant polling.\n\nThe protocol supports **per-service granularity** through the `service` field in the request.\n- An empty string checks overall health, but you can report different statuses for different services on the same server — the `UserService` is healthy while the `PaymentService` is degraded because its downstream database is slow.\n- This lets the load balancer route around a specific degraded service without marking the entire pod as unhealthy."
+          },
+          {
+            "type": "step",
+            "title": "Step 1 — Auto-Configuration in Spring Boot and Actuator Integration",
+            "content": "The `grpc-spring-boot-starter` registers the `grpc.health.v1.Health` service automatically — no code needed. It bridges Spring Actuator's `HealthIndicator` beans to gRPC health status: when Spring reports DOWN (database unreachable, Redis timeout), the gRPC health service flips to `NOT_SERVING`, and Kubernetes stops routing traffic to that pod.\n\n```yaml\ngrpc:\n  server:\n    port: 9090\n    health-service-enabled: true    # default is true\n\nmanagement:\n  endpoint:\n    health:\n      probes:\n        enabled: true               # enable liveness/readiness separation\n```\n\nYou can verify the health service is responding using `grpcurl` from the command line — this is the gRPC equivalent of curling an HTTP health endpoint.\n\n```bash\n# Check overall health\ngrpcurl -plaintext localhost:9090 grpc.health.v1.Health/Check\n# Response: { \"status\": \"SERVING\" }\n\n# Check a specific service\ngrpcurl -plaintext -d '{\"service\": \"OrderService\"}' \\\n  localhost:9090 grpc.health.v1.Health/Check\n```\n\nIf your application has custom health requirements beyond Spring Actuator's defaults — for example, verifying that a Kafka consumer is caught up or that a cache is warm — implement a `HealthIndicator` bean. The starter picks it up automatically and includes it in the gRPC health response."
+          },
+          {
+            "type": "step",
+            "title": "Step 2 — Configure Kubernetes Native gRPC Probes",
+            "content": "Kubernetes 1.24+ supports gRPC probes directly in the pod spec. The kubelet calls the `Check` RPC on the configured port, and the pod transitions to unready if the response is anything other than `SERVING`.\n\n```yaml\napiVersion: v1\nkind: Pod\nspec:\n  containers:\n  - name: order-service\n    image: myregistry/order-service:2.1\n    ports:\n    - containerPort: 9090\n    livenessProbe:\n      grpc:\n        port: 9090\n      initialDelaySeconds: 10\n      periodSeconds: 10\n    readinessProbe:\n      grpc:\n        port: 9090\n        service: \"\"              # empty = overall health\n      initialDelaySeconds: 5\n      periodSeconds: 5\n```\n\nThe critical production rule is **separating liveness from readiness**. Liveness checks whether the process itself is healthy — a stuck thread, a deadlock, an out-of-memory condition. If liveness fails, Kubernetes restarts the pod. Readiness checks whether the pod can accept traffic — database connected, caches warm, downstream dependencies available. If readiness fails, Kubernetes removes the pod from the Service's endpoint list but doesn't restart it.\n\nConfusing the two causes cascading restarts. If a database goes slow and you report that as a liveness failure, Kubernetes restarts every pod in the deployment. The restarted pods reconnect to the same slow database, fail liveness again, and restart in a loop — an outage that amplifies the original problem. Use readiness for dependency failures (stop traffic, let the dependency recover) and liveness only for process-level problems (the JVM is stuck)."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **HTTP health checks don't work on gRPC ports** — an HTTP/1.1 GET to a gRPC server returns garbage.\n- **`grpc-spring-boot-starter` auto-registers the health service** — bridges Spring `HealthIndicator` beans to gRPC status.\n- **Per-service granularity via the `service` field** — an empty string checks overall health.\n- **Liveness ≠ readiness** — liveness failure restarts the pod; readiness failure stops traffic without restart.\n- **`Watch` RPC for reactive health monitoring** — server-streaming RPC pushes status transitions to Envoy in real time without constant polling overhead."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The gRPC Health Checking Protocol is a standard service every production gRPC deployment needs from day one. HTTP health endpoints don't work on gRPC ports — an HTTP GET to a gRPC port returns garbage because gRPC speaks HTTP/2 with binary protobuf framing.\n\n**The protocol:**\n- The standard service at `grpc.health.v1.Health` exposes two RPCs: `Check` returns the current status — `SERVING` or `NOT_SERVING` — and `Watch` is a server-streaming RPC that pushes status changes in real time to load balancers without constant polling\n- The `service` field provides per-service granularity — an empty string checks overall health; a specific service name lets load balancers route around degraded services without marking the entire pod unhealthy\n\n**Spring Boot integration:**\n- With `grpc-spring-boot-starter`, the health service is auto-configured and wired to Spring Actuator's health indicators; if a database connection fails, Actuator reports DOWN, the gRPC health flips to `NOT_SERVING`, and Kubernetes removes the pod from traffic rotation\n- Kubernetes 1.24+ supports native gRPC probes — configure `grpc.port: 9090` in `livenessProbe` and `readinessProbe` directly; no workarounds needed\n\n**The liveness vs readiness distinction — the most important rule:**\n- Liveness failure triggers a pod restart; readiness failure stops traffic without restarting\n- A slow database should fail readiness (drain traffic) but not liveness (don't restart the pod); confusing the two causes cascading restarts that amplify an existing outage — every restart triggers a reconnect storm that makes a struggling database worse\n\nI recommend wiring health checks to your database and external dependency indicators from day one, and always keeping liveness and readiness as separate probes with different thresholds."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you report per-service health (e.g. only the OrderService is NOT_SERVING) using the health checking protocol?",
+        "How does Envoy use the Watch RPC for endpoint health in a service mesh?",
+        "What happens to in-flight gRPC calls when Kubernetes sends SIGTERM to a pod?"
+      ],
+      "seo": {
+        "meta_title": "gRPC Health Checking Spring Boot — Kubernetes Probes",
+        "meta_description": "Implement the gRPC Health Checking Protocol in Spring Boot. Auto-configure GrpcHealthService, integrate with Actuator health indicators, and set up Kubernetes gRPC probes.",
+        "keywords": [
+          "grpc health check spring boot",
+          "grpc health checking protocol",
+          "kubernetes grpc probe",
+          "grpc.health.v1.Health"
+        ],
+        "metaDescription": "The gRPC Health Checking Protocol is a standard gRPC service defined by Google (grpc.health.v1.Health) that exposes a Check (unary) and Watch (server streaming.",
+        "metaTitle": "gRPC Health Checking Protocol"
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "The gRPC Health Checking Protocol is a standard service every production gRPC deployment needs from day one.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When Kubernetes needs to check if a REST service is healthy, it sends an HTTP GET to /actuator/health and checks for a 200 response. Simple. But a gRPC server speaks HTTP/2 with binary protobuf — an HTTP/1.1 GET request to a gRPC port returns garbage or a connection error. The orchestrator thinks the service is dead when it's perfectly healthy. Before Kubernetes 1.24, teams worked around this by running a sidecar HTTP health endpoint or using grpc_health_probe as a custom."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Checks production awareness."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "HTTP health checks don't work on gRPC ports — an HTTP/1",
+              "1 GET to a gRPC server returns garbage",
+              "grpc-spring-boot-starter auto-registers the health service — bridges Spring HealthIndicator beans to gRPC status",
+              "Per-service granularity via the service field — an empty string checks overall health",
+              "Liveness ≠ readiness — liveness failure restarts the pod; readiness failure stops traffic without restart"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "When Kubernetes needs to check if a REST service is healthy, it sends an HTTP GET to /actuator/health and checks for a 200 response. Simple. But a gRPC server speaks HTTP/2 with binary protobuf — an HTTP/1.1 GET request to a gRPC port returns garbage or a connection error. The orchestrator thinks the service is dead when it's perfectly healthy. Before Kubernetes 1.24, teams worked around this by running a sidecar HTTP health endpoint or using grpc_health_probe as a custom exec command. Both approaches were fragile — the sidecar could be healthy while the gRPC server was crashed, and the exec probe had a cold-start cost on every check. Kubernetes 1.24 added native gRPC probes that speak the protocol directly."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Running gRPC in Kubernetes without health checks means the orchestrator cannot detect unhealthy pods"
+            ]
+          }
+        ],
+        "cap": "The protocol: The standard service at grpc.health.v1.Health exposes two RPCs: Check returns the current status — SERVING or NOT_SERVING — and Watch is a server-streaming RPC that pushes status changes",
+        "familiarity_anchors": [
+          "Health",
+          "Checking",
+          "Protocol"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you report per-service health (e.g. only the OrderService is NOT_SERVING) using the health checking protocol?",
+          "How does Envoy use the Watch RPC for endpoint health in a service mesh?",
+          "What happens to in-flight gRPC calls when Kubernetes sends SIGTERM to a pod?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot gRPC service with Protocol Buffers"
+      }
+    },
+    {
+      "id": "grpc-010",
+      "slug": "testing-grpc-services-java",
+      "question": "How do you test gRPC services in Java — unit tests, integration tests, and end-to-end tests?",
+      "title": "Testing gRPC Services in Java",
+      "direct_answer": "Test **gRPC** services at three levels: unit tests that mock `StreamObserver` and call the service implementation directly; integration tests that use `grpc-spring-boot-starter`'s `@SpringBootTest` with an in-process server; and end-to-end tests that start a real server and call it via a generated blocking stub. The `grpc-testing` library provides `GrpcCleanupRule` (JUnit 4) and `GrpcCleanupExtension` (JUnit 5) to manage in-process channel lifecycle.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Tests whether the candidate knows the full testing pyramid for gRPC and can write deterministic, fast tests without needing a live network.",
+        "common_mistake": "Interviewers want to see awareness of the gRPC testing utilities, not just 'I curl it'.",
+        "to_stand_out": "Interviewers want to see awareness of the gRPC testing utilities, not just 'I curl it'."
+      },
+      "company_tags": [
+        "Google",
+        "Lyft",
+        "Stripe",
+        "Shopify",
+        "Netflix",
+        "Square"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why MockMvc Can't Test gRPC — And What Replaces It",
+            "content": "In a REST world, `MockMvc` lets you test controllers without starting a real HTTP server — it simulates the entire request pipeline in-memory.\n- When you migrate to gRPC, that tool disappears. `MockMvc` speaks HTTP/1.1 with JSON bodies; gRPC speaks HTTP/2 with binary protobuf and a completely different header and trailer model.\n- Your first instinct — \"I'll just curl the gRPC port in a test\" — creates slow, flaky tests that depend on port availability and network behavior.\n\ngRPC's testing toolchain replaces `MockMvc` with two mechanisms. For unit tests, the service implementation is a plain Java class — instantiate it directly, pass a mocked `StreamObserver`, and assert on what gets sent. No server, no network, no Spring context. Tests run in single-digit milliseconds.\n\nFor integration tests, `InProcessServerBuilder` and `InProcessChannelBuilder` from the `grpc-testing` library start a real gRPC server and client inside the same JVM with no TCP socket. The server processes requests through the full protobuf serialization path, interceptor chain, and `StreamObserver` lifecycle — catching bugs that unit tests miss (metadata propagation, interceptor ordering, serialization edge cases) — while remaining fast and deterministic.\n\nThe testing pyramid still applies: many fast unit tests for business logic, fewer integration tests for wiring and interceptor behavior, and a small number of end-to-end tests that exercise the full Spring Boot context including `@GrpcService` auto-configuration and `@GrpcClient` injection."
+          },
+          {
+            "type": "step",
+            "title": "Step 1 — Unit Test: Mock StreamObserver and Call the Service Directly",
+            "content": "The service implementation is a plain Java class that extends a generated base class. Instantiate it directly — no Spring context, no gRPC server, no network. Mock the `StreamObserver` with Mockito, call the method, and use `ArgumentCaptor` to grab the response.\n\n```java\nimport io.grpc.stub.StreamObserver;\nimport org.junit.jupiter.api.Test;\nimport org.mockito.ArgumentCaptor;\nimport static org.assertj.core.api.Assertions.assertThat;\nimport static org.mockito.Mockito.*;\n\nclass OrderServiceImplTest {\n\n  private final OrderServiceImpl service =\n      new OrderServiceImpl(new FakeOrderRepository());\n\n  @Test\n  void getOrder_returnsOrder() {\n    OrderRequest request = OrderRequest.newBuilder()\n        .setOrderId(\"ord-1\").build();\n\n    @SuppressWarnings(\"unchecked\")\n    StreamObserver<OrderReply> observer = mock(StreamObserver.class);\n    ArgumentCaptor<OrderReply> captor =\n        ArgumentCaptor.forClass(OrderReply.class);\n\n    service.getOrder(request, observer);\n\n    verify(observer).onNext(captor.capture());\n    verify(observer).onCompleted();\n    verify(observer, never()).onError(any());\n    assertThat(captor.getValue().getStatus()).isEqualTo(\"CONFIRMED\");\n  }\n}\n```\n\nThis pattern runs in single-digit milliseconds and verifies three things: `onNext` was called with the expected response, `onCompleted` was called to close the stream, and `onError` was never called. These are the three `StreamObserver` contract guarantees that every gRPC service method must satisfy. Use fake repositories or Mockito stubs to isolate business logic from infrastructure — the goal is testing your code, not protobuf serialization."
+          },
+          {
+            "type": "step",
+            "title": "Step 2 — Integration Test: In-Process Server Without Network",
+            "content": "The `grpc-testing` library provides `InProcessServerBuilder` and `InProcessChannelBuilder` that start a real gRPC server and client inside the same JVM. No TCP socket, no port allocation, no flaky network. The `directExecutor()` option runs everything on the test thread for deterministic sequencing.\n\n```java\nimport io.grpc.ManagedChannel;\nimport io.grpc.inprocess.InProcessChannelBuilder;\nimport io.grpc.inprocess.InProcessServerBuilder;\nimport io.grpc.testing.GrpcCleanupRule;\nimport org.junit.Rule;\nimport org.junit.Test;\nimport static org.assertj.core.api.Assertions.assertThat;\n\npublic class OrderServiceIntegrationTest {\n\n  @Rule\n  public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();\n\n  @Test\n  public void getOrder_throughFullStack() throws Exception {\n    String name = InProcessServerBuilder.generateName();\n\n    grpcCleanup.register(\n        InProcessServerBuilder.forName(name)\n            .directExecutor()\n            .addService(new OrderServiceImpl(new RealRepository()))\n            .addService(new AuthInterceptor())    // test interceptors too\n            .build().start());\n\n    ManagedChannel channel = grpcCleanup.register(\n        InProcessChannelBuilder.forName(name)\n            .directExecutor().build());\n\n    OrderServiceGrpc.OrderServiceBlockingStub stub =\n        OrderServiceGrpc.newBlockingStub(channel);\n\n    OrderReply reply = stub.getOrder(\n        OrderRequest.newBuilder().setOrderId(\"ord-1\").build());\n\n    assertThat(reply.getStatus()).isEqualTo(\"CONFIRMED\");\n  }\n}\n```\n\nThis level exercises the full protobuf serialization, interceptor chain, and status code mapping. `GrpcCleanupRule` registers shutdown hooks so channels and servers close deterministically after each test — without it, leaked channels accumulate threads and eventually cause `OutOfMemoryError` in long test suites. For JUnit 5, use the equivalent extension or `@AfterEach` manual cleanup."
+          },
+          {
+            "type": "step",
+            "title": "Step 3 — Spring Boot Test: Full Context with In-Process Transport",
+            "content": "Use `@SpringBootTest` with test properties that route the gRPC server and client through in-process transport. This boots the entire Spring context — dependency injection, `@GrpcService` auto-discovery, interceptors, health service — and validates that the starter's auto-configuration wires everything correctly.\n\n```java\nimport net.devh.boot.grpc.client.inject.GrpcClient;\nimport org.junit.jupiter.api.Test;\nimport org.springframework.boot.test.context.SpringBootTest;\nimport org.springframework.test.annotation.DirtiesContext;\nimport static org.assertj.core.api.Assertions.*;\n\n@SpringBootTest(properties = {\n    \"grpc.server.port=-1\",\n    \"grpc.server.in-process-name=test\",\n    \"grpc.client.order.address=in-process:test\"\n})\n@DirtiesContext\nclass OrderServiceSpringTest {\n\n  @GrpcClient(\"order\")\n  private OrderServiceGrpc.OrderServiceBlockingStub stub;\n\n  @Test\n  void getOrder_springContext() {\n    OrderReply reply = stub.getOrder(\n        OrderRequest.newBuilder().setOrderId(\"ord-1\").build());\n    assertThat(reply.getStatus()).isEqualTo(\"CONFIRMED\");\n  }\n\n  @Test\n  void getOrder_notFound_returnsCorrectStatus() {\n    assertThatThrownBy(() -> stub.getOrder(\n        OrderRequest.newBuilder().setOrderId(\"missing\").build()))\n      .isInstanceOf(StatusRuntimeException.class)\n      .satisfies(ex -> assertThat(\n          ((StatusRuntimeException) ex).getStatus().getCode())\n          .isEqualTo(Status.Code.NOT_FOUND));\n  }\n}\n```\n\nSetting `grpc.server.port=-1` disables the TCP server entirely — all traffic flows through the in-process transport, eliminating port conflicts in CI. The error path test is critical: clients depend on specific status codes for retry decisions and error display. If your `.proto` documents error conditions, your tests must verify them. Untested error paths are the first thing that breaks in production when real clients encounter edge cases the happy-path tests never exercised."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`MockMvc` doesn't work for gRPC** — it speaks HTTP/1.1+JSON; gRPC requires direct service invocation (unit) or in-process server/channel (integration).\n- **Mocked `StreamObserver` unit tests run in <10ms** — verify `onNext`, `onCompleted`, and `onError` contract without any server or Spring context.\n- **`InProcessServerBuilder` exercises the full protobuf path** — serialization, interceptor chain, and status code mapping without TCP sockets.\n- **`grpc.server.port=-1` disables TCP in Spring tests** — combined with `in-process-name`, routes all traffic through in-process transport.\n- **Error path tests are non-negotiable** — assert specific `Status.Code` values on the thrown `StatusRuntimeException`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The key difference from REST testing is that `MockMvc` doesn't work for gRPC — it speaks HTTP/1.1 with JSON, and gRPC needs HTTP/2 with protobuf. Test at three levels with the right tools for each.\n\n**Unit tests — fastest and simplest:**\n- Instantiate the service directly as a plain Java object, pass a mocked `StreamObserver`, and assert that `onNext` was called with the expected response and `onCompleted` was called; no Spring, no server, no network\n- Use `ArgumentCaptor` to inspect the response object's fields; these run in under 10 milliseconds and give fast feedback on business logic\n\n**Integration tests — full gRPC pipeline without TCP:**\n- Use `InProcessServerBuilder` from the `grpc-testing` library to start a real gRPC server inside the JVM with no TCP socket; this exercises full protobuf serialization and the interceptor chain while staying fast and deterministic\n- `GrpcCleanupRule` handles channel and server shutdown so you don't leak threads or channels across test runs\n\n**Spring Boot tests — full context, no port binding:**\n- Use `@SpringBootTest` with `grpc.server.port=-1` and `in-process-name` to route everything through in-process transport; the full Spring context boots — `@GrpcService` discovery, interceptors, health service — but without binding a real port, eliminating CI port conflicts\n\n**Error path tests — non-negotiable:**\n- Assert that the stub throws `StatusRuntimeException` with the correct status code for every error scenario — `NOT_FOUND` for missing entities, `INVALID_ARGUMENT` for bad input, `UNAUTHENTICATED` for missing tokens\n- Untested error paths are the first thing that breaks when real clients hit edge cases; the test `assertThrows(StatusRuntimeException.class, () -> stub.callMethod(...)).getStatus().getCode()` pattern is straightforward\n\nI recommend unit tests for every service method, integration tests for every interceptor behavior, and at least one error path test per distinct `Status.Code` the service can return."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you test gRPC interceptors in isolation?",
+        "How do you mock a downstream gRPC service dependency in a Spring Boot integration test?",
+        "How do you test server-streaming or bidirectional-streaming RPCs with JUnit?"
+      ],
+      "seo": {
+        "meta_title": "Testing gRPC Services Java — Unit, Integration, Spring Boot",
+        "meta_description": "Complete guide to testing gRPC services in Java: mock StreamObserver unit tests, InProcessServerBuilder integration tests, and @SpringBootTest with grpc-spring-boot-starter.",
+        "keywords": [
+          "testing grpc java",
+          "grpc unit test mockito",
+          "InProcessServerBuilder junit",
+          "grpc spring boot test",
+          "grpc integration test"
+        ],
+        "metaDescription": "Test gRPC services at three levels: unit tests that mock StreamObserver and call the service implementation directly; integration tests that use grpc-spring-bo.",
+        "metaTitle": "Testing gRPC Services in Java"
+      },
+      "importance": "high",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P05",
+        "hook": "The key difference from REST testing is that MockMvc doesn't work for gRPC — it speaks HTTP/1.1 with JSON, and gRPC needs HTTP/2 with protobuf.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "In a REST world, MockMvc lets you test controllers without starting a real HTTP server — it simulates the entire request pipeline in-memory. When you migrate to gRPC, that tool disappears. MockMvc speaks HTTP/1.1 with JSON bodies; gRPC speaks HTTP/2 with binary protobuf and a completely different header and trailer model. Your first instinct — \"I'll just curl the gRPC port in a test\" — creates slow, flaky tests that depend on port availability and network behavior. gRPC's testing toolchain."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Tests whether the candidate knows the full testing pyramid for gRPC and can write deterministic, fast tests without needing a live network."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "MockMvc doesn't work for gRPC — it speaks HTTP/1",
+              "1+JSON; gRPC requires direct service invocation (unit) or in-process server/channel (integration)",
+              "Mocked StreamObserver unit tests run in <10ms — verify onNext, onCompleted, and onError contract without any server or Spring context",
+              "InProcessServerBuilder exercises the full protobuf path — serialization, interceptor chain, and status code mapping without TCP sockets",
+              "port=-1 disables TCP in Spring tests — combined with in-process-name, routes all traffic through in-process transport"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "In a REST world, MockMvc lets you test controllers without starting a real HTTP server — it simulates the entire request pipeline in-memory. When you migrate to gRPC, that tool disappears. MockMvc speaks HTTP/1.1 with JSON bodies; gRPC speaks HTTP/2 with binary protobuf and a completely different header and trailer model. Your first instinct — \"I'll just curl the gRPC port in a test\" — creates slow, flaky tests that depend on port availability and network behavior. gRPC's testing toolchain replaces MockMvc with two mechanisms. For unit tests, the service implementation is a plain Java class — instantiate it directly, pass a mocked StreamObserver, and assert on what gets sent. No server, no network, no Spring context. Tests run in."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Interviewers want to see awareness of the gRPC testing utilities, not just 'I curl it'"
+            ]
+          }
+        ],
+        "cap": "Unit tests — fastest and simplest: Instantiate the service directly as a plain Java object, pass a mocked StreamObserver, and assert that onNext was called with the expected response and onCompleted w",
+        "familiarity_anchors": [
+          "StreamObserver",
+          "SpringBootTest",
+          "GrpcCleanupRule"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you test gRPC interceptors in isolation?",
+          "How do you mock a downstream gRPC service dependency in a Spring Boot integration test?",
+          "How do you test server-streaming or bidirectional-streaming RPCs with JUnit?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot gRPC service with Protocol Buffers"
+      }
+    }
+  ]
+}

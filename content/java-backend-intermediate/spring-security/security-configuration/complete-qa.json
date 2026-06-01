@@ -1,0 +1,287 @@
+{
+  "topic": "Security Configuration",
+  "topicSlug": "security-configuration",
+  "questions": [
+    {
+      "id": "ss-cfg-001",
+      "slug": "spring-security-filter-chain-configuration",
+      "question": "How does the Spring Security filter chain work, and how do you configure it in Spring Security 6?",
+      "title": "Spring Security Filter Chain and SecurityFilterChain Configuration",
+      "direct_answer": "Spring Security is built as a **chain of servlet filters** (`FilterChainProxy`) that intercepts every request to handle authentication, authorization, CSRF, CORS, headers, and exception translation. In **Spring Security 6**, you configure it by defining one or more **`SecurityFilterChain` beans** — each mapping URL patterns (`securityMatcher`) to a filter chain. **`WebSecurityConfigurerAdapter` was removed in 6.0**; use the **component-based lambda DSL**. Order matters: chains evaluated top-to-bottom, **first match wins**; use **`@Order`** for multiple chains (e.g., `/api/**` JWT + `/web/**` session). Built-in filters cover CSRF, sessions, exceptions, anonymous, auth processing, and authorization; insert custom filters with **`addFilterBefore/After/At`**.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of filter chain architecture; Spring Security 6 migration; multiple filter chain patterns",
+        "common_mistake": "Using deprecated WebSecurityConfigurerAdapter; mis-ordering filter chains; confusing authenticationManager setup",
+        "to_stand_out": "Discuss multiple chains for mixed auth, custom filters, observation API, SecurityMatcher"
+      },
+      "company_tags": [
+        "spring",
+        "pivotal",
+        "vmware",
+        "okta",
+        "auth0"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "How Spring Security Plugs Into the Web Stack",
+            "content": "At boot time, Spring Security registers a single servlet filter, **`DelegatingFilterProxy`**, which delegates to a Spring-managed bean called **`FilterChainProxy`**. This bean holds one or more **`SecurityFilterChain`** instances.\n\nEach `SecurityFilterChain` is a list of filters applied to requests matching a **`SecurityMatcher`** (URL pattern, HTTP method, etc.).\n- For each request, Spring finds the **first matching chain** and runs its filters in order.\n- Every request passes through this chain **before** hitting your `@RestController`.\n- The chain decides whether to let it through, reject it, or redirect to login.\n\n**For reactive WebFlux**, the equivalent is `SecurityWebFilterChain` with analogous filters."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Filter Chain Order (Servlet)",
+            "content": "```mermaid\nflowchart TD\n    req[\"HTTP request\"] --> dfp[\"DelegatingFilterProxy\"]\n    dfp --> fcp[\"FilterChainProxy (Spring managed)\"]\n    fcp --> match{\"SecurityMatcher: which chain?\"}\n    match --> chain[\"Selected SecurityFilterChain\"]\n    chain --> f1[\"DisableEncodeUrlFilter\"]\n    f1 --> f2[\"WebAsyncManagerIntegrationFilter\"]\n    f2 --> f3[\"SecurityContextHolderFilter (loads SecurityContext from session or request attributes)\"]\n    f3 --> f4[\"HeaderWriterFilter (X-Frame-Options, HSTS, CSP, X-Content-Type-Options)\"]\n    f4 --> f5[\"CorsFilter (if CORS configured)\"]\n    f5 --> f6[\"CsrfFilter (validates CSRF token)\"]\n    f6 --> f7[\"LogoutFilter\"]\n    f7 --> f8[\"OAuth2AuthorizationRequestRedirectFilter / Saml2WebSsoAuthenticationRequestFilter\"]\n    f8 --> f9[\"UsernamePasswordAuthenticationFilter / BearerTokenAuthenticationFilter\"]\n    f9 --> f10[\"DefaultLoginPageGeneratingFilter / DefaultLogoutPageGeneratingFilter\"]\n    f10 --> f11[\"BasicAuthenticationFilter\"]\n    f11 --> f12[\"RequestCacheAwareFilter\"]\n    f12 --> f13[\"SecurityContextHolderAwareRequestFilter\"]\n    f13 --> f14[\"AnonymousAuthenticationFilter (anonymous principal if no auth yet)\"]\n    f14 --> f15[\"ExceptionTranslationFilter (catches AccessDenied / Authentication exceptions)\"]\n    f15 --> f16[\"AuthorizationFilter (replaces FilterSecurityInterceptor in 6.x)\"]\n    f16 --> ctl[\"DispatcherServlet -> @RestController\"]\n```"
+          },
+          {
+            "type": "step",
+            "title": "Built-in Filters in Order (What Each Does)",
+            "content": "**Boot-time setup:**\n- `DelegatingFilterProxy` registered as the single servlet filter\n- Delegates to `FilterChainProxy` bean\n- `FilterChainProxy` holds the list of `SecurityFilterChain`s\n\n**The chain (top to bottom):**\n- **`DisableEncodeUrlFilter`** — security hardening (prevents session ID URL encoding)\n- **`WebAsyncManagerIntegrationFilter`** — propagates `SecurityContext` for async dispatch\n- **`SecurityContextHolderFilter`** — loads `SecurityContext` from session/request and clears at end\n- **`HeaderWriterFilter`** — writes security headers (`X-Frame-Options`, HSTS, CSP, `X-Content-Type-Options`)\n- **`CorsFilter`** — only if CORS configured via `http.cors(...)`\n- **`CsrfFilter`** — validates CSRF token for state-changing requests\n- **`LogoutFilter`** — handles `POST /logout`\n- **`OAuth2AuthorizationRequestRedirectFilter` / `Saml2WebSsoAuthenticationRequestFilter`** — initiates OAuth2/SAML\n- **`UsernamePasswordAuthenticationFilter` / `BearerTokenAuthenticationFilter`** — authenticates credentials/tokens\n- **`DefaultLoginPageGeneratingFilter` / `DefaultLogoutPageGeneratingFilter`** — auto-render login/logout pages\n- **`BasicAuthenticationFilter`** — HTTP Basic auth\n- **`RequestCacheAwareFilter`** — replays original request after login\n- **`SecurityContextHolderAwareRequestFilter`** — adapts `HttpServletRequest` (`isUserInRole`, `getPrincipal`)\n- **`AnonymousAuthenticationFilter`** — sets anonymous principal if still unauthenticated\n- **`ExceptionTranslationFilter`** — catches `AccessDeniedException` / `AuthenticationException` and translates to HTTP responses\n- **`AuthorizationFilter`** — final access control check (replaced `FilterSecurityInterceptor` in 6.x)"
+          },
+          {
+            "type": "step",
+            "title": "Spring Security 6 Configuration (Single Chain)",
+            "content": "**Typical starter:**\n\n```java\n@Configuration\n@EnableWebSecurity\npublic class SecurityConfig {\n\n    @Bean\n    SecurityFilterChain chain(HttpSecurity http) throws Exception {\n        return http\n            .csrf(AbstractHttpConfigurer::disable)\n            .cors(Customizer.withDefaults())\n            .authorizeHttpRequests(auth -> auth\n                .requestMatchers(\"/health\", \"/actuator/health\").permitAll()\n                .requestMatchers(HttpMethod.GET, \"/public/**\").permitAll()\n                .requestMatchers(\"/admin/**\").hasRole(\"ADMIN\")\n                .anyRequest().authenticated())\n            .sessionManagement(s -> s.sessionCreationPolicy(STATELESS))\n            .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()))\n            .exceptionHandling(ex -> ex\n                .authenticationEntryPoint(new BearerTokenAuthenticationEntryPoint())\n                .accessDeniedHandler(new BearerTokenAccessDeniedHandler()))\n            .build();\n    }\n\n    @Bean\n    PasswordEncoder passwordEncoder() {\n        return PasswordEncoderFactories.createDelegatingPasswordEncoder();\n    }\n}\n```\n\n**Key elements:**\n- **`csrf`** — enable for browser; disable for pure APIs using Bearer tokens\n- **`sessionCreationPolicy(STATELESS)`** — don't create HTTP session (token-based APIs)\n- **`authorizeHttpRequests`** — ordered rules; first match wins; `anyRequest()` MUST be last\n- **`oauth2ResourceServer.jwt(...)`** — validates JWTs from `Authorization: Bearer`\n- **`exceptionHandling`** — `BearerTokenAuthenticationEntryPoint` returns proper `WWW-Authenticate` headers"
+          },
+          {
+            "type": "step",
+            "title": "Multiple Filter Chains (Mixed Auth)",
+            "content": "**For apps with both API and web frontends, use multiple chains:**\n\n```java\n@Configuration\n@EnableWebSecurity\npublic class SecurityConfig {\n\n    @Bean\n    @Order(1)\n    SecurityFilterChain apiChain(HttpSecurity http) throws Exception {\n        return http\n            .securityMatcher(\"/api/**\")\n            .csrf(AbstractHttpConfigurer::disable)\n            .authorizeHttpRequests(a -> a.anyRequest().authenticated())\n            .sessionManagement(s -> s.sessionCreationPolicy(STATELESS))\n            .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()))\n            .build();\n    }\n\n    @Bean\n    @Order(2)\n    SecurityFilterChain webChain(HttpSecurity http) throws Exception {\n        return http\n            .securityMatcher(\"/web/**\", \"/login\", \"/\", \"/logout\")\n            .authorizeHttpRequests(a -> a\n                .requestMatchers(\"/\", \"/login\", \"/public/**\").permitAll()\n                .anyRequest().authenticated())\n            .formLogin(form -> form.loginPage(\"/login\").defaultSuccessUrl(\"/web/home\"))\n            .logout(Customizer.withDefaults())\n            .build();\n    }\n\n    @Bean\n    @Order(3)\n    SecurityFilterChain actuatorChain(HttpSecurity http) throws Exception {\n        return http\n            .securityMatcher(\"/actuator/**\")\n            .authorizeHttpRequests(a -> a\n                .requestMatchers(\"/actuator/health/**\").permitAll()\n                .anyRequest().hasRole(\"OPS\"))\n            .httpBasic(Customizer.withDefaults())\n            .build();\n    }\n}\n```\n\n**Rules:**\n- `@Order` controls evaluation order — first matching `securityMatcher` wins\n- Without `@Order`, evaluation order is undefined — always annotate when you have multiple chains\n- Each chain is independent — different CSRF, session, auth settings\n\n**What changed in Spring Security 6:**\n- `WebSecurityConfigurerAdapter` removed -> use `SecurityFilterChain` beans\n- `antMatchers(...)` -> `requestMatchers(...)`\n- `authorizeRequests(...)` -> `authorizeHttpRequests(...)` (new authorization model, more consistent)\n- Lambda DSL required (no chaining with `.and()`)\n- `SessionCreationPolicy` imports moved\n- CSRF enabled by default; explicit disable for APIs"
+          },
+          {
+            "type": "step",
+            "title": "Custom Filters, UserDetailsService, AuthenticationManager",
+            "content": "**Custom filter (e.g., API key auth, tenant resolution):**\n\n```java\npublic class ApiKeyFilter extends OncePerRequestFilter {\n    private final ApiKeyService service;\n\n    @Override\n    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,\n                                    FilterChain chain) throws ServletException, IOException {\n        String key = req.getHeader(\"X-Api-Key\");\n        if (key != null) {\n            Optional<AppUser> user = service.validate(key);\n            user.ifPresent(u -> {\n                Authentication auth = new UsernamePasswordAuthenticationToken(\n                    u, null, u.authorities());\n                SecurityContextHolder.getContext().setAuthentication(auth);\n            });\n        }\n        chain.doFilter(req, res);\n    }\n}\n\nhttp.addFilterBefore(new ApiKeyFilter(apiKeyService),\n    UsernamePasswordAuthenticationFilter.class);\n```\n\n**Positioning helpers:**\n- `addFilterBefore(filter, Xyz.class)` — run before\n- `addFilterAfter(filter, Xyz.class)` — run after\n- `addFilterAt(filter, Xyz.class)` — replace at the same position\n\n**`UserDetailsService` for form login:**\n\n```java\n@Bean\nUserDetailsService users(UserRepository repo) {\n    return username -> repo.findByUsername(username)\n        .map(u -> User.withUsername(u.username())\n            .password(u.passwordHash())\n            .roles(u.roles().toArray(String[]::new))\n            .build())\n        .orElseThrow(() -> new UsernameNotFoundException(username));\n}\n```\n\n**`AuthenticationManager` (for programmatic auth):**\n\n```java\n@Bean\nAuthenticationManager authManager(UserDetailsService uds, PasswordEncoder encoder) {\n    DaoAuthenticationProvider provider = new DaoAuthenticationProvider();\n    provider.setUserDetailsService(uds);\n    provider.setPasswordEncoder(encoder);\n    return new ProviderManager(provider);\n}\n```\n\n**Custom JWT processing:**\n\n```java\n@Bean\nSecurityFilterChain chain(HttpSecurity http, JwtDecoder decoder) throws Exception {\n    JwtAuthenticationConverter conv = new JwtAuthenticationConverter();\n    conv.setJwtGrantedAuthoritiesConverter(jwt -> {\n        List<String> roles = jwt.getClaimAsStringList(\"roles\");\n        return roles == null ? List.of() :\n            roles.stream()\n                .map(r -> new SimpleGrantedAuthority(\"ROLE_\" + r))\n                .toList();\n    });\n    return http.oauth2ResourceServer(o -> o\n            .jwt(j -> j.decoder(decoder).jwtAuthenticationConverter(conv)))\n        .build();\n}\n```\n\n**Method security (pairs with URL security):**\n\n```java\n@Configuration\n@EnableMethodSecurity\npublic class MethodSec {}\n\n@PreAuthorize(\"hasRole('ADMIN')\")\npublic void deleteUser(Long id) { ... }\n\n@PreAuthorize(\"#orderId.startsWith(authentication.name)\")\npublic Order getOrder(String orderId) { ... }\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Configuration Patterns: Helps, Hurts, Watch For",
+            "content": "**When multiple chains help:**\n- API + web frontend in same app (different CSRF, session, auth)\n- Actuator with separate auth (Basic for ops, JWT for app)\n- Tenant-specific or version-specific security\n\n**When single chain is enough:**\n- Pure REST API (one auth strategy)\n- Pure server-rendered MVC (one session-based auth)\n- Avoid complexity until you actually need it\n\n**When custom filters help:**\n- API key auth alongside JWT\n- Multi-tenancy (tenant resolution from subdomain/header)\n- Pre-auth audit logging\n- Custom request enrichment\n\n**When custom filters hurt:**\n- Re-implementing what Spring already does (`oauth2ResourceServer`, `formLogin`)\n- Wrong position -> `SecurityContext` empty when authorization runs\n- Catching auth exceptions in filter -> security bypass\n\n**Watch for:**\n- **Rule order** — `anyRequest().authenticated()` before specific `permitAll()` blocks everything\n- **`hasRole(\"ADMIN\")` vs `hasAuthority(\"ROLE_ADMIN\")`** — `hasRole` auto-prefixes `ROLE_`\n- **CSRF mixed across chains** — disabled on `/api/**` enabled on `/web/**` requires separate chains\n- **Session created with STATELESS** if controllers call `request.getSession()`\n- **Missing `@Order`** -> undefined chain evaluation\n- **`X-Frame-Options: DENY`** blocks H2 console / iframe UIs in dev\n- **Forgetting `@EnableMethodSecurity`** -> `@PreAuthorize` ignored silently\n- **Mixing servlet + reactive** in one app — doesn't work\n- **`DefaultLoginPageGeneratingFilter`** showing for API -> remove `formLogin()`\n- **Custom filter at wrong position** — `addFilterBefore` vs `addFilterAt` semantics differ"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Spring Security is a servlet filter chain** (`FilterChainProxy`) with many built-in filters in a fixed order.\n- **`SecurityFilterChain` beans** replace `WebSecurityConfigurerAdapter` (removed in 6.0).\n- **Multiple chains** for mixed auth (`/api/**` JWT, `/web/**` session); use **`@Order`**.\n- **`requestMatchers`** replaces `antMatchers`; **`authorizeHttpRequests`** replaces `authorizeRequests`.\n- **Rule order** — specific rules first, `anyRequest()` last.\n- **`SessionCreationPolicy.STATELESS`** for APIs; **enable CSRF** for cookie-based web apps.\n- **Custom filters** via `addFilterBefore/After/At` at appropriate position.\n- **Built-in headers** (CSP, HSTS, `X-Frame-Options`) — tune per app.\n- **`@EnableMethodSecurity`** for `@PreAuthorize`/`@PostAuthorize`.\n- **Test with `@WithMockUser`** and `mvc.perform(...).with(csrf())`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**How it plugs in**\n- Boot time: Spring registers `DelegatingFilterProxy`\n- Delegates to `FilterChainProxy` bean holding `SecurityFilterChain` instances\n- Each chain is a list of filters applied to requests matching a `SecurityMatcher`\n- First matching chain wins; filters run in fixed order\n\n**Key built-in filters in order**\n- SecurityContextHolderFilter -> loads context\n- HeaderWriterFilter -> security headers\n- CorsFilter, CsrfFilter, LogoutFilter\n- UsernamePasswordAuthenticationFilter / BearerTokenAuthenticationFilter\n- BasicAuthenticationFilter, RequestCacheAwareFilter\n- AnonymousAuthenticationFilter\n- ExceptionTranslationFilter -> AuthorizationFilter (replaces FilterSecurityInterceptor)\n\n**Spring Security 6 single-chain config**\n- `@Configuration @EnableWebSecurity`\n- `@Bean SecurityFilterChain` with `HttpSecurity`\n- `csrf.disable()` for API; `csrf` enabled for browser\n- `authorizeHttpRequests` + `requestMatchers`; `anyRequest().authenticated()` last\n- `sessionCreationPolicy(STATELESS)` for tokens\n- `oauth2ResourceServer.jwt(...)` for JWT\n\n**Multiple chains**\n- `@Order(1)` apiChain with `securityMatcher(\"/api/**\")`\n- `@Order(2)` webChain with `securityMatcher(\"/web/**\", \"/login\")`\n- `@Order(3)` actuatorChain with `securityMatcher(\"/actuator/**\")`\n- First matching `securityMatcher` wins\n\n**Custom filter**\n- Extend `OncePerRequestFilter`\n- Set `Authentication` in `SecurityContextHolder`\n- Register with `addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class)`\n\n**Migration checklist (pre-Boot 3 -> Boot 3+)**\n- `WebSecurityConfigurerAdapter` -> `SecurityFilterChain` bean\n- `antMatchers` -> `requestMatchers`\n- `authorizeRequests` -> `authorizeHttpRequests`\n- Remove `.and()` chaining; use lambda DSL\n- `EnableGlobalMethodSecurity` -> `EnableMethodSecurity`\n\n**Common gotchas**\n- Rule order: specific first, anyRequest last\n- `hasRole` vs `hasAuthority` (ROLE_ prefix)\n- `STATELESS` broken by `request.getSession()` in controllers\n- Missing `@Order` -> undefined evaluation\n- `X-Frame-Options: DENY` blocks dev iframes (H2 console)\n- `@EnableMethodSecurity` required for `@PreAuthorize`"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you set up two SecurityFilterChain beans for /api JWT and /web session?",
+        "What's the difference between hasRole and hasAuthority?",
+        "How do you add a custom filter at the right position in the chain?",
+        "Migration from WebSecurityConfigurerAdapter to SecurityFilterChain beans?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Security 6 Filter Chain — SecurityFilterChain Configuration",
+        "metaDescription": "Spring Security filter chain order, SecurityFilterChain beans, multiple chains, custom filters, headers, CSRF, CORS, and Spring Security 6 migration."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "How it plugs in Boot time: Spring registers DelegatingFilterProxy Delegates to FilterChainProxy bean holding SecurityFilterChain instances Each chain is a list of filters applied to requests matching",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "At boot time, Spring Security registers a single servlet filter, DelegatingFilterProxy, which delegates to a Spring-managed bean called FilterChainProxy. This bean holds one or more SecurityFilterChain instances. Each SecurityFilterChain is a list of filters applied to requests matching a SecurityMatcher (URL pattern, HTTP method, etc.). For each request, Spring finds the first matching chain and runs its filters in order. Every request passes through this chain before hitting your @RestController. The chain decides whether to let it through, reject it."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Understanding of filter chain architecture; Spring Security 6 migration; multiple filter chain patterns"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Spring Security is a servlet filter chain (FilterChainProxy) with many built-in filters in a fixed order",
+              "SecurityFilterChain beans replace WebSecurityConfigurerAdapter (removed in 6",
+              "Multiple chains for mixed auth (/api/ JWT, /web/ session); use @Order",
+              "requestMatchers replaces antMatchers; authorizeHttpRequests replaces authorizeRequests",
+              "Rule order — specific rules first, anyRequest() last"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "At boot time, Spring Security registers a single servlet filter, DelegatingFilterProxy, which delegates to a Spring-managed bean called FilterChainProxy. This bean holds one or more SecurityFilterChain instances. Each SecurityFilterChain is a list of filters applied to requests matching a SecurityMatcher (URL pattern, HTTP method, etc.). For each request, Spring finds the first matching chain and runs its filters in order. Every request passes through this chain before hitting your @RestController. The chain decides whether to let it through, reject it, or redirect to login. For reactive WebFlux, the equivalent is SecurityWebFilterChain with analogous filters."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using deprecated WebSecurityConfigurerAdapter",
+              "mis-ordering filter chains",
+              "confusing authenticationManager setup"
+            ]
+          }
+        ],
+        "cap": "How it plugs in Boot time: Spring registers DelegatingFilterProxy Delegates to FilterChainProxy bean holding SecurityFilterChain instances Each chain is a list of filters applied to requests matching",
+        "familiarity_anchors": [
+          "Spring",
+          "Security",
+          "FilterChainProxy"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you set up two SecurityFilterChain beans for /api JWT and /web session?",
+          "What's the difference between hasRole and hasAuthority?",
+          "How do you add a custom filter at the right position in the chain?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JWT-based authentication"
+      }
+    },
+    {
+      "id": "ss-cfg-002",
+      "slug": "securityfilterchain-modern-config-vs-websecurityconfigureradapter-migration",
+      "question": "How do you migrate from WebSecurityConfigurerAdapter to the modern SecurityFilterChain config in Spring Security 6?",
+      "title": "WebSecurityConfigurerAdapter to SecurityFilterChain Migration (Spring Security 6)",
+      "direct_answer": "Spring Security 6 removed **`WebSecurityConfigurerAdapter`**. Migrate by replacing the adapter subclass with a **`SecurityFilterChain` bean** that takes `HttpSecurity` and returns `http.build()`. Replace **`configure(AuthenticationManagerBuilder)`** with a **`UserDetailsService`** + **`PasswordEncoder`** bean (and optionally a `DaoAuthenticationProvider`/`AuthenticationManager` bean). Replace **`configure(WebSecurity)`** ignore lists with `WebSecurityCustomizer`. Switch **`antMatchers`** -> **`requestMatchers`**, **`authorizeRequests`** -> **`authorizeHttpRequests`**, **`@EnableGlobalMethodSecurity`** -> **`@EnableMethodSecurity`**, and remove all **`.and()`** chaining in favor of the lambda DSL.",
+      "layout_type": "before-after",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Hands-on knowledge of the Spring Security 5.7 -> 6 migration that every Boot 3 upgrade hits.",
+        "common_mistake": "Leaving `WebSecurityConfigurerAdapter` in code, mixing `.and()` with lambda DSL, or losing CSRF/role-prefix nuances during the rewrite.",
+        "to_stand_out": "Discuss the `AuthorizationFilter` replacing `FilterSecurityInterceptor`, the new `authorizeHttpRequests` model, and `WebSecurityCustomizer` as the replacement for `configure(WebSecurity)`."
+      },
+      "company_tags": [
+        "spring",
+        "vmware",
+        "enterprise",
+        "saas",
+        "fintech"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why the Migration: Component Model Over Inheritance",
+            "content": "Spring Security 5.7 deprecated `WebSecurityConfigurerAdapter` and 6.0 removed it.\n- The reason is architectural: **inheritance tied configuration to a single class**, prevented multiple configurations from coexisting cleanly, and made the API less Spring-idiomatic.\n- The replacement is a **bean-based component model**: declare `SecurityFilterChain`, `UserDetailsService`, `PasswordEncoder`, and (optionally) `AuthenticationManager` as `@Bean`s and let Spring wire them.\n\n**The migration touches four areas:**\n- **`configure(HttpSecurity)`** -> `SecurityFilterChain` bean\n- **`configure(AuthenticationManagerBuilder)`** -> `UserDetailsService` + `PasswordEncoder` (+ optional `AuthenticationManager` bean)\n- **`configure(WebSecurity)`** -> `WebSecurityCustomizer` bean\n- **DSL syntax** — `antMatchers` -> `requestMatchers`, `authorizeRequests` -> `authorizeHttpRequests`, lambda DSL replaces `.and()` chaining\n\nUnder the hood, **`AuthorizationFilter`** replaces **`FilterSecurityInterceptor`** as the final access control gate. The new `authorizeHttpRequests` model uses `AuthorizationManager<RequestAuthorizationContext>` — composable, type-safe, and easier to extend with reactive support."
+          },
+          {
+            "type": "before_code",
+            "title": "Before: Spring Security 5.x with WebSecurityConfigurerAdapter",
+            "content": "```java\n@Configuration\n@EnableWebSecurity\n@EnableGlobalMethodSecurity(prePostEnabled = true)\npublic class SecurityConfig extends WebSecurityConfigurerAdapter {\n\n    @Autowired\n    private UserDetailsService uds;\n\n    @Override\n    protected void configure(AuthenticationManagerBuilder auth) throws Exception {\n        auth.userDetailsService(uds).passwordEncoder(passwordEncoder());\n    }\n\n    @Override\n    protected void configure(HttpSecurity http) throws Exception {\n        http\n            .csrf().disable()\n            .authorizeRequests()\n                .antMatchers(\"/public/**\", \"/login\").permitAll()\n                .antMatchers(\"/admin/**\").hasRole(\"ADMIN\")\n                .anyRequest().authenticated()\n            .and()\n            .formLogin()\n                .loginPage(\"/login\")\n                .defaultSuccessUrl(\"/home\")\n            .and()\n            .logout()\n                .logoutSuccessUrl(\"/\")\n            .and()\n            .sessionManagement()\n                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED);\n    }\n\n    @Override\n    public void configure(WebSecurity web) throws Exception {\n        web.ignoring().antMatchers(\"/css/**\", \"/js/**\", \"/images/**\");\n    }\n\n    @Bean\n    public PasswordEncoder passwordEncoder() {\n        return PasswordEncoderFactories.createDelegatingPasswordEncoder();\n    }\n\n    @Bean\n    @Override\n    public AuthenticationManager authenticationManagerBean() throws Exception {\n        return super.authenticationManagerBean();\n    }\n}\n```"
+          },
+          {
+            "type": "after_code",
+            "title": "After: Spring Security 6 with SecurityFilterChain Bean",
+            "content": "```java\n@Configuration\n@EnableWebSecurity\n@EnableMethodSecurity\npublic class SecurityConfig {\n\n    @Bean\n    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {\n        return http\n            .csrf(AbstractHttpConfigurer::disable)\n            .authorizeHttpRequests(auth -> auth\n                .requestMatchers(\"/public/**\", \"/login\").permitAll()\n                .requestMatchers(\"/admin/**\").hasRole(\"ADMIN\")\n                .anyRequest().authenticated())\n            .formLogin(form -> form\n                .loginPage(\"/login\")\n                .defaultSuccessUrl(\"/home\"))\n            .logout(logout -> logout.logoutSuccessUrl(\"/\"))\n            .sessionManagement(s -> s\n                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))\n            .build();\n    }\n\n    @Bean\n    public WebSecurityCustomizer webSecurityCustomizer() {\n        return web -> web.ignoring()\n            .requestMatchers(\"/css/**\", \"/js/**\", \"/images/**\");\n    }\n\n    @Bean\n    public UserDetailsService userDetailsService(UserRepository repo) {\n        return username -> repo.findByUsername(username)\n            .map(u -> User.withUsername(u.username())\n                .password(u.passwordHash())\n                .roles(u.roles().toArray(String[]::new))\n                .build())\n            .orElseThrow(() -> new UsernameNotFoundException(username));\n    }\n\n    @Bean\n    public PasswordEncoder passwordEncoder() {\n        return PasswordEncoderFactories.createDelegatingPasswordEncoder();\n    }\n\n    @Bean\n    public AuthenticationManager authenticationManager(\n            UserDetailsService uds, PasswordEncoder encoder) {\n        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();\n        provider.setUserDetailsService(uds);\n        provider.setPasswordEncoder(encoder);\n        return new ProviderManager(provider);\n    }\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "Migration Mapping (Old API to New)",
+            "content": "**Class structure:**\n- `extends WebSecurityConfigurerAdapter` -> remove inheritance, use `@Configuration` only\n- `@Override configure(HttpSecurity)` -> `@Bean SecurityFilterChain filterChain(HttpSecurity)`\n- `@Override configure(WebSecurity)` -> `@Bean WebSecurityCustomizer`\n- `@Override configure(AuthenticationManagerBuilder)` -> `@Bean UserDetailsService` + `@Bean PasswordEncoder` (+ optional `AuthenticationManager`)\n\n**DSL changes:**\n- `antMatchers(...)` -> `requestMatchers(...)`\n- `mvcMatchers(...)` -> `requestMatchers(...)` (now MVC-aware by default)\n- `regexMatchers(...)` -> `RegexRequestMatcher.regexMatcher(...)`\n- `authorizeRequests()` -> `authorizeHttpRequests()`\n- `.and().csrf()` -> `.csrf(csrf -> ...)` lambda\n- `.and().formLogin()` -> `.formLogin(form -> ...)` lambda\n- `.and()` chaining -> remove entirely; each method takes a `Customizer` lambda\n\n**Annotations:**\n- `@EnableGlobalMethodSecurity(prePostEnabled = true)` -> `@EnableMethodSecurity` (prePost on by default)\n- `@EnableGlobalMethodSecurity(securedEnabled = true)` -> `@EnableMethodSecurity(securedEnabled = true)`\n\n**Disabling features:**\n- `.csrf().disable()` -> `.csrf(AbstractHttpConfigurer::disable)` or `.csrf(csrf -> csrf.disable())`\n- `.formLogin().disable()` -> `.formLogin(AbstractHttpConfigurer::disable)`\n\n**`AuthenticationManager` access:**\n- `authenticationManagerBean()` from adapter -> declare your own `@Bean AuthenticationManager`\n- For programmatic auth in custom filters/controllers, inject the bean directly"
+          },
+          {
+            "type": "step",
+            "title": "Multiple Chains and Method Security in the New Model",
+            "content": "**Multiple SecurityFilterChain beans:**\n\n```java\n@Configuration\n@EnableWebSecurity\n@EnableMethodSecurity\npublic class SecurityConfig {\n\n    @Bean\n    @Order(1)\n    public SecurityFilterChain apiChain(HttpSecurity http) throws Exception {\n        return http\n            .securityMatcher(\"/api/**\")\n            .csrf(AbstractHttpConfigurer::disable)\n            .sessionManagement(s -> s\n                .sessionCreationPolicy(SessionCreationPolicy.STATELESS))\n            .authorizeHttpRequests(a -> a.anyRequest().authenticated())\n            .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()))\n            .build();\n    }\n\n    @Bean\n    @Order(2)\n    public SecurityFilterChain webChain(HttpSecurity http) throws Exception {\n        return http\n            .securityMatcher(\"/**\")\n            .authorizeHttpRequests(a -> a\n                .requestMatchers(\"/\", \"/login\").permitAll()\n                .anyRequest().authenticated())\n            .formLogin(Customizer.withDefaults())\n            .build();\n    }\n}\n```\n\n**Method security with the new annotation:**\n\n```java\n@EnableMethodSecurity\n@Configuration\npublic class MethodSec {}\n\n@Service\npublic class OrderService {\n    @PreAuthorize(\"hasRole('ADMIN')\")\n    public void deleteOrder(Long id) { ... }\n\n    @PreAuthorize(\"#order.userId == authentication.name\")\n    public Order getOrder(Order order) { return order; }\n\n    @PostAuthorize(\"returnObject.userId == authentication.name\")\n    public Order findById(Long id) { ... }\n}\n```\n\n**`@EnableMethodSecurity` defaults:**\n- `prePostEnabled = true` by default (was `false` in `@EnableGlobalMethodSecurity`)\n- `securedEnabled` and `jsr250Enabled` still need explicit opt-in\n- Uses `AuthorizationManager` API under the hood (not `AccessDecisionManager`)"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Old vs New API: At-a-Glance Mapping",
+            "content": "**Quick reference for the most common migration touchpoints:**\n\n| Old (5.x) | New (6.x) |\n|---|---|\n| `extends WebSecurityConfigurerAdapter` | `@Configuration` class only |\n| `configure(HttpSecurity)` | `@Bean SecurityFilterChain filterChain(HttpSecurity)` |\n| `configure(WebSecurity)` | `@Bean WebSecurityCustomizer` |\n| `configure(AuthenticationManagerBuilder)` | `@Bean UserDetailsService` + `@Bean PasswordEncoder` |\n| `authenticationManagerBean()` | `@Bean AuthenticationManager` |\n| `antMatchers(...)` | `requestMatchers(...)` |\n| `authorizeRequests()` | `authorizeHttpRequests()` |\n| `.and().formLogin()...` | `.formLogin(form -> ...)` |\n| `.csrf().disable()` | `.csrf(AbstractHttpConfigurer::disable)` |\n| `@EnableGlobalMethodSecurity(prePostEnabled = true)` | `@EnableMethodSecurity` |\n| `FilterSecurityInterceptor` | `AuthorizationFilter` |\n| `AccessDecisionManager` | `AuthorizationManager<T>` |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Migration: Helps, Hurts, Watch For",
+            "content": "**When the new model helps:**\n- Multiple `SecurityFilterChain` beans for mixed auth\n- Cleaner test setup — beans, not subclasses\n- Reactive parity (`SecurityWebFilterChain` mirrors the API)\n- Easier to compose with `@Profile`, `@Conditional`\n- `AuthorizationManager` API is composable and extensible\n\n**When migration hurts:**\n- Mixed `.and()` and lambda DSL during incremental migration -> compile errors\n- Forgetting `@EnableMethodSecurity` -> annotations silently ignored\n- Losing the `_csrf` token name change with new request handler -> CSRF failures\n- `mvcMatchers` -> `requestMatchers` semantics: now MVC-aware automatically; some path matching differences\n- `WebSecurityCustomizer` ignore-lists bypass ALL Spring Security filters — never use for `/api/**`\n\n**Watch for:**\n- **`hasRole(\"ADMIN\")`** still requires `ROLE_ADMIN` authorities — the prefix convention didn't change\n- **`AuthenticationManager` not auto-wired** — you must declare it explicitly\n- **`@Autowired UserDetailsService`** now works because it's a bean (was previously inside the adapter)\n- **`http.exceptionHandling()`** lambda — must set `authenticationEntryPoint` and `accessDeniedHandler` explicitly for APIs\n- **CSRF token request handler change** — `XorCsrfTokenRequestAttributeHandler` is the new default; SPAs may need `CsrfTokenRequestAttributeHandler` for plain XOR-free tokens\n- **`requestMatchers(\"/admin/**\")`** ambiguity — when both servlet and MVC are present, may need `RequestMatcher` instances explicitly\n- **`PathPatternRequestMatcher` (6.5+)** — newer matcher type; use for fine-grained MVC-aware matching"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`WebSecurityConfigurerAdapter` removed in 6.0** — replace with `SecurityFilterChain` bean.\n- **`configure(HttpSecurity)` -> `@Bean SecurityFilterChain filterChain(HttpSecurity)`** returning `http.build()`.\n- **`configure(WebSecurity)` -> `@Bean WebSecurityCustomizer`** for filter-chain bypass (static resources only).\n- **`configure(AuthenticationManagerBuilder)` -> `@Bean UserDetailsService` + `@Bean PasswordEncoder`** (+ optional `AuthenticationManager`).\n- **`antMatchers` -> `requestMatchers`**, **`authorizeRequests` -> `authorizeHttpRequests`**, **`.and()` -> lambda DSL**.\n- **`@EnableGlobalMethodSecurity` -> `@EnableMethodSecurity`** (prePost on by default).\n- **`AuthorizationFilter` replaces `FilterSecurityInterceptor`** under the hood.\n- **Never use `WebSecurityCustomizer` for `/api/**`** — it bypasses ALL security filters."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**The structural change**\n- `WebSecurityConfigurerAdapter` removed in 6.0\n- Replace inheritance with `@Bean` declarations: `SecurityFilterChain`, `UserDetailsService`, `PasswordEncoder`, `AuthenticationManager`\n- `configure(WebSecurity)` -> `WebSecurityCustomizer` bean\n\n**DSL changes**\n- `antMatchers` -> `requestMatchers`\n- `authorizeRequests` -> `authorizeHttpRequests`\n- Remove `.and()` chaining; each method takes a lambda Customizer\n- `.csrf().disable()` -> `.csrf(AbstractHttpConfigurer::disable)`\n\n**Annotation changes**\n- `@EnableGlobalMethodSecurity(prePostEnabled = true)` -> `@EnableMethodSecurity` (prePost on by default)\n- `securedEnabled` / `jsr250Enabled` still explicit\n\n**AuthenticationManager**\n- No more `authenticationManagerBean()`\n- Declare `@Bean AuthenticationManager` with `DaoAuthenticationProvider` + `ProviderManager`\n\n**Internal change**\n- `AuthorizationFilter` replaces `FilterSecurityInterceptor`\n- New `AuthorizationManager<RequestAuthorizationContext>` API — composable, extensible\n\n**Watch for**\n- Mixing `.and()` with lambda DSL -> compile errors\n- Forgetting `@EnableMethodSecurity` -> `@PreAuthorize` ignored\n- `hasRole(\"ADMIN\")` still requires `ROLE_ADMIN` authority prefix\n- `WebSecurityCustomizer` only for static resources — never for API paths\n- CSRF token handler change: `XorCsrfTokenRequestAttributeHandler` may break SPAs that expect plain tokens"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why was WebSecurityConfigurerAdapter removed?",
+        "What is the difference between WebSecurityCustomizer and an authorizeHttpRequests permitAll?",
+        "How does AuthorizationFilter differ from FilterSecurityInterceptor?",
+        "What CSRF token handler change in Spring Security 6 can break SPAs?"
+      ],
+      "seo": {
+        "metaTitle": "Migrate WebSecurityConfigurerAdapter to SecurityFilterChain (Spring Security 6)",
+        "metaDescription": "Step-by-step migration guide from Spring Security 5 WebSecurityConfigurerAdapter to Spring Security 6 SecurityFilterChain beans, lambda DSL, and EnableMethodSecurity."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "The structural change WebSecurityConfigurerAdapter removed in 6.0 Replace inheritance with @Bean declarations: SecurityFilterChain, UserDetailsService, PasswordEncoder, AuthenticationManager configure",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring Security 5.7 deprecated WebSecurityConfigurerAdapter and 6.0 removed it. The reason is architectural: inheritance tied configuration to a single class, prevented multiple configurations from coexisting cleanly, and made the API less Spring-idiomatic. The replacement is a bean-based component model: declare SecurityFilterChain, UserDetailsService, PasswordEncoder, and (optionally) AuthenticationManager as @Beans and let Spring wire them. The migration touches four areas: configure(HttpSecurity) -> SecurityFilterChain bean configure(AuthenticationManagerBuilder) -> UserDetailsService + PasswordEncoder (+ optional AuthenticationManager bean) configure(WebSecurity) -> WebSecurityCustomizer bean DSL syntax — antMatchers ->."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Hands-on knowledge of the Spring Security 5.7 -> 6 migration that every Boot 3 upgrade hits."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "WebSecurityConfigurerAdapter removed in 6",
+              "0 — replace with SecurityFilterChain bean",
+              "configure(HttpSecurity) -> @Bean SecurityFilterChain filterChain(HttpSecurity) returning http",
+              "configure(WebSecurity) -> @Bean WebSecurityCustomizer for filter-chain bypass (static resources only)",
+              "configure(AuthenticationManagerBuilder) -> @Bean UserDetailsService + @Bean PasswordEncoder (+ optional AuthenticationManager)"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "``java @Configuration @EnableWebSecurity @EnableGlobalMethodSecurity(prePostEnabled = true) public class SecurityConfig extends WebSecurityConfigurerAdapter { @Autowired private UserDetailsService uds; @Override protected void configure(AuthenticationManagerBuilder auth) throws Exception { auth.userDetailsService(uds).passwordEncoder(passwordEncoder()); } @Override protected void configure(HttpSecurity http) throws Exception { http .csrf().disable() .authorizeRequests() .antMatchers(\"/public/**\", \"/login\").permitAll() .antMatchers(\"/admin/**\").hasRole(\"ADMIN\") .anyRequest().authenticated() .and() .formLogin() .loginPage(\"/login\") .defaultSuccessUrl(\"/home\") .and() .logout() .logoutSuccessUrl(\"/\") .and() .sessionManagement() .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED); } @Override public void configure(WebSecurity web) throws Exception { web.ignoring().antMatchers(\"/css/\", \"/js/\", \"/images/**\"); } @Bean public PasswordEncoder passwordEncoder() { return PasswordEncoderFactories.createDelegatingPasswordEncoder(); } @Bean @Override public AuthenticationManager authenticationManagerBean() throws Exception { return super.authenticationManagerBean(); } } ``"
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Leaving WebSecurityConfigurerAdapter in code, mixing",
+              "and() with lambda DSL, or losing CSRF/role-prefix nuances during the rewrite"
+            ]
+          }
+        ],
+        "cap": "The structural change WebSecurityConfigurerAdapter removed in 6.0 Replace inheritance with @Bean declarations: SecurityFilterChain, UserDetailsService, PasswordEncoder, AuthenticationManager configure",
+        "familiarity_anchors": [
+          "Spring",
+          "Security",
+          "WebSecurityConfigurerAdapter"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why was WebSecurityConfigurerAdapter removed?",
+          "What is the difference between WebSecurityCustomizer and an authorizeHttpRequests permitAll?",
+          "How does AuthorizationFilter differ from FilterSecurityInterceptor?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JWT-based authentication"
+      }
+    }
+  ]
+}

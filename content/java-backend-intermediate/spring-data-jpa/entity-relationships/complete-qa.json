@@ -1,0 +1,407 @@
+{
+  "topic": "Entity Relationships",
+  "topicSlug": "entity-relationships",
+  "questions": [
+    {
+      "id": "hib-004",
+      "slug": "hibernate-onetomany-fetch-strategies",
+      "question": "What are the different fetch strategies for `@OneToMany` in Hibernate — JOIN, SUBSELECT, and SELECT — and how do you choose between them?",
+      "title": "@OneToMany Fetch Strategies — JOIN, SUBSELECT, SELECT, BatchSize",
+      "direct_answer": "Hibernate supports four practical fetch strategies for `@OneToMany`. **SELECT (default LAZY)** — 1 query for parents + 1 per parent's collection on access (the classic **N+1**). **JOIN (`@Fetch(JOIN)` / `JOIN FETCH`)** — one query with LEFT JOIN; rows multiply (Cartesian) and **pagination breaks** (`HHH90003004` — Hibernate paginates in memory). **SUBSELECT (`@Fetch(SUBSELECT)`)** — parent query + one follow-up `WHERE parent_id IN (SELECT ... FROM original_query)`; works with pagination. **`@BatchSize(50)`** — reduces N+1 to `ceil(N/50) + 1` via `WHERE parent_id IN (?, ?, ?)` batches; works with pagination. **`FetchType.EAGER` on `@OneToMany` is always wrong** — it forces JOIN on every parent load and silently produces Cartesian products.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Awareness of N+1 and the trade-offs between fetch strategies, including pagination compatibility",
+        "common_mistake": "Using `FetchType.EAGER` on `@OneToMany` thinking it avoids N+1 — instead it causes a JOIN that multiplies rows (Cartesian product)",
+        "to_stand_out": "Explain why JOIN fetch breaks pagination, when SUBSELECT or BatchSize is preferable, and the global `default_batch_fetch_size` setting"
+      },
+      "company_tags": [
+        "enterprise",
+        "e-commerce",
+        "fintech",
+        "Hibernate",
+        "Spring",
+        "Shopify"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "EAGER `@OneToMany` Doesn't Fix N+1 — It Creates a Cartesian Product",
+            "content": "Developers see N+1 on a `@OneToMany` collection and reach for `FetchType.EAGER`, expecting Hibernate to load everything in one query. It does — with a JOIN that **multiplies result rows**. An order with 10 items + 5 payments via two EAGER collections returns 50 rows per order — the Cartesian product explodes silently.\n\nHibernate offers three fetch strategies for collections: **SELECT** (default lazy — N+1), **JOIN** (one query with a JOIN — Cartesian risk, breaks pagination), and **SUBSELECT** (one extra query with a subselect — no Cartesian, no N+1, but loads all matching collections). A fourth practical strategy is **`@BatchSize`** — batched IN-clause loading that works with pagination.\n\nThe right choice depends on whether you need pagination, how many collections you load, and whether you want eager-equivalent behavior. There is **no universally correct strategy**."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "ER Cardinality of `@OneToMany`/`@ManyToOne`/`@ManyToMany`",
+            "content": "```mermaid\nflowchart LR\n    customer[\"Customer\"] -- \"1\" --- one1[\"OneToMany\"]\n    one1 -- \"N\" --- order[\"Order\"]\n    order -- \"N\" --- many1[\"ManyToOne\"]\n    many1 -- \"1\" --- customer\n\n    order -- \"1\" --- one2[\"OneToMany items\"]\n    one2 -- \"N\" --- item[\"OrderItem\"]\n    item -- \"N\" --- many2[\"ManyToOne product\"]\n    many2 -- \"1\" --- product[\"Product\"]\n\n    student[\"Student\"] -- \"N\" --- mm[\"ManyToMany via Enrollment\"]\n    mm -- \"N\" --- course[\"Course\"]\n```"
+          },
+          {
+            "type": "comparison_table",
+            "title": "SELECT vs JOIN vs SUBSELECT vs BatchSize",
+            "content": "Each strategy trades query count, result size, and pagination compatibility.\n\n| Strategy | Queries | Pagination | Cartesian risk | Best for |\n|---|---|---|---|---|\n| SELECT (default lazy) | 1 + N | Works | None | Small N, infrequent access |\n| JOIN (`@Fetch(JOIN)` / `JOIN FETCH`) | 1 | Breaks (in-memory) | Yes — rows multiply | Single collection, no pagination |\n| SUBSELECT (`@Fetch(SUBSELECT)`) | 2 | Works | None | Always need collection across page |\n| `@BatchSize(size=50)` | 1 + ceil(N/50) | Works | None | Pagination + general default |"
+          },
+          {
+            "type": "step",
+            "title": "Four Strategies, Four SQL Patterns",
+            "content": "**Setup:** `Order` with `@OneToMany List<OrderItem> items`. Loading 3 orders, each with 5 items.\n\n**Strategy 1 — SELECT (default LAZY) — 4 queries (N+1):**\n\n```java\n@OneToMany(mappedBy = \"order\", fetch = FetchType.LAZY)\nList<OrderItem> items;\n```\n```sql\nSELECT * FROM orders LIMIT 3;\nSELECT * FROM order_items WHERE order_id = 1;\nSELECT * FROM order_items WHERE order_id = 2;\nSELECT * FROM order_items WHERE order_id = 3;\n```\n\n**Strategy 2 — JOIN FETCH — 1 query but breaks pagination:**\n\n```java\n@Query(\"select distinct o from Order o join fetch o.items\")\nList<Order> findAllWithItems();\n```\n- One query: `SELECT o.*, oi.* FROM orders o LEFT JOIN order_items oi ON oi.order_id = o.id`.\n- With `Pageable` -> `HHH90003004` warning, paginates in Java.\n\n**Strategy 3 — SUBSELECT — 2 queries, pagination-safe:**\n\n```java\n@OneToMany(mappedBy = \"order\", fetch = FetchType.LAZY)\n@Fetch(FetchMode.SUBSELECT)\nList<OrderItem> items;\n```\n```sql\nSELECT * FROM orders LIMIT 3;\nSELECT * FROM order_items WHERE order_id IN (SELECT id FROM orders LIMIT 3);\n```\n\n**Strategy 4 — `@BatchSize` — `ceil(N/batch) + 1` queries, pagination-safe:**\n\n```java\n@OneToMany(mappedBy = \"order\", fetch = FetchType.LAZY)\n@BatchSize(size = 50)\nList<OrderItem> items;\n```\n```sql\nSELECT * FROM orders LIMIT 3;\nSELECT * FROM order_items WHERE order_id IN (1, 2, 3);\n```\n\n**Global default in `application.yml`:**\n\n```yaml\nspring:\n  jpa:\n    properties:\n      hibernate.default_batch_fetch_size: 50\n```\n\n- One line that fixes 90% of N+1 bugs.\n- Applies `@BatchSize(50)` to every association without an override."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Why EAGER Is Forbidden and When Each Strategy Wins",
+            "content": "**`FetchType.EAGER` on `@OneToMany` is always wrong:**\n- Loads the full collection on **every** query that touches the parent.\n- Cartesian product when combined with another EAGER collection.\n- `findById` loads the entire items table for that order.\n- Cannot be overridden per query reliably.\n- Pagination silently breaks with `HHH90003004`.\n\n**`DISTINCT` with JOIN FETCH:**\n- `select distinct o from Order o join fetch o.items` deduplicates **in Java**, not SQL.\n- Add hint `hibernate.query.passDistinctThrough = false` to skip the redundant SQL DISTINCT.\n\n**SUBSELECT vs BatchSize:**\n- **SUBSELECT wins** when you consistently need the collection for every parent in the result.\n- **BatchSize wins** when collections are sometimes unneeded and when multiple queries hit the same entities.\n\n**`Set` vs `List`:**\n- `Set` deduplicates automatically but needs business-key `equals/hashCode`.\n- `List` allows duplicates and preserves order; needs DISTINCT on JOIN FETCH.\n- `MultipleBagFetchException` fires when fetching two `List` collections — solutions: split queries, use `Set`, or `@BatchSize` on both.\n\n**Watch for:**\n- **Cartesian explosions** with two `@OneToMany` JOIN FETCH.\n- **`FetchType.EAGER` on `@OneToOne` inverse side** — needs bytecode enhancement to be truly lazy.\n- **No SQL count tests** — every critical endpoint should assert query count via `Statistics.getPrepareStatementCount()`."
+          },
+          {
+            "type": "when_to_use",
+            "title": "Decision Tree for Fetch Strategy",
+            "content": "**Start with the global default:**\n- `hibernate.default_batch_fetch_size: 50` in application.yml.\n\n**Per query:**\n- **Single-entity detail view (`GET /orders/{id}`)** -> `@EntityGraph(attributePaths = {\"customer\", \"items\"})`.\n- **Non-paginated list with single association** -> `JOIN FETCH` in JPQL.\n- **Paginated list with any collection** -> `@BatchSize` + `Pageable`. **Never `JOIN FETCH` + `Pageable` on a collection.**\n- **Always-load-everything for parents+children** -> `@Fetch(SUBSELECT)`.\n- **Read-heavy summary endpoint** -> DTO projection; skip entity loading entirely.\n\n**Avoid:**\n- `FetchType.EAGER` on `@OneToMany`.\n- `JOIN FETCH` of two `@OneToMany` (Cartesian or `MultipleBagFetchException`).\n- `findAll()` without `Pageable` on a production table.\n- Cascading JOIN FETCHes without explicit `DISTINCT`."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`FetchType.EAGER` on `@OneToMany`** is always an anti-pattern.\n- **`@BatchSize(50)`** is the pragmatic default — pagination-safe, fixes N+1.\n- **JOIN FETCH + Pageable** triggers `HHH90003004` and paginates in memory.\n- **SUBSELECT** issues one follow-up with the parent IDs — works with pagination.\n- **`@EntityGraph`** is the modern, declarative way to fetch associations per query.\n- **Global `default_batch_fetch_size: 50`** in application.yml fixes most N+1 bugs.\n- **DTO projections** beat entity loading for read-heavy summaries."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Hibernate has four practical fetch strategies for `@OneToMany` collections.\n\n**SELECT — the default LAZY:**\n- One query for parents, one extra per parent's collection on access — N+1\n- Acceptable only when N is small or access is rare\n\n**JOIN FETCH:**\n- One query with LEFT JOIN — zero N+1\n- Rows multiply — Cartesian product with multiple collections\n- Pagination breaks — `HHH90003004`, Hibernate paginates in memory\n\n**SUBSELECT (`@Fetch(SUBSELECT)`):**\n- One query for parents + one follow-up `WHERE parent_id IN (SELECT...)`\n- Works with pagination, no Cartesian risk\n- Best when you always need the collection across the entire page\n\n**`@BatchSize(50)`:**\n- Reduces N+1 to `ceil(N/50)+1` via batched IN-clause queries\n- Pagination-safe, the pragmatic default\n- Set globally with `hibernate.default_batch_fetch_size: 50`\n\n**Avoid:**\n- `FetchType.EAGER` on `@OneToMany` — silently produces Cartesian products\n- JOIN FETCH of two `@OneToMany` — `MultipleBagFetchException` or row explosion\n- JOIN FETCH + Pageable on a collection — Hibernate paginates in memory"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why does Hibernate log `HHH90003004` when you use JOIN FETCH with pagination?",
+        "How does `@BatchSize` work and how do you set a global default in Spring Boot?",
+        "When would you choose an `@EntityGraph` over a JPQL JOIN FETCH?",
+        "Why is `MultipleBagFetchException` thrown and how do you work around it?"
+      ],
+      "seo": {
+        "metaTitle": "Hibernate @OneToMany Fetch Strategies — JOIN, SUBSELECT, BatchSize",
+        "metaDescription": "Compare Hibernate collection fetch strategies — SELECT, JOIN FETCH, SUBSELECT, and @BatchSize — with SQL patterns, pagination safety, and Spring Boot examples."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Hibernate has four practical fetch strategies for @OneToMany collections.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Developers see N+1 on a @OneToMany collection and reach for FetchType.EAGER, expecting Hibernate to load everything in one query. It does — with a JOIN that multiplies result rows. An order with 10 items + 5 payments via two EAGER collections returns 50 rows per order — the Cartesian product explodes silently. Hibernate offers three fetch strategies for collections: SELECT (default lazy — N+1), JOIN (one query with a JOIN — Cartesian risk, breaks pagination), and SUBSELECT (one extra query."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Awareness of N+1 and the trade-offs between fetch strategies, including pagination compatibility"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "EAGER on @OneToMany is always an anti-pattern",
+              "@BatchSize(50) is the pragmatic default — pagination-safe, fixes N+1",
+              "JOIN FETCH + Pageable triggers HHH90003004 and paginates in memory",
+              "SUBSELECT issues one follow-up with the parent IDs — works with pagination",
+              "@EntityGraph is the modern, declarative way to fetch associations per query"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Developers see N+1 on a @OneToMany collection and reach for FetchType.EAGER, expecting Hibernate to load everything in one query. It does — with a JOIN that multiplies result rows. An order with 10 items + 5 payments via two EAGER collections returns 50 rows per order — the Cartesian product explodes silently. Hibernate offers three fetch strategies for collections: SELECT (default lazy — N+1), JOIN (one query with a JOIN — Cartesian risk, breaks pagination), and SUBSELECT (one extra query with a subselect — no Cartesian, no N+1, but loads all matching collections). A fourth practical strategy is @BatchSize — batched IN-clause loading that works with pagination. The right choice depends on whether you need pagination, how many collections you."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using FetchType",
+              "EAGER on @OneToMany thinking it avoids N+1 — instead it causes a JOIN that multiplies rows (Cartesian product)"
+            ]
+          }
+        ],
+        "cap": "SELECT — the default LAZY: One query for parents, one extra per parent's collection on access — N+1 Acceptable only when N is small or access is rare JOIN FETCH: One query with LEFT JOIN.",
+        "familiarity_anchors": [
+          "Hibernate",
+          "OneToMany",
+          "SELECT"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why does Hibernate log `HHH90003004` when you use JOIN FETCH with pagination?",
+          "How does `@BatchSize` work and how do you set a global default in Spring Boot?",
+          "When would you choose an `@EntityGraph` over a JPQL JOIN FETCH?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "jpa-entity-relationships",
+      "slug": "jpa-entity-relationships-onetomany-manytomany",
+      "question": "How do you map JPA entity relationships — `@OneToMany`, `@ManyToOne`, `@ManyToMany`?",
+      "title": "JPA Entity Relationships — Owning Side, Inverse Side, Mapping",
+      "direct_answer": "JPA relationships have two concepts that explain every mapping bug: the **owning side** (holds the foreign key column) and the **inverse side** (declared with `mappedBy`). For `@ManyToOne`/`@OneToMany`: **`@ManyToOne` is always the owning side** — the FK lives on its table. **`@OneToMany(mappedBy=...)`** is the inverse — it reads but doesn't write. **Missing `mappedBy` is the classic bug** — Hibernate creates an extra join table instead of using the FK. For `@ManyToMany`: one side owns the join table; **changes to the inverse side are silently ignored**. Bidirectional relationships need helper methods that update both sides. Collection choice: **`Set` for `@ManyToMany`** (List causes delete-all-and-reinsert), **`List` with `@OrderColumn`** when order matters, **business-key `equals/hashCode`** (never ID-based) to survive the unsaved-then-saved transition.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands owning vs inverse side and can map relationships correctly",
+        "common_mistake": "Not setting `mappedBy` on `@OneToMany` — Hibernate creates an extra join table instead of using the FK on the `@ManyToOne` side",
+        "to_stand_out": "Explain why bidirectional `@ManyToMany` should use `Set`, the junction-entity pattern, and the business-key `equals/hashCode` rule"
+      },
+      "company_tags": [
+        "Spring",
+        "Hibernate",
+        "Atlassian",
+        "fintech",
+        "e-commerce"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Missing `mappedBy` Creates an Extra Join Table — The Most Common Mapping Mistake",
+            "content": "The most common JPA relationship bug is `@OneToMany` without `mappedBy`. Hibernate interprets this as a **unidirectional** one-to-many backed by a join table — an extra `order_items` table with `order_id` and `item_id`. Adding `mappedBy = \"order\"` tells Hibernate the `@ManyToOne` on `Item` is the owning side and the FK lives directly on `items`.\n\nThe **owning side** controls the foreign key column in the database. For `@ManyToOne`/`@OneToMany`, the owning side is always `@ManyToOne` — it maps to the actual FK. The `@OneToMany(mappedBy=...)` is the **inverse side** — reads the relationship but doesn't write it.\n\nThis distinction means **adding to `order.getItems()` without setting `item.setOrder(order)` doesn't persist the relationship.** Only changes on the owning side reach the database. Bidirectional relationships require helper methods that synchronize both sides in Java code."
+          },
+          {
+            "type": "step",
+            "title": "`@ManyToMany` with `Set` — and Why `List` Causes Duplicate Rows",
+            "content": "**Default behavior:**\n- `@ManyToMany` creates a join table automatically.\n- `Student` and `Course` produce a `student_courses(student_id, course_id)` table.\n- The owning side (whichever lacks `mappedBy`) controls the join table.\n\n**Why `Set<Course>` not `List<Course>`:**\n- With **`List`**, removing one course triggers `DELETE FROM student_courses WHERE student_id=?` then re-INSERT of the survivors — O(n) writes.\n- With **`Set`**, only the affected row is inserted or deleted.\n- On a student with 50 courses, removing one course = **50 DELETEs + 49 INSERTs vs 1 DELETE**.\n\n**Bidirectional sync helper:**\n- Always provide `addCourse(course)` and `removeCourse(course)` that update both sides.\n- Without sync, the in-memory state diverges from database state inside the same transaction.\n- Hibernate persists what the **owning side** says — the inverse-side change is silently lost."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Relationship Types — Owning Side, SQL Generated, Pitfalls",
+            "content": "Five JPA relationship annotations and what they generate at the SQL level.\n\n| Annotation | Owning side | SQL generated | Pitfall | Idiomatic usage |\n|---|---|---|---|---|\n| `@ManyToOne` | Always owner | FK column on child table | Default EAGER — override to LAZY | `@ManyToOne(fetch=LAZY) @JoinColumn(name=\"order_id\") Order order;` |\n| `@OneToMany(mappedBy=...)` | Never owner (inverse) | No FK; reads child's FK | Missing `mappedBy` creates join table | `@OneToMany(mappedBy=\"order\", cascade={PERSIST,MERGE}, orphanRemoval=true) Set<Item> items;` |\n| `@OneToOne` | Either | FK on owner's table | Default EAGER, hard to LAZY on inverse | `@OneToOne(fetch=LAZY, mappedBy=\"user\") UserProfile profile;` |\n| `@ManyToMany` | Side without `mappedBy` | `@JoinTable` with two FKs | `List` causes delete-all+reinsert | `Set<Tag> tags;` — never `List<Tag>` |\n| Junction entity | Composed `@ManyToOne` x 2 | Real entity with attrs | Forgotten when relation needs metadata | `@Entity Enrollment { @ManyToOne Student s; @ManyToOne Course c; Instant enrolledAt; }` |"
+          },
+          {
+            "type": "after_code",
+            "title": "Bidirectional Sync Helper + Junction Entity Pattern",
+            "content": "**Canonical bidirectional `@OneToMany`:**\n\n```java\n@Entity\npublic class Order {\n    @Id Long id;\n\n    @OneToMany(mappedBy = \"order\",\n               cascade = {CascadeType.PERSIST, CascadeType.MERGE},\n               orphanRemoval = true)\n    private final Set<OrderItem> items = new HashSet<>();\n\n    public Set<OrderItem> getItems() { return Collections.unmodifiableSet(items); }\n\n    public void addItem(OrderItem item) {\n        items.add(item);\n        item.setOrder(this);\n    }\n\n    public void removeItem(OrderItem item) {\n        items.remove(item);\n        item.setOrder(null);\n    }\n}\n\n@Entity\npublic class OrderItem {\n    @Id Long id;\n\n    @ManyToOne(fetch = FetchType.LAZY, optional = false)\n    @JoinColumn(name = \"order_id\")\n    private Order order;\n\n    void setOrder(Order order) { this.order = order; }\n}\n```\n\n**Why this is the gold pattern:**\n- `Collections.unmodifiableSet` prevents direct mutation.\n- Package-private `setOrder` ensures both sides stay in sync.\n- `orphanRemoval = true` deletes items removed from the collection.\n- `cascade = {PERSIST, MERGE}` propagates saves; `REMOVE` is handled by `orphanRemoval`.\n\n**`@ManyToMany` with metadata — junction entity:**\n\n```java\n@Entity\npublic class Enrollment {\n    @EmbeddedId EnrollmentId id;\n    @ManyToOne @MapsId(\"studentId\") Student student;\n    @ManyToOne @MapsId(\"courseId\")  Course  course;\n    Instant enrolledAt;\n    Grade   grade;\n}\n\n@Entity\npublic class Student {\n    @OneToMany(mappedBy = \"student\", cascade = ALL, orphanRemoval = true)\n    Set<Enrollment> enrollments;\n}\n```\n\n- **`@ManyToMany` is rarely the right model** — relationships almost always accrue metadata.\n- Modeling the junction as an entity from day one avoids costly schema migrations later."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "`equals`/`hashCode`, `Set` vs `List`, and the Cascade.REMOVE Trap",
+            "content": "**When mapping helps:**\n- Correct `mappedBy` and FK placement gives clean SQL with no extra tables.\n- Bidirectional sync helpers keep object graphs consistent.\n- `Set` for `@ManyToMany` produces minimal DELETE/INSERT footprint.\n\n**When mapping hurts:**\n- **ID-based `equals/hashCode`** breaks when entities are added to a `Set` before save — unsaved id is null, after save id changes, `set.contains(entity)` returns false.\n- **`@ManyToMany` with `List`** = delete-all-and-reinsert on any change.\n- **`CascadeType.REMOVE` on `@ManyToMany`** = catastrophic — deleting a student deletes shared courses.\n\n**Watch for:**\n- **Always use a business key or UUID** for `equals/hashCode`, never the ID.\n- **`FetchType.EAGER` defaults** on `@ManyToOne` and `@OneToOne` — override to LAZY explicitly.\n- **`@OneToOne` inverse LAZY** doesn't actually lazy without bytecode enhancement.\n- **Cascade flows parent-to-child** — never cascade from `@ManyToOne` to its parent.\n- **Modeling the junction as an entity** the moment any metadata is needed.\n- **Never `cascade = ALL` across `@ManyToMany`** — REMOVE inside ALL deletes shared rows."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@OneToMany` without `mappedBy`** creates a join table — always add it.\n- **`@ManyToMany` should use `Set`** — `List` causes delete-all-and-reinsert.\n- **Bidirectional relationships need sync helpers** — Hibernate persists only the owning side.\n- **`@JoinTable` controls junction table naming** — customize to avoid schema conflicts.\n- **Model `@ManyToMany` as a junction entity** when the relationship has attributes.\n- **`@ManyToOne` and `@OneToOne` default EAGER** — override to LAZY.\n- **Business-key `equals/hashCode`** — never ID-based; survives the unsaved->saved transition."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "JPA relationships hinge on understanding owning side vs inverse side.\n\n**Owning vs inverse:**\n- The owning side holds the FK column — for `@OneToMany`/`@ManyToOne`, that's `@ManyToOne`\n- The inverse side declares `mappedBy` — reads the relationship, never writes it\n- Hibernate persists only changes made to the owning side\n\n**The `mappedBy` bug:**\n- `@OneToMany` without `mappedBy` creates a third join table — usually wrong\n- Add `mappedBy = \"order\"` to use the FK already on the child table\n\n**`@ManyToMany` with `Set`:**\n- `List` triggers DELETE-all + INSERT-survivors on any change\n- `Set` only inserts/deletes the affected row\n- Use `Set<Course>` always; use a junction entity when the relationship has metadata\n\n**Bidirectional sync helpers:**\n- `addItem` and `removeItem` methods that set both sides\n- Without them, in-memory state diverges from database state in the same transaction\n\n**`equals`/`hashCode`:**\n- Never base on the ID — ID is null before save, set after\n- Use a business key or a UUID generated in the constructor\n\n**Defaults to override:**\n- `@ManyToOne` and `@OneToOne` default EAGER — make them LAZY\n- `@OneToMany` defaults LAZY — keep it that way"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is ID-based `equals/hashCode` problematic for entities in a `Set`?",
+        "How would you migrate a `@ManyToMany` relationship to a junction entity without losing data?",
+        "What goes wrong when you cascade `REMOVE` across a `@ManyToMany`?",
+        "Why does LAZY on `@OneToOne` inverse side require bytecode enhancement?"
+      ],
+      "seo": {
+        "metaTitle": "JPA Entity Relationships — @OneToMany, @ManyToOne, @ManyToMany",
+        "metaDescription": "Map JPA relationships correctly: owning vs inverse side, mappedBy, Set vs List, junction entities, and the bidirectional sync helper pattern."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "JPA relationships hinge on understanding owning side vs inverse side.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The most common JPA relationship bug is @OneToMany without mappedBy. Hibernate interprets this as a unidirectional one-to-many backed by a join table — an extra order_items table with order_id and item_id. Adding mappedBy = \"order\" tells Hibernate the @ManyToOne on Item is the owning side and the FK lives directly on items. The owning side controls the foreign key column in the database. For @ManyToOne/@OneToMany, the owning side is always @ManyToOne — it maps to the actual FK. The @OneToMany(mappedBy=...)."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands owning vs inverse side and can map relationships correctly"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@OneToMany without mappedBy creates a join table — always add it",
+              "@ManyToMany should use Set — List causes delete-all-and-reinsert",
+              "Bidirectional relationships need sync helpers — Hibernate persists only the owning side",
+              "@JoinTable controls junction table naming — customize to avoid schema conflicts",
+              "Model @ManyToMany as a junction entity when the relationship has attributes"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The most common JPA relationship bug is @OneToMany without mappedBy. Hibernate interprets this as a unidirectional one-to-many backed by a join table — an extra order_items table with order_id and item_id. Adding mappedBy = \"order\" tells Hibernate the @ManyToOne on Item is the owning side and the FK lives directly on items. The owning side controls the foreign key column in the database. For @ManyToOne/@OneToMany, the owning side is always @ManyToOne — it maps to the actual FK. The @OneToMany(mappedBy=...) is the inverse side — reads the relationship but doesn't write it. This distinction means adding to order.getItems() without setting item.setOrder(order) doesn't persist the relationship. Only changes on the owning side reach the database. Bidirectional relationships require helper methods that."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Not setting mappedBy on @OneToMany",
+              "Hibernate creates an extra join table instead of using the FK on the @ManyToOne side"
+            ]
+          }
+        ],
+        "cap": "Owning vs inverse: The owning side holds the FK column — for @OneToMany/@ManyToOne, that's @ManyToOne The inverse side declares mappedBy — reads the relationship, never writes it Hibernate persists on",
+        "familiarity_anchors": [
+          "ManyToOne",
+          "OneToMany",
+          "Missing"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why is ID-based `equals/hashCode` problematic for entities in a `Set`?",
+          "How would you migrate a `@ManyToMany` relationship to a junction entity without losing data?",
+          "What goes wrong when you cascade `REMOVE` across a `@ManyToMany`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "jpa-cascade-types",
+      "slug": "jpa-cascade-types-orphan-removal",
+      "question": "What are JPA cascade types and `orphanRemoval`, and when should you use each?",
+      "title": "JPA Cascade Types and `orphanRemoval` — When to Use Each",
+      "direct_answer": "JPA cascade types propagate entity lifecycle operations (`persist`, `merge`, `remove`, `refresh`, `detach`) from a parent to its children. **`PERSIST`** — saving the parent saves new children. **`MERGE`** — merging the parent merges children. **`REMOVE`** — deleting the parent deletes all children (**catastrophic on `@ManyToMany`** because it deletes shared entities). **`ALL`** combines all five. **`orphanRemoval = true`** is a stricter, collection-level trigger — it fires whenever a child is removed from the collection, even if the parent still exists. Distinction: **cascade REMOVE deletes children when the parent is deleted; orphanRemoval deletes children when removed from the collection OR when parent is deleted**. Safe default for owned `@OneToMany`: `cascade = {PERSIST, MERGE}, orphanRemoval = true`. **Never cascade REMOVE across `@ManyToMany`**.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the difference between cascade REMOVE and orphanRemoval, and when each is appropriate",
+        "common_mistake": "Using `CascadeType.ALL` on `@ManyToMany` — deleting one student cascades to delete courses, which cascades to delete other students enrolled",
+        "to_stand_out": "Explain orphanRemoval as collection-level ON DELETE CASCADE, the ghost-entity bug from MERGE, and the cascade decision tree by relationship type"
+      },
+      "company_tags": [
+        "Spring",
+        "Hibernate",
+        "Atlassian",
+        "fintech",
+        "e-commerce"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "`CascadeType.ALL` on `@ManyToMany` Deletes Shared Entities",
+            "content": "Cascade types propagate lifecycle operations from a parent to its children. `PERSIST` and `MERGE` are convenient and safe. **`REMOVE` and `ALL` are where the danger lives.**\n\nOn a `@OneToMany` (parent owns children), `CascadeType.REMOVE` is fine — deleting an order deletes its line items. On a `@ManyToMany`, it's catastrophic. Deleting a student with `cascade = ALL` on `courses` deletes the courses themselves, and other students enrolled in those courses lose them. **One delete can empty the database.**\n\n**`orphanRemoval = true`** is the collection-level delete trigger.\n- It deletes children when they're removed from the parent's collection — `order.getItems().remove(item)` deletes the item from the database.\n- Without it, removing from the collection only nullifies the FK; the orphan stays as a ghost row."
+          },
+          {
+            "type": "step",
+            "title": "cascade REMOVE vs `orphanRemoval` — The Critical Distinction",
+            "content": "Both delete children, but at different trigger points.\n\n**`cascade = REMOVE`** fires when:\n- `em.remove(parent)` is called.\n- Parent deletion cascades to all children.\n- Removing an item from the collection without deleting the parent **does not** delete the item — it leaves an orphan with a null FK.\n\n**`orphanRemoval = true`** fires when:\n- A child is removed from the parent's collection (`order.getItems().remove(item)`).\n- The parent is deleted (implicit cascade REMOVE).\n- Both triggers in one annotation.\n\n**Use `orphanRemoval = true` when** children have no meaning without the parent — line items, phone numbers, addresses on a user.\n\n**Don't use `orphanRemoval` when** children can exist independently — tags on an article, categories on a product — because removing from the collection would delete the shared entity.\n\n**Safe default for owned `@OneToMany`:**\n```java\n@OneToMany(mappedBy = \"order\",\n           cascade = {CascadeType.PERSIST, CascadeType.MERGE},\n           orphanRemoval = true)\nSet<OrderItem> items;\n```"
+          },
+          {
+            "type": "comparison_table",
+            "title": "All Cascade Types + `orphanRemoval`",
+            "content": "Six cascade options plus `orphanRemoval`, mapped to the EntityManager operation that triggers them.\n\n| Cascade | Triggering op | Effect | Safe on `@OneToMany`? | Safe on `@ManyToMany`? |\n|---|---|---|---|---|\n| PERSIST | `em.persist(parent)` | INSERT new children | Yes | Only when children are new |\n| MERGE | `em.merge(parent)` | Re-attach / sync children | Yes | Can resurrect deleted children |\n| REMOVE | `em.remove(parent)` | DELETE children | Yes (owned) | DELETES SHARED ENTITIES |\n| REFRESH | `em.refresh(parent)` | SELECT child state | Yes | Yes |\n| DETACH | `em.detach(parent)` | Remove from context | Yes | Yes |\n| ALL | Any of the above | All effects | Owned only | Never |\n| `orphanRemoval=true` | Removed from collection | DELETE child on flush | Yes | Not applicable |"
+          },
+          {
+            "type": "after_code",
+            "title": "Cascade Patterns in Practice",
+            "content": "**Pattern 1 — Parent owns children (line items, addresses):**\n\n```java\n@Entity\npublic class Order {\n    @Id Long id;\n    @OneToMany(mappedBy = \"order\",\n               cascade = {CascadeType.PERSIST, CascadeType.MERGE},\n               orphanRemoval = true)\n    Set<OrderItem> items;\n}\n\norderRepo.save(order);             // saves order + new items\norder.getItems().remove(item);     // DELETE FROM order_items WHERE id=?\norderRepo.save(order);\norderRepo.delete(order);           // DELETE items, then DELETE order\n```\n\n**Pattern 2 — Parent references shared children (tags, categories):**\n\n```java\n@Entity\npublic class Article {\n    @ManyToMany\n    Set<Tag> tags;\n}\n\ntagRepo.save(tag);\narticle.getTags().add(tag);\narticleRepo.save(article);         // INSERT junction row only\narticle.getTags().remove(tag);\narticleRepo.save(article);         // DELETE junction row only\narticleRepo.delete(article);       // DELETE junction rows + article (tags untouched)\n```\n\n**Pattern 3 — `@ManyToMany` with metadata (junction entity):**\n\n```java\n@Entity\npublic class Enrollment {\n    @EmbeddedId EnrollmentId id;\n    @ManyToOne(fetch = LAZY) @MapsId(\"studentId\") Student student;\n    @ManyToOne(fetch = LAZY) @MapsId(\"courseId\")  Course  course;\n    Instant enrolledAt;\n}\n\n@Entity\npublic class Student {\n    @OneToMany(mappedBy = \"student\",\n               cascade = CascadeType.ALL,\n               orphanRemoval = true)\n    Set<Enrollment> enrollments;\n}\n```\n\n- **`CascadeType.ALL` is safe** here because the junction entity is owned by the student.\n- Deleting the student deletes enrollments but **not** the courses themselves."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Detached Entities, Merge Pitfalls, and the Cascade Decision Tree",
+            "content": "**When cascade helps:**\n- **Owned children lifecycle** — saving/deleting a parent should propagate to its children.\n- **Junction entities** — `cascade = ALL` is safe because the junction is owned.\n- **`orphanRemoval`** acts like collection-level ON DELETE CASCADE.\n\n**When cascade hurts:**\n- **`@ManyToMany cascade = REMOVE`** deletes shared entities.\n- **`MERGE` resurrects deleted children** — the 'ghost entity' bug when REST clients send full payloads with previously-removed children still present.\n- **`PERSIST` with already-persisted children** throws `TransientPropertyValueException`.\n\n**Watch for:**\n- **Cascade from `@ManyToOne` to its parent** — almost always wrong; cascade flows parent-to-child.\n- **`orphanRemoval` on a unidirectional `@OneToMany`** with a join table doesn't work — needs a single owner.\n- **REST update endpoints sending full payloads** — load fresh and apply specific changes; don't blindly merge a DTO-derived detached entity.\n\n**Decision tree by relationship:**\n- **`@ManyToMany`** -> no cascade on REMOVE/ALL; use `PERSIST, MERGE` only if children always new.\n- **Owned `@OneToMany`** -> `cascade = {PERSIST, MERGE}, orphanRemoval = true`.\n- **Shared children** -> no cascade or `PERSIST, MERGE` only.\n- **Junction entity** -> `cascade = ALL, orphanRemoval = true` on parent->junction; no cascade on junction->other side.\n- **`@ManyToOne`** -> almost never cascade; LAZY fetch and save the parent independently."
+          },
+          {
+            "type": "when_to_use",
+            "title": "Choosing the Cascade Set",
+            "content": "**Use `cascade = {PERSIST, MERGE}, orphanRemoval = true` when:**\n- Children have no meaning without the parent.\n- Lifecycle is fully owned by the parent.\n- Examples: line items, phone numbers, addresses, user settings.\n\n**Use no cascade (or `PERSIST, MERGE` only) when:**\n- Children are shared across multiple parents.\n- Examples: tags on articles, categories on products, courses on students.\n\n**Use `cascade = ALL, orphanRemoval = true` only when:**\n- The associated entity is a true junction owned by the parent.\n- Example: `Student -> Enrollment` where `Enrollment` belongs to one student.\n\n**Never:**\n- `cascade = REMOVE` or `ALL` across `@ManyToMany`.\n- Cascade from `@ManyToOne` toward the parent."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`CascadeType.ALL` on `@ManyToMany`** can delete shared entities — never use it.\n- **Safe default for owned `@OneToMany`** is `{PERSIST, MERGE} + orphanRemoval = true`.\n- **`orphanRemoval`** deletes children removed from the collection or when parent is deleted.\n- **`orphanRemoval` only works on the owning side** with `mappedBy` or `@JoinColumn`.\n- **`MERGE` can resurrect children** removed in the database but still in the detached entity.\n- **Cascade flows parent-to-child** — never cascade from `@ManyToOne`.\n- **Junction entities** can safely use `cascade = ALL` — they're owned by one parent."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Cascade types propagate JPA operations from a parent to its associated children. Choosing the wrong one is one of the easiest ways to delete data unintentionally.\n\n**What each cascade does:**\n- PERSIST — saving the parent saves new children\n- MERGE — merging the parent merges children\n- REMOVE — deleting the parent deletes children\n- REFRESH — refreshing the parent re-loads children\n- ALL — all of the above\n\n**The `@ManyToMany` REMOVE trap:**\n- `@ManyToMany(cascade = REMOVE)` on `Student.courses` deletes the courses themselves\n- Other students lose those courses too — catastrophic\n- Never cascade REMOVE or ALL across `@ManyToMany`\n\n**`orphanRemoval = true`:**\n- Collection-level ON DELETE CASCADE\n- `order.getItems().remove(item)` triggers DELETE on the item\n- Also fires when parent is deleted\n- Only works on the owning side with `mappedBy` or `@JoinColumn`\n\n**Safe defaults:**\n- Owned children -> `cascade = {PERSIST, MERGE}, orphanRemoval = true`\n- Shared children -> no cascade or `PERSIST, MERGE` only\n- Junction entities -> `cascade = ALL, orphanRemoval = true`\n- `@ManyToOne` -> almost never cascade"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the ghost entity bug, and why does `MERGE` cause it?",
+        "Why doesn't `orphanRemoval` work on a unidirectional `@OneToMany` with a join table?",
+        "When is `cascade = ALL` actually safe?",
+        "How do you delete a parent without cascading to shared children?"
+      ],
+      "seo": {
+        "metaTitle": "JPA Cascade Types and orphanRemoval — When to Use Each",
+        "metaDescription": "Understand JPA cascade types (PERSIST, MERGE, REMOVE, REFRESH, DETACH, ALL) and orphanRemoval, with safe defaults and the @ManyToMany trap."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Cascade types propagate JPA operations from a parent to its associated children.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Cascade types propagate lifecycle operations from a parent to its children. PERSIST and MERGE are convenient and safe. REMOVE and ALL are where the danger lives. On a @OneToMany (parent owns children), CascadeType.REMOVE is fine — deleting an order deletes its line items. On a @ManyToMany, it's catastrophic. Deleting a student with cascade = ALL on courses deletes the courses themselves, and other students enrolled in those courses lose them. One delete can empty the database. orphanRemoval = true is."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the difference between cascade REMOVE and orphanRemoval, and when each is appropriate"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "CascadeType",
+              "ALL on @ManyToMany can delete shared entities — never use it",
+              "Safe default for owned @OneToMany is {PERSIST, MERGE} + orphanRemoval = true",
+              "orphanRemoval deletes children removed from the collection or when parent is deleted",
+              "orphanRemoval only works on the owning side with mappedBy or @JoinColumn"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Cascade types propagate lifecycle operations from a parent to its children. PERSIST and MERGE are convenient and safe. REMOVE and ALL are where the danger lives. On a @OneToMany (parent owns children), CascadeType.REMOVE is fine — deleting an order deletes its line items. On a @ManyToMany, it's catastrophic. Deleting a student with cascade = ALL on courses deletes the courses themselves, and other students enrolled in those courses lose them. One delete can empty the database. orphanRemoval = true is the collection-level delete trigger. It deletes children when they're removed from the parent's collection — order.getItems().remove(item) deletes the item from the database. Without it, removing from the collection only nullifies the FK; the orphan stays as a ghost row."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using CascadeType",
+              "ALL on @ManyToMany — deleting one student cascades to delete courses, which cascades to delete other students enrolled"
+            ]
+          }
+        ],
+        "cap": "What each cascade does: PERSIST — saving the parent saves new children MERGE — merging the parent merges children REMOVE — deleting the parent deletes children REFRESH — refreshing the parent re-loads",
+        "familiarity_anchors": [
+          "PERSIST",
+          "MERGE",
+          "REMOVE"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the ghost entity bug, and why does `MERGE` cause it?",
+          "Why doesn't `orphanRemoval` work on a unidirectional `@OneToMany` with a join table?",
+          "When is `cascade = ALL` actually safe?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    }
+  ]
+}

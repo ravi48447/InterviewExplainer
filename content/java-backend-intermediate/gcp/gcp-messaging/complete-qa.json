@@ -1,0 +1,126 @@
+{
+  "topic": "Gcp And Azure Overview",
+  "topicSlug": "gcp-and-azure-overview",
+  "questions": [
+    {
+      "id": "gcp-003",
+      "slug": "google-cloud-pubsub-with-spring",
+      "question": "How do you use Google Cloud Pub/Sub with Spring?",
+      "title": "Integrating Google Cloud Pub/Sub with Spring Boot",
+      "direct_answer": "Add the `spring-cloud-gcp-starter-pubsub` dependency, then use `PubSubTemplate` to publish messages and `@ServiceActivator` or `PubSubInboundChannelAdapter` to consume them. Spring Cloud GCP handles credential management and message serialization, letting you work with Pub/Sub using familiar Spring Integration or Spring Messaging abstractions.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Ability to integrate async messaging into a Spring application and understanding of Pub/Sub's push/pull model and acknowledgement semantics.",
+        "common_mistake": "Forgetting to acknowledge messages (causing infinite redelivery), or conflating Pub/Sub topics with subscriptions — topics receive messages, subscriptions deliver them.",
+        "to_stand_out": "Discuss dead-letter topics for poison messages, ordering keys for FIFO delivery within a key, and exactly-once delivery mode introduced in Pub/Sub."
+      },
+      "company_tags": [
+        "Google",
+        "Twitter",
+        "Zalando",
+        "Grab"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem Pub/Sub Solves: Why Synchronous REST Chains Break Under Load",
+            "content": "When Service A calls Service B over HTTP, and B calls C, and C calls D — you have a fragile chain where any single service being slow or down cascades into failures across the entire system. Pub/Sub breaks this chain by introducing **asynchronous decoupling**: producers publish messages to a topic without knowing or caring who consumes them, and consumers process messages at their own pace.\n\nThe mental model that trips people up is the **topic vs. subscription distinction**. A topic is a named channel that receives messages. A subscription is attached to a topic and delivers messages to consumers. One topic can have multiple subscriptions, each with its own delivery and acknowledgement semantics — this is how you fan out a single event to multiple independent consumers.\n\nSpring Cloud GCP wraps this model with `PubSubTemplate` for publishing and `PubSubInboundChannelAdapter` for consuming, using the same Spring Integration abstractions you'd use with RabbitMQ or Kafka. But the acknowledgement semantics are Pub/Sub-specific and getting them wrong causes the most common production bug: **infinite message redelivery**."
+          },
+          {
+            "type": "step",
+            "title": "Publishing Messages: PubSubTemplate and the Async Confirmation Pattern",
+            "content": "Publishing is straightforward — `PubSubTemplate.publish()` serializes your object to JSON, sends it to a topic, and returns a future you can use for async confirmation or error handling. The critical detail is that publishing is **fire-and-forget by default** — if you don't attach a callback or block on the future, a publish failure is silently swallowed.\n\nThe setup requires one starter dependency and minimal configuration. Spring Cloud GCP detects Application Default Credentials automatically, so no credential configuration is needed when running on Cloud Run or GKE.\n\n```java\n@Service\npublic class OrderEventPublisher {\n    private final PubSubTemplate pubSubTemplate;\n\n    public OrderEventPublisher(PubSubTemplate pubSubTemplate) {\n        this.pubSubTemplate = pubSubTemplate;\n    }\n\n    public void publishOrderCreated(OrderEvent event) {\n        pubSubTemplate.publish(\"order-events\", event)\n            .whenComplete((msgId, ex) -> {\n                if (ex != null) {\n                    log.error(\"Publish failed for order {}\", event.orderId(), ex);\n                } else {\n                    log.info(\"Published order {} as {}\", event.orderId(), msgId);\n                }\n            });\n    }\n}\n```\n\nThe `whenComplete` callback is essential for production — without it, a network partition or topic misconfiguration would silently drop events. For critical events like payments, block on the future with `.get(5, SECONDS)` to guarantee delivery before returning a response to the caller."
+          },
+          {
+            "type": "step",
+            "title": "The Acknowledgement Trap: Why Consumers Fail Without Manual Ack",
+            "content": "Pub/Sub uses **at-least-once delivery**: every message is delivered at least once, and it keeps redelivering until the consumer explicitly acknowledges it. If your consumer throws an exception before calling `ack()`, the message goes back to the subscription and is redelivered — potentially infinitely if the bug is deterministic.\n\nThis is the most common Pub/Sub production bug. A consumer processes an order, updates the database, but crashes before the ack. The message redelivers, the order is processed again, and the customer gets charged twice. The fix requires both **manual acknowledgement** and **idempotent processing**.\n\nSpring Cloud GCP's channel adapter defaults to `AckMode.AUTO`, which acks on successful handler return. For production, switch to `AckMode.MANUAL` so you control exactly when acknowledgement happens.\n\n```java\n@Configuration\npublic class PubSubConsumerConfig {\n    @Bean\n    public PubSubInboundChannelAdapter orderAdapter(\n            @Qualifier(\"orderChannel\") MessageChannel channel,\n            PubSubTemplate template) {\n        var adapter = new PubSubInboundChannelAdapter(template, \"order-events-sub\");\n        adapter.setOutputChannel(channel);\n        adapter.setAckMode(AckMode.MANUAL); // explicit control\n        return adapter;\n    }\n}\n\n@Component\npublic class OrderConsumer {\n    @ServiceActivator(inputChannel = \"orderChannel\")\n    public void handle(Message<OrderEvent> msg) {\n        var ack = msg.getHeaders().get(\n            GcpPubSubHeaders.ORIGINAL_MESSAGE,\n            BasicAcknowledgeablePubsubMessage.class);\n        try {\n            processOrder(msg.getPayload()); // idempotent operation\n            ack.ack();  // only after successful processing\n        } catch (TransientException e) {\n            ack.nack(); // redelivery for retryable errors\n        } catch (PoisonMessageException e) {\n            log.error(\"Poison message: {}\", msg.getPayload());\n            ack.ack();  // ack poison messages to stop infinite redelivery\n        }\n    }\n}\n```\n\nNotice the deliberate choice with poison messages: we **ack them** to stop redelivery, but log the error. The better solution is a dead-letter topic that captures these automatically."
+          },
+          {
+            "type": "step",
+            "title": "Dead-Letter Topics and Ordering Keys: Production Resilience Patterns",
+            "content": "A dead-letter topic is a safety net for messages that repeatedly fail processing. Instead of manually acking poison messages in your code, configure the subscription with a `max-delivery-attempts` limit. After that many failures, Pub/Sub automatically routes the message to a dead-letter topic where you can inspect, fix, and replay it.\n\n```bash\ngcloud pubsub subscriptions update order-events-sub \\\n  --dead-letter-topic=order-events-dlq \\\n  --max-delivery-attempts=5\n```\n\nWithout this, a single malformed message can starve your consumer — the message redelivers every `ackDeadlineSeconds` (default 10s), consuming a subscriber thread each time. With 5 max attempts, a poison message hits the DLQ within 50 seconds and your consumer stays healthy.\n\n**Ordering keys** solve a different problem: when message order matters per entity but global ordering is unnecessary. Payment events for order-123 must be processed in sequence, but order-123 and order-456 can be processed in parallel. Setting an ordering key groups messages by that key and guarantees FIFO delivery within the group.\n\n```java\npubSubTemplate.publish(\"payment-events\", paymentEvent,\n    Map.of(\"ordering-key\", paymentEvent.orderId()));\n```\n\nThe trade-off is throughput — ordering keys reduce parallelism because messages sharing a key are serialized. Use them only when misordering causes business logic errors, not as a default. And enable message ordering on the subscription in the GCP Console — the publisher-side key alone is not enough.\n\nFor exactly-once delivery, Pub/Sub supports it at the subscription level by deduplicating messages based on their ID. Enable it with `--enable-exactly-once-delivery` on the subscription, but be aware it increases publish latency by ~50ms because Pub/Sub must coordinate deduplication across its storage layer."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`PubSubTemplate.publish()` for type-safe async publishing** — serializes to JSON; returns a `ListenableFuture`; batching enabled via config reduces per-message API overhead at high throughput\n- **`@PubSubListener` for declarative subscription handling** — auto-acknowledges on success; message redelivered on exception; implement idempotent handlers because at-least-once delivery is guaranteed\n- **At-least-once delivery requires idempotent consumers** — a message may be delivered more than once if the consumer crashes after processing but before acknowledging; use a deduplication key (message ID) to detect and skip duplicates\n- **Push subscriptions for Cloud Run and serverless consumers** — Pub/Sub calls the HTTP endpoint directly; no polling loop; Cloud Run scales to zero between pushes; requires public HTTPS endpoint for the push delivery\n- **Subscription message filters reduce unnecessary delivery** — `attributes.type = \"OrderPlaced\"` on a subscription skips messages the consumer doesn't need; cheaper and simpler than consumer-side filtering"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Cloud Pub/Sub is GCP's managed messaging service. Spring Cloud GCP makes the publishing side trivial and provides annotation-based subscription handling, but understanding the delivery semantics — at-least-once, push vs pull — is what makes the integration reliable.\n\n**Publishing with PubSubTemplate**\n- Inject `PubSubTemplate` and call `pubSubTemplate.publish(topicName, message)` — Spring Cloud GCP serializes the object to JSON by default and publishes asynchronously; the return value is a `ListenableFuture` for the publish confirmation\n- For high-throughput publishing, configure the publisher's batch settings: `spring.cloud.gcp.pubsub.publisher.batching.enabled=true` batches multiple messages into one API call, which reduces per-message overhead significantly\n\n**Consuming with @PubSubListener**\n- `@PubSubListener(subscriptions = \"my-subscription\")` on a method marks it as a subscription handler — Spring Cloud GCP creates the subscription client, polls for messages, deserializes them, and calls the method; the message is automatically acknowledged if the method returns normally\n- If the method throws an exception, the message is not acknowledged and becomes available for redelivery after the ack deadline — at-least-once delivery; implement idempotent handlers to handle duplicate delivery safely\n\n**Push subscriptions**\n- A push subscription has Pub/Sub call a URL when messages arrive — which means Cloud Run functions or App Engine services can receive Pub/Sub messages via HTTP POST without running a continuous polling loop\n- The HTTP handler receives the message as a Base64-encoded payload in a JSON envelope; `@RestController` + Spring's `@PubSubSubscriber` utility handles the deserialization\n\n**Message attributes and filtering**\n- Pub/Sub message attributes are key-value string metadata — `pubSubTemplate.publish(topic, message, Map.of(\"type\", \"OrderPlaced\"))` adds an attribute\n- Subscription filters (`subscription.message_filter`) allow a subscription to receive only messages matching `attributes.type = \"OrderPlaced\"`, reducing traffic to consumers that only need specific event types"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a Pub/Sub push subscription and a pull subscription?",
+        "How do you implement idempotent message consumers with Pub/Sub?",
+        "How would you test a Pub/Sub consumer in a Spring Boot integration test?"
+      ],
+      "seo": {
+        "metaTitle": "Google Cloud Pub/Sub with Spring Boot — Complete Integration Guide",
+        "metaDescription": "Learn how to publish and consume messages with Google Cloud Pub/Sub using Spring Cloud GCP, including dead-letter topics, manual acknowledgement, and ordered delivery."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P10",
+        "hook": "Cloud Pub/Sub is GCP's managed messaging service.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When Service A calls Service B over HTTP, and B calls C, and C calls D — you have a fragile chain where any single service being slow or down cascades into failures across the entire system. Pub/Sub breaks this chain by introducing asynchronous decoupling: producers publish messages to a topic without knowing or caring who consumes them, and consumers process messages at their own pace. The mental model that trips people up is the topic vs. subscription distinction. A."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Ability to integrate async messaging into a Spring application and understanding of Pub/Sub's push/pull model and acknowledgement semantics."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "PubSubTemplate",
+              "publish() for type-safe async publishing — serializes to JSON; returns a ListenableFuture; batching enabled via config reduces per-message API overhead at high throughput @PubSubListener for declarative subscription handling — auto-acknowledges on success; message redelivered on exception; implement idempotent handlers because at-least-once delivery is guaranteed At-least-once delivery requires idempotent consumers — a message may be delivered more than once if the consumer crashes after processing but before acknowledging; use a deduplication key (message ID) to detect and skip duplicates Push subscriptions for Cloud Run and serverless consumers — Pub/Sub calls the HTTP endpoint directly; no polling loop; Cloud Run scales to zero between pushes; requires public HTTPS endpoint for the push delivery Subscription message filters reduce unnecessary delivery — attributes",
+              "type = \"OrderPlaced\" on a subscription skips messages the consumer doesn't need; cheaper and simpler than consumer-side filtering"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "When Service A calls Service B over HTTP, and B calls C, and C calls D — you have a fragile chain where any single service being slow or down cascades into failures across the entire system. Pub/Sub breaks this chain by introducing asynchronous decoupling: producers publish messages to a topic without knowing or caring who consumes them, and consumers process messages at their own pace. The mental model that trips people up is the topic vs. subscription distinction. A topic is a named channel that receives messages. A subscription is attached to a topic and delivers messages to consumers. One topic can have multiple subscriptions, each with its own delivery and acknowledgement semantics — this is how you fan."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Forgetting to acknowledge messages (causing infinite redelivery), or conflating Pub/Sub topics with subscriptions",
+              "topics receive messages, subscriptions deliver them"
+            ]
+          }
+        ],
+        "cap": "Publishing with PubSubTemplate Inject PubSubTemplate and call pubSubTemplate.publish(topicName, message) — Spring Cloud GCP serializes the object to JSON by default and publishes asynchronously; the r",
+        "familiarity_anchors": [
+          "PubSubTemplate",
+          "ServiceActivator",
+          "PubSubInboundChannelAdapter"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a Pub/Sub push subscription and a pull subscription?",
+          "How do you implement idempotent message consumers with Pub/Sub?",
+          "How would you test a Pub/Sub consumer in a Spring Boot integration test?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app deployed on GCP Cloud Run"
+      }
+    }
+  ]
+}

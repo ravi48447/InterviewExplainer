@@ -1,0 +1,248 @@
+{
+  "topic": "R2DBC Reactive Data",
+  "topicSlug": "r2dbc-reactive-data",
+  "questions": [
+    {
+      "id": "wf-r2-001",
+      "slug": "r2dbc-reactive-data-spring-boot",
+      "question": "What is R2DBC, and how do you use it correctly with Spring Data?",
+      "title": "R2DBC — Reactive Relational Data Access with Spring",
+      "direct_answer": "**R2DBC** (Reactive Relational Database Connectivity) is a non-blocking alternative to JDBC, with drivers for Postgres, MySQL, H2, MSSQL, MariaDB, and Oracle. You consume it through **Spring Data R2DBC** — `ReactiveCrudRepository`, `R2dbcEntityTemplate`, `DatabaseClient`. R2DBC is **not** JPA: no lazy loading, no first-level cache, no automatic relationships, no rich criteria API. Transactions work via the auto-configured **`R2dbcTransactionManager`** plus `@Transactional` or `TransactionalOperator`. Pick R2DBC when you are reactive-all-the-way and need streaming queries or genuine non-blocking I/O. In 2026, **MVC + virtual threads + JDBC** is a strong default; R2DBC earns its place for reactive WebFlux services and streaming row pipelines.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Understanding of reactive DB access, limitations vs JPA, transaction semantics, and modern alternatives (virtual threads)",
+        "common_mistake": "Treating R2DBC like JPA; mixing R2DBC with JPA carelessly; not propagating reactive transaction context",
+        "to_stand_out": "Discuss r2dbc-postgresql LISTEN/NOTIFY streaming, connection pool tuning, reactive transaction propagation, Flyway migration coexistence"
+      },
+      "company_tags": [
+        "Spring",
+        "PostgreSQL",
+        "Pivotal",
+        "VMware",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "What R2DBC Is — and Just as Importantly, What It Isn't",
+            "content": "**R2DBC** is a specification (originated at Pivotal / VMware) for reactive database drivers over TCP. It exposes `Publisher<T>`-based APIs for connection, query, and transaction lifecycle, and it has mature drivers for the major SQL engines: r2dbc-postgresql, r2dbc-mysql, r2dbc-mssql, r2dbc-h2, r2dbc-mariadb, and r2dbc-oracle.\n\n**Spring Data R2DBC** sits on top and provides three idiomatic entry points: `ReactiveCrudRepository` for declarative repositories, `R2dbcEntityTemplate` for fluent programmatic CRUD, and `DatabaseClient` for fluent SQL with parameter binding.\n\n**What R2DBC is NOT:**\n- Not JPA / Hibernate — no auto-flush, no first-level cache, no lazy loading\n- Not a full ORM — relationships are explicit; you fetch and assemble\n- No `@OneToMany` / `@ManyToMany` automatic loading\n- No second-level cache\n- No criteria API as rich as JPA's\n- Limited batching compared to Hibernate\n\n**What R2DBC IS:**\n- Non-blocking, reactive database access\n- Native integration with Reactor and WebFlux — queries return `Mono<T>` / `Flux<T>`\n- True streaming — `Flux<Row>` over millions of rows without loading them all\n- Reactive transactions via `R2dbcTransactionManager`\n- Backpressure-aware at the driver level"
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Non-Blocking DB Call Sequence",
+            "content": "```mermaid\nsequenceDiagram\n    participant Ctl as Controller (Mono)\n    participant Repo as ReactiveCrudRepository\n    participant Tpl as R2dbcEntityTemplate\n    participant Drv as r2dbc-postgresql driver\n    participant EL as Netty event loop\n    participant DB as PostgreSQL\n    Ctl->>Repo: findById(42)\n    Repo->>Tpl: select query\n    Tpl->>Drv: createStatement / execute\n    Drv->>EL: write SQL frame (non-blocking)\n    EL->>DB: TCP send\n    Note right of EL: thread is free<br/>handles other requests\n    DB-->>EL: rows arrive\n    EL-->>Drv: read response frame\n    Drv-->>Tpl: emit Row\n    Tpl-->>Repo: map to entity\n    Repo-->>Ctl: Mono onNext + onComplete\n```"
+          },
+          {
+            "type": "step",
+            "title": "Setup and Repository Pattern",
+            "content": "**Dependencies (Spring Boot 3.x)**\n- `spring-boot-starter-data-r2dbc` — Spring Data R2DBC\n- `r2dbc-postgresql` — driver\n- `flyway-core` — migrations still run on JDBC\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-data-r2dbc</artifactId>\n</dependency>\n<dependency>\n    <groupId>org.postgresql</groupId>\n    <artifactId>r2dbc-postgresql</artifactId>\n</dependency>\n<dependency>\n    <groupId>org.flywaydb</groupId>\n    <artifactId>flyway-core</artifactId>\n</dependency>\n```\n\n**`application.yml`**\n- R2DBC for runtime queries\n- JDBC URL kept for Flyway migrations\n\n```yaml\nspring:\n  r2dbc:\n    url: r2dbc:postgresql://localhost:5432/mydb\n    username: app\n    password: ${DB_PASSWORD}\n    pool:\n      initial-size: 5\n      max-size: 20\n      max-idle-time: 30m\n  flyway:\n    url: jdbc:postgresql://localhost:5432/mydb\n    user: app\n    password: ${DB_PASSWORD}\n```\n\n**Entity**\n- Use Spring Data Relational annotations — `@Table`, `@Column`, `@Id`\n- No JPA annotations\n- Records work cleanly\n\n```java\n@Table(\"orders\")\npublic record Order(\n    @Id Long id,\n    @Column(\"customer_id\") Long customerId,\n    String status,\n    BigDecimal amount,\n    @Column(\"created_at\") Instant createdAt) {}\n```\n\n**Repository**\n- Extends `ReactiveCrudRepository`\n- Method-name queries; `@Query` for explicit SQL; `@Modifying` for updates\n\n```java\npublic interface OrderRepository extends ReactiveCrudRepository<Order, Long> {\n\n    Flux<Order> findByCustomerId(Long customerId);\n\n    @Query(\"SELECT * FROM orders WHERE status = :status AND created_at > :since\")\n    Flux<Order> findRecentByStatus(String status, Instant since);\n\n    @Modifying\n    @Query(\"UPDATE orders SET status = :status WHERE id = :id\")\n    Mono<Integer> updateStatus(Long id, String status);\n}\n```\n\n**Service composition**\n- `flatMap` to chain async lookups\n- Beware N+1 — prefer SQL `JOIN` for many-row composition\n\n```java\n@Service\npublic class OrderService {\n    private final OrderRepository repo;\n    private final CustomerRepository customerRepo;\n\n    public Flux<OrderWithCustomer> findRecentWithCustomer(Instant since) {\n        return repo.findRecentByStatus(\"PAID\", since)\n            .flatMap(order -> customerRepo.findById(order.customerId())\n                .map(c -> new OrderWithCustomer(order, c)));\n    }\n}\n```\n\n**Streaming large result sets**\n- `repo.findAll()` streams rows; the entire result is never loaded into memory\n- Backpressure flows from the consumer to the driver to the database\n\n```java\npublic Flux<Order> streamAll() {\n    return repo.findAll();\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "Transactions, DatabaseClient, and Relationships",
+            "content": "**Declarative `@Transactional`**\n- Auto-configured `R2dbcTransactionManager` when `spring-boot-starter-data-r2dbc` is on the classpath\n- All operations in the chain run in one reactive transaction\n- Commit on success; rollback on `onError`\n\n```java\n@Service\npublic class PaymentService {\n\n    @Transactional\n    public Mono<Payment> charge(String orderId, BigDecimal amount) {\n        return orderRepo.findById(orderId)\n            .flatMap(order -> paymentRepo.save(new Payment(order.id(), amount)))\n            .flatMap(p -> orderRepo.updateStatus(p.orderId(), \"PAID\").thenReturn(p));\n    }\n}\n```\n\n**Programmatic with `TransactionalOperator`**\n- Apply at the end of the chain via `.as(tx::transactional)`\n- Useful when you can't use the proxy-based `@Transactional`\n\n```java\n@Service\npublic class PaymentService {\n    private final TransactionalOperator tx;\n\n    public Mono<Payment> charge(String orderId, BigDecimal amount) {\n        return orderRepo.findById(orderId)\n            .flatMap(order -> paymentRepo.save(new Payment(order.id(), amount)))\n            .flatMap(p -> orderRepo.updateStatus(p.orderId(), \"PAID\").thenReturn(p))\n            .as(tx::transactional);\n    }\n}\n```\n\n**`DatabaseClient` for fluent SQL**\n- Best for analytical queries and joins where you want full control\n- Bind parameters by name; map rows manually\n\n```java\nFlux<OrderSummary> byDay = databaseClient.sql(\"\"\"\n        SELECT DATE(created_at) AS day, COUNT(*) AS cnt, SUM(amount) AS total\n        FROM orders\n        WHERE created_at >= :from\n        GROUP BY day\n        \"\"\")\n    .bind(\"from\", startDate)\n    .map((row, meta) -> new OrderSummary(\n        row.get(\"day\", LocalDate.class),\n        row.get(\"cnt\", Long.class),\n        row.get(\"total\", BigDecimal.class)))\n    .all();\n```\n\n**`R2dbcEntityTemplate` for programmatic CRUD**\n- Type-safe builder; good middle ground\n\n```java\nMono<Order> saved = template.insert(order);\nFlux<Order> recent = template.select(Order.class)\n    .matching(Query.query(where(\"status\").is(\"PAID\"))\n        .sort(Sort.by(\"created_at\").descending())\n        .limit(100))\n    .all();\n```\n\n**Manual relationships**\n- No automatic `@OneToMany` loading; combine with `Mono.zip`\n- For large parent-child loads, use a SQL `JOIN` via `DatabaseClient` and map manually to avoid N+1\n\n```java\npublic Mono<OrderWithLines> findWithLines(Long id) {\n    Mono<Order> orderMono = repo.findById(id);\n    Mono<List<OrderLine>> linesMono = lineRepo.findByOrderId(id).collectList();\n    return Mono.zip(orderMono, linesMono)\n        .map(t -> new OrderWithLines(t.getT1(), t.getT2()));\n}\n```\n\n**PostgreSQL LISTEN/NOTIFY — a use case only R2DBC handles cleanly**\n\n```java\n@Autowired ConnectionFactory factory;\n\npublic Flux<String> orderEvents() {\n    return Mono.from(factory.create())\n        .cast(PostgresqlConnection.class)\n        .flatMapMany(conn ->\n            conn.createStatement(\"LISTEN order_events\").execute()\n                .thenMany(conn.getNotifications())\n                .map(n -> n.getParameter())\n                .doFinally(s -> conn.close().subscribe()));\n}\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Limitations, Pitfalls, and the 2026 Decision Guide",
+            "content": "**Limitations to know:**\n- **No lazy loading or auto-fetch** — explicit joins or follow-up queries\n- **No first-level cache** — two `findById(1)` calls hit DB twice\n- **Limited batching** vs Hibernate\n- **Streaming LOBs** support varies by driver\n- **Migrations still use JDBC** — Flyway and Liquibase have no reactive versions; keep JDBC config for schema\n- **`@Transactional` semantics differ** — reactive context must flow through the chain; mixing blocking and reactive breaks it\n- **Error message** *Transaction not available in reactive context* usually means missing context propagation or wrong tx manager\n\n**Common pitfalls:**\n- **Mixing JPA and R2DBC entities** — possible but complex; usually pick one\n- **R2DBC for complex OLTP with many relationships** — JPA is still better\n- **Not using `r2dbc-pool`** — connection acquisition becomes the bottleneck\n- **Wrong isolation level** — set via `spring.r2dbc.properties.isolation-level`\n- **Query logging** requires driver-level flags, not just Spring Data settings\n- **Pagination** — `Pageable` works; `.count()` is a separate query\n\n**Connection pool sizing:**\n- Start with `max-size = (2 × CPU_count) + effective_spindle_count` (same rule of thumb as JDBC)\n- Monitor `r2dbc.pool.acquired.count` and `pending.count`\n- Too small: requests queue for connections\n- Too large: DB pressure; watch Postgres `max_connections`\n\n**R2DBC vs JDBC + virtual threads — comparison**\n\n| Aspect | R2DBC | JDBC + Virtual Threads |\n|---|---|---|\n| Non-blocking | Yes natively | Yes via Loom |\n| JPA support | No | Yes |\n| Relationships | Manual | Automatic (JPA) |\n| Migrations | JDBC still required | Native |\n| Learning curve | High | Low |\n| Streaming rows | Excellent (Flux) | Possible with stream queries |\n| Transaction propagation | Reactive context | ThreadLocal (normal) |\n| Memory per connection | Low | Low (with VT) |\n| Team familiarity | Lower | Higher |\n\n**When R2DBC wins:**\n- **Streaming millions of rows** with backpressure end-to-end\n- **WebFlux app fully reactive** — DB is the missing piece\n- **Simple CRUD** without complex relationships\n- **Real-time streaming** scenarios (Postgres LISTEN/NOTIFY via r2dbc-postgresql)\n\n**When JDBC + virtual threads wins:**\n- **Complex domain** with relationships and aggregates\n- **Heavy JPA usage** — caching, lazy loading, criteria queries\n- **Team unfamiliar** with reactive\n- **Tooling maturity** matters — debuggers, profilers, ORMs, migrations\n- **Most CRUD workloads**\n\n**Testing**\n- `@DataR2dbcTest` slices the context to data layer\n- Testcontainers Postgres for realistic integration tests\n- `StepVerifier` for chain assertions\n\n```java\n@DataR2dbcTest\nclass OrderRepositoryTest {\n    @Autowired OrderRepository repo;\n\n    @Test\n    void saveAndFind() {\n        StepVerifier.create(repo.save(new Order(null, 1L, \"NEW\", TEN, now())))\n            .expectNextMatches(o -> o.id() != null)\n            .verifyComplete();\n    }\n}\n```\n\n**Observability**\n- Micrometer metrics — `r2dbc.pool.*`, query timing\n- OpenTelemetry R2DBC instrumentation for distributed tracing\n- Slow-query logging via driver config\n\n**The 2026 recommendation:**\n- **Default** — Spring MVC + virtual threads + JPA / JDBC; normal blocking code, scale via Loom\n- **R2DBC sweet spot** — reactive WebFlux service, streaming queries, real-time patterns (LISTEN/NOTIFY), explicit backpressure on huge result sets\n- **Don't** — pick R2DBC \"for performance\" vs JDBC + virtual threads without a streaming or reactive-all-the-way motivation"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **R2DBC** = reactive JDBC alternative; drivers for Postgres, MySQL, H2, SQL Server, MariaDB, Oracle\n- **Spring Data R2DBC** provides `ReactiveCrudRepository`, `R2dbcEntityTemplate`, `DatabaseClient`\n- **Not JPA** — no lazy loading, no first-level cache, manual relationships, limited batching\n- **`@Transactional` works** with the auto-configured `R2dbcTransactionManager`\n- **Migrations still JDBC** — Flyway and Liquibase have no reactive flavor\n- **Streaming queries** — `Flux<Row>` over millions of rows without loading all into memory\n- **Connection pool** via `r2dbc-pool`; tune like JDBC HikariCP\n- **Use R2DBC when** streaming rows, WebFlux reactive-all-the-way, Postgres LISTEN/NOTIFY\n- **Use JDBC + virtual threads when** complex domain, JPA features needed, team familiar with blocking\n- **Architectural decision**, not a performance tweak"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "R2DBC is Reactive Relational Database Connectivity — a non-blocking alternative to JDBC with drivers for Postgres, MySQL, H2, SQL Server, MariaDB, and Oracle. You consume it through Spring Data R2DBC.\n\n**Three entry points**\n- `ReactiveCrudRepository` — declarative repositories\n- `R2dbcEntityTemplate` — fluent programmatic CRUD\n- `DatabaseClient` — fluent SQL with parameter binding\n\n**What it is NOT**\n- Not JPA / Hibernate — no auto-flush, first-level cache, lazy loading\n- Not a full ORM — relationships are explicit; you fetch and assemble\n- No automatic `@OneToMany` loading\n- No second-level cache\n- Limited batching\n\n**What it IS**\n- Non-blocking, reactive DB access\n- Native Reactor / WebFlux integration — `Mono<T>` / `Flux<T>`\n- True streaming — `Flux<Row>` over millions of rows without loading them all\n- Reactive transactions via `R2dbcTransactionManager`\n- Backpressure-aware at driver level\n\n**Transactions**\n- `@Transactional` works; auto-configured `R2dbcTransactionManager`\n- All operations in the chain run in one reactive transaction\n- Programmatic alternative — `TransactionalOperator` plus `.as(tx::transactional)`\n- Mixing blocking and reactive in a transaction breaks context propagation\n\n**Migrations**\n- Flyway and Liquibase don't have reactive versions\n- Keep a JDBC URL just for migrations; runtime queries use R2DBC\n\n**Connection pool**\n- `r2dbc-pool` is essential\n- Sizing rule of thumb the same as JDBC: `(2 × CPU) + spindle_count`\n- Watch Postgres `max_connections`\n\n**R2DBC vs JDBC + virtual threads**\n- Both are non-blocking\n- R2DBC: no JPA, manual relationships, JDBC migrations, high learning curve\n- JDBC + virtual threads: full JPA, automatic relationships, native migrations, low learning curve\n- R2DBC better for streaming and LISTEN/NOTIFY\n- JDBC + VT better for complex domains and most CRUD\n\n**When R2DBC wins**\n- Streaming millions of rows with backpressure\n- WebFlux fully reactive — DB is the missing piece\n- Simple CRUD without complex relationships\n- Real-time streaming via Postgres LISTEN/NOTIFY\n\n**The 2026 recommendation**\n- Default — MVC + virtual threads + JPA / JDBC\n- R2DBC sweet spot — reactive WebFlux, streaming queries, LISTEN/NOTIFY, explicit backpressure on huge result sets\n- Don't pick R2DBC \"for performance\" without a streaming or reactive-all-the-way motivation\n\n**Strategic answer**\n- R2DBC is reactive DB access, not a JPA replacement\n- Architectural decision, not a performance tweak\n- Pick for streaming and reactive-all-the-way\n- JDBC + virtual threads covers most cases"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What can't you do with R2DBC that you can with JPA?",
+        "How do transactions work across reactive chains?",
+        "Compare R2DBC streaming vs JDBC stream queries",
+        "When would you mix R2DBC and JDBC in one service?"
+      ],
+      "seo": {
+        "metaTitle": "R2DBC Reactive Relational Data Access — Spring Data R2DBC Guide",
+        "metaDescription": "R2DBC for reactive databases: Spring Data R2DBC, ReactiveCrudRepository, DatabaseClient, transactions, streaming queries, and limitations vs JPA."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "R2DBC is Reactive Relational Database Connectivity — a non-blocking alternative to JDBC with drivers for Postgres, MySQL, H2, SQL Server, MariaDB, and Oracle.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "R2DBC is a specification (originated at Pivotal / VMware) for reactive database drivers over TCP. It exposes Publisher<T>-based APIs for connection, query, and transaction lifecycle, and it has mature drivers for the major SQL engines: r2dbc-postgresql, r2dbc-mysql, r2dbc-mssql, r2dbc-h2, r2dbc-mariadb, and r2dbc-oracle. Spring Data R2DBC sits on top and provides three idiomatic entry points: ReactiveCrudRepository for declarative repositories, R2dbcEntityTemplate for fluent programmatic CRUD, and DatabaseClient for fluent SQL with parameter."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Limitations to know: No lazy loading or auto-fetch — explicit joins or follow-up queries No first-level cache — two findById(1) calls hit DB twice Limited batching vs Hibernate Streaming LOBs support varies by driver Migrations still use JDBC — Flyway and Liquibase have no reactive versions; keep JDBC config for schema @Transactional semantics differ — reactive context must flow through the chain; mixing blocking and reactive breaks it Error message Transaction not available in reactive context usually means missing context propagation or wrong tx manager Common pitfalls: Mixing JPA and R2DBC entities — possible but complex; usually pick one R2DBC for complex OLTP with many relationships — JPA is still better Not using r2dbc-pool — connection acquisition becomes the bottleneck Wrong isolation level — set via spring",
+              "isolation-level Query logging requires driver-level flags, not just Spring Data settings Pagination — Pageable works;",
+              "count() is a separate query Connection pool sizing: Start with max-size = (2 × CPU_count) + effective_spindle_count (same rule of thumb as JDBC) Monitor r2dbc",
+              "count and pending",
+              "count Too small: requests queue for connections Too large: DB pressure; watch Postgres max_connections R2DBC vs JDBC + virtual threads — comparison | Aspect | R2DBC | JDBC + Virtual Threads | |---|---|---| | Non-blocking | Yes natively | Yes via Loom | | JPA support | No | Yes | | Relationships | Manual | Automatic (JPA) | | Migrations | JDBC still required | Native | | Learning curve | High | Low | | Streaming rows | Excellent (Flux) | Possible with stream queries | | Transaction propagation | Reactive context | ThreadLocal (normal) | | Memory per connection | Low | Low (with VT) | | Team familiarity | Lower | Higher | When R2DBC wins: Streaming millions of rows with backpressure end-to-end WebFlux app fully reactive — DB is the missing piece Simple CRUD without complex relationships Real-time streaming scenarios (Postgres LISTEN/NOTIFY via r2dbc-postgresql) When JDBC + virtual threads wins: Complex domain with relationships and aggregates Heavy JPA usage — caching, lazy loading, criteria queries Team unfamiliar with reactive Tooling maturity matters — debuggers, profilers, ORMs, migrations Most CRUD workloads Testing @DataR2dbcTest slices the context to data layer Testcontainers Postgres for realistic integration tests StepVerifier for chain assertions ``java @DataR2dbcTest class OrderRepositoryTest { @Autowired OrderRepository repo; @Test void saveAndFind() { StepVerifier"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Limitations to know: No lazy loading or auto-fetch — explicit joins or follow-up queries No first-level cache — two findById(1) calls hit DB twice Limited batching vs Hibernate Streaming LOBs support varies by driver Migrations still use JDBC — Flyway and Liquibase have no reactive versions; keep JDBC config for schema @Transactional semantics differ — reactive context must flow through the chain; mixing blocking and reactive breaks it Error message Transaction not available in reactive context usually means missing context propagation or wrong tx manager Common pitfalls: Mixing JPA and."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "R2DBC is a specification (originated at Pivotal / VMware) for reactive database drivers over TCP. It exposes Publisher<T>-based APIs for connection, query, and transaction lifecycle, and it has mature drivers for the major SQL engines: r2dbc-postgresql, r2dbc-mysql, r2dbc-mssql, r2dbc-h2, r2dbc-mariadb, and r2dbc-oracle. Spring Data R2DBC sits on top and provides three idiomatic entry points: ReactiveCrudRepository for declarative repositories, R2dbcEntityTemplate for."
+          }
+        ],
+        "cap": "Three entry points ReactiveCrudRepository — declarative repositories R2dbcEntityTemplate — fluent programmatic CRUD DatabaseClient — fluent SQL with parameter binding What it is NOT Not JPA / Hibernat",
+        "familiarity_anchors": [
+          "Reactive",
+          "Relational",
+          "Database"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What can't you do with R2DBC that you can with JPA?",
+          "How do transactions work across reactive chains?",
+          "Compare R2DBC streaming vs JDBC stream queries"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring WebFlux reactive API with Reactor"
+      }
+    },
+    {
+      "id": "wf-r2-002",
+      "slug": "r2dbc-vs-jdbc-comparison",
+      "question": "R2DBC vs JDBC — feature-by-feature comparison and decision guide",
+      "title": "R2DBC vs JDBC — Reactive vs Blocking Database Access",
+      "direct_answer": "**JDBC** is the classic blocking SQL API — every query parks the calling thread until the database responds. **R2DBC** is the reactive, non-blocking equivalent — queries return `Mono` / `Flux` and the calling thread is free while the network round-trip happens. JDBC has 25 years of tooling — JPA, Hibernate, Spring Data JPA, every connection pool, every migration tool, every monitoring agent. R2DBC has none of JPA's caching or relationship management. With **virtual threads** (JDK 21+), JDBC code runs on cheap virtual threads that park on blocking I/O without blocking carriers — closing much of the original concurrency gap. Today the choice is rarely about raw throughput — it's about whether you're running reactive end-to-end or whether you need JPA's ORM features.",
+      "layout_type": "comparison-arena",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can articulate the trade-offs in 2026 — including how virtual threads change the JDBC story",
+        "common_mistake": "Assuming R2DBC is always faster than JDBC; ignoring the JPA-feature gap; forgetting that migrations still need JDBC even with R2DBC",
+        "to_stand_out": "Discuss connection pool tuning differences, streaming row patterns, transaction semantics, and how virtual threads close the gap"
+      },
+      "company_tags": [
+        "Spring",
+        "PostgreSQL",
+        "Oracle",
+        "Pivotal",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "JDBC and R2DBC — Same Goal, Opposite Threading Models",
+            "content": "**JDBC** has been the standard Java DB API since 1997.\n- Every query method (`Statement.execute`, `PreparedStatement.executeQuery`, `Connection.commit`) blocks the calling thread until the database responds.\n- Around it Java has built every major ORM (Hibernate, MyBatis, jOOQ), every connection pool (HikariCP, Tomcat JDBC), and every migration tool (Flyway, Liquibase).\n\n**R2DBC** is the non-blocking equivalent — same SQL, same protocols, but the API returns `Publisher<T>` instead of blocking. The calling thread is free while the network round-trip happens. The driver uses Netty under the hood and reactive backpressure to control row delivery.\n\nThe **threading model** is the deepest difference. JDBC scales by adding threads; the practical limit on a typical service is the connection pool size (10-50 connections) and the thread pool size (200). R2DBC scales by sharing a handful of event-loop threads across thousands of in-flight queries.\n\n**With virtual threads (JDK 21+)** the picture shifted dramatically.\n- JDBC calls running on virtual threads still block, but they block a virtual thread — which parks cheaply and frees the carrier thread for other work. The OS-thread limit no longer applies.\n- This closes much of the historical concurrency gap and makes JDBC + virtual threads a serious alternative for many services that previously would have been forced to R2DBC."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Feature-by-Feature Comparison",
+            "content": "Each row is a real engineering decision; the rightmost column flags how virtual threads change the equation.\n\n| Dimension | JDBC | R2DBC | Virtual Threads Effect |\n|---|---|---|---|\n| API style | Blocking | Reactive (`Mono`/`Flux`) | JDBC blocking is now cheap |\n| Threading | Thread-per-query | Event-loop sharing | JDBC scales further with VT |\n| ORM support | JPA, Hibernate, MyBatis, jOOQ | None of these | Unchanged |\n| Caching | First-level + L2 (JPA) | None | Unchanged |\n| Relationships | Automatic with JPA | Manual | Unchanged |\n| Lazy loading | Yes (JPA) | No | Unchanged |\n| Migrations | Flyway / Liquibase native | Flyway via JDBC URL | Unchanged |\n| Streaming rows | `ResultSet.fetchSize` + cursor | `Flux<Row>` natural | R2DBC still cleaner |\n| Backpressure | None | Native | R2DBC still wins |\n| Transactions | `ThreadLocal`-bound | Reactive context | VT keeps `ThreadLocal` working |\n| Connection pool | HikariCP | r2dbc-pool | Same sizing rules |\n| Tooling maturity | 25+ years | ~5 years | JDBC tooling unchanged |\n| Learning curve | Low | High | VT keeps JDBC easy |\n| Best for | Most workloads, JPA-heavy | WebFlux + streaming | VT favors JDBC for most |"
+          },
+          {
+            "type": "step",
+            "title": "Same Query Two Ways",
+            "content": "The same simple query through each API.\n\n**JDBC + Spring `JdbcTemplate`**\n\n```java\npublic List<Order> findByStatus(String status) {\n    return jdbc.query(\n        \"SELECT id, customer_id, status, amount FROM orders WHERE status = ?\",\n        new Object[]{status},\n        (rs, i) -> new Order(\n            rs.getLong(\"id\"),\n            rs.getLong(\"customer_id\"),\n            rs.getString(\"status\"),\n            rs.getBigDecimal(\"amount\")));\n}\n```\n\n**JDBC + JPA**\n\n```java\npublic List<Order> findByStatus(String status) {\n    return em.createQuery(\n            \"SELECT o FROM Order o WHERE o.status = :status\", Order.class)\n        .setParameter(\"status\", status)\n        .getResultList();\n}\n```\n\n**R2DBC + Spring Data `ReactiveCrudRepository`**\n\n```java\npublic interface OrderRepository extends ReactiveCrudRepository<Order, Long> {\n    Flux<Order> findByStatus(String status);\n}\n```\n\n**R2DBC + `DatabaseClient`**\n\n```java\npublic Flux<Order> findByStatus(String status) {\n    return databaseClient.sql(\n            \"SELECT id, customer_id, status, amount FROM orders WHERE status = :s\")\n        .bind(\"s\", status)\n        .map((row, meta) -> new Order(\n            row.get(\"id\", Long.class),\n            row.get(\"customer_id\", Long.class),\n            row.get(\"status\", String.class),\n            row.get(\"amount\", BigDecimal.class)))\n        .all();\n}\n```\n\n**Observations**\n- JPA gives the cleanest API at the cost of cache and lazy-loading complexity\n- `JdbcTemplate` is similarly clean and very explicit\n- R2DBC's repository is just as clean for simple queries\n- `DatabaseClient` sits at the same level as `JdbcTemplate` — explicit SQL, type-mapped rows"
+          },
+          {
+            "type": "step",
+            "title": "Streaming, Transactions, and Pool Tuning",
+            "content": "**Streaming rows**\n- JDBC needs server-side cursors plus `ResultSet.fetchSize` to avoid loading everything\n- R2DBC streams naturally — `Flux<Row>` with backpressure end-to-end\n\n```java\n// JDBC streaming: requires explicit fetchSize and a Stream\ntry (Stream<Order> stream = jdbc.queryForStream(\n        \"SELECT * FROM orders\", new OrderRowMapper())) {\n    stream.forEach(this::process);\n}\n```\n\n```java\n// R2DBC streaming: Flux is the contract\nrepo.findAll()\n    .doOnNext(this::process)\n    .subscribe();\n```\n\n**Transactions**\n- JDBC: `@Transactional` with `DataSourceTransactionManager`; `ThreadLocal`-bound; compatible with virtual threads\n- R2DBC: `@Transactional` with `R2dbcTransactionManager`; reactive context bound; only works inside the reactive chain\n\n**Mixing blocking and reactive in one transaction is a footgun** — the boundary loses transaction context and you get partial commits.\n\n**Connection pool tuning**\n- HikariCP for JDBC, r2dbc-pool for R2DBC\n- Same rule of thumb: `max = (2 × CPU) + effective_spindle_count`\n- With virtual threads on JDBC, the pool becomes the real concurrency limit since virtual threads themselves are essentially free\n- Tune `pendingAcquireTimeout` so requests fail fast rather than queue forever\n\n**Migrations**\n- Flyway and Liquibase have no reactive equivalents\n- An R2DBC service still needs a JDBC URL just to run migrations at startup\n- Don't try to write your own reactive migration tool — keep JDBC for schema"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When Each Wins, and the Pitfalls to Avoid",
+            "content": "**When JDBC + virtual threads helps:**\n- Standard CRUD with JPA features (caching, lazy loading, relationships)\n- Existing codebase with extensive JPA / Hibernate use\n- Complex transactional workflows that benefit from `ThreadLocal` semantics\n- Team familiar with blocking imperative code\n- Most modern services in 2026\n\n**When R2DBC helps:**\n- Reactive WebFlux service end-to-end\n- Streaming queries — millions of rows with end-to-end backpressure\n- Postgres LISTEN/NOTIFY for real-time pub/sub\n- Memory-constrained containers at extreme connection counts\n- Reactive Kafka / Redis already in the pipeline\n\n**Watch for — common pitfalls:**\n- **Using `RestTemplate` or JDBC inside a WebFlux handler** — blocks the event loop and stalls every concurrent request\n- **Mixing JPA and R2DBC entities** — possible but the cognitive load is huge; pick one per service\n- **Believing R2DBC is faster** — at moderate concurrency the gap is often negligible; the win is in extreme connection counts and streaming\n- **Over-tuning the connection pool with virtual threads** — virtual threads are free but DB connections are not; the pool is your real limiter\n- **Forgetting Flyway needs JDBC** — you can't fully escape JDBC even on a reactive service\n- **`@Transactional` on a method that returns `Mono` but uses `DataSourceTransactionManager`** — transactions don't propagate correctly across the reactive chain; need `R2dbcTransactionManager`\n\n**Strategic choices in 2026:**\n- Default to **JDBC + virtual threads + JPA** for new services on JDK 21+\n- Choose **R2DBC** when streaming, reactive-all-the-way, or LISTEN/NOTIFY are real requirements\n- Avoid mixing the two in one service unless you have a specific reason\n- For an existing JPA codebase, virtual threads are a one-line config change with massive concurrency upside\n\n**Pool sizing under virtual threads:**\n- 10K virtual threads can each try to acquire a JDBC connection from a pool of 10 — most will block on `getConnection`\n- Either size the pool larger or accept that the pool is your concurrency contract\n- Set short `connectionTimeout` and clear failure semantics so callers fail fast rather than pile up\n\n**Observability:**\n- JDBC has decades of tooling — APM agents, query loggers, p6spy, Hibernate Statistics\n- R2DBC tooling is catching up — Micrometer support, OpenTelemetry instrumentation, but still less mature\n- For mission-critical services where deep DB observability matters, JDBC's tooling lead is real"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **JDBC** is blocking; **R2DBC** is reactive; both speak SQL to the same databases\n- **Virtual threads (JDK 21+)** make JDBC blocking cheap — closing much of the concurrency gap\n- **JPA, Hibernate, jOOQ, MyBatis** all run on JDBC; R2DBC has no equivalents\n- **Streaming rows** is more natural in R2DBC; possible with JDBC via cursors and `fetchSize`\n- **Transactions** — JDBC `ThreadLocal`-bound; R2DBC reactive-context-bound; mixing them is a footgun\n- **Migrations** — Flyway and Liquibase still need JDBC even on R2DBC services\n- **Connection pool** — HikariCP for JDBC, r2dbc-pool for R2DBC; same sizing rule of thumb\n- **2026 default** — JDBC + virtual threads + JPA for most new services\n- **R2DBC sweet spot** — reactive WebFlux, streaming, LISTEN/NOTIFY, explicit backpressure\n- **Don't mix** the two in one service unless there's a specific reason"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "JDBC and R2DBC speak the same SQL to the same databases — the difference is the threading model and the ecosystem around them.\n\n**JDBC**\n- Blocking; every query parks the calling thread\n- 25 years of tooling — JPA, Hibernate, every connection pool, every migration tool\n- Scales by adding threads; pool size and thread pool are the limits\n- With virtual threads (JDK 21+), blocking calls park cheaply and free the carrier — concurrency is no longer the wall it used to be\n\n**R2DBC**\n- Reactive, non-blocking; queries return `Mono` / `Flux`\n- Calling thread is free during the network round-trip\n- Native streaming — `Flux<Row>` with end-to-end backpressure\n- No JPA equivalent; relationships are manual; no first-level cache\n- Migrations still use JDBC — Flyway and Liquibase have no reactive flavor\n\n**Transaction semantics**\n- JDBC — `ThreadLocal`-bound; works with virtual threads\n- R2DBC — reactive-context-bound; only works inside the reactive chain\n- Mixing blocking and reactive across a transaction is a footgun\n\n**When JDBC + virtual threads wins**\n- Standard CRUD with JPA features\n- Complex transactional workflows\n- Team familiar with blocking code\n- Most modern services in 2026\n\n**When R2DBC wins**\n- Reactive WebFlux end-to-end\n- Streaming millions of rows with backpressure\n- Postgres LISTEN/NOTIFY pub/sub\n- Reactive Kafka / Redis already in the pipeline\n\n**Pitfalls**\n- JDBC inside a WebFlux handler stalls the event loop\n- Mixing JPA and R2DBC in one service is painful\n- Believing R2DBC is faster — usually the gap is small at moderate concurrency\n- Forgetting Flyway needs JDBC even on R2DBC\n- `@Transactional` with the wrong tx manager doesn't propagate across reactive chains\n\n**Strategic answer**\n- The choice is rarely about raw throughput — it's about reactive-all-the-way vs JPA features\n- Virtual threads have tilted the default back toward JDBC for most services\n- Pick R2DBC for specific reasons — streaming, LISTEN/NOTIFY, reactive end-to-end — not by default"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do virtual threads change the JDBC vs R2DBC decision?",
+        "What does Flyway need from JDBC when the runtime uses R2DBC?",
+        "Why does mixing blocking and reactive break transactions?",
+        "How do you stream a 10-million-row query with each API?"
+      ],
+      "seo": {
+        "metaTitle": "R2DBC vs JDBC — Decision Guide for 2026 Spring Apps",
+        "metaDescription": "Feature-by-feature comparison of R2DBC vs JDBC: threading, JPA, streaming, transactions, and how virtual threads change the choice in 2026."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "JDBC and R2DBC speak the same SQL to the same databases — the difference is the threading model and the ecosystem around them.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "JDBC has been the standard Java DB API since 1997. Every query method (Statement.execute, PreparedStatement.executeQuery, Connection.commit) blocks the calling thread until the database responds. Around it Java has built every major ORM (Hibernate, MyBatis, jOOQ), every connection pool (HikariCP, Tomcat JDBC), and every migration tool (Flyway, Liquibase). R2DBC is the non-blocking equivalent — same SQL, same protocols, but the API returns Publisher<T> instead of blocking. The calling thread is free."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "Each row is a real engineering decision; the rightmost column flags how virtual threads change the equation",
+              "| Dimension | JDBC | R2DBC | Virtual Threads Effect | |---|---|---|---| | API style | Blocking | Reactive (Mono/Flux) | JDBC blocking is now cheap | | Threading | Thread-per-query | Event-loop sharing | JDBC scales further with VT | | ORM support | JPA, Hibernate, MyBatis, jOOQ | None of these | Unchanged | | Caching | First-level + L2 (JPA) | None | Unchanged | | Relationships | Automatic with JPA | Manual | Unchanged | | Lazy loading | Yes (JPA) | No | Unchanged | | Migrations | Flyway / Liquibase native | Flyway via JDBC URL | Unchanged | | Streaming rows | ResultSet",
+              "fetchSize + cursor | Flux<Row> natural | R2DBC still cleaner | | Backpressure | None | Native | R2DBC still wins | | Transactions | ThreadLocal-bound | Reactive context | VT keeps ThreadLocal working | | Connection pool | HikariCP | r2dbc-pool | Same sizing rules | | Tooling maturity | 25+ years | ~5 years | JDBC tooling unchanged | | Learning curve | Low | High | VT keeps JDBC easy | | Best for | Most workloads, JPA-heavy | WebFlux + streaming | VT favors JDBC for most |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "When JDBC + virtual threads helps: Standard CRUD with JPA features (caching, lazy loading, relationships) Existing codebase with extensive JPA / Hibernate use Complex transactional workflows that benefit from ThreadLocal semantics Team familiar with blocking imperative code Most modern services in 2026 When R2DBC helps: Reactive WebFlux service end-to-end Streaming queries — millions of rows with end-to-end backpressure Postgres LISTEN/NOTIFY for real-time pub/sub Memory-constrained containers at extreme connection counts Reactive Kafka / Redis already in the pipeline Watch for — common pitfalls: Using RestTemplate or JDBC inside a WebFlux handler."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "JDBC has been the standard Java DB API since 1997. Every query method (Statement.execute, PreparedStatement.executeQuery, Connection.commit) blocks the calling thread until the database responds. Around it Java has built every major ORM (Hibernate, MyBatis, jOOQ), every connection pool (HikariCP, Tomcat JDBC), and every migration tool (Flyway, Liquibase). R2DBC is the non-blocking equivalent — same SQL, same protocols, but the API."
+          }
+        ],
+        "cap": "JDBC Blocking; every query parks the calling thread 25 years of tooling — JPA, Hibernate, every connection pool, every migration tool Scales by adding threads; pool size and thread pool are the limits",
+        "familiarity_anchors": [
+          "Hibernate",
+          "Spring",
+          "Today"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do virtual threads change the JDBC vs R2DBC decision?",
+          "What does Flyway need from JDBC when the runtime uses R2DBC?",
+          "Why does mixing blocking and reactive break transactions?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring WebFlux reactive API with Reactor"
+      }
+    }
+  ]
+}

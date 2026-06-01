@@ -1,0 +1,404 @@
+{
+  "topic": "Query Optimization",
+  "topicSlug": "query-optimization",
+  "questions": [
+    {
+      "id": "hib-005",
+      "slug": "hibernate-criteria-api-vs-jpql-vs-native-sql",
+      "question": "When would you use Hibernate Criteria API, JPQL, or native SQL queries?",
+      "title": "Hibernate Criteria API vs JPQL vs Native SQL",
+      "direct_answer": "**JPQL** is the default for ~95% of queries — an object-oriented query language that operates on entity classes and fields, is **database-agnostic**, validated at startup when declared via `@Query`, and integrates with Hibernate's first-level cache and dirty checking. **JPA Criteria API** (and Spring Data's **`Specifications`**) is for **dynamic queries built programmatically** — runtime filters, sorts, joins, type-safe with the JPA metamodel (`Order_.status`). **Native SQL** is the escape hatch for database features JPQL cannot express — CTEs, window functions, JSONB operators, `LATERAL JOIN`, `RETURNING`, `MERGE/UPSERT`, full-text search, vendor hints. **Native costs**: validates only at first execution, loses portability, bypasses L2 cache, skips lifecycle callbacks on bulk operations, leaves L1 stale (requires `em.clear()` after modifying SQL).",
+      "layout_type": "comparison-arena",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Ability to match the query mechanism to the use-case and awareness of trade-offs in testability and portability",
+        "common_mistake": "Using native SQL for everything because it feels familiar, thereby losing portability and bypassing Hibernate's dirty checking and cache invalidation",
+        "to_stand_out": "Mention the JPA 2.1 Criteria API vs Hibernate's older Criteria API (deprecated), and how Spring Data Specifications build on JPA Criteria"
+      },
+      "company_tags": [
+        "Atlassian",
+        "Salesforce",
+        "Adyen",
+        "Stripe",
+        "Workday",
+        "ServiceNow"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Native SQL Feels Familiar but Bypasses Everything Hibernate Does for You",
+            "content": "Developers default to native SQL because it is what they know.\n- The query runs, results come back, job done.\n- But native SQL **bypasses Hibernate's dirty checking, cache invalidation, and entity state management.** A native `UPDATE` does not update the persistence context — subsequent entity reads return stale data from the L1 cache.\n- A native `SELECT` does not populate the L2 cache.\n\n**JPQL** is Hibernate's portable query language — it operates on entities and their relationships, not tables and columns.\n- JPQL queries are **database-agnostic** and integrate with the persistence context.\n- The trade-off: JPQL cannot express everything SQL can — window functions, CTEs, vendor hints require native SQL.\n\n**JPA Criteria API** builds queries programmatically with type-safe references.\n- It replaced Hibernate's legacy Criteria API (deprecated in Hibernate 5) and is the foundation for **Spring Data Specifications**.\n- Criteria queries are verbose but composable — essential for dynamic search filters where the WHERE clause varies at runtime."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Query Lifecycle — Parse, Optimize, Execute, Rowset",
+            "content": "What happens between calling a repository method and getting results back. The same flow applies to JPQL, Criteria, and native — but the parse step changes.",
+            "mermaid": "sequenceDiagram\n    participant App as Application\n    participant Repo as Spring Data Repository\n    participant Hib as Hibernate Query Engine\n    participant DB as Database (Planner / Executor)\n    participant Cache as L1 / L2 Cache\n\n    App->>Repo: orderRepo.findByStatus(OPEN)\n    Repo->>Hib: derived query -> JPQL string\n    Note over Hib: Parse JPQL into AST\n    Hib->>Hib: Resolve entity / column mapping\n    Hib->>Hib: Translate to SQL\n    Hib->>Cache: L2 query cache lookup (if enabled)\n    alt cache hit\n        Cache-->>Hib: cached IDs / rowset\n    else cache miss\n        Hib->>DB: Send SQL + parameters\n        Note over DB: Parser builds parse tree\n        Note over DB: Optimizer chooses plan (seq scan, index scan, joins)\n        Note over DB: Executor runs plan, fetches pages\n        DB-->>Hib: Result set (rows)\n        Hib->>Cache: Store in L2 if cacheable\n    end\n    Hib->>Hib: Hydrate entities, attach to L1\n    Hib-->>Repo: List<Order>\n    Repo-->>App: List<Order>"
+          },
+          {
+            "type": "comparison_table",
+            "title": "JPQL vs Criteria vs Native SQL — Portability, Safety, and When to Use Each",
+            "content": "Match the query type to the use case.\n\n| Aspect | JPQL | Criteria API | Native SQL |\n|---|---|---|---|\n| **Syntax** | String-based, SQL-like | Programmatic, type-safe | Raw SQL strings |\n| **Portability** | Database-agnostic | Database-agnostic | Database-specific |\n| **Dynamic queries** | String concatenation (risky) | Composable predicates | String concatenation (risky) |\n| **Cache integration** | Full L1/L2 integration | Full L1/L2 integration | Bypasses L2, stales L1 |\n| **Lifecycle callbacks** | Triggered | Triggered | Skipped on bulk operations |\n| **Complex SQL** | No window functions/CTEs | No window functions/CTEs | Full SQL power |\n| **Best for** | Static queries, joins | Dynamic filters, search | Reporting, DB-specific features |\n\n**Spring Data Specifications wrap the Criteria API** with a cleaner interface. For dynamic queries in Spring Data projects, Specifications are the recommended approach — composability without the verbose `CriteriaBuilder` boilerplate."
+          },
+          {
+            "type": "after_code",
+            "title": "The Same Query Written Four Ways",
+            "content": "'Find orders by optional status, city, and date range' — four implementations.\n\n**1. JPQL (static, all filters required):**\n\n```java\n@Query(\"\"\"\n    SELECT o FROM Order o\n    WHERE o.status = :status AND o.shippingCity = :city\n      AND o.createdAt BETWEEN :from AND :to\n    ORDER BY o.createdAt DESC\n\"\"\")\nList<Order> findAll(@Param(\"status\") OrderStatus status,\n                    @Param(\"city\") String city,\n                    @Param(\"from\") Instant from,\n                    @Param(\"to\") Instant to);\n```\n\n**2. JPA Criteria API (dynamic, type-safe):**\n\n```java\nCriteriaBuilder cb = em.getCriteriaBuilder();\nCriteriaQuery<Order> cq = cb.createQuery(Order.class);\nRoot<Order> o = cq.from(Order.class);\n\nList<Predicate> predicates = new ArrayList<>();\nif (status != null) predicates.add(cb.equal(o.get(\"status\"), status));\nif (city != null)   predicates.add(cb.equal(o.get(\"shippingCity\"), city));\nif (from != null)   predicates.add(cb.greaterThanOrEqualTo(o.get(\"createdAt\"), from));\nif (to != null)     predicates.add(cb.lessThanOrEqualTo(o.get(\"createdAt\"), to));\n\ncq.where(predicates.toArray(new Predicate[0]))\n  .orderBy(cb.desc(o.get(\"createdAt\")));\n\nList<Order> results = em.createQuery(cq).getResultList();\n```\n\n**3. Spring Data Specification (Criteria wrapped):**\n\n```java\nSpecification<Order> spec = Specification\n    .where(status != null ? (r, q, cb) -> cb.equal(r.get(\"status\"), status) : null)\n    .and(city != null ? (r, q, cb) -> cb.equal(r.get(\"shippingCity\"), city) : null)\n    .and(from != null ? (r, q, cb) -> cb.greaterThanOrEqualTo(r.get(\"createdAt\"), from) : null)\n    .and(to != null ? (r, q, cb) -> cb.lessThanOrEqualTo(r.get(\"createdAt\"), to) : null);\n\nList<Order> results = orderRepo.findAll(spec, Sort.by(\"createdAt\").descending());\n```\n\n**4. Native SQL (for features JPQL cannot express):**\n\n```java\n@Query(value = \"\"\"\n    WITH ranked AS (\n      SELECT o.*, ROW_NUMBER() OVER (PARTITION BY o.customer_id ORDER BY o.created_at DESC) rn\n      FROM orders o WHERE o.created_at >= :cutoff\n    )\n    SELECT * FROM ranked WHERE rn = 1\n\"\"\", nativeQuery = true)\nList<Order> findLatestOrderPerCustomer(@Param(\"cutoff\") Instant cutoff);\n```\n\nThe window function (`ROW_NUMBER() OVER PARTITION BY`) cannot be expressed in JPQL — native is the only option."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "The Hidden Costs of Native SQL — Cache Stale, Bulk Pitfalls, Schema Coupling",
+            "content": "**When native helps:**\n- Vendor-specific SQL is required (window functions, CTEs, JSONB, full-text).\n- Performance hints needed (`/*+ INDEX(...) */`, planner overrides).\n- Bulk operations where you do not need entity management.\n\n**When native hurts:**\n- Bypasses L2 cache — repeat queries always hit DB.\n- Bulk UPDATE/DELETE leaves L1 stale; subsequent `findById` returns pre-update entity.\n- Bulk operations skip `@PreUpdate`, `@PostUpdate`, Spring Data Auditing (`@LastModifiedDate`, `@LastModifiedBy`).\n- Returns `Object[]` per row unless `resultClass` or `@SqlResultSetMapping` is configured.\n- Uses DB column names — entity field renames silently break queries.\n- Pagination requires explicit `countQuery` (Spring cannot parse native SQL).\n- Validates only at first execution — typos surface in production.\n\n**Watch for:**\n- After native bulk modifying SQL, call `em.clear()` to drop stale cached entities.\n- `@Version` columns are not auto-incremented — explicitly add `version = version + 1` to bulk SQL.\n- `@SqlResultSetMapping` is the formal way to map native columns to entities/DTOs.\n- The jOOQ alternative — type-safe SQL DSL combining Criteria's safety with native's expressive power; ideal for reporting-heavy apps.\n\n**Guardrail for teams:**\n- Require every native query to have a code-review comment explaining why JPQL cannot express it.\n- Keeps native queries rare and intentional, not the default reach for 'I know SQL better than JPQL'."
+          },
+          {
+            "type": "when_to_use",
+            "title": "Decision Flow — JPQL, Criteria, or Native",
+            "content": "**Default to JPQL:**\n- Static query (fixed filter set, fixed sort).\n- Readable, portable, validated at startup, cache-integrated.\n\n**Switch to Criteria/Specifications when:**\n- Filters are **optional** and combine at runtime (search forms, admin tools).\n- Sort column is user-selectable.\n- Joins depend on runtime flags.\n- Building a reusable query library across multiple repositories.\n\n**Switch to native SQL when:**\n- **Window functions** (`ROW_NUMBER`, `LAG`, `LEAD`, `SUM() OVER`).\n- **CTE (`WITH`)** queries for recursive or hierarchical data.\n- **Postgres JSONB** operators (`@>`, `->>`, `jsonb_array_elements`).\n- **Full-text search** (`tsvector`, `tsquery`, `MATCH AGAINST`).\n- **Vendor hints** (Oracle `/*+ INDEX(...) */`, Postgres `/*+ SeqScan(t) */`).\n- **`RETURNING`** clause for `INSERT ... RETURNING id`.\n- **`MERGE/UPSERT`** — `INSERT ... ON CONFLICT DO UPDATE`, `MERGE INTO`.\n- **`LATERAL JOIN`** or correlated subqueries JPQL cannot express.\n\n**Never use native for:**\n- Simple CRUD that JPQL covers.\n- Queries you might want to port to another database.\n- Queries where audit callbacks must fire.\n- Queries whose result is entities needing entity management.\n\n**Hybrid pattern — JPQL for 90% + native for 10%:**\n- A typical production app has 50-100 JPQL `@Query` methods, 10-20 Specifications, 3-5 native queries.\n- When native exceeds 10% of the repository layer, the schema or framework choice is wrong."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **JPQL operates on entities and fields; native SQL operates on tables and columns** — renaming entity fields breaks JPQL but not native; renaming DB columns breaks native but not JPQL.\n- **Criteria API is type-safe and dynamically composable** — best for runtime-built filters; verbose but refactor-safe.\n- **Spring Data Specifications wrap Criteria** for cleaner composition.\n- **Native SQL is the escape hatch** — CTEs, window functions, JSONB, RETURNING, vendor hints.\n- **Native bulk operations skip callbacks** — `@PreUpdate`, audit, `@Version` increment, L2 cache invalidation.\n- **Always clear L1 cache** (`em.clear()`) after native modifying SQL.\n- **`@Query` with JPQL is validated at startup** — typos fail fast; native typos surface only at first execution."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Data JPA and Hibernate give you four ways to query: derived method names, JPQL, Criteria API, and native SQL.\n\n**JPQL — the standard choice:**\n- Object-oriented; references entity class and field names\n- Validated at startup with `@Query`\n- Limitation: static string; building dynamic WHERE requires concatenation or Specifications\n\n**Criteria API — type-safe dynamic queries:**\n- `CriteriaBuilder` + `CriteriaQuery` + `Root` build the query programmatically\n- Refactoring-safe: renaming the entity field causes a compile error\n- Verbose; use Specifications for cleaner composition\n\n**Native SQL — for database-specific features:**\n- CTEs, window functions, RETURNING, json_agg, LATERAL JOIN — none expressible in JPQL\n- `@Query(value = \"...\", nativeQuery = true)`\n- Ties you to a specific database; migration becomes harder\n\n**Decision:** derived methods for simple lookups -> JPQL for readable queries -> Specifications for dynamic multi-filter -> native for database-specific SQL."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Spring Data JPA's `Specification` interface relate to the JPA Criteria API?",
+        "What must you do after running a native bulk UPDATE to keep the Hibernate cache consistent?",
+        "How do you map a native SQL result to a DTO instead of a full entity?",
+        "When would you reach for jOOQ instead of Hibernate?"
+      ],
+      "seo": {
+        "metaTitle": "Hibernate Criteria API vs JPQL vs Native SQL — When to Use Each",
+        "metaDescription": "Compare JPQL, JPA Criteria API, and native SQL queries in Hibernate — type safety, dynamic queries, caching, lifecycle callbacks, and Spring Data integration."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Data JPA and Hibernate give you four ways to query: derived method names, JPQL, Criteria API, and native SQL.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Developers default to native SQL because it is what they know. The query runs, results come back, job done. But native SQL bypasses Hibernate's dirty checking, cache invalidation, and entity state management. A native UPDATE does not update the persistence context — subsequent entity reads return stale data from the L1 cache. A native SELECT does not populate the L2 cache. JPQL is Hibernate's portable query language — it operates on entities and their relationships, not tables and columns. JPQL."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Ability to match the query mechanism to the use-case and awareness of trade-offs in testability and portability"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "JPQL operates on entities and fields; native SQL operates on tables and columns — renaming entity fields breaks JPQL but not native; renaming DB columns breaks native but not JPQL",
+              "Criteria API is type-safe and dynamically composable — best for runtime-built filters; verbose but refactor-safe",
+              "Spring Data Specifications wrap Criteria for cleaner composition",
+              "Native SQL is the escape hatch — CTEs, window functions, JSONB, RETURNING, vendor hints",
+              "Native bulk operations skip callbacks — @PreUpdate, audit, @Version increment, L2 cache invalidation"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Developers default to native SQL because it is what they know. The query runs, results come back, job done. But native SQL bypasses Hibernate's dirty checking, cache invalidation, and entity state management. A native UPDATE does not update the persistence context — subsequent entity reads return stale data from the L1 cache. A native SELECT does not populate the L2 cache. JPQL is Hibernate's portable query language — it operates on entities and their relationships, not tables and columns. JPQL queries are database-agnostic and integrate with the persistence context. The trade-off: JPQL cannot express everything SQL can — window functions, CTEs, vendor hints require native SQL. JPA Criteria API builds queries programmatically with type-safe references. It replaced Hibernate's legacy Criteria."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using native SQL for everything because it feels familiar, thereby losing portability and bypassing Hibernate's dirty checking and cache invalidation"
+            ]
+          }
+        ],
+        "cap": "JPQL — the standard choice: Object-oriented; references entity class and field names Validated at startup with @Query Limitation: static string; building dynamic WHERE requires concatenation or Specif",
+        "familiarity_anchors": [
+          "Query",
+          "Hibernate",
+          "Criteria"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Spring Data JPA's `Specification` interface relate to the JPA Criteria API?",
+          "What must you do after running a native bulk UPDATE to keep the Hibernate cache consistent?",
+          "How do you map a native SQL result to a DTO instead of a full entity?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "jpa-009",
+      "slug": "dto-projections-interface-class-based",
+      "title": "DTO Projections in Spring Data JPA",
+      "question": "What are DTO projections in Spring Data JPA, what types exist, and when should you use them over entity queries?",
+      "direct_answer": "DTO projections let Spring Data JPA fetch **only the columns a query needs** instead of materializing full entities. Three styles: **interface-based closed projections** (interface with getters matching entity field names — Spring generates a SELECT with exactly those columns, no entity, no lazy proxies); **class-based projections** via `SELECT new com.x.OrderSummary(o.id, o.status, c.name)` or Java records (explicit, type-safe, JPQL or native); **dynamic projections** — `<T> List<T> findByStatus(OrderStatus s, Class<T> type)` — the caller chooses the projection at runtime. **Trap**: **open projections** (`@Value(\"#{target.firstName + ' ' + target.lastName}\")`) LOOK like optimization but actually load the full entity and evaluate SpEL in Java. **Closed projections** (getters matching entity properties exactly) generate efficient SQL. **Nested association getters** (`getCustomer()` returning another interface) trigger N+1 — use a flattened class-based DTO instead.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows how to optimise read queries and avoid the overhead of loading full entities when only a subset of fields is needed",
+        "common_mistake": "Using interface projections with associations triggers N+1 because Spring Data fetches each related entity separately. Closed projections (matching exact column names) are more efficient than open projections",
+        "to_stand_out": "Explain the difference between open and closed projections, discuss the @Value SpEL-based computed properties in interface projections, and mention dynamic projections using a generic <T> return type"
+      },
+      "company_tags": [
+        "LinkedIn",
+        "Spotify",
+        "Airbnb",
+        "Twitter",
+        "Pinterest",
+        "Booking.com"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Fetching 50 Columns to Display 3 Is the Performance Problem Projections Solve",
+            "content": "When a REST API returns a user's name and email, loading the full `User` entity with 50 fields, lazy associations, and persistence-context tracking is wasteful. **DTO projections select only the columns needed**, skip entity management entirely, and return plain objects that Jackson serializes directly — no `LazyInitializationException`, no N+1, no dirty checking overhead.\n\nSpring Data JPA supports three projection types.\n- **Class-based projections** use `SELECT new Dto(...)` in JPQL or constructor matching — concrete classes (or records) with exact column mapping.\n- **Interface-based closed projections** define getter methods matching entity property names — Spring generates a proxy.\n- **Interface-based open projections** use `@Value` with SpEL for computed properties — but they lose the optimization because Spring loads the full entity.\n\n**The subtlety interviewers test:** closed interface projections generate efficient SQL selecting only the declared columns. **Open projections load the entire entity** and compute the values in Java. Using open projections thinking they are optimized is a common mistake."
+          },
+          {
+            "type": "step",
+            "title": "Three Projection Types and When Each Makes Sense",
+            "content": "**Class-based projections (records or DTOs):**\n- Most explicit; declare a record with the fields you need.\n- Spring Data maps the query result to the constructor.\n\n```java\npublic record UserSummary(Long id, String name, String email) {}\n\npublic interface UserRepository extends JpaRepository<User, Long> {\n    List<UserSummary> findByActiveTrue();\n}\n```\n\n- Generates `SELECT u.id, u.name, u.email FROM User u WHERE u.active = true`.\n- Most efficient; no entity management.\n\n**Closed interface projections:**\n- Same efficiency with an interface; Spring generates a proxy.\n- One entity can have multiple projection interfaces for different views.\n- Method names must match entity property getters exactly.\n\n**Dynamic projections:**\n- `<T> List<T> findByActiveTrue(Class<T> type)` lets callers choose the projection at call time.\n- One repository method serves entity reads + multiple DTO views.\n\n**Open projections:**\n- `@Value(\"#{target.firstName + ' ' + target.lastName}\")` computes values from the entity.\n- Spring loads ALL columns and the full entity to evaluate SpEL.\n- Use only when computed properties are genuinely needed."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Interface vs Class vs Dynamic vs Native Projections",
+            "content": "Four projection approaches with their SQL characteristics.\n\n| Style | Declaration | SQL generated | Nested associations | Best for |\n|---|---|---|---|---|\n| **Closed interface** | `interface OrderSummary { Long getId(); String getStatus(); }` | `SELECT id, status FROM orders` | Triggers N+1 if getter returns another interface | Simple read views, auto-generated queries |\n| **Open interface (`@Value`)** | `@Value(\"#{target.firstName + ' ' + target.lastName}\") String getFullName()` | Loads full entity, evaluates SpEL in Java | N+1 because full entity loaded | Rare — only when computed from multiple fields |\n| **Class-based (record)** | `record OrderSummary(Long id, String status) {}` + `SELECT new ...` | `SELECT id, status FROM orders` via constructor | Flatten with explicit joins | Explicit queries, complex joins, native SQL |\n| **Dynamic projection** | `<T> List<T> findByStatus(OrderStatus s, Class<T> type)` | Depends on passed `type` | Same as the chosen class | One query serves entity + DTO views |\n| **Native + mapping** | `@Query(value=..., nativeQuery=true)` + `@SqlResultSetMapping` | Raw SQL | Manual JOIN/mapping in SQL | DB-specific SELECT (JSONB, windowing) into DTO |\n\n**Closed vs open mental model:** if every getter name matches an entity property getter name **exactly**, it is closed (efficient). The moment you add `@Value` SpEL or compute/aggregate, it is open (loads the whole entity).\n\n**`getCustomer()` returning another projection interface is a trap.** Spring detects the nested projection and fires a separate query per row to load the customer. N+1 returns. Fix: class-based record with `String customerName` field plus an explicit `JOIN`."
+          },
+          {
+            "type": "after_code",
+            "title": "Projection Patterns That Work in Production",
+            "content": "**Pattern 1 — closed interface projection for list view:**\n\n```java\npublic interface OrderListItem {\n    Long getId();\n    OrderStatus getStatus();\n    Instant getCreatedAt();\n    BigDecimal getTotalAmount();\n}\n\npublic interface OrderRepository extends JpaRepository<Order, Long> {\n    Page<OrderListItem> findByCustomerId(Long customerId, Pageable page);\n    // SELECT id, status, created_at, total_amount FROM orders WHERE customer_id = ?\n}\n```\n\nNo entity, no lazy proxies, Jackson serializes the interface proxy directly.\n\n**Pattern 2 — class-based record with explicit join:**\n\n```java\npublic record OrderSummary(\n    Long id,\n    OrderStatus status,\n    Instant createdAt,\n    String customerName,\n    BigDecimal total\n) {}\n\npublic interface OrderRepository extends JpaRepository<Order, Long> {\n    @Query(\"\"\"\n        SELECT new com.acme.OrderSummary(o.id, o.status, o.createdAt, c.name, o.totalAmount)\n        FROM Order o JOIN o.customer c\n        WHERE o.status = :status\n        ORDER BY o.createdAt DESC\n    \"\"\")\n    Page<OrderSummary> findSummaries(@Param(\"status\") OrderStatus status, Pageable page);\n}\n```\n\nOne query, joined with customer, flat DTO — no N+1 possible.\n\n**Pattern 3 — dynamic projection for reuse:**\n\n```java\npublic interface OrderRepository extends JpaRepository<Order, Long> {\n    <T> List<T> findByStatus(OrderStatus status, Class<T> type);\n}\n\nList<OrderListItem> lightweight = orderRepo.findByStatus(PAID, OrderListItem.class);\nList<OrderDetailDto> detailed   = orderRepo.findByStatus(PAID, OrderDetailDto.class);\nList<Order>          entities   = orderRepo.findByStatus(PAID, Order.class);\n```\n\n**Pattern 4 — native query with class-based record:**\n\n```java\npublic record CustomerRevenue(Long customerId, String customerName, BigDecimal revenue) {}\n\npublic interface ReportRepository extends Repository<Order, Long> {\n    @Query(value = \"\"\"\n        SELECT c.id AS customerId, c.name AS customerName,\n               SUM(o.total_amount) AS revenue\n        FROM orders o JOIN customers c ON c.id = o.customer_id\n        WHERE o.status = 'PAID' AND o.created_at >= :from\n        GROUP BY c.id, c.name\n        ORDER BY revenue DESC\n    \"\"\", nativeQuery = true)\n    List<CustomerRevenue> topCustomers(@Param(\"from\") Instant from, Pageable page);\n}\n```\n\nColumn aliases match record component names — Spring maps by name."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Projection Pitfalls and When to Just Return the Entity",
+            "content": "**When projections help:**\n- List views with many rows but few columns needed.\n- Read paths exposed to API where DTOs are the right contract.\n- Avoiding `LazyInitializationException` by skipping entity management.\n- Reducing N+1 risk by flattening associations.\n\n**When projections hurt:**\n- Internal service calls needing entity semantics (dirty tracking, cascades).\n- Code paths that modify the loaded entity.\n- When `@PostLoad` or other entity callbacks must fire.\n- Cases where the projection cost exceeds the saved bytes (small entities).\n\n**Specific pitfalls:** - **Nested interface projections trigger N+1** — `interface OrderSummary { CustomerView getCustomer(); }`.\n- Use class-based with flattened `customerName`.\n- **Interface projections do not flatten collections well** — `List<ItemView> getItems()` is unreliable.\n- Use class-based DTO with explicit query.\n- **`@Value` SpEL is almost always a mistake** — loads every column including unintended BLOBs.\n- **Native projections by column alias** — alias must match record component name; mismatch = `ConversionFailedException` at runtime.\n- **Pagination + projections** — interface and class-based work; native requires explicit `countQuery`.\n\n**Watch for:** - Performance hierarchy (fastest -> slowest):\n  - 1.\n- Class-based DTO with explicit `SELECT NEW` (no entity overhead)\n  - 2.\n- Closed interface projection (no entity, but Spring builds a proxy)\n  - 3.\n- Dynamic projection (same as chosen type)\n  - 4.\n- Open interface projection (loads full entity)\n  - 5.\n- Entity query with `JOIN FETCH` (full entities + associations)\n\n**Production checklist:**\n- List views use projections; detail views can use entities.\n- Nested associations in interface projections replaced with flattened class-based DTOs.\n- No `@Value` SpEL in repository-returned interfaces.\n- Native projections document the column-alias-to-component mapping.\n- `Page<Projection>` works correctly for both small and large datasets."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Interface projections select only the declared columns** — Hibernate generates a tighter SELECT.\n- **Closed projections (no `@Value`) are efficient; open projections load the full entity** — that is the single most misunderstood point.\n- **Class-based projections (record + `SELECT new ...`) are the most explicit and fastest.**\n- **Nested association getters trigger N+1** — flatten with class-based DTOs.\n- **Dynamic projections** — `<T> List<T> findByStatus(Class<T> type)` lets callers pick at runtime.\n- **Native projections need column aliases matching the record component names.**\n- **Use entities only when you need entity semantics** (dirty tracking, cascades, callbacks)."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "DTO projections let you select exactly the data your query needs without loading full entities. Reduces data transferred and prevents lazy-loading issues in read paths.\n\n**Interface projections:**\n- Define an interface with getter methods matching entity fields\n- Change the repository return type — Spring generates `SELECT id, status FROM orders`\n- Closed projection (method name = field name): only those columns selected\n- Open projection (`@Value(\"#{target...}\")`): loads full entity, evaluates SpEL — no column optimization\n\n**Class-based projections:**\n- `@Query(\"SELECT new com.example.OrderDto(o.id, o.status, o.total) FROM Order o ...\")`\n- Constructor expression — Hibernate calls the DTO constructor; no entity, no proxy\n- Works with native queries and complex joins\n\n**Association trap:**\n- `interface OrderSummary { CustomerView getCustomer(); }` — Spring proxies the nested interface; accessing `customer.getName()` fires a query per row\n- Use a flattened class-based DTO with `customerName` instead\n\n**When to use:** list views, read-heavy endpoints, and any query where you do not need entity management."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a closed and an open interface projection in terms of the SQL generated?",
+        "Can you use DTO projections with native SQL queries in Spring Data JPA?",
+        "How does a class-based projection with a Java record differ from using a custom JPQL @Query that returns Object[]?",
+        "How do dynamic projections interact with `Page<T>` results?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Data JPA DTO Projections Interface Class-Based — Java Interview",
+        "metaDescription": "Interface-based and class-based DTO projections in Spring Data JPA — how they work, the SQL they generate, and when to use each for optimising read queries."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "DTO projections let you select exactly the data your query needs without loading full entities.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When a REST API returns a user's name and email, loading the full User entity with 50 fields, lazy associations, and persistence-context tracking is wasteful. DTO projections select only the columns needed, skip entity management entirely, and return plain objects that Jackson serializes directly — no LazyInitializationException, no N+1, no dirty checking overhead. Spring Data JPA supports three projection types. Class-based projections use SELECT new Dto(...) in JPQL or constructor matching — concrete classes (or records) with exact column mapping."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows how to optimise read queries and avoid the overhead of loading full entities when only a subset of fields is needed"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Interface projections select only the declared columns — Hibernate generates a tighter SELECT",
+              "Closed projections (no @Value) are efficient; open projections load the full entity — that is the single most misunderstood point",
+              "Class-based projections (record + SELECT new",
+              ") are the most explicit and fastest",
+              "Nested association getters trigger N+1 — flatten with class-based DTOs"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "When a REST API returns a user's name and email, loading the full User entity with 50 fields, lazy associations, and persistence-context tracking is wasteful. DTO projections select only the columns needed, skip entity management entirely, and return plain objects that Jackson serializes directly — no LazyInitializationException, no N+1, no dirty checking overhead. Spring Data JPA supports three projection types. Class-based projections use SELECT new Dto(...) in JPQL or constructor matching — concrete classes (or records) with exact column mapping. Interface-based closed projections define getter methods matching entity property names — Spring generates a proxy. Interface-based open projections use @Value with SpEL for computed properties — but they lose the optimization because Spring loads the full entity. The subtlety interviewers."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using interface projections with associations triggers N+1 because Spring Data fetches each related entity separately",
+              "Closed projections (matching exact column names) are more efficient than open projections"
+            ]
+          }
+        ],
+        "cap": "Interface projections: Define an interface with getter methods matching entity fields Change the repository return type — Spring generates SELECT id, status FROM orders Closed projection (method name",
+        "familiarity_anchors": [
+          "Spring",
+          "Three",
+          "SELECT"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a closed and an open interface projection in terms of the SQL generated?",
+          "Can you use DTO projections with native SQL queries in Spring Data JPA?",
+          "How does a class-based projection with a Java record differ from using a custom JPQL @Query that returns Object[]?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "jpa-010",
+      "slug": "modifying-bulk-updates-deletes",
+      "title": "@Modifying Bulk Updates and Deletes in Spring Data JPA",
+      "question": "How do you perform bulk UPDATE and DELETE in Spring Data JPA, and what are the pitfalls of @Modifying?",
+      "direct_answer": "Bulk UPDATE/DELETE in Spring Data JPA uses **`@Modifying`** with **`@Query`** to issue DML directly to the database, bypassing per-entity loads and dirty checking — essential for thousands of rows. Three critical configurations: **`@Transactional`** (`@Modifying` requires an active transaction), **`clearAutomatically = true`** (clears L1 after the operation so subsequent `findById` does not return stale entities), and **`flushAutomatically = true`** (flushes pending writes BEFORE the bulk SQL runs). **Hidden costs:** `@Modifying` bypasses lifecycle callbacks (`@PreUpdate`, `@PostUpdate`, Spring Data Auditing), cascade rules (`CascadeType.REMOVE` does not propagate), `@Version` increment, and Hibernate interceptors. For audited or cascading entities, prefer **per-entity loops with `em.flush() + em.clear()` per batch** so callbacks fire; for true bulk operations on simple state-change tables, `@Modifying` is orders of magnitude faster.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows the limitations of Hibernate's first-level cache when bypassing entity-level operations with bulk DML",
+        "common_mistake": "Using @Modifying without clearing the persistence context — subsequent reads in the same transaction return stale entities from the first-level cache rather than the updated values",
+        "to_stand_out": "Explain that @Modifying bypasses entity lifecycle callbacks (@PreUpdate, @PostUpdate) and Hibernate interceptors, so audit logging via these mechanisms will not fire. Recommend using entity-level operations for audited changes"
+      },
+      "company_tags": [
+        "Microsoft",
+        "Adobe",
+        "ServiceNow",
+        "Workday",
+        "Atlassian",
+        "Salesforce"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "@Modifying Bypasses the Persistence Context — Your Next Read Returns Stale Data",
+            "content": "Bulk UPDATE and DELETE operations in Spring Data JPA use `@Modifying` with `@Query` to generate SQL that runs directly against the database. **The persistence context is not updated.** If you bulk-update 1,000 orders to 'SHIPPED' and then read one in the same transaction, the persistence context returns the cached entity with the old status.\n\nThis is the most common `@Modifying` bug. The fix is **`@Modifying(clearAutomatically = true)`** — clears the persistence context after the bulk operation. But clearing evicts ALL managed entities, which may trigger lazy loads or break references held by the calling code.\n\n**Second hidden issue:** `@Modifying` bypasses entity lifecycle callbacks. `@PreUpdate`, `@PostUpdate`, and Hibernate interceptors do not fire because the UPDATE goes directly to the database. **Audit logging using these callbacks is silently skipped.** Unsuitable for any table where audit trail completeness is required."
+          },
+          {
+            "type": "step",
+            "title": "Using @Modifying Correctly — clearAutomatically, flushAutomatically, and the Audit Trap",
+            "content": "**Required setup:**\n- `@Modifying` requires `@Transactional`.\n- `@Query` with UPDATE or DELETE statement.\n- Without `@Transactional`: `TransactionRequiredException` at runtime.\n\n**Example:**\n```java\n@Modifying(clearAutomatically = true, flushAutomatically = true)\n@Query(\"UPDATE Order o SET o.status = :status WHERE o.createdAt < :cutoff\")\nint archiveOldOrders(@Param(\"status\") String status, @Param(\"cutoff\") LocalDate cutoff);\n```\n\n**`flushAutomatically = true`:**\n- Flushes pending changes BEFORE the bulk operation.\n- Without it, pending entity modifications are lost — bulk SQL runs against database state, not persistence context state.\n\n**`clearAutomatically = true`:**\n- Evicts all managed entities AFTER the operation.\n- Without it, reads in the same transaction return stale cached values.\n\n**The audit trap:**\n- Do NOT use `@Modifying` if `@PreUpdate`, `@PostUpdate`, or Spring Data Auditing must fire.\n- For audited entities, load and mutate them in a loop — Hibernate's dirty checking generates per-entity UPDATEs with all callbacks.\n- Slower (N updates vs 1 bulk) but ensures audit trail correctness."
+          },
+          {
+            "type": "after_code",
+            "title": "Bulk Operations Done Right — Cache Clearing, Audit Fields, Cascade Handling",
+            "content": "**Correct bulk UPDATE with explicit audit fields:**\n\n```java\npublic interface OrderRepository extends JpaRepository<Order, Long> {\n\n    @Modifying(clearAutomatically = true, flushAutomatically = true)\n    @Query(\"\"\"\n        UPDATE Order o\n        SET o.status = :newStatus,\n            o.lastModifiedAt = CURRENT_TIMESTAMP,\n            o.lastModifiedBy = :actor\n        WHERE o.status = :oldStatus AND o.createdAt < :cutoff\n    \"\"\")\n    int archiveByStatusAndAge(@Param(\"newStatus\") OrderStatus newStatus,\n                              @Param(\"oldStatus\") OrderStatus oldStatus,\n                              @Param(\"cutoff\") Instant cutoff,\n                              @Param(\"actor\") String actor);\n}\n```\n\n`@LastModifiedDate` does NOT fire — set the audit columns explicitly in JPQL.\n\n**Bulk DELETE with cascade-aware pattern:**\n\n```java\n// WRONG: does NOT cascade to order_items even if Order has cascade=REMOVE\n@Modifying\n@Query(\"DELETE FROM Order o WHERE o.status = 'CANCELLED' AND o.createdAt < :cutoff\")\nint purgeCancelled(@Param(\"cutoff\") Instant cutoff);\n// Database throws FK violation\n\n// RIGHT: delete children first, then parents\n@Transactional\npublic int purgeCancelled(Instant cutoff) {\n    int itemsDeleted = itemRepo.deleteItemsForCancelledOrders(cutoff);\n    int ordersDeleted = orderRepo.deleteCancelledOrders(cutoff);\n    return ordersDeleted;\n}\n\n@Modifying(clearAutomatically = true)\n@Query(\"DELETE FROM OrderItem i WHERE i.order.status = 'CANCELLED' AND i.order.createdAt < :cutoff\")\nint deleteItemsForCancelledOrders(@Param(\"cutoff\") Instant cutoff);\n\n@Modifying(clearAutomatically = true)\n@Query(\"DELETE FROM Order o WHERE o.status = 'CANCELLED' AND o.createdAt < :cutoff\")\nint deleteCancelledOrders(@Param(\"cutoff\") Instant cutoff);\n```\n\n**Batch-updating thousands of rows with entity loading (audit-required):**\n\n```java\n@Transactional\npublic void archiveWithAudit(Instant cutoff) {\n    int batchSize = 100;\n    int page = 0;\n    while (true) {\n        List<Order> batch = orderRepo.findByStatusAndCreatedAtBefore(\n            OPEN, cutoff, PageRequest.of(page, batchSize));\n        if (batch.isEmpty()) break;\n\n        batch.forEach(o -> o.setStatus(ARCHIVED));\n\n        em.flush();\n        em.clear();\n        page++;\n    }\n}\n```\n\nWith `spring.jpa.properties.hibernate.jdbc.batch_size: 50`, Hibernate groups UPDATEs into JDBC batches. Slower than pure `@Modifying` but all callbacks fire."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Decision Matrix — @Modifying vs Entity Loop vs Native Bulk vs Spring Batch",
+            "content": "Four approaches to bulk modification, each with a clear fit.\n\n| Rows affected | Audit callbacks required? | Cascade required? | Recommendation |\n|---|---|---|---|\n| < 1000 | No | No | `@Modifying` JPQL — simplest, fastest |\n| < 1000 | Yes | Yes | Entity loop with `em.flush() + em.clear()` per batch |\n| 1K - 100K | No | Parent-delete cascades needed | `@Modifying` with explicit child-delete-first pattern |\n| 1K - 100K | Yes | Any | Spring Batch with `JpaItemWriter` |\n| 100K+ | Any | Any | Spring Batch with `JpaItemWriter` or raw JDBC + `StatelessSession` |\n\n**The silent-failure trap of native bulk UPDATE** (`nativeQuery = true`):\n- Persistence context is NOT cleared -> stale `findById`.\n- `@LastModifiedDate` is NOT updated.\n- `@PreUpdate`/`@PostUpdate` do NOT fire.\n- `@Version` is NOT incremented (breaks subsequent optimistic lock checks).\n- L2 cache for the entity is NOT invalidated.\n\n**Rule:** if you have any `@Version` fields, never use native bulk UPDATE — use JPQL `@Modifying` so Hibernate at least tracks it."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Subtle Pitfalls and Production Guardrails",
+            "content": "**When `@Modifying` helps:**\n- True bulk state changes on simple entities.\n- Tables without audit / cascade requirements.\n- Reducing N updates to 1 SQL — orders of magnitude faster.\n\n**When `@Modifying` hurts:**\n- Audit-trail tables — callbacks skipped silently.\n- `@Version`-tracked entities — version not incremented unless explicit `version = version + 1`.\n- Cascading deletes — children must be deleted first, manually.\n\n**Watch for:**\n- **`@Version` handling in JPQL bulk UPDATEs** — `UPDATE Order o SET o.status = :s WHERE o.id IN :ids` does NOT auto-increment version. Add explicitly: `SET o.status = :s, o.version = o.version + 1`. Otherwise, future `save()` calls on stale in-memory entities fail optimistic lock checks.\n- **Missing `@Transactional` symptom** — `TransactionRequiredException: Executing an update/delete query`. Put `@Transactional` on the service or repository method.\n- **`clearAutomatically = true` side effects** — evicts ALL managed entities. References still work (now detached), but `em.persist(detachedEntity)` will fail. Usually harmless for single-operation services; surprising in long transactions.\n- **`flushAutomatically = true` is underappreciated** — without it, in-flight `em.persist()` or modifications are NOT visible to the bulk UPDATE.\n  ```java\n  Order o = em.find(Order.class, 42L);\n  o.setTotalAmount(BigDecimal.ZERO);\n  int n = repo.archiveLowValueOrders(cutoff); // misses the zero-amount update\n  ```\n- **Spring Batch wins for big jobs** — chunk-oriented `Reader/Processor/Writer`, restart-from-failure, progress tracking. For 100K+ row nightly jobs, always Spring Batch."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Modifying` is mandatory for UPDATE/DELETE `@Query`** — without it, Spring runs as SELECT and throws.\n- **`clearAutomatically = true` prevents stale reads** — clears L1 after the bulk op.\n- **`flushAutomatically = true` applies pending entity changes before the bulk op** — guarantees the bulk SQL operates on the latest state.\n- **Bulk operations skip callbacks, cascades, auditing, `@Version` increment** — set audit columns explicitly in JPQL.\n- **Delete children before parents** — `@Modifying` DELETE does not cascade.\n- **Native bulk SQL is even more dangerous** — no L1 clear, no L2 invalidation, no version tracking.\n- **Use Spring Batch for 100K+ row jobs** — restartable, observable, chunk-oriented."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Bulk updates and deletes operate directly in SQL, bypassing Hibernate's entity lifecycle. Dramatically more efficient for large datasets but require explicit cache management.\n\n**Basic pattern:**\n```java\n@Modifying\n@Query(\"UPDATE Order o SET o.status = :status WHERE o.createdAt < :cutoff\")\nint updateStatusForOldOrders(@Param(\"status\") String status, @Param(\"cutoff\") LocalDateTime cutoff);\n```\n- `@Modifying` is required for UPDATE/DELETE JPQL\n- Returns the number of affected rows\n\n**The first-level cache problem:**\n- L1 is not updated by bulk SQL\n- A `findById()` after a bulk update returns the pre-update version from cache\n- Fix: `@Modifying(clearAutomatically = true)`\n\n**What is bypassed:**\n- `@PreUpdate`, `@PostUpdate` callbacks — not called\n- Spring Data `@LastModifiedDate` auditing — not updated automatically\n- Cascade rules — child entities are not affected unless SQL explicitly targets them\n- `@Version` — not incremented unless explicit\n\n**For `lastModifiedAt`:** include it in the JPQL: `SET o.status = :status, o.lastModifiedAt = CURRENT_TIMESTAMP`."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why does a bulk DELETE not trigger `CascadeType.REMOVE` on child entities?",
+        "What happens if you use `@Modifying` without `@Transactional`?",
+        "How would you handle bulk updates that also need to be captured by an audit log that uses `@PreUpdate`?",
+        "When should you reach for Spring Batch instead of `@Modifying`?"
+      ],
+      "seo": {
+        "metaTitle": "@Modifying Bulk Update Delete Spring Data JPA — Java Interview",
+        "metaDescription": "Use @Modifying with @Query for bulk UPDATE/DELETE in Spring Data JPA — clearAutomatically, flushAutomatically, callback bypass, cascade handling, and Spring Batch alternative."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Bulk updates and deletes operate directly in SQL, bypassing Hibernate's entity lifecycle.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Bulk UPDATE and DELETE operations in Spring Data JPA use @Modifying with @Query to generate SQL that runs directly against the database. The persistence context is not updated. If you bulk-update 1,000 orders to 'SHIPPED' and then read one in the same transaction, the persistence context returns the cached entity with the old status. This is the most common @Modifying bug. The fix is @Modifying(clearAutomatically = true) — clears the persistence context after the bulk operation. But clearing evicts ALL."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate knows the limitations of Hibernate's first-level cache when bypassing entity-level operations with bulk DML"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@Modifying is mandatory for UPDATE/DELETE @Query — without it, Spring runs as SELECT and throws",
+              "clearAutomatically = true prevents stale reads — clears L1 after the bulk op",
+              "flushAutomatically = true applies pending entity changes before the bulk op — guarantees the bulk SQL operates on the latest state",
+              "Bulk operations skip callbacks, cascades, auditing, @Version increment — set audit columns explicitly in JPQL",
+              "Delete children before parents — @Modifying DELETE does not cascade"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Bulk UPDATE and DELETE operations in Spring Data JPA use @Modifying with @Query to generate SQL that runs directly against the database. The persistence context is not updated. If you bulk-update 1,000 orders to 'SHIPPED' and then read one in the same transaction, the persistence context returns the cached entity with the old status. This is the most common @Modifying bug. The fix is @Modifying(clearAutomatically = true) — clears the persistence context after the bulk operation. But clearing evicts ALL managed entities, which may trigger lazy loads or break references held by the calling code. Second hidden issue: @Modifying bypasses entity lifecycle callbacks. @PreUpdate, @PostUpdate, and Hibernate interceptors do not fire because the UPDATE goes directly to the database. Audit."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using @Modifying without clearing the persistence context",
+              "subsequent reads in the same transaction return stale entities from the first-level cache rather than the updated values"
+            ]
+          }
+        ],
+        "cap": "Basic pattern: `java @Modifying @Query(\"UPDATE Order o SET o.status = :status WHERE o.createdAt < :cutoff\") int updateStatusForOldOrders(@Param(\"status\") String status, @Param(\"cutoff\") LocalDateTime",
+        "familiarity_anchors": [
+          "UPDATE",
+          "DELETE",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why does a bulk DELETE not trigger `CascadeType.REMOVE` on child entities?",
+          "What happens if you use `@Modifying` without `@Transactional`?",
+          "How would you handle bulk updates that also need to be captured by an audit log that uses `@PreUpdate`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    }
+  ]
+}

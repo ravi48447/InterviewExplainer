@@ -1,0 +1,268 @@
+{
+  "topic": "Aop",
+  "topicSlug": "aop",
+  "questions": [
+    {
+      "id": "sc-006",
+      "slug": "how-spring-aop-works",
+      "question": "How does Spring AOP work? Explain proxies, JDK dynamic proxies, and CGLIB.",
+      "title": "How Spring AOP Works (Proxy, JDK vs CGLIB)",
+      "direct_answer": "**Spring AOP creates proxies** that wrap target beans and intercept method calls to apply cross-cutting concerns like transactions or caching. It uses **JDK dynamic proxies** when the bean implements at least one interface, and **CGLIB subclass proxies** when no interface is present (Spring Boot 2.0+ defaults to CGLIB even with interfaces, controlled by `spring.aop.proxy-target-class=true`). The proxy is transparent to callers but means **self-invocation (calling a method via `this`) bypasses the proxy** and skips advice — the most common AOP debugging scenario. Spring AOP is deliberately a **subset of AspectJ** — proxy-based, method-level only, public methods on Spring-managed beans; in exchange, you get zero build-time overhead and no special classloader.",
+      "layout_type": "internals-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands why @Transactional breaks on internal calls and can explain the proxy-based mechanism behind most Spring magic.",
+        "common_mistake": "Thinking AOP works through bytecode weaving in all cases; not knowing the self-invocation limitation or the difference between JDK proxy (interface-based) and CGLIB (class subclassing).",
+        "to_stand_out": "Distinguish Spring AOP (proxy-based, method-level only) from AspectJ (full compile/load-time weaving, field-level join points) and explain when you would reach for AspectJ."
+      },
+      "company_tags": [
+        "Pivotal",
+        "Red Hat",
+        "Deutsche Bank",
+        "Twitter",
+        "Netflix",
+        "Atlassian"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why @Transactional Breaks on Self-Invocation — The Proxy Model Explained",
+            "content": "The single most common AOP debugging question in Spring interviews is: 'I annotated my method with `@Transactional` but it doesn't work when called from within the same class.' Understanding why requires knowing that **Spring AOP is proxy-based**, not bytecode-based.\n\nWhen Spring detects an aspect — `@Transactional`, `@Cacheable`, `@Async`, or a custom `@Around` advice — it wraps the target bean in a **proxy object** during the `BeanPostProcessor` phase.\n- Every external call to that bean goes through the proxy, which applies the aspect logic.\n- But a call from `this.method()` inside the same class **bypasses the proxy entirely** — it hits the original object directly.\n\nSpring offers two proxy implementations.\n- **JDK dynamic proxies** work when the bean implements an interface — the proxy implements the same interface and delegates to the original.\n- **CGLIB proxies** create a subclass of the concrete class at runtime, which is why Spring Boot defaults to CGLIB (most beans don't implement interfaces).\n- Both intercept external calls identically; **neither intercepts internal `this` calls**.\n\nSpring AOP is deliberately a **subset of AspectJ**.\n- It borrows AspectJ's annotation syntax (`@Aspect`, `@Pointcut`, `@Around`) and pointcut expression language, but restricts join points to **method execution on Spring-managed beans**.\n- Field access, constructor calls, and static methods — all supported by full AspectJ weaving — are off the table.\n- In exchange, you get zero build-time overhead, no special classloader, and no bytecode magic in your stack traces."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "How Calls Flow Through the Spring AOP Proxy",
+            "content": "The diagram shows why **self-invocation bypasses every aspect**: the `this.helper()` arrow loops back to the target bean directly, never hitting the proxy or the advice chain. Only calls that arrive from the outside (through the proxy reference Spring injected) go through advisors.\n\n```mermaid\nflowchart LR\n    Caller([\"Caller bean<br/>e.g. Controller\"])\n    Proxy[\"Spring AOP Proxy<br/>JDK or CGLIB\"]\n    Chain[\"Advice chain<br/>@Around then @Before<br/>then target then @After<br/>then @AfterReturning/Throwing\"]\n    Target[\"Real bean instance<br/>OrderServiceImpl\"]\n    DB[(\"Database / external\")]\n\n    Caller -- \"external method call\" --> Proxy\n    Proxy --> Chain\n    Chain -- \"invoke\" --> Target\n    Target -- \"this.helper() self-call\" --> Target\n    Target --> DB\n    Target -.return.-> Chain\n    Chain -.return.-> Proxy\n    Proxy -.return.-> Caller\n```"
+          },
+          {
+            "type": "phase",
+            "title": "How Spring Creates Proxies — The BeanPostProcessor That Replaces Your Bean",
+            "content": "Proxy creation happens during the `postProcessAfterInitialization` phase of the bean lifecycle. `AbstractAutoProxyCreator` — a `BeanPostProcessor` — scans each bean for applicable advisors (aspects). If any advisor matches, the post-processor creates a proxy and **returns it instead of the original bean**.\n\n**Proxy selection rule**\n- If the bean's class implements at least one interface, Spring can use a **JDK dynamic proxy**\n- The JDK proxy creates a class implementing the same interface; delegates each call through an `InvocationHandler`\n- If the bean doesn't implement any interface, Spring falls back to **CGLIB**\n- CGLIB generates a subclass at runtime using bytecode generation\n\n**Why Spring Boot 2.0+ defaults to CGLIB**\n- `spring.aop.proxy-target-class=true` is the default\n- JDK proxies require you to inject the interface type, not the concrete class\n- Code that injects `MyServiceImpl` instead of `MyService` breaks with JDK proxies but works fine with CGLIB\n- Defaulting to CGLIB eliminates this class of startup errors\n\n**What gets registered in the container**\n- The proxy reference, not the original\n- Every `@Autowired` injection of this bean type receives the proxy\n- The original instance still exists (the proxy holds a reference to it for delegation), but it is invisible to dependency injection"
+          },
+          {
+            "type": "phase",
+            "title": "The Self-Invocation Trap — Why this.method() Bypasses Every Aspect",
+            "content": "When you call `this.internalMethod()` inside a Spring bean, `this` refers to the **original object**, not the proxy. The proxy sits between the caller and the bean — it only intercepts calls that arrive through the injected reference.\n\n**The most common AOP bug**\n- A public method calls a private method annotated with `@Transactional` — the transaction never starts because the call never goes through the proxy\n- Same applies to `@Cacheable`, `@Async`, `@Retry`, custom aspects\n\n```java\n@Service\npublic class OrderService {\n    public void processOrder(Order order) {\n        validate(order);\n        this.saveOrder(order);  // bypasses proxy — no transaction!\n    }\n\n    @Transactional\n    public void saveOrder(Order order) {\n        repository.save(order);\n    }\n}\n```\n\n**Three fixes with different trade-offs**\n- **Restructure** — move `saveOrder()` to a separate bean so the call crosses the proxy boundary; cleanest solution\n- **Self-injection** — inject the bean into itself (`@Autowired private OrderService self`) and call `self.saveOrder()`; works because `self` is the proxy reference\n- **AspectJ weaving** — switch from Spring AOP to compile-time AspectJ; modifies bytecode directly, doesn't rely on proxies; the nuclear option, use only if you genuinely need self-invocation aspects\n\n**Two related CGLIB gotchas**\n- CGLIB **cannot proxy `final` classes or `final` methods** — it creates a subclass; a `@Cacheable` annotation on a `final` method silently does nothing; Spring logs a warning but doesn't fail the application\n- CGLIB **calls the target class's no-arg constructor** to create the proxy subclass — any constructor side effect (logging, registration, initialization) runs twice; harmless for idempotent constructors, latent bug for stateful ones"
+          },
+          {
+            "type": "phase",
+            "title": "Advice Types and Execution Order — Around, Before, After, AfterReturning, AfterThrowing",
+            "content": "Spring AOP supports five advice types, each answering a different question about when the cross-cutting code runs.\n\n**`@Before`**\n- Runs before the target method\n- Can inspect arguments but cannot change them (without reflection) and cannot stop execution short of throwing\n- Use for logging entry points, auditing, validation that should abort via exception\n\n**`@AfterReturning`**\n- Runs only if the method completes normally\n- Returned value accessible via the `returning` attribute\n- Use for logging successful outcomes or post-processing a return value\n\n**`@AfterThrowing`**\n- Runs only if the method threw an exception\n- Thrown exception accessible via the `throwing` attribute\n- Does not swallow the exception — still propagates unless caught explicitly\n- Use for alerting on failure patterns or translating one exception type to another\n\n**`@After`**\n- Runs whether the method returns or throws — like `finally`\n- Use for cleanup that must happen either way\n\n**`@Around` — the most powerful**\n- Receives a `ProceedingJoinPoint`, decides whether to call `proceed()`\n- Can modify arguments, transform the return value, catch exceptions, run arbitrary code before and after\n- `@Transactional`, `@Cacheable`, `@Async` are all `@Around` because they need full control\n- Cost: every `@Around` adds one stack frame and one reflective method call per invocation\n\n```java\n@Around(\"@annotation(Timed)\")\npublic Object time(ProceedingJoinPoint pjp) throws Throwable {\n    long start = System.nanoTime();\n    try {\n        return pjp.proceed();\n    } finally {\n        meter.record(System.nanoTime() - start);\n    }\n}\n```\n\n**Ordering when multiple aspects match**\n- Use `@Order` on the aspect class — lower value = higher priority = outermost in the chain\n- Without `@Order`, execution order is undefined and can change between Spring versions\n- Chain is symmetric: outermost aspect's `@Before` fires first and its `@After` fires last\n- Typical production stack: security check → transaction → cache → method\n- Without explicit `@Order`: caching might wrap transactions (cached data bypasses transactional read) or transactions might wrap security (unauthorized code runs inside a transaction)"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Spring AOP is proxy-based, not bytecode weaving** — Spring wraps the bean in a JDK dynamic proxy or CGLIB subclass; AOP only intercepts public method calls that arrive through the proxy.\n- **Self-invocation bypasses the proxy** — `this.method()` refers to the original object, not the proxy; `@Transactional`, `@Async`, and custom aspects are all bypassed on internal calls — the most common AOP debugging scenario.\n- **JDK proxy requires interface; CGLIB uses class subclassing** — Spring Boot defaults to CGLIB (`spring.aop.proxy-target-class=true`) because most beans do not implement interfaces and JDK proxies fail when the concrete class is injected.\n- **CGLIB cannot proxy `final` classes or `final` methods** — subclassing is forbidden by the JVM; `@Cacheable` on a `final` method silently does nothing; Spring logs a warning but the build succeeds.\n- **Proxy creation happens in `postProcessAfterInitialization`** — `AbstractAutoProxyCreator` scans each bean for applicable advisors and returns a proxy instead of the original if any match.\n- **`@Around` is the only advice that can short-circuit `proceed()`** — `@Before`/`@After`/`@AfterReturning`/`@AfterThrowing` are observational; `@Transactional`, `@Cacheable`, `@Async` are all `@Around` because they need full control.\n- **Use `@Order` on aspects when more than one matches** — without it, chain order is undefined between Spring versions; typical production order is security → transaction → cache → method.\n- **AspectJ weaving is the escape hatch for self-invocation** — compile-time or load-time AspectJ modifies bytecode directly; intercepts any method including private ones and internal calls; use only when proxy limitations are a real constraint."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring AOP is proxy-based — not bytecode weaving.\n- When you annotate a method with `@Transactional` or `@Cacheable`, Spring does not modify your code; it wraps your bean in a proxy object that intercepts external method calls and applies the aspect before or after delegating to the original.\n- Spring AOP is deliberately a subset of AspectJ — it borrows the annotation syntax and pointcut language but restricts join points to public method execution on Spring-managed beans.\n\n**How the proxy is created**\n- During `postProcessAfterInitialization`, `AbstractAutoProxyCreator` scans each bean for applicable advisors\n- If any advisor matches, it returns a proxy instead of the original bean\n- JDK dynamic proxy: requires the bean to implement an interface; Spring Boot 2.0+ defaults to CGLIB even when interfaces exist because developers who inject the concrete class hit startup failures with JDK proxies\n- CGLIB proxy: generates a runtime subclass of the concrete class; can proxy any public method but not `final` classes or `final` methods\n\n**The self-invocation trap**\n- `this.method()` refers to the original object, not the proxy — the aspect never fires\n- Root cause of every my `@Transactional` is not working bug where one method calls another transactional method on the same class\n- Three fixes: move the called method to a separate bean (cleanest); inject the bean into itself and call through `self.method()` (pragmatic); switch to AspectJ weaving (nuclear)\n\n**Advice types**\n- `@Before`, `@AfterReturning`, `@AfterThrowing`, `@After` are observational — react to the invocation but cannot change its flow\n- `@Around` is the powerful one — receives a `ProceedingJoinPoint`, can short-circuit `proceed()`, transform arguments, catch exceptions; `@Transactional`, `@Cacheable`, `@Async` are all `@Around` under the hood\n- When multiple aspects match the same join point, Spring orders them by `@Order` (lower value = outermost wrapper)\n\n**Spring AOP vs AspectJ**\n- Spring AOP: proxy-based, public methods only, no self-invocation, zero build overhead, stack traces stay normal\n- AspectJ: compile-time or load-time bytecode weaving, any method including private and final, self-invocation works, field-access and constructor join points available — use only when proxy limitations are a real constraint"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why does @Transactional not work when called from the same class?",
+        "What is the difference between Spring AOP and full AspectJ weaving?",
+        "When would you choose proxyTargetClass=true?",
+        "How do you order multiple aspects that match the same join point?"
+      ],
+      "seo": {
+        "metaTitle": "How Spring AOP Works: JDK Proxy vs CGLIB Explained | Java Intermediate",
+        "metaDescription": "Deep dive into Spring AOP proxy mechanics — JDK dynamic proxies, CGLIB subclass proxies, the self-invocation pitfall, and how @Transactional and @Cacheable are implemented."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring AOP is proxy-based — not bytecode weaving.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The single most common AOP debugging question in Spring interviews is: 'I annotated my method with @Transactional but it doesn't work when called from within the same class.' Understanding why requires knowing that Spring AOP is proxy-based, not bytecode-based. When Spring detects an aspect — @Transactional, @Cacheable, @Async, or a custom @Around advice — it wraps the target bean in a proxy object during the BeanPostProcessor phase. Every external call to that bean goes through the proxy, which applies the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands why @Transactional breaks on internal calls and can explain the proxy-based mechanism behind most Spring magic."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Spring AOP is proxy-based, not bytecode weaving — Spring wraps the bean in a JDK dynamic proxy or CGLIB subclass; AOP only intercepts public method calls that arrive through the proxy",
+              "Self-invocation bypasses the proxy — this",
+              "method() refers to the original object, not the proxy; @Transactional, @Async, and custom aspects are all bypassed on internal calls — the most common AOP debugging scenario",
+              "JDK proxy requires interface; CGLIB uses class subclassing — Spring Boot defaults to CGLIB (spring",
+              "proxy-target-class=true) because most beans do not implement interfaces and JDK proxies fail when the concrete class is injected"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The single most common AOP debugging question in Spring interviews is: 'I annotated my method with @Transactional but it doesn't work when called from within the same class.' Understanding why requires knowing that Spring AOP is proxy-based, not bytecode-based. When Spring detects an aspect — @Transactional, @Cacheable, @Async, or a custom @Around advice — it wraps the target bean in a proxy object during the BeanPostProcessor phase. Every external call to that bean goes through the proxy, which applies the aspect logic. But a call from this.method() inside the same class bypasses the proxy entirely — it hits the original object directly. Spring offers two proxy implementations. JDK dynamic proxies work when the bean implements an interface — the proxy."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking AOP works through bytecode weaving in all cases",
+              "not knowing the self-invocation limitation or the difference between JDK proxy (interface-based) and CGLIB (class subclassing)"
+            ]
+          }
+        ],
+        "cap": "How the proxy is created During postProcessAfterInitialization, AbstractAutoProxyCreator scans each bean for applicable advisors If any advisor matches, it returns a proxy instead of the original bean",
+        "familiarity_anchors": [
+          "Spring",
+          "CGLIB",
+          "AspectJ"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why does @Transactional not work when called from the same class?",
+          "What is the difference between Spring AOP and full AspectJ weaving?",
+          "When would you choose proxyTargetClass=true?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    },
+    {
+      "id": "pointcut-expressions",
+      "slug": "pointcut-expressions-spring-aop",
+      "question": "How do you write pointcut expressions in Spring AOP?",
+      "title": "Pointcut Expressions — Targeting Methods in Spring AOP",
+      "direct_answer": "A **pointcut** is a predicate that selects which **join points** (method executions in Spring AOP) an aspect should advise. Spring AOP uses **AspectJ pointcut syntax** but only supports **method execution** join points (not field access, constructor call). The core designators: **`execution(...)`** — match by signature (most common); **`within(...)`** — all methods of classes matching a type pattern; **`@annotation(X)`** — methods annotated with `X`; **`@within(X)`**/`@target(X)` — class-level annotations; **`args(...)`** — argument types/binding; **`bean(name)`** — Spring-specific, by bean name. Combine with `&&`, `||`, `!`. Example: `execution(* com.example.service.*.*(..)) && @annotation(com.example.Audited)` matches every method in the `service` package annotated with `@Audited`. **Name pointcuts** with `@Pointcut` methods for reuse.",
+      "layout_type": "concept-deep-dive",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you know the primary pointcut designators, AspectJ syntax basics, and the Spring AOP limitation (only method execution join points)",
+        "common_mistake": "Writing pointcuts that match too broadly (performance hit from advising every method); confusing Spring AOP with full AspectJ (field access, constructor calls not supported in Spring AOP)",
+        "to_stand_out": "Explain why combining designators (e.g. `execution` + `@annotation`) gives both performance and precision; mention that overly broad pointcuts like `execution(* *.*(..))` slow startup because every bean is evaluated"
+      },
+      "company_tags": [
+        "Amazon",
+        "Pivotal",
+        "Atlassian",
+        "Red Hat",
+        "Netflix",
+        "Microsoft"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Pattern Language That Decides Where Your Aspect Fires",
+            "content": "Every aspect needs to know **where to fire** — which methods, in which classes, under which conditions. That's what pointcut expressions define. They're a pattern language specific to Spring AOP that selects join points (method executions) based on class names, method signatures, annotations, or argument types.\n\nGet it wrong, and your aspect either fires on every method in the application (destroying performance), misses the methods it should target (appearing broken), or — worst case — matches methods in third-party libraries and causes baffling side effects.\n\nSpring AOP supports several pointcut designators, but three dominate production use: **`execution()`** matches by method signature pattern, **`@annotation()`** matches by the presence of an annotation, and **`within()`** matches by declaring class. The rest — `args()`, `target()`, `this()`, `@within()`, `@args()` — are niche tools for advanced scenarios.\n\nSpring AOP pointcuts only match **Spring-managed bean methods**. A pointcut expression that would match a method on a non-bean object does nothing. Spring AOP only intercepts **public methods** by default with JDK proxies; CGLIB can intercept protected and package-private methods, but private methods are always excluded."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Pointcut to Join Point to Advice Chain — The Decision Flow",
+            "content": "The diagram shows how a method call resolves through Spring AOP: the proxy intercepts every external call, evaluates each registered pointcut against the join point, and executes matching advice in `@Order` sequence around the target method.\n\n```mermaid\nflowchart TB\n    Call[\"External method call\"]\n    Proxy[\"Spring AOP proxy intercepts\"]\n    JoinPoint[\"Join point<br/>method signature + arguments\"]\n    Eval[\"Evaluate registered pointcuts\"]\n    NoMatch[\"No match<br/>invoke target directly\"]\n    Match[\"Match: collect applicable advisors\"]\n    Order[\"Sort advisors by @Order\"]\n    Chain[\"Advice chain executes\"]\n    Around1[\"@Around outer\"]\n    Before[\"@Before\"]\n    Target[\"Target method\"]\n    AfterReturn[\"@AfterReturning / @AfterThrowing\"]\n    After[\"@After (finally)\"]\n    Around2[\"@Around outer (post)\"]\n    Return[\"Return to caller\"]\n\n    Call --> Proxy --> JoinPoint --> Eval\n    Eval -- \"no advisor matches\" --> NoMatch --> Return\n    Eval -- \"one or more match\" --> Match --> Order --> Chain\n    Chain --> Around1 --> Before --> Target --> AfterReturn --> After --> Around2 --> Return\n```\n\nTwo facts are visible from this flow. **Pointcut evaluation happens once per call** — Spring caches matching results aggressively, but a too-broad pointcut still adds per-call overhead because every bean's methods must be evaluated against it. **Advice ordering is symmetric** — the outermost `@Around` wraps everything, the innermost layer is closest to the target method."
+          },
+          {
+            "type": "step",
+            "title": "The execution() Expression — Anatomy and Common Patterns",
+            "content": "The `execution()` designator matches based on method signatures. Its syntax looks complex but follows a fixed pattern.\n\n**Syntax**\n- `execution(modifiers? return-type declaring-type?.method-name(params) throws?)`\n- `*` matches one segment\n- `..` matches zero or more (sub-packages, parameters)\n\n**Common patterns**\n```java\n// All public methods in the service package\n@Before(\"execution(public * com.example.service.*.*(..))\")\n\n// All methods returning void in any subpackage\n@Before(\"execution(void com.example..*.*(..))\")\n\n// All methods named find* with any parameters\n@Before(\"execution(* com.example..find*(..))\")\n\n// Methods taking exactly one String parameter\n@Before(\"execution(* *..*(String))\")\n\n// Methods with no parameters\n@Before(\"execution(* *..*())\")\n```\n\n**The dot-dot trap**\n- `..` in `com.example..` matches any number of sub-packages\n- `..` in `(..)` matches any number of parameters of any type\n- Without `..` for packages, only the exact package is matched — common mistake when methods live in sub-packages\n\n**Performance — avoid overly broad patterns**\n- `execution(* *.*(..))` causes Spring to proxy every bean and intercept every method call\n- For a large application, this adds measurable latency to every operation\n- Scope your patterns to specific packages or use annotation-based pointcuts for precision"
+          },
+          {
+            "type": "step",
+            "title": "within() vs execution() and args() Argument Binding",
+            "content": "Interviewers probe one specific distinction: **`within()` matches the declaring type, `execution()` matches the method signature**.\n\n**`within()` — class-level scoping**\n- `within(com.example.service.OrderService)` matches every join point whose declaring class is `OrderService`\n- Cheaper to evaluate — Spring only needs the class name, not the full method signature\n- Pairs naturally with type-based composition: `within(com.example.service..*) && @annotation(Audited)`\n\n**`execution()` — method-level precision**\n- `execution(* com.example.service.OrderService.*(..))` evaluates method-by-method\n- Can restrict by return type or parameter types — `within()` cannot\n- Use for narrow method-level matches\n\n**Practical recommendation**\n- For broad class-level pointcuts, prefer `within()` — faster and reads cleaner\n- For narrow method-level matches, use `execution()`\n\n**`args()` — match parameter types AND bind arguments**\n```java\n@Before(\"execution(* com.example..*.*(..)) && args(order)\")\npublic void audit(Order order) {\n    auditLog.record(\"processed order: \" + order.getId());\n}\n\n@Around(\"@annotation(cacheable) && args(key,..)\")\npublic Object cached(ProceedingJoinPoint pjp, Cacheable cacheable, String key) throws Throwable {\n    String cacheKey = cacheable.prefix() + key;\n}\n```\n\n**The lowercase-name binding rule**\n- `args(order)` with a lowercase name tells Spring to treat `order` as a parameter name to bind, matching any method whose first argument is of type `Order` (inferred from the advice method's `Order` parameter)\n- `args(com.example.Order)` with a fully-qualified type only matches without binding\n- The most common pointcut syntax confusion in interviews"
+          },
+          {
+            "type": "step",
+            "title": "Annotation-Based Pointcuts and Combining Expressions",
+            "content": "The `@annotation()` designator is the safest approach for custom aspects because it's explicitly opt-in: only methods (or classes) carrying a specific annotation are matched.\n\n**Annotation matching patterns**\n```java\n// Match any method annotated with @Timed\n@Around(\"@annotation(com.example.annotation.Timed)\")\n\n// Match any method in a class annotated with @Audited\n@Before(\"@within(com.example.annotation.Audited)\")\n\n// Bind the annotation value to an advice parameter\n@Around(\"@annotation(timed)\")\npublic Object time(ProceedingJoinPoint pjp, Timed timed) {\n    String metricName = timed.value();\n}\n```\n\n**Lowercase name binds the annotation instance**\n- `@annotation(timed)` (lowercase) binds the annotation to a parameter named `timed`\n- Gives you access to annotation attributes inside the advice\n- Useful for configurable aspects where the annotation carries metadata\n\n**Combining pointcuts with `&&`, `||`, `!`**\n```java\n@Pointcut(\"execution(* com.example.service..*.*(..))\")\npublic void serviceLayer() {}\n\n@Pointcut(\"@annotation(Transactional)\")\npublic void transactional() {}\n\n@Before(\"serviceLayer() && !transactional()\")\npublic void logNonTransactional(JoinPoint jp) {\n    // Fires on service methods that are NOT @Transactional\n}\n```\n\n**Reusable pointcut definitions**\n- Extract reusable pointcuts as `@Pointcut`-annotated void methods\n- Avoids duplicating the same expression across multiple advice methods\n- Gives the pointcut a descriptive name\n- When the package structure changes, you update one `@Pointcut` method instead of hunting through every advice annotation"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`execution()` pattern: `modifiers? return-type declaring-type?.method-name(params)`** — `*` matches one segment; `..` matches zero-or-more sub-packages in a type or zero-or-more parameters in args.\n- **`within()` matches declaring class, `execution()` matches method signature** — `within()` is cheaper and reads cleaner for class-level scoping; `execution()` is needed for return-type or parameter-type precision.\n- **`args(order)` vs `args(com.example.Order)` — one binds, the other matches** — lowercase names bind arguments into the advice method; fully-qualified type names only match without binding. The most common pointcut syntax confusion in interviews.\n- **`@annotation()` is the safest approach for custom aspects** — explicitly opt-in; only methods carrying the annotation are matched; cannot accidentally match unrelated code.\n- **Spring AOP only matches public methods on Spring-managed beans** — non-bean objects are never proxied; protected and private methods are invisible to the proxy.\n- **Too-broad `execution(* *.*(..))` proxies everything** — causes measurable performance overhead on every bean and every method call; scope tightly or use `@annotation()` for precision.\n- **Named `@Pointcut` methods for reuse** — extract expressions into `@Pointcut`-annotated void methods; reference by name in advice; update one place when package structure changes."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Pointcut expressions are the pattern language that tells Spring AOP which methods to intercept. Get the pattern wrong and your aspect either misses everything, fires on every method in the application, or matches methods in third-party libraries and causes baffling side effects.\n\n**`execution()` — match by method signature**\n- Pattern: `execution(modifiers? return-type declaring-type?.method-name(params))`\n- `*` matches one path segment; `..` matches zero-or-more sub-packages in a type pattern and any number of parameters in an arg list\n- Example: `execution(* com.example.service..*.*(..))` matches all methods on all classes in `service` and any sub-package\n- Without `..` for packages, only the exact package is matched — the trap when methods live in sub-packages\n\n**`within()` vs `execution()`**\n- `within(com.example.service.OrderService)` matches by declaring class — cheaper because Spring only needs the class name\n- `execution(...)` evaluates method-by-method and can restrict by return type or parameter types\n- Prefer `within()` for class-level scoping, `execution()` for narrow method-level matches\n\n**`@annotation()` — match by annotation presence**\n- `@Around(\"@annotation(com.example.Timed)\")` — only methods explicitly annotated are intercepted\n- The safest approach for custom aspects — explicitly opt-in, no accidental matches on unrelated code\n- Lowercase name in the designator binds the annotation instance to a parameter: `@annotation(timed)` gives you access to `timed.value()` in the advice method\n\n**`args()` — match and bind arguments**\n- `args(order)` with a lowercase name binds the matching argument into the advice's `Order order` parameter\n- `args(com.example.Order)` with a fully-qualified type only matches without binding\n- Combine annotation and args binding in `@Around` to build configurable aspects\n\n**Combining and reusing**\n- Use `&&`, `||`, `!` to compose: `serviceLayer() && !transactional()`\n- Extract reusable patterns into named `@Pointcut` void methods\n\nSpring AOP intercepts public methods on Spring-managed beans only. Non-bean objects are never proxied. Private methods are always excluded. Too-broad `execution(* *.*(..))` proxies every bean and evaluates every method call — measurable latency at scale."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between `within` and `execution` in pointcut expressions?",
+        "Why is `@annotation` preferred over matching by method name for cross-cutting concerns?",
+        "Can Spring AOP intercept private methods or static methods?",
+        "What is the performance cost of a very broad pointcut?"
+      ],
+      "seo": {
+        "metaTitle": "Spring AOP Pointcut Expressions — Designators and Examples",
+        "metaDescription": "Pointcut expressions in Spring AOP. execution, within, @annotation, args, target designators. Combine with &&, ||, ! for precise method matching."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Pointcut expressions are the pattern language that tells Spring AOP which methods to intercept.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Every aspect needs to know where to fire — which methods, in which classes, under which conditions. That's what pointcut expressions define. They're a pattern language specific to Spring AOP that selects join points (method executions) based on class names, method signatures, annotations, or argument types. Get it wrong, and your aspect either fires on every method in the application (destroying performance), misses the methods it should target (appearing broken), or — worst case — matches methods in third-party libraries."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you know the primary pointcut designators, AspectJ syntax basics, and the Spring AOP limitation (only method execution join points)"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "execution() pattern: modifiers? return-type declaring-type?",
+              "method-name(params) — * matches one segment;",
+              "matches zero-or-more sub-packages in a type or zero-or-more parameters in args",
+              "within() matches declaring class, execution() matches method signature — within() is cheaper and reads cleaner for class-level scoping; execution() is needed for return-type or parameter-type precision",
+              "args(order) vs args(com"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Every aspect needs to know where to fire — which methods, in which classes, under which conditions. That's what pointcut expressions define. They're a pattern language specific to Spring AOP that selects join points (method executions) based on class names, method signatures, annotations, or argument types. Get it wrong, and your aspect either fires on every method in the application (destroying performance), misses the methods it should target (appearing broken), or — worst case — matches methods in third-party libraries and causes baffling side effects. Spring AOP supports several pointcut designators, but three dominate production use: execution() matches by method signature pattern, @annotation() matches by the presence of an annotation, and within() matches by declaring class. The rest — args()."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Writing pointcuts that match too broadly (performance hit from advising every method)",
+              "confusing Spring AOP with full AspectJ (field access, constructor calls not supported in Spring AOP)"
+            ]
+          }
+        ],
+        "cap": "Too-broad execution( .*(..)) proxies every bean and evaluates every method call — measurable latency at scale.",
+        "familiarity_anchors": [
+          "Spring",
+          "AspectJ",
+          "Combine"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between `within` and `execution` in pointcut expressions?",
+          "Why is `@annotation` preferred over matching by method name for cross-cutting concerns?",
+          "Can Spring AOP intercept private methods or static methods?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with @Service and @Repository beans"
+      }
+    }
+  ]
+}

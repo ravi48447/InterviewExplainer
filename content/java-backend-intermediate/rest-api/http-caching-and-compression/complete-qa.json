@@ -1,0 +1,278 @@
+{
+  "topic": "HTTP Caching and Compression",
+  "topicSlug": "http-caching-and-compression",
+  "questions": [
+    {
+      "id": "rest-cache-001",
+      "slug": "http-caching-etag-cache-control-spring-boot",
+      "question": "Explain HTTP caching deeply — Cache-Control, ETag, Last-Modified — and how to implement it properly in Spring Boot.",
+      "title": "HTTP Caching: Cache-Control, ETags, Last-Modified",
+      "direct_answer": "HTTP caching has two main mechanisms: **freshness** (Cache-Control directives like `max-age`, `public`, `private`, `no-cache`, `no-store`, `immutable`) tell caches how long a response stays fresh without revalidation; **validation** (ETag, Last-Modified + If-None-Match/If-Modified-Since) lets a cache check with origin cheaply — 304 Not Modified if unchanged, saving bandwidth. Use together: set `Cache-Control: max-age=300, public` for fresh reuse; set ETag so stale caches revalidate cheaply. In Spring Boot: use `ResponseEntity.ok().cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES)).eTag(etag).body(...)` or `ShallowEtagHeaderFilter` for auto-ETags; combine with CDN (CloudFront, Cloudflare) and compression (Brotli > gzip) for real production wins.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Deep understanding of HTTP semantics; practical caching strategy; real performance engineering",
+        "common_mistake": "Setting Cache-Control: no-cache everywhere (disables caching); returning wrong Vary headers (poisons CDN); generating weak ETags on dynamic data (no real savings)",
+        "to_stand_out": "Discuss public vs private, stale-while-revalidate, stale-if-error, CDN integration, Vary header pitfalls, conditional requests, Brotli vs gzip, and cache key design"
+      },
+      "company_tags": [
+        "cloudflare",
+        "fastly",
+        "aws",
+        "google",
+        "Netflix",
+        "Amazon"
+      ],
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-24",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "HTTP Caching: Freshness and Validation",
+            "content": "HTTP caching reduces origin load, tail latency, and bandwidth by reusing responses. The HTTP/1.1 RFC (RFC 9111) defines two mechanisms:\n\n**Freshness** — 'how long can I reuse this response without asking the server?'\nSet by `Cache-Control: max-age=300` (seconds) or `Expires: Tue, 22 Apr 2026 14:00:00 GMT` (older). While fresh, the cache serves without contacting origin.\n\n**Validation** — 'this response is stale; is it still good?'\nSet by `ETag: \"abc123\"` (opaque content hash) or `Last-Modified: Tue, 22 Apr 2026 10:00:00 GMT`.\n- Cache sends conditional request with `If-None-Match: \"abc123\"` or `If-Modified-Since: ...`.\n- Origin returns:\n- **304 Not Modified** if unchanged — no body, cache's copy is still good; cheap for origin\n- **200 OK + new body** if changed\n\nCombined, these give the right behavior:\n- `Cache-Control: max-age=60, public` + `ETag: \"v1\"` = 1-minute fresh window; after that, revalidate cheaply\n\n**Directives that matter in 2026:**\n\n- `public` — may be stored by shared caches (CDN, proxy)\n- `private` — browser/user cache only; never CDN\n- `max-age=N` — fresh for N seconds\n- `s-maxage=N` — fresh for N seconds in shared caches (overrides max-age for CDN)\n- `no-cache` — may cache but must revalidate before serving\n- `no-store` — don't cache at all (secrets, PII)\n- `must-revalidate` — don't serve stale even if origin is unreachable\n- `immutable` — content will never change (versioned assets: `main.abc123.js`)\n- `stale-while-revalidate=N` — serve stale for N seconds while revalidating in background\n- `stale-if-error=N` — serve stale for N seconds if origin returns 5xx\n\n**Three layers of cache** (all see the same headers):\n1. **Browser cache** — per user\n2. **CDN** (CloudFront, Cloudflare, Fastly) — edge pop, shared\n3. **Origin / reverse proxy** (nginx, varnish) — in front of your servers\n\nGood caching design is the cheapest performance win you'll ever get. A well-cached API can serve 99% of traffic from the edge without touching your Spring Boot servers."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Request Flow: Cache Hit, Validation, Miss",
+            "content": "```mermaid\nflowchart TB\n    Client[Browser / Client] -->|GET /products/42| Browser{Browser cache}\n    Browser -->|fresh| Hit1[Serve from browser<br/>0 bytes over network]\n    Browser -->|stale or not present| CDN{CDN cache}\n    CDN -->|fresh| Hit2[Serve from edge<br/>~10ms]\n    CDN -->|stale| Validate{Validate with origin}\n    Validate -->|If-None-Match:\"abc123\"| Origin[Spring Boot origin]\n    Origin -->|304 Not Modified| CDN\n    CDN -->|serve cached copy<br/>update freshness| Client\n    Validate -->|no match in CDN| Origin\n    Origin -->|200 + body<br/>Cache-Control + ETag| CDN\n    CDN -->|store + serve| Client\n    Origin -->|stale-while-revalidate| BG[Background revalidation]\n    BG --> CDN\n```",
+            "diagram_format": "mermaid"
+          },
+          {
+            "type": "step",
+            "title": "Spring Boot Implementation Patterns",
+            "content": "**Pattern 1: Static, immutable assets (versioned URLs)**\n\n```java\n@GetMapping(\"/assets/main.{hash}.js\")\npublic ResponseEntity<Resource> js(@PathVariable String hash) {\n    Resource r = assetService.load(\"main.\" + hash + \".js\");\n    return ResponseEntity.ok()\n        .cacheControl(CacheControl.maxAge(365, TimeUnit.DAYS).immutable().cachePublic())\n        .contentType(MediaType.parseMediaType(\"application/javascript\"))\n        .body(r);\n}\n```\n\nAsset URL includes content hash; if content changes, URL changes. Cache for 1 year; `immutable` tells browsers not to revalidate even on refresh.\n\n**Pattern 2: API responses with ETag**\n\n```java\n@GetMapping(\"/products/{id}\")\npublic ResponseEntity<Product> getProduct(\n        @PathVariable Long id,\n        WebRequest request) {\n\n    Product p = productService.findById(id).orElseThrow();\n    String etag = \"\\\"\" + p.getVersion() + \"-\" + p.getUpdatedAt().toEpochMilli() + \"\\\"\";\n\n    if (request.checkNotModified(etag)) {\n        return null;  // 304 auto-returned by Spring\n    }\n\n    return ResponseEntity.ok()\n        .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())\n        .eTag(etag)\n        .body(p);\n}\n```\n\nSpring's `WebRequest.checkNotModified(etag)` compares with `If-None-Match` header; returns 304 if match and returns null means Spring will send 304.\n\n**Pattern 3: Conditional with Last-Modified**\n\n```java\n@GetMapping(\"/orders/{id}\")\npublic ResponseEntity<Order> getOrder(\n        @PathVariable String id,\n        WebRequest request) {\n\n    Order o = orderService.findById(id).orElseThrow();\n    long lastModified = o.getUpdatedAt().toEpochMilli();\n\n    if (request.checkNotModified(lastModified)) {\n        return null;\n    }\n\n    return ResponseEntity.ok()\n        .cacheControl(CacheControl.maxAge(30, TimeUnit.SECONDS)\n            .staleWhileRevalidate(Duration.ofMinutes(5))\n            .cachePrivate())\n        .lastModified(lastModified)\n        .body(o);\n}\n```\n\n`cachePrivate()` because order is per-user; only browser cache, never CDN.\n\n**Pattern 4: Auto-ETag for all responses**\n\n```java\n@Bean\npublic FilterRegistrationBean<ShallowEtagHeaderFilter> shallowEtagHeaderFilter() {\n    FilterRegistrationBean<ShallowEtagHeaderFilter> filter = new FilterRegistrationBean<>();\n    filter.setFilter(new ShallowEtagHeaderFilter());\n    filter.addUrlPatterns(\"/api/*\");\n    return filter;\n}\n```\n\nSpring hashes response body, sets ETag, handles conditional requests. Simple but has cost: must compute response before computing hash; saves bandwidth but not CPU. Good for static-ish API data; not great for expensive endpoints.\n\n**Pattern 5: Stale-while-revalidate for low-volume dynamic data**\n\n```java\nResponseEntity.ok()\n    .cacheControl(CacheControl.maxAge(30, TimeUnit.SECONDS)\n        .staleWhileRevalidate(Duration.ofMinutes(5))\n        .staleIfError(Duration.ofMinutes(30))\n        .cachePublic())\n    .body(data);\n```\n\nCache serves for 30s fresh; during next 5 min, serves stale immediately while revalidating in background; if origin 5xx, serves stale for 30 min. Huge p99 wins.\n\n**Pattern 6: Compression**\n\n```yaml\nserver:\n  compression:\n    enabled: true\n    mime-types: application/json,text/plain,text/html,text/css,text/javascript\n    min-response-size: 1024\n```\n\nSpring Boot + Tomcat: gzip by default. For Brotli (better compression ratio), use a reverse proxy (nginx, Cloudflare) in front.\n\n**Pattern 7: Cache-key awareness (Vary header)**\n\n```java\nResponseEntity.ok()\n    .header(\"Vary\", \"Accept, Accept-Language, Accept-Encoding\")\n    .cacheControl(CacheControl.maxAge(10, TimeUnit.MINUTES).cachePublic())\n    .body(data);\n```\n\n`Vary: Accept` means 'this response depends on Accept header'; CDN caches separately by header value. Without Vary, CDN may serve wrong representation to wrong client.\n\n**Pattern 8: Per-user private data**\n\n```java\n// Never publicly cache; prevent CDN from storing user-specific\nResponseEntity.ok()\n    .cacheControl(CacheControl.maxAge(60, TimeUnit.SECONDS).cachePrivate())\n    .header(\"Vary\", \"Authorization\")\n    .body(userData);\n```\n\n`private` + `Vary: Authorization` = browser caches per user; CDN doesn't."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Cache-Control Directive Deep Dive + Gotchas",
+            "content": "**`no-cache` is not 'no caching'.** `no-cache` means 'store but must revalidate before serving'. `no-store` means 'don't store at all'. Huge difference. Use `no-store` for PII, auth tokens, credit card responses.\n\n**`public` vs `private`.** `public` = any cache may store (CDN, proxy, browser). `private` = only browser/user cache. Never put `public` on user-specific data; CDN will serve to other users.\n\n**`max-age=0, must-revalidate`.** Equivalent to `no-cache`. Response stored; revalidated on every request. Useful for frequently-changing content with cheap revalidation.\n\n**Vary header pitfalls.** `Vary: *` effectively disables caching. `Vary: User-Agent` splits cache by browser (hundreds of variants; terrible hit rate). Be precise: `Vary: Accept-Encoding` is cheap; `Vary: Authorization` is needed for per-user; `Vary: Accept-Language` for localized.\n\n**ETag strength.**\n- **Strong ETag** (`\"abc123\"`): byte-for-byte identical\n- **Weak ETag** (`W/\"abc123\"`): semantically equivalent\n\nFor APIs, weak ETags are fine. For range requests, strong required.\n\n**ETag generation strategies.**\n- Version field + updated_at hash (best, O(1))\n- Content hash (MD5/SHA of serialized body; ShallowEtagHeaderFilter; O(body size))\n- Incrementing revision number\n\nAvoid regenerating on every request if expensive — defeats caching purpose.\n\n**If-None-Match vs If-Match.** `If-None-Match` = 'send body only if ETag differs' (caching). `If-Match` = 'only process this request if ETag matches' (optimistic concurrency). Different headers, different semantics.\n\n**Revalidation cost.** A 304 still costs a round trip. If origin is 100ms away and max-age=0, every request pays 100ms. Tune `max-age` to balance freshness vs round-trip cost.\n\n**Stale-while-revalidate is a game changer.** Response fresh 30s; during next 5 min, serve stale immediately to user while revalidating in background. p99 latency drops dramatically; user never waits for revalidation. Supported by modern browsers and CDNs.\n\n**Stale-if-error.** If origin returns 5xx during revalidation, serve stale for N more seconds. Buys you headroom during incidents. Combined with SWR, survives minor origin blips transparently.\n\n**CDN cache keys.** Default: URL + Vary-specified headers. Query string may or may not be in key (configurable in CloudFront, Cloudflare). Auth header usually not in key; use `Vary: Authorization` if you cache per-user.\n\n**CDN cache invalidation.** Purge by URL pattern. Expensive and slow on some CDNs. Prefer versioned URLs (asset.abc123.js) — change version, URL changes, old cached forever without harm.\n\n**Compression: gzip vs Brotli.**\n- **gzip**: universal; 70% reduction on JSON\n- **Brotli**: 20–30% better compression; supported by all modern browsers; enable in CDN or nginx\n- Both: Accept-Encoding negotiated; cache by Vary: Accept-Encoding\n\n**Don't compress small responses.** Overhead > savings for < 1KB. Spring Boot's default `min-response-size: 1024` is sensible.\n\n**Don't compress already-compressed (images, video).** No gain; wasted CPU.\n\n**HTTP/2 and HTTP/3.** Multiplexing means many requests over one connection. Slightly different caching semantics (no Head-of-Line blocking). Same HTTP headers.\n\n**Cache poisoning.** Attacker sends request that causes cache to store malicious response for others. Mitigations: validate Host header; use Vary correctly; don't cache based on user-controlled headers you don't expect.\n\n**POST isn't cacheable by default.** Changing to GET or using idempotent POST with caching hints is rare. GraphQL's POST + query body is why its caching is hard.\n\n**Cache-Control response vs request.** Request: `Cache-Control: no-cache` from client = force revalidation. Response: server instructs caches. Servers control, clients hint.\n\n**Observability.** Dashboard:\n- CDN hit rate (target > 80% for public content)\n- Origin request rate (inverse of CDN effectiveness)\n- 304 rate (indicates validation working)\n- Average response size with and without compression\n\n**Production pattern.**\n- Static assets: `max-age=31536000, immutable` (1 year) + versioned URLs\n- Rarely-changing API (product catalog): `max-age=300, public` + ETag + SWR\n- User-specific data: `max-age=60, private` + Vary: Authorization\n- Auth tokens, PII: `no-store`\n- Tune per endpoint; measure hit rates; adjust\n\n**Spring Boot's `ShallowEtagHeaderFilter` vs manual ETag.** Filter is easy but computes hash from full response body on each request; no origin work saved. Manual ETag (version/updated_at) avoids serialization entirely on 304. For expensive endpoints, manual.\n\n**The strategic answer:**\n- Cache-Control for freshness policy, ETag/Last-Modified for validation\n- Use CDN with well-tuned headers — cheapest scaling win\n- stale-while-revalidate + stale-if-error for resilience\n- Versioned URLs for immutable assets; revalidation for dynamic\n- Measure hit rates; tune; repeat"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Two mechanisms**: freshness (Cache-Control max-age) + validation (ETag / Last-Modified)\n- **`no-cache` means 'revalidate'**, `no-store` means 'don't cache at all'\n- **`public` vs `private`**: never put `public` on user-specific data (CDN will serve to others)\n- **Vary header is critical**: `Vary: Accept-Encoding` cheap; `Vary: *` disables caching\n- **ETag generation**: version + updated_at is O(1); content hash is O(body size)\n- **`stale-while-revalidate`** is a huge p99 win — serve stale immediately, revalidate in background\n- **`stale-if-error`** serves stale during origin 5xx; improves resilience\n- **Immutable + versioned URLs** for assets: `main.abc123.js` with `max-age=1y, immutable`\n- **Compression**: gzip ubiquitous, Brotli 20–30% better on modern browsers; don't compress < 1KB\n- **Measure CDN hit rate** — target > 80% for public content; tune headers based on evidence"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "HTTP caching reduces origin load, tail latency, and bandwidth by reusing responses. The HTTP/1.1 RFC defines two complementary mechanisms.\n\n**Freshness — how long can I reuse without asking the server?**\n- Set by Cache-Control max-age in seconds\n- While fresh, cache serves without contacting origin\n- Expires header is the older alternative\n\n**Validation — this is stale, is it still good?**\n- Set by ETag (opaque content hash) or Last-Modified timestamp\n- Cache sends conditional request with If-None-Match or If-Modified-Since\n- Origin returns 304 Not Modified if unchanged (no body, cheap) or 200 with new body if changed\n\n**Combined they give the right behavior**\n- max-age=60 plus ETag: fresh for 1 minute, then cheap revalidation\n- Matches real-world data patterns\n\n**Cache-Control directives that matter**\n- public: any cache may store (CDN, proxy, browser)\n- private: only browser; never CDN\n- max-age=N: fresh for N seconds\n- s-maxage=N: overrides max-age in shared caches (CDN)\n- no-cache: may cache but must revalidate before serving\n- no-store: don't cache at all (secrets, PII)\n- must-revalidate: don't serve stale even if origin unreachable\n- immutable: content never changes (versioned assets)\n- stale-while-revalidate=N: serve stale for N seconds while revalidating in background\n- stale-if-error=N: serve stale for N seconds if origin 5xx\n\n**The three layers of cache**\n- Browser cache: per user\n- CDN: CloudFront, Cloudflare, Fastly; shared at edge\n- Origin reverse proxy: nginx, Varnish\n- All see the same headers; good design uses all three\n\n**Common mistakes**\n\n*no-cache is not 'no caching'*\n- no-cache means 'store but revalidate before serving'\n- no-store means 'don't cache at all'\n- Huge difference; use no-store for PII and secrets\n\n*public on user-specific data*\n- CDN will serve one user's data to another\n- Always private + Vary: Authorization for user-specific\n\n*Vary header pitfalls*\n- Vary: * effectively disables caching\n- Vary: User-Agent splits cache into hundreds of variants\n- Be precise: Accept-Encoding cheap; Authorization needed for per-user\n\n*ETag generation cost*\n- Content hash on every request means no CPU savings\n- Better: version plus updated_at (O(1) generation)\n- ShallowEtagHeaderFilter is easy but computes hash from full body\n\n**Stale-while-revalidate is a game changer**\n- Fresh 30 seconds; during next 5 minutes serve stale immediately, revalidate in background\n- User never waits for revalidation\n- p99 latency drops dramatically\n- Supported by modern browsers and CDNs\n\n**Stale-if-error for resilience**\n- If origin returns 5xx during revalidation, serve stale for additional N seconds\n- Buys headroom during incidents\n- Combined with SWR, survives minor blips transparently\n\n**Spring Boot patterns**\n\n*Static assets with versioned URLs*\n- main.abc123.js with max-age=1 year, immutable, public\n- Change content means change URL; no invalidation needed\n\n*API responses with ETag*\n- ResponseEntity.ok().cacheControl(...).eTag(etag).body(p)\n- WebRequest.checkNotModified(etag) compares If-None-Match and returns 304\n\n*User-specific data*\n- CacheControl.maxAge(60, SECONDS).cachePrivate()\n- Vary: Authorization\n- Browser caches per user; CDN doesn't cache\n\n*Stale-while-revalidate*\n- CacheControl.maxAge(30s).staleWhileRevalidate(5min).staleIfError(30min)\n- Huge p99 wins for low-volume dynamic data\n\n**Compression**\n- gzip universal; 70% reduction on JSON\n- Brotli 20 to 30% better than gzip; all modern browsers support\n- Don't compress under 1KB; overhead exceeds savings\n- Don't compress images or video; already compressed\n- Vary: Accept-Encoding to cache per compression type\n\n**CDN integration**\n- Default cache key is URL plus Vary headers\n- Invalidation by URL pattern; slow and expensive\n- Prefer versioned URLs over manual invalidation\n- Target CDN hit rate above 80% for public content\n\n**Cache key design**\n- Vary: Accept-Encoding is cheap and valuable\n- Vary: Authorization for per-user cached content\n- Avoid Vary: User-Agent unless you handle dozens of variants\n- Query string handling configurable in CloudFront/Cloudflare\n\n**The production pattern**\n- Static assets: max-age=1 year, immutable, versioned URLs\n- Rarely-changing API: max-age=5 min, public, ETag, stale-while-revalidate\n- User-specific data: max-age=1 min, private, Vary: Authorization\n- Auth tokens and PII: no-store\n- Tune per endpoint; measure hit rates; adjust\n\n**Observability**\n- CDN hit rate (target > 80% for public content)\n- Origin request rate (inverse of effectiveness)\n- 304 response rate (shows validation working)\n- Response size with and without compression\n\n**The strategic answer**\n- Cache-Control for freshness; ETag or Last-Modified for validation\n- CDN with well-tuned headers is the cheapest scaling win\n- stale-while-revalidate plus stale-if-error for resilience\n- Versioned URLs for immutable assets\n- Measure hit rates; tune; repeat\n- Well-cached API serves 99% of traffic from edge without touching your Spring Boot servers"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does stale-while-revalidate compare to setting a longer max-age?",
+        "When would you choose ShallowEtagHeaderFilter vs manual ETag generation?",
+        "How does Cloudflare handle Cache-Control: private vs CloudFront?",
+        "What are the security implications of caching authenticated responses?"
+      ],
+      "seo": {
+        "meta_title": "HTTP Caching Deep Dive: Cache-Control, ETag, Last-Modified",
+        "meta_description": "Master HTTP caching in Spring Boot. Cache-Control directives, ETag, Last-Modified, stale-while-revalidate, CDN integration, Brotli compression.",
+        "keywords": [
+          "http caching",
+          "cache-control",
+          "etag spring boot",
+          "stale-while-revalidate",
+          "brotli gzip compression"
+        ],
+        "metaDescription": "HTTP caching has two main mechanisms: freshness (Cache-Control directives like max-age, public, private, no-cache, no-store, immutable) tell caches how long a.",
+        "metaTitle": "HTTP Caching: Cache-Control, ETags, Last-Modified"
+      },
+      "importance": "medium",
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P04",
+        "hook": "HTTP caching reduces origin load, tail latency, and bandwidth by reusing responses.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "HTTP caching reduces origin load, tail latency, and bandwidth by reusing responses. The HTTP/1.1 RFC (RFC 9111) defines two mechanisms: Freshness — 'how long can I reuse this response without asking the server?' Set by Cache-Control: max-age=300 (seconds) or Expires: Tue, 22 Apr 2026 14:00:00 GMT (older). While fresh, the cache serves without contacting origin. Validation — 'this response is stale; is it still good?' Set by ETag: \"abc123\" (opaque content hash) or Last-Modified: Tue, 22 Apr 2026 10:00:00 GMT."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Deep understanding of HTTP semantics; practical caching strategy; real performance engineering"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Two mechanisms: freshness (Cache-Control max-age) + validation (ETag / Last-Modified) no-cache means 'revalidate', no-store means 'don't cache at all' public vs private: never put public on user-specific data (CDN will serve to others) Vary header is critical: Vary: Accept-Encoding cheap; Vary: * disables caching ETag generation: version + updated_at is O(1); content hash is O(body size) stale-while-revalidate is a huge p99 win — serve stale immediately, revalidate in background stale-if-error serves stale during origin 5xx; improves resilience Immutable + versioned URLs for assets: main",
+              "js with max-age=1y, immutable Compression: gzip ubiquitous, Brotli 20–30% better on modern browsers; don't compress < 1KB Measure CDN hit rate — target > 80% for public content; tune headers based on evidence"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "HTTP caching reduces origin load, tail latency, and bandwidth by reusing responses. The HTTP/1.1 RFC (RFC 9111) defines two mechanisms: Freshness — 'how long can I reuse this response without asking the server?' Set by Cache-Control: max-age=300 (seconds) or Expires: Tue, 22 Apr 2026 14:00:00 GMT (older). While fresh, the cache serves without contacting origin. Validation — 'this response is stale; is it still good?' Set by ETag: \"abc123\" (opaque content hash) or Last-Modified: Tue, 22 Apr 2026 10:00:00 GMT. Cache sends conditional request with If-None-Match: \"abc123\" or If-Modified-Since: .... Origin returns: 304 Not Modified if unchanged — no body, cache's copy is still good; cheap for origin 200 OK + new body if changed Combined, these give the right."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Setting Cache-Control: no-cache everywhere (disables caching)",
+              "returning wrong Vary headers (poisons CDN)",
+              "generating weak ETags on dynamic data (no real savings)"
+            ]
+          }
+        ],
+        "cap": "Freshness — how long can I reuse without asking the server? Set by Cache-Control max-age in seconds While fresh, cache serves without contacting origin Expires header is the older alternative Validati",
+        "familiarity_anchors": [
+          "Cache",
+          "Control",
+          "Modified"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does stale-while-revalidate compare to setting a longer max-age?",
+          "When would you choose ShallowEtagHeaderFilter vs manual ETag generation?",
+          "How does Cloudflare handle Cache-Control: private vs CloudFront?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API serving a mobile client"
+      }
+    },
+    {
+      "id": "http-cc-002",
+      "slug": "http-compression-gzip-brotli-spring-boot",
+      "question": "How does HTTP response compression work (gzip, Brotli, zstd), and how do you configure it in Spring Boot without hurting latency?",
+      "title": "HTTP Compression — gzip, Brotli, zstd in Spring Boot",
+      "direct_answer": "HTTP compression is content-coding negotiated via **`Accept-Encoding`** (client) and **`Content-Encoding`** (server). The server picks one codec — **gzip** (universal), **Brotli** (30–50% smaller on text, browser-only), or **zstd** (fast and small, Chromium-only) — compresses the body, and sets `Content-Encoding`. In Spring Boot enable it with `server.compression.enabled=true`, whitelist text MIME types via `server.compression.mime-types`, and set `server.compression.min-response-size` around 1–2 KB so small payloads don't pay CPU cost for no byte savings. Already-compressed assets (JPEG/PNG/MP4/Parquet) must be excluded — re-compressing them costs CPU and grows bytes.",
+      "layout_type": "how-to-guide",
+      "difficulty": "intermediate",
+      "importance": "medium",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you understand HTTP content-coding negotiation (Accept-Encoding/Content-Encoding), know the three mainstream codecs (gzip/br/zstd) and their trade-offs, and can configure Spring Boot compression with a sensible min-size threshold and MIME-type allow-list.",
+        "common_mistake": "Enabling compression globally with `min-response-size=0`, compressing tiny JSON responses and paying CPU for kilobytes saved; or compressing already-compressed content types (images, video) and inflating size. Also: serving compressed responses without a `Vary: Accept-Encoding` header, poisoning shared caches.",
+        "to_stand_out": "Discuss Brotli static vs dynamic modes, zstd support (Chromium 123+), precompressed static asset serving via `gzip_static`/`brotli_static`, HTTP/2 HPACK + body compression composition, and why TLS 1.3 closed the BREACH attack only for specific cases — secrets in reflected bodies still need mitigation."
+      },
+      "company_tags": [
+        "Google",
+        "Cloudflare",
+        "Netflix",
+        "Shopify",
+        "Fastly",
+        "Vercel"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "How HTTP Content-Coding Negotiation Works",
+            "content": "Compression in HTTP is a **content-coding** — an end-to-end transformation of the response body.\n- The client advertises what it can decode in **`Accept-Encoding`** (e.g. `gzip, br, zstd`), and the server picks one, compresses the body, and replies with **`Content-Encoding: br`**.\n- If the server can't or won't compress, it omits `Content-Encoding` and returns the body verbatim.\n\nTwo practical rules govern this:\n- The server **MUST** emit `Vary: Accept-Encoding` on any compressed response so intermediate caches (CDN, reverse proxy, browser cache) key the entry per encoding and don't serve a gzipped body to a client that asked for identity\n- Compression happens **inside** TLS — the encrypted bytes on the wire are the compressed payload, so compressing the response saves both bandwidth and transfer time\n\nThree codecs dominate in 2026:\n- **gzip** — universal, ~30 years old, RFC 1952, ~3–5× compression on text, cheap CPU\n- **Brotli (br)** — Google, RFC 7932, 15–30% better than gzip on text at similar CPU, supported by every modern browser and most CDNs; has a precomputed dictionary that makes small text payloads especially compact\n- **zstd** — Facebook, RFC 8878, fastest at high compression ratios; Chromium 123+ sends `zstd` in `Accept-Encoding`, Firefox support is behind a flag as of mid-2026, safe to enable with content-negotiation fallback"
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Boot Configuration — application.yml",
+            "language": "yaml",
+            "content": "server:\n  compression:\n    enabled: true\n    # Only compress content types that benefit — text and structured data\n    mime-types:\n      - application/json\n      - application/xml\n      - application/javascript\n      - application/graphql+json\n      - application/problem+json      # RFC 7807\n      - text/html\n      - text/xml\n      - text/css\n      - text/plain\n      - image/svg+xml                   # text-like, compresses well\n    # Below this size the CPU cost outweighs the byte savings\n    min-response-size: 2KB\n    # Exclude MIME types even if client asks — already-compressed\n    excluded-user-agents: ''          # don't use unless you really must\n\n# Reverse proxy / gateway note:\n# If Nginx/Envoy/CloudFront already compresses upstream responses,\n# disable Tomcat compression to avoid double work and double CPU."
+          },
+          {
+            "type": "code_example",
+            "title": "Per-Endpoint Override and curl Verification",
+            "language": "bash",
+            "content": "# 1. Ask for gzip explicitly\ncurl -s -I -H 'Accept-Encoding: gzip' https://api.example.com/v1/orders\n# HTTP/2 200\n# content-type: application/json\n# content-encoding: gzip\n# vary: Accept-Encoding\n# content-length: 1847   # compressed size\n\n# 2. Ask for brotli — modern CDNs will respect it\ncurl -s -I -H 'Accept-Encoding: br' https://api.example.com/v1/orders\n# content-encoding: br\n# vary: Accept-Encoding\n\n# 3. Ask for multiple with q-values; server picks best\ncurl -s -I -H 'Accept-Encoding: zstd;q=1.0, br;q=0.9, gzip;q=0.8' \\\n     https://api.example.com/v1/orders\n\n# 4. Negotiation off -> identity response\ncurl -s -I -H 'Accept-Encoding: identity' https://api.example.com/v1/orders\n# (no content-encoding header; raw body)\n\n# 5. Decompress manually for debugging\ncurl -s -H 'Accept-Encoding: gzip' https://api.example.com/v1/orders | gunzip\n\n# 6. Measure compression ratio on a real payload\nfor enc in identity gzip br; do\n  bytes=$(curl -s -H \"Accept-Encoding: $enc\" -o /dev/null -w '%{size_download}' \\\n          https://api.example.com/v1/orders)\n  echo \"$enc: $bytes bytes\"\ndone"
+          },
+          {
+            "type": "code_example",
+            "title": "Programmatic Control — Disable Compression for One Endpoint",
+            "language": "java",
+            "content": "// Compression at the Tomcat connector level is all-or-nothing by MIME type.\n// For per-endpoint control (e.g. disable for a streaming endpoint), use a filter.\n\n@Component\npublic class NoCompressionForStreamingFilter implements Filter {\n    @Override\n    public void doFilter(ServletRequest req, ServletResponse res, FilterChain chain)\n            throws IOException, ServletException {\n        var httpReq = (HttpServletRequest) req;\n        if (httpReq.getRequestURI().startsWith(\"/v1/stream/\")) {\n            // Strip Accept-Encoding so Tomcat won't try to gzip SSE/NDJSON chunks\n            chain.doFilter(new AcceptEncodingStripper(httpReq), res);\n        } else {\n            chain.doFilter(req, res);\n        }\n    }\n}\n\n// For Brotli (Spring Boot doesn't include it by default), add Jetty's Brotli module\n// or a servlet filter based on brotli4j:\n// implementation 'com.aayushatharva.brotli4j:brotli4j:1.16.0'\n// implementation 'com.aayushatharva.brotli4j:native-linux-x86_64:1.16.0'\n\n@Bean\nFilterRegistrationBean<BrotliServletFilter> brotliFilter() {\n    var reg = new FilterRegistrationBean<>(new BrotliServletFilter());\n    reg.addUrlPatterns(\"/api/*\");\n    reg.setOrder(Ordered.HIGHEST_PRECEDENCE + 50);\n    return reg;\n}"
+          },
+          {
+            "type": "step",
+            "title": "When Compression Helps — and When It Hurts",
+            "content": "**Where compression is a clear win**\n- JSON/XML API responses over 2 KB — typical ratios 3–8× for gzip, 4–10× for Brotli\n- HTML, CSS, JavaScript bundles — Brotli static precompression on CDN edge gives best-in-class sizes\n- GraphQL responses — usually large and highly repetitive (shared field names) so compress very well\n- Server-side rendered pages and sitemaps\n\n**Where compression hurts or is pointless**\n- Already-compressed media — JPEG, PNG, WebP, MP4, Parquet, ZIP, JAR; recompressing wastes CPU and often grows bytes\n- Tiny payloads (< 1–2 KB) — gzip header overhead (~18 bytes) plus the CPU cycle is worse than the savings\n- Real-time streaming where TTFB matters more than bytes — gzip's deflate state must flush for each chunk, adding latency\n- `Content-Encoding` on responses that should remain verbatim (e.g. pre-signed content served byte-identical)\n\n**CPU budget**\n- gzip level 6 (default) costs ~30–50 μs per KB on modern server CPUs\n- Brotli dynamic at level 4 (good default for live responses) costs ~80–150 μs per KB; level 11 is for static precompression only\n- zstd level 3 is close to gzip level 1 in CPU but compresses like gzip level 9\n\n**Static vs dynamic compression**\n- Static assets — precompress at build time (`gzip -9` + `brotli -q 11`), serve `.gz` / `.br` variants via `gzip_static on; brotli_static on;` in Nginx or `aws-cloudfront-compression=gzip,brotli`\n- Dynamic JSON — compress on the fly at moderate level (gzip 6 / brotli 4); don't waste level 11 CPU on every request\n\n**HTTP/2 + compression**\n- HTTP/2's HPACK compresses headers; body compression is independent and composes normally\n- HTTP/3 uses QPACK for headers; still unrelated to content coding"
+          },
+          {
+            "type": "step",
+            "title": "Security, Caching, and Operational Gotchas",
+            "content": "**`Vary: Accept-Encoding` is mandatory**\n- Without it, a shared cache (CDN, browser) can serve a gzipped response to a client that sent `Accept-Encoding: identity`\n- Spring Boot's Tomcat compression adds the `Vary` header automatically; verify with `curl -I` on every environment\n\n**BREACH-style attacks**\n- If secrets (CSRF tokens, session IDs) are reflected inside a compressed response body alongside attacker-controlled data, compressed-length side-channel attacks can leak them\n- Mitigations: move secrets out of response bodies, add per-response random padding, disable compression on endpoints that reflect secrets, or rely on TLS 1.3 with per-request key derivation as partial defence\n- TLS 1.3 did not eliminate BREACH — it only closed CRIME (TLS-level compression); body compression is still an attack surface\n\n**Double compression**\n- If the CDN (CloudFront, Fastly, Cloudflare) compresses edge responses, disable `server.compression.enabled` in Spring Boot — compressing twice is pure CPU waste\n- Some proxies strip `Accept-Encoding` from upstream requests and recompress at the edge; check with `curl -I` through the full chain\n\n**Streaming endpoints**\n- Server-Sent Events and NDJSON generally should not be compressed — gzip has to flush its deflate state on every chunk boundary, destroying the latency benefit\n- If you must, use `Content-Encoding: gzip` with `Transfer-Encoding: chunked` and flush explicitly\n\n**Content-Length vs Transfer-Encoding**\n- Dynamic compression usually switches the response to `Transfer-Encoding: chunked` because the final size is not known at header-write time\n- Some clients or proxies mishandle chunked — verify, especially in corporate networks\n\n**Reverse-proxy coordination**\n- If Nginx/Envoy sits in front of Spring Boot and is configured with `gzip on` / `brotli on`, let the proxy compress — it's faster, usually precompiled against SIMD-accelerated libraries\n- The Spring Boot service should then serve uncompressed, keeping CPU free for application logic"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs — Codec and Level Selection",
+            "content": "**Size vs CPU**\n- Brotli dynamic level 4 — 10–20% smaller than gzip level 6, ~2–3× the CPU; reasonable for high-traffic APIs when bandwidth cost dominates\n- gzip level 6 — the safe universal default; every client understands it\n- gzip level 1 — trades ratio for speed; useful when CPU is constrained and payloads are large\n- Brotli level 11 — 30–50% smaller than gzip; only viable for **static precompression** at build time\n\n**Ratio vs latency**\n- Compressing a 10 KB JSON at gzip 6 adds ~0.5 ms CPU and saves ~7 KB bandwidth — win at almost any network speed\n- Compressing a 500 B JSON adds ~40 μs CPU and saves ~50 B — pure waste; hence `min-response-size: 2KB`\n\n**Client coverage — 2026**\n- `gzip` — 100% client coverage; always safe\n- `br` — all modern browsers, most mobile HTTP libraries, curl 7.57+, Java 21 HttpClient with a module\n- `zstd` — Chromium 123+ sends it by default; Firefox behind flag; enable only with `br`/`gzip` fallback via content negotiation\n\n**When to disable entirely**\n- Endpoints already serving pre-compressed assets (images, video, archives, Parquet)\n- Latency-sensitive streaming (SSE, WebSocket upgrade responses, NDJSON bulk exports without buffering)\n- Responses with secrets reflected inside attacker-controllable content (BREACH mitigation)\n- Behind a CDN that already handles compression at the edge\n\n**Observability**\n- Log `Content-Length` and `Content-Encoding` — track average compression ratio by endpoint\n- Alert when a normally-compressed endpoint starts returning `identity` — indicates configuration drift or a proxy stripping the header\n- Track CPU time spent in the compression codec via JFR; over 5% of request CPU means your level is too high"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Content-coding negotiation** — `Accept-Encoding` (client), `Content-Encoding` (server), `Vary: Accept-Encoding` (mandatory on compressed responses for correct cache keying)\n- **Three mainstream codecs in 2026** — gzip (universal), Brotli (better ratio, browser-centric), zstd (fastest, Chromium-first)\n- **`server.compression.enabled=true` + MIME allow-list + `min-response-size: 2KB`** — the Spring Boot one-liner\n- **Never compress already-compressed content** — JPEG/PNG/MP4/Parquet/ZIP; re-compression loses CPU and often grows bytes\n- **Brotli level 11 is for static precompression only** — dynamic responses should use level 4 or gzip level 6\n- **CDN vs origin** — if the edge compresses, disable origin compression to avoid double work\n- **Streaming endpoints usually skip compression** — gzip's deflate-state flushing per chunk destroys the latency benefit\n- **BREACH is still live** — don't reflect secrets inside compressed bodies with attacker-controlled input; TLS 1.3 did not eliminate this attack"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "HTTP compression is content-coding negotiated between client and server.\n\n**How negotiation works**\n- Client sends `Accept-Encoding: gzip, br, zstd` — the list of codecs it can decode\n- Server picks one, compresses the body, and replies with `Content-Encoding: br`\n- Server must add `Vary: Accept-Encoding` so shared caches key per encoding; otherwise a CDN can serve a gzipped body to a client that only accepts identity\n\n**Three codecs that matter in 2026**\n- gzip — universal, cheap CPU, 3–5× on text; always safe\n- Brotli — 15–30% better than gzip on text at comparable CPU; every modern browser supports it\n- zstd — fastest, Chromium 123+ sends it; enable with brotli and gzip fallback\n\n**Spring Boot configuration**\n- `server.compression.enabled=true`\n- `server.compression.mime-types` — allow-list text and structured data (JSON, XML, HTML, CSS, JS, SVG, application/problem+json)\n- `server.compression.min-response-size: 2KB` — below that the CPU cost outweighs the savings\n- Brotli is not built in — add `brotli4j` as a servlet filter if you need it at origin\n\n**When compression hurts**\n- Already-compressed media: JPEG, PNG, WebP, MP4, Parquet — skip them, or you grow bytes\n- Tiny payloads under 1 KB — gzip header alone is ~18 bytes\n- Streaming endpoints (SSE, NDJSON) — flushing deflate state per chunk kills latency\n- Secrets reflected in bodies with attacker-controlled input — BREACH attack surface\n\n**Static vs dynamic**\n- Static assets — precompress at build time with Brotli level 11 and gzip -9; serve `.br` / `.gz` variants from the CDN\n- Dynamic JSON — gzip level 6 or Brotli level 4; never level 11 on every request\n\n**CDN coordination**\n- If CloudFront, Fastly, or Cloudflare compresses at the edge, disable origin compression — don't double the work\n- Verify with `curl -I` through the full chain that `Content-Encoding` and `Vary` are correct\n\n**Verification**\n- `curl -H 'Accept-Encoding: br' -I` — check `Content-Encoding` and `Vary`\n- Measure ratios per endpoint in monitoring; alert when a normally-compressed endpoint starts returning identity — usually a proxy stripping the header"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why is `Vary: Accept-Encoding` mandatory on compressed responses, and what breaks without it?",
+        "How would you serve Brotli-compressed static assets from Spring Boot vs a CDN edge?",
+        "When is BREACH still a concern in 2026, and how do you mitigate it?",
+        "Why does compressing SSE/NDJSON endpoints usually make latency worse?"
+      ],
+      "seo": {
+        "metaTitle": "HTTP Compression in Spring Boot — gzip, Brotli, zstd Configuration",
+        "metaDescription": "Configure HTTP response compression in Spring Boot: Accept-Encoding/Content-Encoding, gzip vs Brotli vs zstd, min-response-size, MIME allow-list, and CDN coordination."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P04",
+        "hook": "HTTP compression is content-coding negotiated between client and server.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Compression in HTTP is a content-coding — an end-to-end transformation of the response body. The client advertises what it can decode in Accept-Encoding (e.g. gzip, br, zstd), and the server picks one, compresses the body, and replies with Content-Encoding: br. If the server can't or won't compress, it omits Content-Encoding and returns the body verbatim. Two practical rules govern this: The server MUST emit Vary: Accept-Encoding on any compressed response so intermediate caches (CDN, reverse proxy, browser cache) key the entry per encoding and don't serve a gzipped body to."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Where compression is a clear win JSON/XML API responses over 2 KB — typical ratios 3–8× for gzip, 4–10× for Brotli HTML, CSS, JavaScript bundles — Brotli static precompression on CDN edge gives best-in-class sizes GraphQL responses — usually large and highly repetitive (shared field names) so compress very well Server-side rendered pages and sitemaps Where compression hurts or is pointless Already-compressed media — JPEG, PNG, WebP, MP4, Parquet, ZIP, JAR; recompressing wastes CPU and often grows bytes Tiny payloads (< 1–2 KB) — gzip header overhead (~18 bytes) plus the CPU cycle is worse than the savings Real-time streaming where TTFB matters more than bytes — gzip's deflate state must flush for each chunk, adding latency Content-Encoding on responses that should remain verbatim (e.g.",
+              "pre-signed content served byte-identical) CPU budget gzip level 6 (default) costs ~30–50 μs per KB."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Content-coding negotiation — Accept-Encoding (client), Content-Encoding (server), Vary: Accept-Encoding (mandatory on compressed responses for correct cache keying) Three mainstream codecs in 2026 — gzip (universal), Brotli (better ratio, browser-centric), zstd (fastest, Chromium-first) server",
+              "compression",
+              "enabled=true + MIME allow-list + min-response-size: 2KB — the Spring Boot one-liner Never compress already-compressed content — JPEG/PNG/MP4/Parquet/ZIP; re-compression loses CPU and often grows bytes Brotli level 11 is for static precompression only — dynamic responses should use level 4 or gzip level 6 CDN vs origin — if the edge compresses, disable origin compression to avoid double work Streaming endpoints usually skip compression — gzip's deflate-state flushing per chunk destroys the latency benefit BREACH is still live — don't reflect secrets inside compressed bodies with attacker-controlled input; TLS 1",
+              "3 did not eliminate this attack"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Enabling compression globally with min-response-size=0, compressing tiny JSON responses and paying CPU for kilobytes saved; or compressing already-compressed content types (images, video) and inflating size. Also: serving compressed responses without a Vary: Accept-Encoding header, poisoning shared caches."
+          }
+        ],
+        "cap": "How negotiation works Client sends Accept-Encoding: gzip, br, zstd — the list of codecs it can decode Server picks one, compresses the body, and replies with Content-Encoding: br Server must add Vary:",
+        "familiarity_anchors": [
+          "Accept",
+          "Encoding",
+          "Content"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why is `Vary: Accept-Encoding` mandatory on compressed responses, and what breaks without it?",
+          "How would you serve Brotli-compressed static assets from Spring Boot vs a CDN edge?",
+          "When is BREACH still a concern in 2026, and how do you mitigate it?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API serving a mobile client"
+      }
+    }
+  ]
+}

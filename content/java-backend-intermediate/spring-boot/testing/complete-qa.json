@@ -1,0 +1,264 @@
+{
+  "topic": "Testing",
+  "topicSlug": "testing",
+  "questions": [
+    {
+      "id": "sbo-010",
+      "slug": "spring-boot-testing-slices-context-caching",
+      "question": "How do @SpringBootTest test slices work and how does Spring Boot cache test application contexts?",
+      "title": "Spring Boot Testing: @SpringBootTest, Slices, and Context Caching",
+      "direct_answer": "`@SpringBootTest` loads the **full application context** and is suitable for integration tests, but it is slow. **Test slice annotations** like `@WebMvcTest`, `@DataJpaTest`, and `@JsonTest` load only the slice of the context relevant to the test (controllers, JPA layer, JSON serialization), making them much faster. Spring Test **caches `ApplicationContext`s** across test classes that share identical configuration — so the expensive context startup happens once per unique configuration combination. The cache key includes `@MockBean` declarations, `@ActiveProfiles`, and `@TestPropertySource` — variation in any of those creates a separate context.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the cost of `@SpringBootTest` for every test and can choose the right slice for unit-like speed with integration-like confidence",
+        "common_mistake": "Using `@SpringBootTest` for every test including repository-only or controller-only tests, causing very slow test suites, or accidentally breaking context caching by adding test-specific `@MockBean` in a way that creates a unique context per test class",
+        "to_stand_out": "Explain that `@MockBean` creates a new `ApplicationContext` (breaking caching) so it should be standardized in a base class or `@TestConfiguration`, and mention the cache logging at `org.springframework.test.context.cache=DEBUG`"
+      },
+      "company_tags": [
+        "Spotify",
+        "Netflix",
+        "Atlassian",
+        "ThoughtWorks",
+        "Revolut"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why @SpringBootTest Makes Your Test Suite Slow — and Slices Exist to Fix It",
+            "content": "The most common Spring Boot testing mistake is using `@SpringBootTest` for everything.\n- Every `@SpringBootTest` loads the full application context — database connections, message brokers, all auto-configurations, every bean.\n- For a test that only checks a controller's request mapping or a repository's query, **you're paying 10-30 seconds of context startup for a test that runs in milliseconds**.\n\n**Test slices solve this** by loading only the beans relevant to one layer. `@WebMvcTest` loads controllers, filters, and MVC infrastructure — no services, no repositories, no database. `@DataJpaTest` loads JPA repositories with an embedded database — no controllers, no web server. Each slice auto-configures just enough context for its layer.\n\nBut slices introduce a second problem: **context caching**.\n- Spring's test framework caches application contexts across tests to avoid re-creating them.\n- The cache key is the combination of configuration classes, properties, active profiles, and **mock definitions**.\n- Any difference creates a new context.\n- Understanding what breaks the cache is the difference between a test suite that runs in 2 minutes and one that takes 15."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Test Slice Annotations — What Each Loads",
+            "content": "Each slice annotation is a meta-annotation that combines `@ExtendWith(SpringExtension.class)` with `@AutoConfigure*` annotations specific to one layer.\n\n| Annotation | Loads | Doesn't Load | Use For |\n|---|---|---|---|\n| `@SpringBootTest` | Full context | — | End-to-end integration tests |\n| `@WebMvcTest` | MVC controllers, filters, advice | Services, repositories, DB | Controller routing and validation |\n| `@WebFluxTest` | Reactive controllers, WebFilter | Services, R2DBC | Reactive controller tests |\n| `@DataJpaTest` | JPA repos + embedded H2, transactional | Web layer, services | Repository queries, mappings |\n| `@DataMongoTest` | MongoDB repos | Web, JPA | Mongo repository tests |\n| `@JsonTest` | Jackson, Gson configuration | Everything else | Serialization unit tests |\n| `@RestClientTest` | `RestTemplate`/`RestClient` config | Everything else | HTTP client tests with `MockRestServiceServer` |\n\n**Pick the smallest slice that exercises the behavior**. A controller test should not start a database; a repository test should not start MVC."
+          },
+          {
+            "type": "step",
+            "title": "Test Slice Examples",
+            "content": "**`@WebMvcTest` — controller in isolation**\n\n```java\n@WebMvcTest(OrderController.class)\nclass OrderControllerTest {\n\n    @Autowired MockMvc mvc;\n    @MockBean OrderService orderService;\n\n    @Test\n    void returns404WhenOrderMissing() throws Exception {\n        when(orderService.find(\"abc\")).thenReturn(Optional.empty());\n\n        mvc.perform(get(\"/orders/abc\"))\n            .andExpect(status().isNotFound());\n    }\n}\n```\n\n**`@DataJpaTest` — repository in isolation**\n\n```java\n@DataJpaTest\nclass OrderRepositoryTest {\n\n    @Autowired OrderRepository repo;\n\n    @Test\n    void findsByCustomerWithStatus() {\n        repo.save(new Order(\"c1\", Status.PAID));\n        repo.save(new Order(\"c1\", Status.SHIPPED));\n\n        var paid = repo.findByCustomerIdAndStatus(\"c1\", Status.PAID);\n        assertThat(paid).hasSize(1);\n    }\n}\n```\n\n**Operational notes**\n- `@WebMvcTest` does not scan `@Service` or `@Repository` beans — mock them with `@MockBean`\n- `@DataJpaTest` defaults to H2; tests are wrapped in a transaction that rolls back after each test\n- Use `@AutoConfigureTestDatabase(replace = NONE)` with Testcontainers for production-fidelity DB tests\n- `@SpringBootTest(webEnvironment = RANDOM_PORT)` starts a real server on a random port for end-to-end HTTP tests"
+          },
+          {
+            "type": "step",
+            "title": "Context Caching — What Shares and What Breaks the Cache",
+            "content": "**The cache key**\n- Configuration classes (`@SpringBootTest`, `@ContextConfiguration`)\n- Active profiles (`@ActiveProfiles`)\n- Property sources (`@TestPropertySource`)\n- Mock bean definitions (`@MockBean`, `@SpyBean`)\n- Web environment (MOCK, RANDOM_PORT, etc.)\n\n**`@MockBean` is the silent cache killer**\n- Each unique combination of `@MockBean` declarations produces a different cache key\n- `TestA` mocks `UserService`; `TestB` mocks `UserService` + `PaymentService` → two contexts\n- In a 100-test suite this can mean 20+ context creations instead of 2-3\n\n**Stabilize mocks across tests**\n\n```java\nabstract class BaseControllerTest {\n    @MockBean protected UserService userService;\n    @MockBean protected PaymentService paymentService;\n}\n\n@WebMvcTest(OrderController.class)\nclass OrderControllerTest extends BaseControllerTest { ... }\n\n@WebMvcTest(InvoiceController.class)\nclass InvoiceControllerTest extends BaseControllerTest { ... }\n```\n\n**Monitor cache behavior**\n- Set `logging.level.org.springframework.test.context.cache=DEBUG`\n- Logs show every cache hit and miss with the cache key\n- Goal: under 5 distinct contexts for an entire test suite\n- More than that means mock or property strategy needs cleanup\n\n**`@DirtiesContext` and other forced evictions**\n- `@DirtiesContext` forces context disposal — only use when state mutation is unavoidable (e.g., embedded broker shared across tests)\n- Maximum cache size is bounded; old contexts are evicted by LRU policy"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Slice and Caching Trade-offs",
+            "content": "**When slices help:**\n- Fast feedback on focused concerns — one controller, one repository, one serializer\n- Clear separation between unit and integration tests in CI\n- Maximum context cache reuse when slices share base configuration\n\n**When slices hurt:**\n- Cross-cutting tests that span layers — slice mocks the wrong dependency\n- H2-based `@DataJpaTest` masks dialect-specific bugs that fail in PostgreSQL\n- Slice annotations sometimes forget to import `@TestConfiguration` classes you actually need\n\n**Watch for:**\n- `@MockBean` declared per-test — kills caching; standardize in a base class\n- `@TestPropertySource` with one-off values — same caching problem\n- `@DirtiesContext` used to mask test isolation issues — fix the root cause instead\n- Mixing `@SpringBootTest` with slices in the same suite — they don't share contexts\n- H2 dialect differences from PostgreSQL — switch to Testcontainers for production fidelity"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@SpringBootTest` loads the full application context — use it only for integration tests** — `@WebMvcTest`, `@DataJpaTest`, `@JsonTest` load sliced contexts with only the relevant beans.\n- **`@MockBean` breaks context caching** — each unique `@MockBean` configuration creates a separate `ApplicationContext`; standardize mocks in a base test class.\n- **`@DataJpaTest` uses an embedded H2 by default** — add `@AutoConfigureTestDatabase(replace = NONE)` to test against the real database; pair with Testcontainers in CI.\n- **`@WebMvcTest` tests the web layer only** — no `@Service` or `@Repository` beans; use `@MockBean` to replace them; tests are fast because no database or message broker is started.\n- **Context caching key includes `@ActiveProfiles`, `@TestPropertySource`, and `@MockBean`** — minimize variation to maximize cache hits.\n- **Enable `org.springframework.test.context.cache=DEBUG`** — logs cache hits and misses; surfaces accidental cache busts immediately.\n- **`@DirtiesContext` evicts a context** — use only when state mutation is unavoidable; otherwise solve the underlying isolation issue."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Boot provides test slice annotations that load only the beans relevant to what you are testing. Using `@SpringBootTest` for everything works but is unnecessarily slow — a repository test that starts the web layer and message brokers wastes seconds on every CI run.\n\n**Test slices**\n- `@WebMvcTest(OrderController.class)` — loads only MVC infrastructure, the specified controller, and related `@ControllerAdvice`; no database, no service layer; use `@MockBean` for dependencies\n- `@DataJpaTest` — loads only JPA/Hibernate + an embedded H2 database; no web layer; tests repository logic in isolation\n- `@SpringBootTest` — loads the full `ApplicationContext`; use for end-to-end integration tests only\n\n**Context caching**\n- Spring caches `ApplicationContext` instances across test classes that share the same configuration\n- `@MockBean` is the most common cache-buster — each unique set of mocked beans creates a distinct context\n- Extract shared mocks into a base test class or `@TestConfiguration` class to maximize cache hits across the test suite\n- Enable `org.springframework.test.context.cache=DEBUG` to see cache hits and misses\n\n**Embedded vs real database**\n- `@DataJpaTest` defaults to H2; if your query uses a PostgreSQL-specific function, the test passes with H2 and fails in production\n- `@AutoConfigureTestDatabase(replace = NONE)` + Testcontainers runs the real database in CI — the only reliable approach for dialect-specific queries\n\nIn an interview, the strong answer is: **slices for fast focused tests, full `@SpringBootTest` for end-to-end paths, and a base class to keep mock signatures consistent so the cache actually works**."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you use Testcontainers with `@DataJpaTest` to test against a real PostgreSQL database?",
+        "Why does adding `@MockBean` to a `@SpringBootTest` class sometimes make the test suite slower?",
+        "What is the difference between `@SpringBootTest` `webEnvironment` MOCK and RANDOM_PORT?",
+        "When is `@DirtiesContext` justified, and what is a better alternative when it isn't?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Boot Test Slices & Context Caching | Java Intermediate Interview",
+        "metaDescription": "Master Spring Boot testing: @SpringBootTest vs @WebMvcTest vs @DataJpaTest test slices, context caching rules, and how @MockBean affects cache invalidation."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Boot provides test slice annotations that load only the beans relevant to what you are testing.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The most common Spring Boot testing mistake is using @SpringBootTest for everything. Every @SpringBootTest loads the full application context — database connections, message brokers, all auto-configurations, every bean. For a test that only checks a controller's request mapping or a repository's query, you're paying 10-30 seconds of context startup for a test that runs in milliseconds. Test slices solve this by loading only the beans relevant to one layer. @WebMvcTest loads controllers, filters, and MVC infrastructure — no services, no."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the cost of @SpringBootTest for every test and can choose the right slice for unit-like speed with integration-like confidence"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@SpringBootTest loads the full application context — use it only for integration tests — @WebMvcTest, @DataJpaTest, @JsonTest load sliced contexts with only the relevant beans",
+              "@MockBean breaks context caching — each unique @MockBean configuration creates a separate ApplicationContext; standardize mocks in a base test class",
+              "@DataJpaTest uses an embedded H2 by default — add @AutoConfigureTestDatabase(replace = NONE) to test against the real database; pair with Testcontainers in CI",
+              "@WebMvcTest tests the web layer only — no @Service or @Repository beans; use @MockBean to replace them; tests are fast because no database or message broker is started",
+              "Context caching key includes @ActiveProfiles, @TestPropertySource, and @MockBean — minimize variation to maximize cache hits"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The most common Spring Boot testing mistake is using @SpringBootTest for everything. Every @SpringBootTest loads the full application context — database connections, message brokers, all auto-configurations, every bean. For a test that only checks a controller's request mapping or a repository's query, you're paying 10-30 seconds of context startup for a test that runs in milliseconds. Test slices solve this by loading only the beans relevant to one layer. @WebMvcTest loads controllers, filters, and MVC infrastructure — no services, no repositories, no database. @DataJpaTest loads JPA repositories with an embedded database — no controllers, no web server. Each slice auto-configures just enough context for its layer. But slices introduce a second problem: context caching. Spring's test framework caches application contexts."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using @SpringBootTest for every test including repository-only or controller-only tests, causing very slow test suites, or accidentally breaking context caching by adding test-specific @MockBean in a way that creates a unique context per test class"
+            ]
+          }
+        ],
+        "cap": "Test slices @WebMvcTest(OrderController.class) — loads only MVC infrastructure, the specified controller, and related @ControllerAdvice; no database, no service layer; use @MockBean for dependencies @",
+        "familiarity_anchors": [
+          "SpringBootTest",
+          "WebMvcTest",
+          "DataJpaTest"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you use Testcontainers with `@DataJpaTest` to test against a real PostgreSQL database?",
+          "Why does adding `@MockBean` to a `@SpringBootTest` class sometimes make the test suite slower?",
+          "What is the difference between `@SpringBootTest` `webEnvironment` MOCK and RANDOM_PORT?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JPA repository"
+      }
+    },
+    {
+      "id": "sbo-010-testcontainers",
+      "slug": "testcontainers-with-springboottest-integration-pattern",
+      "question": "How do you integrate Testcontainers with @SpringBootTest for production-fidelity integration tests?",
+      "title": "Testcontainers with @SpringBootTest — The Integration Pattern",
+      "direct_answer": "Use Testcontainers to run the **real database, message broker, or cache** in a Docker container during integration tests, eliminating H2-vs-PostgreSQL dialect drift. The modern pattern in Spring Boot 3.1+ uses **`@ServiceConnection`** which auto-wires container connection details into Spring properties — no manual `@DynamicPropertySource` plumbing. Make containers `static final` with `withReuse(true)` and a shared `@TestConfiguration` so the same container is reused across the entire test suite, preserving Spring's context cache. The combination gives you production-fidelity tests at a few seconds of startup overhead per CI run, not per test.",
+      "layout_type": "recipe-builder",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can set up integration tests that run against the real database/broker without breaking Spring's context cache or tanking CI runtime",
+        "common_mistake": "Creating a new container per test class with `@Container` instance fields, forcing Docker startup on every test class and breaking context caching",
+        "to_stand_out": "Mention `@ServiceConnection` (Spring Boot 3.1+), container reuse with `~/.testcontainers.properties`, and `Testcontainers.exposeHostPorts` for callbacks back to the host"
+      },
+      "company_tags": [
+        "Atlassian",
+        "Klarna",
+        "Spotify",
+        "ING",
+        "Adyen"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "H2 Lies — Testcontainers Tells the Truth",
+            "content": "**The H2 problem is real**. `@DataJpaTest` defaults to an embedded H2 database, which silently passes tests for queries that fail against PostgreSQL or MySQL in production.\n- JSONB operators, window functions, full-text search, custom types, even basic things like `RETURNING` clauses behave differently.\n- A test suite that's green against H2 is no guarantee of correctness against the real database.\n\n**Testcontainers solves this** by running the actual database (or Kafka, Redis, RabbitMQ, Elasticsearch, S3 via LocalStack) in a Docker container during the test run.\n- Your code talks to the same engine in tests as in production.\n- The only cost is a few seconds of container startup at CI initialization.\n\n**Spring Boot 3.1+ added `@ServiceConnection`** which makes the integration nearly invisible.\n- Annotate a `static` container field with `@ServiceConnection` and Spring Boot auto-configures the JDBC URL, Kafka bootstrap servers, or Redis connection from the running container — no `@DynamicPropertySource`, no manual property wiring.\n- Combined with **container reuse** (`withReuse(true)`), the same container survives across multiple `mvn test` runs locally, making the developer feedback loop nearly as fast as H2 with full PostgreSQL fidelity."
+          },
+          {
+            "type": "step",
+            "title": "Setup — Dependencies and Reuse Configuration",
+            "content": "**Maven dependencies**\n\n```xml\n<dependency>\n    <groupId>org.testcontainers</groupId>\n    <artifactId>testcontainers</artifactId>\n    <scope>test</scope>\n</dependency>\n<dependency>\n    <groupId>org.testcontainers</groupId>\n    <artifactId>postgresql</artifactId>\n    <scope>test</scope>\n</dependency>\n<dependency>\n    <groupId>org.testcontainers</groupId>\n    <artifactId>junit-jupiter</artifactId>\n    <scope>test</scope>\n</dependency>\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-testcontainers</artifactId>\n    <scope>test</scope>\n</dependency>\n```\n\n**Enable container reuse on the developer machine**\n- Create `~/.testcontainers.properties` once per developer\n- Contents: `testcontainers.reuse.enable=true`\n- Containers persist across `mvn test` runs locally; CI typically disables reuse for hermetic builds\n\n**Spring Boot version requirement**\n- Spring Boot 3.1+ for `@ServiceConnection`\n- Earlier versions: use `@DynamicPropertySource` to wire container URLs into Spring properties manually"
+          },
+          {
+            "type": "step",
+            "title": "The Modern Pattern with @ServiceConnection",
+            "content": "**Shared @TestConfiguration with reusable static containers**\n\n```java\n@TestConfiguration(proxyBeanMethods = false)\npublic class IntegrationTestContainers {\n\n    @Bean\n    @ServiceConnection\n    PostgreSQLContainer<?> postgres() {\n        return new PostgreSQLContainer<>(\"postgres:16-alpine\")\n            .withReuse(true);\n    }\n\n    @Bean\n    @ServiceConnection\n    KafkaContainer kafka() {\n        return new KafkaContainer(DockerImageName.parse(\"confluentinc/cp-kafka:7.5.0\"))\n            .withReuse(true);\n    }\n\n    @Bean\n    @ServiceConnection(name = \"redis\")\n    GenericContainer<?> redis() {\n        return new GenericContainer<>(\"redis:7-alpine\")\n            .withExposedPorts(6379)\n            .withReuse(true);\n    }\n}\n```\n\n**Use it in any integration test**\n\n```java\n@SpringBootTest\n@Import(IntegrationTestContainers.class)\nclass OrderFlowIntegrationTest {\n\n    @Autowired OrderService orders;\n    @Autowired KafkaTemplate<String, String> kafka;\n\n    @Test\n    void persistsAndPublishes() {\n        var order = orders.place(new NewOrder(\"c1\", List.of(\"sku-1\")));\n\n        assertThat(order.getId()).isNotNull();\n        kafka.send(\"orders\", order.getId().toString());\n    }\n}\n```\n\n**What `@ServiceConnection` gives you**\n- Spring Boot detects the container type and auto-configures the connection (JDBC URL, Kafka bootstrap, Redis host/port)\n- No `@DynamicPropertySource`, no manual `spring.datasource.url` wiring\n- The `@TestConfiguration` is shared across every `@SpringBootTest` that imports it — same context cache, same container"
+          },
+          {
+            "type": "step",
+            "title": "The Pre-3.1 Pattern with @DynamicPropertySource",
+            "content": "**For Spring Boot < 3.1 or special cases**\n\n```java\n@SpringBootTest\n@Testcontainers\nclass LegacyIntegrationTest {\n\n    @Container\n    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(\"postgres:16-alpine\")\n        .withReuse(true);\n\n    @DynamicPropertySource\n    static void registerProperties(DynamicPropertyRegistry registry) {\n        registry.add(\"spring.datasource.url\", postgres::getJdbcUrl);\n        registry.add(\"spring.datasource.username\", postgres::getUsername);\n        registry.add(\"spring.datasource.password\", postgres::getPassword);\n    }\n}\n```\n\n**Why static fields matter**\n- `static` ensures the container starts once for the JVM, not once per test class\n- `@Container` lifecycle annotation is provided by `@Testcontainers`\n- Reuse + static = the container is shared even across multiple test classes\n\n**Pitfall — instance field containers**\n- Non-static `@Container` fields start a new container per test class\n- That breaks Spring's context cache because container URLs differ per class\n- Always make integration containers `static final`"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Testcontainers Trade-offs",
+            "content": "**When Testcontainers helps:**\n- Repository and integration tests where DB dialect differences matter (JSONB, window functions, custom types)\n- Kafka, RabbitMQ, Redis tests that need real protocol semantics\n- LocalStack containers for AWS S3, SQS, DynamoDB integration\n- Schema migration tests that must run real Flyway against the real engine\n\n**When Testcontainers hurts:**\n- Pure unit tests that exercise no I/O — overkill\n- CI environments without Docker support\n- Constrained hosts where Docker daemon overhead is significant\n- Test classes that create one container per class — Docker startup time tanks the suite\n\n**Watch for:**\n- Forgetting `withReuse(true)` — containers restart per JVM and slow local development\n- Reuse enabled in CI — CI should be hermetic; reuse on developer machines only\n- Mixing `@DataJpaTest` with Testcontainers — `@DataJpaTest` replaces the DataSource; add `@AutoConfigureTestDatabase(replace = NONE)`\n- Container image versions drifting from production — pin exact tags, not `latest`\n- Network mode issues on macOS / Windows where Docker runs in a VM and host networking differs"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@ServiceConnection` in Spring Boot 3.1+** — auto-configures Spring properties from a container bean; no `@DynamicPropertySource` needed.\n- **`static final` containers with `withReuse(true)`** — one container per JVM, persistent across local runs when `~/.testcontainers.properties` enables reuse.\n- **Shared `@TestConfiguration`** — import the same container config into every `@SpringBootTest`; same context cache, same container, fast suite.\n- **`@DataJpaTest` + `@AutoConfigureTestDatabase(replace = NONE)`** — runs `@DataJpaTest` against the real Testcontainers DataSource instead of H2.\n- **Pin exact image tags** — `postgres:16-alpine`, not `postgres:latest`; reproducibility across machines.\n- **CI typically disables reuse** — hermetic builds; reuse is a developer-machine optimization.\n- **Testcontainers supports almost everything** — PostgreSQL, MySQL, Kafka, Redis, RabbitMQ, Elasticsearch, MongoDB, LocalStack (AWS), Selenium browsers.\n- **`Testcontainers.exposeHostPorts(...)`** — for callbacks where the container needs to reach a port on the host."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Testcontainers runs the real database, message broker, or cache in a Docker container during integration tests so your code talks to the same engine in tests as in production. The H2 default in `@DataJpaTest` is fine for trivial CRUD but silently passes tests for PostgreSQL-specific features that fail in production.\n\n**The modern Spring Boot 3.1+ pattern**\n- Annotate a `static` container bean with `@ServiceConnection` in a `@TestConfiguration` class\n- Spring Boot auto-configures `spring.datasource.url`, Kafka bootstrap servers, Redis host/port from the running container\n- Import the configuration into every `@SpringBootTest` — the same context cache and the same container are reused across the suite\n\n**The pre-3.1 pattern**\n- `@Container static PostgreSQLContainer postgres = new PostgreSQLContainer(...)` plus `@DynamicPropertySource` to wire the URL into Spring properties\n- Verbose but works for older Spring Boot versions\n\n**The two patterns that make it fast**\n- `static final` container fields — one container per JVM, not per test class\n- `withReuse(true)` plus `~/.testcontainers.properties` enabling reuse — container persists across `mvn test` runs locally\n\n**Common pitfalls**\n- Non-static `@Container` fields start a new container per test class — kills the context cache and slows the suite\n- Forgetting `@AutoConfigureTestDatabase(replace = NONE)` when using `@DataJpaTest` with Testcontainers — Spring replaces the DataSource with H2\n- Pinning to `:latest` image tags — reproducibility issues across machines\n\nIn an interview, the strong answer is: **`@ServiceConnection` + `static final` containers + `withReuse(true)` + a shared `@TestConfiguration` is the production-fidelity integration test pattern that doesn't break Spring's context cache or balloon CI time**."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between `@ServiceConnection` and `@DynamicPropertySource`?",
+        "How do you use Testcontainers with Kafka — what does `KafkaContainer` provide that `EmbeddedKafka` does not?",
+        "Why is `static` important for `@Container` fields, and what happens if you forget?",
+        "How would you use Testcontainers in CI vs local development, and why is reuse handled differently?"
+      ],
+      "seo": {
+        "metaTitle": "Testcontainers with Spring Boot @SpringBootTest — Integration Pattern",
+        "metaDescription": "Run real PostgreSQL, Kafka, Redis in Spring Boot integration tests with Testcontainers and @ServiceConnection. Container reuse, context caching, and the @TestConfiguration pattern."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Testcontainers runs the real database, message broker, or cache in a Docker container during integration tests so your code talks to the same engine in tests as in production.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The H2 problem is real. @DataJpaTest defaults to an embedded H2 database, which silently passes tests for queries that fail against PostgreSQL or MySQL in production. JSONB operators, window functions, full-text search, custom types, even basic things like RETURNING clauses behave differently. A test suite that's green against H2 is no guarantee of correctness against the real database. Testcontainers solves this by running the actual database (or Kafka, Redis, RabbitMQ, Elasticsearch, S3 via LocalStack) in a Docker container during the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate can set up integration tests that run against the real database/broker without breaking Spring's context cache or tanking CI runtime"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@ServiceConnection in Spring Boot 3",
+              "1+ — auto-configures Spring properties from a container bean; no @DynamicPropertySource needed",
+              "static final containers with withReuse(true) — one container per JVM, persistent across local runs when ~/",
+              "testcontainers",
+              "properties enables reuse"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The H2 problem is real. @DataJpaTest defaults to an embedded H2 database, which silently passes tests for queries that fail against PostgreSQL or MySQL in production. JSONB operators, window functions, full-text search, custom types, even basic things like RETURNING clauses behave differently. A test suite that's green against H2 is no guarantee of correctness against the real database. Testcontainers solves this by running the actual database (or Kafka, Redis, RabbitMQ, Elasticsearch, S3 via LocalStack) in a Docker container during the test run. Your code talks to the same engine in tests as in production. The only cost is a few seconds of container startup at CI initialization. Spring Boot 3.1+ added @ServiceConnection which makes the integration nearly invisible. Annotate a."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Creating a new container per test class with @Container instance fields, forcing Docker startup on every test class and breaking context caching"
+            ]
+          }
+        ],
+        "cap": "The modern Spring Boot 3.1+ pattern Annotate a static container bean with @ServiceConnection in a @TestConfiguration class Spring Boot auto-configures spring.datasource.url, Kafka bootstrap servers, R",
+        "familiarity_anchors": [
+          "Testcontainers",
+          "Docker",
+          "PostgreSQL"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between `@ServiceConnection` and `@DynamicPropertySource`?",
+          "How do you use Testcontainers with Kafka — what does `KafkaContainer` provide that `EmbeddedKafka` does not?",
+          "Why is `static` important for `@Container` fields, and what happens if you forget?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JPA repository"
+      }
+    }
+  ]
+}

@@ -1,0 +1,259 @@
+{
+  "topic": "Prometheus And Grafana",
+  "topicSlug": "prometheus-and-grafana",
+  "questions": [
+    {
+      "id": "obs-002",
+      "slug": "spring-boot-actuator-prometheus-metrics-setup",
+      "question": "How do you expose Spring Boot application metrics to Prometheus using Spring Boot Actuator?",
+      "title": "Spring Boot Actuator + Prometheus Metrics Setup",
+      "direct_answer": "Add the `micrometer-registry-prometheus` dependency, enable the Prometheus Actuator endpoint in application.yml, and point your Prometheus scrape config at `/actuator/prometheus`.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Hands-on knowledge of the Micrometer + Actuator + Prometheus integration pipeline.",
+        "common_mistake": "Forgetting to expose the `prometheus` endpoint in `management.endpoints.web.exposure.include`, leaving it inaccessible.",
+        "to_stand_out": "Mention custom metrics using MeterRegistry and how to add common tags to all metrics for service-level filtering in Grafana."
+      },
+      "company_tags": [
+        "Revolut",
+        "Zalando",
+        "Deliveroo",
+        "N26",
+        "Shopify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Pipeline: How a Method Call Becomes a Prometheus Time Series",
+            "content": "Spring Boot applications generate a wealth of internal data — JVM heap usage, garbage collection pauses, HTTP request latency, thread pool saturation, database connection pool health — but none of it is visible outside the JVM unless you explicitly expose it. **Spring Boot Actuator** solves the exposure problem by providing HTTP endpoints that serve operational data. Combined with **Micrometer** and the `micrometer-registry-prometheus` dependency, Actuator translates all those internal metrics into the Prometheus text exposition format at `/actuator/prometheus`.\n\nThe pipeline works like this: Micrometer defines the metric instruments in your Java code (counters, timers, gauges). The Prometheus registry translates those instruments into the text format Prometheus expects. Actuator serves that text at an HTTP endpoint. Prometheus scrapes that endpoint on a configured interval and stores the time-series data. The common trap is forgetting the final configuration step: Actuator keeps the Prometheus endpoint hidden by default, so without `management.endpoints.web.exposure.include=prometheus`, Prometheus gets a 404 and your monitoring has a silent gap."
+          },
+          {
+            "type": "step",
+            "title": "The Endpoint That Returns 404 by Default — And Why Nobody Notices",
+            "content": "The most common mistake in Actuator-Prometheus integration is adding the dependency and assuming the endpoint is available. It is not. Actuator's security-first design keeps most endpoints hidden until you explicitly expose them.\n\n```yaml\nmanagement:\n  endpoints:\n    web:\n      exposure:\n        include: health,info,prometheus,metrics\n  metrics:\n    tags:\n      application: ${spring.application.name}\n      env: ${APP_ENV:local}\n```\n\nThe `exposure.include` list controls which endpoints are accessible via HTTP. Without `prometheus` in this list, the endpoint exists internally but returns 404 to Prometheus scrapes — and because Prometheus treats a 404 as 'no metrics,' it fails silently. There is no error in the application logs, no alert from Prometheus. You only discover the gap when you look at a Grafana dashboard and see no data.\n\nThe `management.metrics.tags` section adds common labels to every metric the application exports. Tagging with `application` and `env` means Grafana can filter dashboards by service name and environment without you adding these tags to every individual counter and timer in your code. This becomes essential when you have dozens of services exporting to the same Prometheus instance."
+          },
+          {
+            "type": "step",
+            "title": "Custom Business Metrics: The Signals That Surface Problems Before Infrastructure Does",
+            "content": "Spring Boot auto-instruments JVM metrics, HTTP request metrics, and database connection pool metrics out of the box. These are essential but they only tell you about infrastructure health. A drop in `orders.created` rate is often the first signal of a business-impacting failure — faster than JVM metrics and more specific than HTTP error rates.\n\n```java\n@Service\npublic class OrderService {\n    private final Counter orderCounter;\n    private final Timer orderTimer;\n\n    public OrderService(MeterRegistry registry) {\n        this.orderCounter = Counter.builder(\"orders.created\")\n                .description(\"Total orders successfully created\")\n                .register(registry);\n        this.orderTimer = Timer.builder(\"orders.processing.time\")\n                .description(\"Order processing latency\")\n                .publishPercentileHistogram()   // enables fleet-wide P99 in PromQL\n                .register(registry);\n    }\n\n    public Order createOrder(OrderRequest req) {\n        return orderTimer.record(() -> {\n            Order order = processOrder(req);\n            orderCounter.increment();\n            return order;\n        });\n    }\n}\n```\n\nInject `MeterRegistry` — the Micrometer facade — into any Spring bean to register custom instruments. The `publishPercentileHistogram()` call on the Timer is critical for multi-instance services: it publishes histogram buckets that Prometheus can aggregate across all pods using `histogram_quantile()`, giving you a fleet-wide P99 rather than a per-pod number that hides outliers."
+          },
+          {
+            "type": "step",
+            "title": "Pointing Prometheus at the Endpoint: Static Config and Kubernetes Discovery",
+            "content": "Prometheus discovers your application through a scrape configuration that specifies the target host, the metrics path, and the scrape interval.\n\n```yaml\nscrape_configs:\n  - job_name: 'spring-boot-app'\n    metrics_path: '/actuator/prometheus'\n    scrape_interval: 15s\n    static_configs:\n      - targets: ['localhost:8080']\n```\n\nIn Kubernetes, you typically replace `static_configs` with service discovery annotations. Add `prometheus.io/scrape: \"true\"` and `prometheus.io/path: \"/actuator/prometheus\"` to your pod annotations, and Prometheus discovers and scrapes new pods automatically as they scale. The scrape interval of 15 seconds is the Prometheus default and works well for most services — shorter intervals increase Prometheus storage and CPU load without meaningfully improving alert responsiveness.\n\nOnce scraping is active, Prometheus stores the time-series data and Grafana queries it for dashboards. The auto-instrumented metrics that matter most out of the box are `http_server_requests_seconds` (request rate, latency, error rate per endpoint), `jvm_memory_used_bytes` (heap vs non-heap, essential for memory leak detection), `jvm_gc_pause_seconds` (GC pause frequency — sudden increases signal memory pressure), and `hikaricp_connections_active` (database connection pool health)."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`micrometer-registry-prometheus` auto-configures `/actuator/prometheus`** — add the dependency; expose the endpoint with `management.endpoints.web.exposure.include=prometheus`; Prometheus scrapes it at the configured interval\n- **`management.server.port` isolates management endpoints** — run Actuator on a separate port not exposed to the public internet; Prometheus scrapes the management port; business traffic uses the application port\n- **Kubernetes `ServiceMonitor` for dynamic Prometheus scraping** — Prometheus Operator watches ServiceMonitor CRDs; label the Service and define a ServiceMonitor; Prometheus auto-discovers services without static config changes\n- **HikariCP metrics reveal connection pool saturation** — `hikaricp.connections.pending > 0` means threads are waiting for connections; visible from the Prometheus endpoint without custom instrumentation\n- **`management.endpoints.web.exposure.include` whitelist required** — Actuator exposes only `health` and `info` by default; `prometheus`, `metrics`, and `loggers` must be explicitly included; never expose `heapdump` or `threaddump` publicly"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Boot Actuator exposes application metrics over HTTP, and the Prometheus integration publishes those metrics in Prometheus's text format for scraping. The most common issue is that the Prometheus endpoint is hidden by default.\n\n**Setup**\n- Add `spring-boot-starter-actuator` and `micrometer-registry-prometheus`; Actuator auto-configures the `/actuator/prometheus` endpoint that Prometheus scrapes\n- The endpoint is disabled by default: add `management.endpoints.web.exposure.include=health,info,prometheus,metrics` to expose it; in production, restrict access to this endpoint to the Prometheus server's IP or put it on a separate management port\n\n**Configuring Prometheus scraping**\n- Add a scrape configuration in `prometheus.yml`: `- job_name: 'spring-boot' static_configs: - targets: ['myservice:8080']`; Prometheus scrapes `/actuator/prometheus` at the configured interval (typically 15 or 60 seconds)\n- On Kubernetes, use a `ServiceMonitor` CRD (if using the Prometheus Operator) to configure scraping declaratively — the ServiceMonitor watches for services with matching labels and auto-configures Prometheus to scrape them\n\n**What gets exposed automatically**\n- JVM metrics: `jvm.memory.used`, `jvm.gc.pause.count`, `jvm.threads.live`, `jvm.gc.memory.allocated`\n- HTTP metrics: `http.server.requests` tagged with URI, method, status, and outcome\n- HikariCP metrics: `hikaricp.connections.active`, `hikaricp.connections.pending` — connection pool saturation is visible from the metrics endpoint without any custom code\n- System metrics: CPU usage, disk space, load average\n\n**Securing the Prometheus endpoint**\n- The `/actuator/prometheus` endpoint contains detailed application internals — configure Spring Security to require authentication or restrict by IP; alternatively put it on a separate `management.server.port` that is not exposed to external traffic"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you secure the `/actuator/prometheus` endpoint in production?",
+        "What is the difference between a Counter and a Gauge in Micrometer?",
+        "How would you expose custom business metrics alongside JVM metrics?"
+      ],
+      "seo": {
+        "title": "Spring Boot Actuator + Prometheus Metrics Setup — Java Interview Answer",
+        "description": "Step-by-step guide to exposing Spring Boot metrics to Prometheus using Spring Boot Actuator and Micrometer, with custom metric examples.",
+        "keywords": [
+          "spring boot prometheus",
+          "micrometer prometheus",
+          "spring boot actuator metrics",
+          "prometheus scrape spring boot"
+        ],
+        "metaDescription": "Add the micrometer-registry-prometheus dependency, enable the Prometheus Actuator endpoint in application.yml, and point your Prometheus scrape config at /actu.",
+        "metaTitle": "Spring Boot Actuator + Prometheus Metrics Setup"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P11",
+        "hook": "Spring Boot Actuator exposes application metrics over HTTP, and the Prometheus integration publishes those metrics in Prometheus's text format for scraping.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring Boot applications generate a wealth of internal data — JVM heap usage, garbage collection pauses, HTTP request latency, thread pool saturation, database connection pool health — but none of it is visible outside the JVM unless you explicitly expose it. Spring Boot Actuator solves the exposure problem by providing HTTP endpoints that serve operational data. Combined with Micrometer and the micrometer-registry-prometheus dependency, Actuator translates all those internal metrics into the Prometheus text exposition format at /actuator/prometheus. The pipeline works."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Hands-on knowledge of the Micrometer + Actuator + Prometheus integration pipeline."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "micrometer-registry-prometheus auto-configures /actuator/prometheus — add the dependency; expose the endpoint with management",
+              "include=prometheus; Prometheus scrapes it at the configured interval management",
+              "port isolates management endpoints — run Actuator on a separate port not exposed to the public internet; Prometheus scrapes the management port; business traffic uses the application port Kubernetes ServiceMonitor for dynamic Prometheus scraping — Prometheus Operator watches ServiceMonitor CRDs; label the Service and define a ServiceMonitor; Prometheus auto-discovers services without static config changes HikariCP metrics reveal connection pool saturation — hikaricp",
+              "connections",
+              "pending > 0 means threads are waiting for connections; visible from the Prometheus endpoint without custom instrumentation management"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Spring Boot applications generate a wealth of internal data — JVM heap usage, garbage collection pauses, HTTP request latency, thread pool saturation, database connection pool health — but none of it is visible outside the JVM unless you explicitly expose it. Spring Boot Actuator solves the exposure problem by providing HTTP endpoints that serve operational data. Combined with Micrometer and the micrometer-registry-prometheus dependency, Actuator translates all those internal metrics into the Prometheus text exposition format at /actuator/prometheus. The pipeline works like this: Micrometer defines the metric instruments in your Java code (counters, timers, gauges). The Prometheus registry translates those instruments into the text format Prometheus expects. Actuator serves that text at an HTTP endpoint. Prometheus scrapes that endpoint on a."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Forgetting to expose the prometheus endpoint in management",
+              "include, leaving it inaccessible"
+            ]
+          }
+        ],
+        "cap": "Setup Add spring-boot-starter-actuator and micrometer-registry-prometheus; Actuator auto-configures the /actuator/prometheus endpoint that Prometheus scrapes The endpoint is disabled by default: add m",
+        "familiarity_anchors": [
+          "Prometheus",
+          "Actuator"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you secure the `/actuator/prometheus` endpoint in production?",
+          "What is the difference between a Counter and a Gauge in Micrometer?",
+          "How would you expose custom business metrics alongside JVM metrics?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with Micrometer and OpenTelemetry"
+      }
+    },
+    {
+      "id": "obs-007",
+      "slug": "grafana-dashboards-spring-boot-service-health",
+      "question": "How do you build a Grafana dashboard to monitor the health of a Spring Boot service?",
+      "title": "Grafana Dashboards for Spring Boot Service Health",
+      "direct_answer": "Use the Prometheus data source in Grafana. Build panels for the four golden signals: latency (P99), traffic (req/s), errors (5xx rate), and saturation (CPU, JVM heap). Import community dashboards like JVM Micrometer (ID 4701) as a starting point.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Familiarity with Grafana, PromQL, and the four golden signals framework.",
+        "common_mistake": "Building dashboards that show raw counter values instead of rates, which are flat lines until a reset occurs.",
+        "to_stand_out": "Mention alert rules defined as code with Grafana provisioning or Prometheus alerting rules, and how to link dashboard panels to runbooks."
+      },
+      "company_tags": [
+        "Grafana Labs",
+        "Cloudflare",
+        "GitLab",
+        "Shopify",
+        "Twilio"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Dashboard Trap: Fifty Charts Nobody Reads During an Outage",
+            "content": "Most Grafana dashboards fail not because the data is wrong but because the layout is wrong. Fifty charts in random order, raw counter values instead of rates, no connection between a spike on screen and the runbook that explains what to do about it. During an outage — the exact moment the dashboard matters most — engineers waste precious minutes scanning for the right panel instead of triaging the problem.\n\nA well-designed dashboard is structured around Google's **four golden signals**: latency, traffic, errors, and saturation. These four measurements capture user-visible health completely. If latency is low, traffic is flowing, errors are rare, and resources are not saturated, the service is healthy. Any deviation is immediately visible.\n\nFor Spring Boot services, Micrometer exposes all the raw metrics Prometheus needs to compute these signals. The dashboard's job is to organize and present them in a hierarchy that matches how engineers naturally investigate: top-level single-stat panels for instant assessment, time-series panels for trend analysis, and deep links to traces and runbooks for investigation. Treat dashboards as code — check JSON models into Git and use Grafana provisioning to load them automatically, so dashboards are version-controlled artifacts, not click-and-drag creations living only on a Grafana server nobody backs up."
+          },
+          {
+            "type": "step",
+            "title": "The Four Golden Signals in PromQL: Queries That Actually Tell You Something",
+            "content": "Each golden signal maps to a specific PromQL query against the metrics that Spring Boot and Micrometer expose automatically.\n\n**Traffic** is the rate of incoming requests per second. This single number tells you whether the service is receiving its expected load.\n\n```promql\nsum(rate(http_server_requests_seconds_count{application=\"order-service\"}[5m]))\n```\n\n**Latency** is the P99 request duration, computed from Micrometer's histogram buckets. A sustained increase means users are experiencing delays.\n\n```promql\nhistogram_quantile(0.99,\n  sum(rate(http_server_requests_seconds_bucket{application=\"order-service\"}[5m])) by (le))\n```\n\n**Errors** is the proportion of 5xx responses. Express it as a ratio, not a raw count, so the signal is meaningful regardless of traffic volume.\n\n```promql\nsum(rate(http_server_requests_seconds_count{application=\"order-service\",status=~\"5..\"}[5m]))\n/\nsum(rate(http_server_requests_seconds_count{application=\"order-service\"}[5m]))\n```\n\n**Saturation** covers JVM heap utilization relative to max. When heap usage exceeds 80% of max, GC pressure increases and latency follows.\n\n```promql\njvm_memory_used_bytes{area=\"heap\",application=\"order-service\"}\n/\njvm_memory_max_bytes{area=\"heap\",application=\"order-service\"}\n```\n\nThe most common PromQL mistake is graphing raw counter values instead of rates. Counters reset to zero on every application restart, so the raw graph shows a sawtooth pattern with misleading drops. Wrapping every counter in `rate()` produces a smooth, meaningful per-second line that correctly handles restarts."
+          },
+          {
+            "type": "step",
+            "title": "Layout, Template Variables, and Runbook Links That Scale Across the Fleet",
+            "content": "Effective dashboards follow a **top-down drill-down layout** that matches how engineers investigate incidents. The top row contains four single-stat panels — one per golden signal — with threshold coloring: green for normal, yellow for warning, red for critical. An on-call engineer glances at this row and immediately knows whether there is a latency, traffic, error, or saturation problem.\n\nBelow the single-stat row, time-series panels show the same four signals over the last 6 hours with **deployment annotations**. Grafana annotations mark each deployment as a vertical line on the chart, so latency spikes that coincide with a deploy are immediately obvious. Configure annotations to pull from a Prometheus metric like `app_deployment_timestamp` or a webhook from your CI pipeline.\n\nThe third layer links dashboards to investigation tools. Each panel's description field should contain a **runbook link** — when the error rate panel spikes, the engineer clicks the panel title and sees the playbook URL. This turns dashboards from passive displays into active incident response tools.\n\n**Template variables** prevent dashboard sprawl. Define variables for `application`, `environment`, and `namespace`. All panels use these variables in PromQL queries via label matchers like `{application=~\"$application\"}`. Instead of maintaining 50 dashboards for 50 services, you maintain a small set of templates that serve every service through variable selection.\n\nFor a practical starting point, import Grafana dashboard **ID 4701** — the JVM Micrometer dashboard. It covers heap usage, GC pauses, thread counts, and HTTP request metrics out of the box. Layer your business metric rows on top: order creation rate, payment failure rate, search latency."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Four golden signals are the required minimum** — request rate, error rate, P99 latency, and saturation (JVM heap + connection pool); everything else is diagnostic detail\n- **P99 latency with `histogram_quantile`** — `histogram_quantile(0.99, rate(http_server_requests_seconds_bucket[5m]))`; P99 shows the experience of the worst-affected 1% of users; mean latency hides tail latency problems\n- **JVM heap sawtooth is normal; rising baseline without drops indicates memory leak** — regular GC reclaims heap; a rising baseline between GC cycles means objects are being promoted to old generation faster than GC can collect them\n- **`hikaricp_connections_pending > 0` is the connection pool saturation signal** — threads waiting for a connection; increase pool size or reduce query duration; `hikaricp_connections_active` approaching `maximumPoolSize` confirms saturation\n- **Grafana variables for multi-service dashboards** — `$application` and `$env` variables let one dashboard serve all services; avoid duplicating dashboards per service"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A Grafana dashboard for a Spring Boot service should answer four questions at a glance — the four golden signals: latency, traffic (request rate), errors, and saturation. Every other panel is a supplement to these four.\n\n**Four golden signals**\n- Request rate: `rate(http_server_requests_seconds_count{application=\"my-service\"}[5m])` — requests per second; visualize as a time-series line; spike indicates load increase\n- Error rate: `rate(http_server_requests_seconds_count{status=~\"5..\"}[5m]) / rate(http_server_requests_seconds_count[5m])` — percentage of 5xx responses; alert when above 1%\n- Latency: `histogram_quantile(0.99, rate(http_server_requests_seconds_bucket[5m]))` — P99 latency in seconds; alert when above SLO threshold (e.g., 500ms)\n- Saturation: JVM heap usage `jvm_memory_used_bytes{area=\"heap\"} / jvm_memory_max_bytes{area=\"heap\"}` and HikariCP pending connections `hikaricp_connections_pending`\n\n**JVM health panels**\n- Heap usage over time: identify trends toward GC pressure before the GC becomes a problem; a sawtooth pattern is normal GC behavior; a flat rising line without drops indicates a memory leak\n- GC pause duration: `rate(jvm_gc_pause_seconds_sum[5m]) / rate(jvm_gc_pause_seconds_count[5m])` — average GC pause time; above 200ms on average indicates GC tuning is needed\n- Thread count: `jvm_threads_live_threads` trending upward indicates a thread leak\n\n**Database health panels**\n- HikariCP active connections: `hikaricp_connections_active` — approaching `maximumPoolSize` indicates pool saturation\n- Connection acquisition time: how long threads wait for a pool connection; above a few milliseconds consistently means queries are too slow or pool size is too small\n\nOrganize the dashboard into rows: Service Health (golden signals), JVM Health, Database, and Infrastructure. Use Grafana's variable feature for `$application` and `$environment` to make one dashboard serve all services."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What are the four golden signals and where do they come from?",
+        "How do you set up Grafana dashboard provisioning as code?",
+        "What is the difference between a Grafana alert and a Prometheus alerting rule?"
+      ],
+      "seo": {
+        "title": "Grafana Dashboard for Spring Boot Service Health — Java Interview Answer",
+        "description": "How to build a Grafana dashboard for a Spring Boot service using Prometheus metrics and the four golden signals framework.",
+        "keywords": [
+          "grafana spring boot",
+          "prometheus grafana java",
+          "four golden signals",
+          "spring boot dashboard",
+          "JVM micrometer grafana"
+        ],
+        "metaDescription": "Use the Prometheus data source in Grafana.",
+        "metaTitle": "Grafana Dashboards for Spring Boot Service Health"
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P11",
+        "hook": "A Grafana dashboard for a Spring Boot service should answer four questions at a glance — the four golden signals: latency, traffic (request rate), errors, and saturation.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most Grafana dashboards fail not because the data is wrong but because the layout is wrong. Fifty charts in random order, raw counter values instead of rates, no connection between a spike on screen and the runbook that explains what to do about it. During an outage — the exact moment the dashboard matters most — engineers waste precious minutes scanning for the right panel instead of triaging the problem. A well-designed dashboard is structured around Google's four golden signals."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Familiarity with Grafana, PromQL, and the four golden signals framework."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Four golden signals are the required minimum — request rate, error rate, P99 latency, and saturation (JVM heap + connection pool); everything else is diagnostic detail P99 latency with histogram_quantile — histogram_quantile(0",
+              "99, rate(http_server_requests_seconds_bucket[5m])); P99 shows the experience of the worst-affected 1% of users; mean latency hides tail latency problems JVM heap sawtooth is normal; rising baseline without drops indicates memory leak — regular GC reclaims heap; a rising baseline between GC cycles means objects are being promoted to old generation faster than GC can collect them hikaricp_connections_pending > 0 is the connection pool saturation signal — threads waiting for a connection; increase pool size or reduce query duration; hikaricp_connections_active approaching maximumPoolSize confirms saturation Grafana variables for multi-service dashboards — $application and $env variables let one dashboard serve all services; avoid duplicating dashboards per service"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Most Grafana dashboards fail not because the data is wrong but because the layout is wrong. Fifty charts in random order, raw counter values instead of rates, no connection between a spike on screen and the runbook that explains what to do about it. During an outage — the exact moment the dashboard matters most — engineers waste precious minutes scanning for the right panel instead of triaging the problem. A well-designed dashboard is structured around Google's four golden signals: latency, traffic, errors, and saturation. These four measurements capture user-visible health completely. If latency is low, traffic is flowing, errors are rare, and resources are not saturated, the service is healthy. Any deviation is immediately visible. For Spring Boot services."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Building dashboards that show raw counter values instead of rates, which are flat lines until a reset occurs"
+            ]
+          }
+        ],
+        "cap": "Use Grafana's variable feature for $application and $environment to make one dashboard serve all services.",
+        "familiarity_anchors": [
+          "Prometheus",
+          "Grafana",
+          "Build"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What are the four golden signals and where do they come from?",
+          "How do you set up Grafana dashboard provisioning as code?",
+          "What is the difference between a Grafana alert and a Prometheus alerting rule?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with Micrometer and OpenTelemetry"
+      }
+    }
+  ]
+}

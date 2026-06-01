@@ -1,0 +1,620 @@
+{
+  "topic": "Caching at Scale",
+  "topicSlug": "caching-at-scale",
+  "questions": [
+    {
+      "id": "sd-004",
+      "slug": "design-distributed-cache",
+      "question": "How do you design a caching strategy for a high-traffic Java API? What caching patterns should you know?",
+      "title": "Distributed Caching Strategy — Patterns and Trade-offs",
+      "direct_answer": "Layer caches by latency budget: **L1 in-process (Caffeine, ~100 ns)** for hottest keys, **L2 distributed (Redis cluster, ~1 ms)** for shared state, **L3 CDN/edge** for cacheable HTTP. Pick a **read/write pattern per use case** — cache-aside is the safe default; read-through and write-behind have specific niches. Set **TTLs and eviction (LRU/LFU)** per workload. Defend against **stampedes** (request coalescing + jittered TTL), **hot keys** (key replication or local L1), and **stale data** (versioned keys + invalidation events).",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 13,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Multi-layer cache topology, read/write pattern selection, eviction & TTL, and operational hazards (stampede, hot key, staleness, consistency).",
+        "common_mistake": "Treating Redis as a single 'the cache' with one TTL, ignoring stampedes, and using write-back for systems where data loss is unacceptable.",
+        "to_stand_out": "Justify per-key cache pattern based on read/write ratio + tolerance for staleness, walk through stampede mitigation (singleflight + jitter), and discuss invalidation via pub/sub for multi-instance L1 caches."
+      },
+      "company_tags": [
+        "Redis Labs",
+        "Netflix",
+        "Amazon",
+        "Cloudflare",
+        "Stripe"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Framing the Problem and What Makes Caching Hard",
+            "content": "\"Add a cache\" is the most common performance recommendation — and the most commonly misapplied. The hard parts:\n\n- **Cache invalidation** — the older it is, the more often it's wrong; the newer it is, the less it helps.\n- **Stampedes** — a popular key expires and 10,000 simultaneous requests hammer the source system in the next millisecond.\n- **Hot keys** — a single key (the trending product, the top user) absorbs 10× the traffic of any other.\n- **Multi-tier consistency** — in-process L1 caches across 50 instances can hold different versions; users see flicker.\n- **Failure modes** — cache outage often takes the source DB down too (load multiplier).\n\nThe central architectural decisions: **how many tiers**, **which read/write pattern per tier**, **eviction strategy**, and **how to defend against operational hazards** (stampede, hot key, staleness)."
+          },
+          {
+            "type": "step",
+            "title": "Cache Tiers — L1 / L2 / L3",
+            "content": "**L1 — in-process (Caffeine)**\n- Latency: ~100 ns. Throughput: millions ops/sec per instance.\n- Best for: hottest reads (top product, popular config) where eventual consistency across instances is OK.\n- Risk: divergent state across instances; needs invalidation channel (Redis pub/sub or Kafka topic).\n\n**L2 — distributed (Redis cluster)**\n- Latency: ~0.5–1 ms within a region.\n- Best for: shared state across instances, session data, computed views, derived aggregates.\n- Sharded by key hash; read/write throughput scales horizontally.\n\n**L3 — CDN / edge**\n- Latency: ~10–50 ms (RTT to edge).\n- Best for: cacheable HTTP responses keyed on URL + a small set of headers.\n- Trade-off: invalidation is expensive and slow; use short TTLs with `stale-while-revalidate`.\n\n**Picking tiers per workload**\n- Hot product detail page: L1 + L2 + L3 (URL with versioned ID).\n- User session: L2 only (multi-instance, no need for edge).\n- Computed analytics dashboard: L2 with longer TTL.\n- Per-user feed: L2 only (not cacheable at edge — private)."
+          },
+          {
+            "type": "step",
+            "title": "Read/Write Patterns — Cache-Aside, Read-Through, Write-Through, Write-Behind",
+            "content": "**Cache-aside (lazy)** — the default 95% of the time.\n- Read: app checks cache; if miss, reads DB, populates cache, returns.\n- Write: app updates DB, then invalidates (or updates) cache.\n- Pros: simple, cache failure doesn't break correctness.\n- Cons: stampede on miss, application code touches both stores.\n\n**Read-through** — cache library handles the miss.\n- App reads cache; library fetches from DB on miss and populates.\n- Used with Caffeine `LoadingCache` and Redis client libraries.\n- Cleaner code; same semantics as cache-aside otherwise.\n\n**Write-through** — cache writes to source synchronously.\n- App writes to cache; cache writes to DB before returning.\n- Pros: cache stays consistent.\n- Cons: write latency = max(cache, DB); cache outage blocks writes.\n\n**Write-behind / write-back** — async DB write.\n- App writes to cache; cache batches writes to DB.\n- Pros: extreme write throughput.\n- Cons: data loss window if cache fails before flush. Reserve for metrics/analytics where loss is OK; never for orders, payments, identity.\n\n**Decision rule:**\n- Read-heavy + tolerant of brief staleness → cache-aside or read-through.\n- Write-heavy with strong consistency → write-through.\n- Metrics/counters → write-behind with bounded loss window."
+          },
+          {
+            "type": "step",
+            "title": "Eviction Policies — LRU, LFU, TTL",
+            "content": "**LRU (Least Recently Used)** — evicts entries unused longest.\n- Default for most workloads; good fit when access patterns shift gradually.\n- Caffeine and Redis (`maxmemory-policy allkeys-lru`) both support.\n\n**LFU (Least Frequently Used)** — evicts entries with lowest hit count.\n- Better for stable hot sets where a few keys dominate.\n- Caffeine's W-TinyLFU is a notable hybrid — TinyLFU sketch for frequency + LRU window for recency.\n\n**TTL-based** — entries expire after a fixed time.\n- Combine with LRU for size-bounded caches.\n- TTL is the freshness contract; LRU is the size contract.\n\n**FIFO / Random** — rare; sometimes used in CDN edges for simplicity.\n\n**Per-key TTL strategies:**\n- **Short** (seconds) for fast-changing data (rates, prices).\n- **Long** (hours) for catalog data with explicit invalidation on update.\n- **Jittered** (e.g., base 5min ± 30s random) to avoid synchronized expiry that triggers stampedes."
+          },
+          {
+            "type": "step",
+            "title": "High-Level Caching Topology",
+            "content": "```mermaid\nflowchart LR\n    Client([Client])\n    CDN[CDN / Edge<br/>L3]\n    LB[Load Balancer]\n    App1[App Instance 1<br/>L1 Caffeine]\n    App2[App Instance 2<br/>L1 Caffeine]\n    Redis[(Redis Cluster<br/>L2 distributed)]\n    DB[(Source DB<br/>PostgreSQL / Cassandra)]\n    Bus{{Redis Pub/Sub<br/>invalidation events}}\n\n    Client --> CDN\n    CDN -.miss.-> LB\n    LB --> App1\n    LB --> App2\n    App1 --> Redis\n    App2 --> Redis\n    Redis -.miss.-> DB\n    App1 -.publish invalidations.-> Bus\n    App2 -.publish invalidations.-> Bus\n    Bus -.broadcast.-> App1\n    Bus -.broadcast.-> App2\n\n    classDef edge fill:#dbeafe,stroke:#3b82f6\n    classDef svc fill:#dcfce7,stroke:#22c55e\n    classDef store fill:#fee2e2,stroke:#ef4444\n    classDef bus fill:#fef3c7,stroke:#f59e0b\n    class CDN,LB edge\n    class App1,App2 svc\n    class Redis,DB store\n    class Bus bus\n```\n\n**Read flow:** L1 → L2 → source. First hit at any tier returns; populate downstream tiers on the way back if warranted.\n\n**Write flow:** write source first → invalidate L2 entry → publish invalidation event on bus → each app instance evicts its L1 entry. Critical: write source first so a concurrent reader-on-miss reads correct value."
+          },
+          {
+            "type": "step",
+            "title": "LLD — Class Design of a Layered Cache Manager",
+            "content": "Application code shouldn't think about tiers; one façade abstracts them.\n\n```mermaid\nclassDiagram\n    class CacheManager~K,V~ {\n        +get(key, loader) V\n        +put(key, value)\n        +invalidate(key)\n    }\n    class CacheLayer~K,V~ {\n        <<interface>>\n        +get(key) Optional~V~\n        +put(key, value, ttl)\n        +invalidate(key)\n    }\n    class CaffeineLayer\n    class RedisLayer\n    class StampedeGuard {\n        +singleflight(key, loader) V\n    }\n    class InvalidationBus {\n        +publish(key)\n        +subscribe(handler)\n    }\n    class TtlPolicy {\n        +ttlFor(key) Duration\n    }\n\n    CacheManager --> CacheLayer\n    CacheManager --> StampedeGuard\n    CacheManager --> InvalidationBus\n    CacheManager --> TtlPolicy\n    CacheLayer <|.. CaffeineLayer\n    CacheLayer <|.. RedisLayer\n```\n\n**Key code paths:**\n\n```java\npublic class LayeredCacheManager<K, V> {\n    public V get(K key, Supplier<V> loader) {\n        Optional<V> l1 = caffeine.get(key);\n        if (l1.isPresent()) return l1.get();\n\n        Optional<V> l2 = redis.get(key);\n        if (l2.isPresent()) {\n            caffeine.put(key, l2.get(), ttl.ttlFor(key));\n            return l2.get();\n        }\n\n        return guard.singleflight(key, () -> {\n            V loaded = loader.get();\n            redis.put(key, loaded, ttl.ttlFor(key));\n            caffeine.put(key, loaded, ttl.ttlFor(key));\n            return loaded;\n        });\n    }\n\n    public void invalidate(K key) {\n        caffeine.invalidate(key);\n        redis.invalidate(key);\n        bus.publish(key);          // peers evict their L1\n    }\n\n    @PostConstruct void subscribe() {\n        bus.subscribe(key -> caffeine.invalidate(key));\n    }\n}\n```\n\nWhy this shape:\n\n- **`CacheLayer` interface** — swap implementations (in-memory for tests, Caffeine/Redis for prod).\n- **`StampedeGuard.singleflight`** — only one caller per key fetches from the source; others wait.\n- **`InvalidationBus`** — keeps L1 caches across instances coherent.\n- **`TtlPolicy`** centralizes per-key TTL decisions (jitter, per-namespace overrides)."
+          },
+          {
+            "type": "step",
+            "title": "Stampede / Thundering Herd Mitigation",
+            "content": "When a hot key expires, all in-flight requests miss simultaneously and dog-pile the source.\n\n**Mitigations (use together):**\n\n1. **Singleflight (request coalescing)** — first miss locks the key; subsequent misses on the same key wait for the first to complete and reuse its result.\n2. **Jittered TTL** — expire times spread across a window (e.g., 300s ± 30s) so synchronized expiry doesn't happen.\n3. **Probabilistic early refresh** — with probability proportional to (age / TTL)², refresh before expiry. Smooths out the cliff.\n4. **Stale-while-revalidate** — return stale value immediately; refresh in background. Eliminates user-visible miss latency at the cost of brief staleness.\n5. **Negative caching** — cache \"not found\" briefly so missing-key probes don't repeat-hit the DB.\n\nCombine 1+2 for most cases; add 3+4 for ultra-hot keys."
+          },
+          {
+            "type": "step",
+            "title": "Hot Keys, Sharding, and Replication",
+            "content": "**The problem:** in a Redis Cluster, each key hashes to a single shard. A super-hot key (top trending product) can saturate that shard while others sit idle.\n\n**Mitigations:**\n\n- **Local L1 absorbs the heat** — hot keys are precisely what L1 is for; per-instance Caffeine keeps the load off Redis.\n- **Key replication** — write the value under N shadow keys (`product:42:0`, `product:42:1`, ...); read from a random shadow on each request.\n- **Read replicas** — Redis read replicas serve `READONLY` clients; writes still go through primary.\n- **Pre-aggregate** — if the hot data is a counter, use atomic INCR locally per instance and flush to Redis periodically.\n\n**Detection:** Redis `OBJECT FREQ` (with LFU eviction) or external sampling identifies hot keys. Alert when a single key exceeds 10× average shard QPS."
+          },
+          {
+            "type": "step",
+            "title": "Invalidation Strategies and Consistency Models",
+            "content": "**Cache-aside invalidation patterns:**\n\n- **Write-through invalidation** — on write, evict cache entries; next read repopulates. Simple; brief miss penalty.\n- **Write-around** — writes go straight to DB; cache untouched until expiry. Good for write-heavy + read-cold.\n- **Versioned keys** — cache key includes version (`product:42:v3`). Update bumps version; old key naturally evicts via LRU. Avoids race where reader between DB write and cache evict reads stale.\n\n**Multi-instance L1 invalidation:**\n\n- App instance A updates a record → publishes `invalidated:product:42` to Redis pub/sub.\n- All app instances subscribe; on receipt, evict L1 entry.\n- Bounded staleness: L1 is consistent within ~milliseconds across the fleet.\n\n**Strong-consistency caching is a contradiction** — if you need strong consistency, don't cache. If you must, use cache-aside with versioned keys + write-through invalidation, accepting brief windows of misses on writes."
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes",
+            "content": "**Cache outage causes DB overload (the classic)**\n\n- All cache misses fall through to the DB; if cache hit rate was 99%, suddenly DB sees 100× traffic.\n- **Mitigations:** circuit breaker on the source DB (shed load, return cached-but-stale where possible), in-process L1 absorbs hottest keys for the cache outage duration.\n\n**Cache split-brain (two writers)**\n\n- App A writes value v3, app B writes value v2 (older); race makes v2 win.\n- **Mitigation:** versioned keys; only accept update if new version > existing version.\n\n**Stale data after deploy**\n\n- New code expects a different schema in cached values.\n- **Mitigation:** include schema version in cache key (`product:42:schema-v2`).\n\n**Memory pressure**\n\n- Cache fills up; eviction starts thrashing.\n- **Mitigation:** monitor `evicted_keys/sec` and `mem_used`; alert before eviction begins."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Layer caches by latency budget** — L1 in-process (Caffeine), L2 distributed (Redis), L3 CDN.\n- **Cache-aside is the safe default**; reserve write-through for strong-consistency, write-behind for loss-tolerant counters.\n- **Eviction = LRU + TTL with jitter**; LFU (W-TinyLFU) for stable hot sets.\n- **Singleflight + jittered TTL + stale-while-revalidate** defend against stampedes.\n- **Local L1 absorbs hot keys**; shadow-key replication for distributed-tier hot keys.\n- **Versioned keys + pub/sub invalidation bus** keep multi-instance L1 caches coherent.\n- **Cache outage takes down the DB** unless you have circuit breakers and L1 fallback."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Clarifying questions I'd ask first**\n\n- What's the read/write ratio per data type?\n- How stale can the cached data be — seconds, minutes, hours?\n- Multi-instance fleet — do they need to agree on cached values?\n- Critical paths that can never read stale (payments, inventory)?\n- Hot key suspects (top product, viral content)?\n\n**Layered caching topology**\n\n- L1 in-process (Caffeine): ~100ns, hottest keys, eventual consistency across instances\n- L2 distributed (Redis cluster): ~1ms, shared state, sharded by key hash\n- L3 CDN/edge: ~10-50ms, public HTTP responses with short TTLs\n\n**Read/write patterns — pick per use case**\n\n- Cache-aside is the safe 95% default — app reads cache, on miss reads DB, populates cache; on write, updates DB then invalidates cache\n- Read-through wraps the miss in the cache library (Caffeine LoadingCache)\n- Write-through writes to cache and DB synchronously — strong consistency at write-latency cost\n- Write-behind batches DB writes asynchronously — fast but risks data loss; reserve for metrics/counters\n\n**Eviction**\n\n- LRU default; LFU (W-TinyLFU in Caffeine) for stable hot sets\n- TTL is the freshness contract; LRU is the size contract — use both\n- Jitter TTLs (base ± random) to avoid synchronized expiry stampedes\n\n**Stampede mitigation — multiple defenses together**\n\n- Singleflight: first miss locks the key, others wait and reuse the result\n- Jittered TTL spreads expiries\n- Probabilistic early refresh smooths the cliff\n- Stale-while-revalidate returns stale immediately, refreshes in background\n- Negative caching for missing-key probes\n\n**Hot keys**\n\n- Local L1 absorbs heat for super-hot keys\n- Shadow-key replication (`product:42:0`, `:1`, ...) spreads across shards\n- Read replicas for read-heavy hot keys\n- Pre-aggregate counters in app then flush\n\n**Multi-instance L1 coherence**\n\n- Versioned keys eliminate read-after-write races\n- Pub/sub invalidation bus broadcasts evicts to all app instances; bounded staleness in milliseconds\n\n**LLD**\n\n- One `LayeredCacheManager` façade hides tiers from app code\n- `CacheLayer` interface (Caffeine impl, Redis impl, in-memory test impl)\n- `StampedeGuard.singleflight(key, loader)` for the miss path\n- `TtlPolicy` centralizes per-key TTL\n- `InvalidationBus` keeps L1s coherent\n\n**Failure modes**\n\n- Cache outage = DB overload (hit rate collapse → 100x DB traffic) — needs circuit breaker + L1 fallback\n- Split-brain on concurrent writes — versioned keys with monotonic version check\n- Stale-after-deploy — schema version in cache key\n- Memory pressure — alert on evicted_keys/sec before thrashing\n\n**Recommendation**\n\n**Three-tier topology (L1 Caffeine + L2 Redis + L3 CDN), cache-aside as the default pattern with read-through where the abstraction fits, LRU+TTL with jitter, singleflight for stampedes, local L1 for hot keys, versioned keys with pub/sub invalidation for multi-instance coherence, and a circuit breaker on the source DB so cache outage doesn't cascade.** That's the same shape Netflix, Stripe, and modern Spring/Java stacks run."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Walk through the exact sequence when a hot key (1M req/s) expires — what fails without singleflight?",
+        "How would you migrate a cache from one schema to another with zero downtime?",
+        "When does write-through become preferable to cache-aside?",
+        "Design a per-region cache topology where regions need to share invalidations but data is regional."
+      ],
+      "seo": {
+        "metaTitle": "Distributed Caching Strategy — Patterns, Tiers, Stampede Defense",
+        "metaDescription": "Multi-tier cache topology (Caffeine L1, Redis L2, CDN L3), cache-aside vs read-through vs write-through vs write-behind, eviction (LRU/LFU/TTL with jitter), stampede mitigation (singleflight, SWR, probabilistic refresh), hot-key handling, and pub/sub invalidation."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P06",
+        "hook": "Clarifying questions I'd ask first What's the read/write ratio per data type? How stale can the cached data be — seconds, minutes, hours? Multi-instance fleet — do they need to agree on cached values? Critical.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "\"Add a cache\" is the most common performance recommendation — and the most commonly misapplied. The hard parts: Cache invalidation — the older it is, the more often it's wrong; the newer it is, the less it helps. Stampedes — a popular key expires and 10,000 simultaneous requests hammer the source system in the next millisecond. Hot keys — a single key (the trending product, the top user) absorbs 10× the traffic of any other. Multi-tier consistency — in-process L1 caches across 50 instances can hold different versions; users see flicker. Failure modes — cache outage often takes the source DB down too (load multiplier). The central architectural decisions: how many tiers, which read/write pattern per tier, eviction strategy, and."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "\"Add a cache\" is the most common performance recommendation — and the most commonly misapplied. The hard parts: Cache invalidation — the older it is, the more often it's wrong; the newer it is, the less it helps. Stampedes — a popular key expires and 10,000 simultaneous requests hammer the source system in the next millisecond. Hot keys — a single key (the trending product, the top user) absorbs 10× the traffic of any other. Multi-tier consistency — in-process L1 caches across 50 instances can hold different versions; users see flicker. Failure modes — cache outage often takes the source DB down too (load multiplier). The central architectural decisions: how."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "L1 — in-process (Caffeine) Latency: ~100 ns",
+              "Throughput: millions ops/sec per instance",
+              "Best for: hottest reads (top product, popular config) where eventual consistency across instances is OK",
+              "Risk: divergent state across instances; needs invalidation channel (Redis pub/sub or Kafka topic)",
+              "L2 — distributed (Redis cluster) Latency: ~0"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "\"Add a cache\" is the most common performance recommendation — and the most commonly misapplied. The hard parts: Cache invalidation — the older it is, the more often it's wrong; the newer it is, the less it helps. Stampedes — a popular key expires and 10,000 simultaneous requests hammer the source system in the next millisecond. Hot keys — a single key (the trending product, the top user) absorbs 10× the traffic of any other. Multi-tier consistency — in-process L1 caches across 50 instances can hold different versions; users see flicker. Failure modes — cache outage often takes the source DB down too (load multiplier). The central architectural decisions: how many tiers, which read/write pattern per tier, eviction strategy, and."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "\"Add a cache\" is the most common performance recommendation — and the most commonly misapplied. The hard parts: Cache invalidation — the older it is, the more often it's wrong; the newer it is, the less it helps. Stampedes — a popular key expires and 10,000 simultaneous requests hammer the source system in the next millisecond. Hot keys — a single key (the trending product, the top user) absorbs 10× the traffic of any other. Multi-tier consistency — in-process L1 caches across 50 instances can hold different versions; users see flicker. Failure modes — cache outage often takes the source DB down too (load multiplier). The central architectural decisions: how many tiers, which read/write pattern per tier, eviction strategy, and."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Treating Redis as a single 'the cache' with one TTL, ignoring stampedes, and using write-back for systems where data loss is unacceptable."
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Layer caches by latency budget — L1 in-process (Caffeine), L2 distributed (Redis), L3 CDN. Cache-aside is the safe default; reserve write-through for strong-consistency, write-behind for loss-tolerant counters. Eviction = LRU + TTL with jitter; LFU (W-TinyLFU) for stable hot sets. Singleflight + jittered TTL + stale-while-revalidate defend against stampedes. Local L1 absorbs hot keys; shadow-key replication for distributed-tier hot keys. Versioned keys + pub/sub invalidation bus keep multi-instance L1 caches coherent. Cache outage takes down the DB unless you have circuit breakers and L1 fallback."
+          }
+        ],
+        "cap": "That's the same shape Netflix, Stripe, and modern Spring/Java stacks run.",
+        "familiarity_anchors": [
+          "Layer",
+          "Caffeine",
+          "Redis"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Walk through the exact sequence when a hot key (1M req/s) expires — what fails without singleflight?",
+          "How would you migrate a cache from one schema to another with zero downtime?",
+          "When does write-through become preferable to cache-aside?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Distributed Java system handling 10k requests per second"
+      }
+    },
+    {
+      "id": "sdf-010",
+      "slug": "cdn-edge-caching",
+      "question": "How do CDNs and edge caching reduce latency for global users? When should you use them?",
+      "title": "CDN and Edge Caching: Reducing Latency for Global Users",
+      "direct_answer": "A CDN is a globally distributed network of **edge POPs** that cache content close to users. Latency drops because requests terminate within ~10–50 ms of the user instead of crossing oceans. Use a CDN for **static assets** (JS/CSS/images), **video segments** (immutable HLS chunks), **public API responses** with cacheable shapes, and **origin shielding** even for dynamic content. The key levers are the **`Cache-Control` header**, **cache key design** (URL + a few headers), and **invalidation strategy** (short TTL + `stale-while-revalidate` beats explicit purges for most use cases).",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Edge caching mechanics, cacheability rules (`Cache-Control`, `Vary`), TTL strategy, invalidation, and origin-shield patterns.",
+        "common_mistake": "Caching personalized responses without `Vary` or auth-token consideration (cross-user data leak), or relying on explicit purges for high-churn content.",
+        "to_stand_out": "Discuss `stale-while-revalidate`, multi-CDN steering, edge compute (workers/functions) for personalization at the edge, and content-addressed asset URLs (`app.abc123.js`) so cache is effectively forever."
+      },
+      "company_tags": [
+        "Cloudflare",
+        "Akamai",
+        "Netflix",
+        "Amazon CloudFront",
+        "Fastly"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Edge Caching Exists",
+            "content": "Speed of light through fiber is roughly 200,000 km/s. A round trip from Sydney to a US-East origin is ~250 ms physically — before any compute. For a page that loads 50 assets, that's 12+ seconds of pure network latency.\n\nCDNs solve this by terminating requests at **edge POPs** — hundreds of small datacenters spread across the globe. The user's request hits the nearest POP (often <30 ms away), which serves a cached response if available, or proxies to origin and caches the result.\n\nThe second job of a CDN is **scale absorption** — a viral page that would melt your origin can be served entirely from edge cache, with origin seeing a tiny fraction of total traffic."
+          },
+          {
+            "type": "step",
+            "title": "What Belongs on a CDN",
+            "content": "**Always cache:**\n- Static assets (JS, CSS, images, fonts) — immutable when content-addressed (`app.abc123.js`).\n- Video segments (HLS/DASH `.ts` / `.m4s`) — immutable.\n- Public API responses with stable URLs (top products list, news feed for anonymous users).\n\n**Cache with care:**\n- HTML pages — if mostly static; use short TTL + SWR for personalization at edge.\n- Search results — popular queries cache well; long-tail does not.\n- Geo-targeted content — vary by country; CDN supports vary by client geo.\n\n**Don't cache:**\n- Per-user data with auth tokens — unless using edge compute to personalize after a cached base response.\n- POST/PUT/DELETE responses — mutations.\n- Very low-traffic dynamic content — cache hit rate too low to justify the complexity."
+          },
+          {
+            "type": "step",
+            "title": "Cache-Control — The Key Header",
+            "content": "The `Cache-Control` header tells the CDN (and browser) how long to cache and under what conditions.\n\n```http\n# Static asset, content-addressed: cache forever\nCache-Control: public, max-age=31536000, immutable\n\n# API response, public, 60 seconds\nCache-Control: public, max-age=60, stale-while-revalidate=120\n\n# Personalized response: don't share across users\nCache-Control: private, max-age=10\n\n# Never cache\nCache-Control: no-store\n```\n\n**Key directives:**\n- `public` — CDN can cache.\n- `private` — only browser, not CDN.\n- `max-age=N` — fresh for N seconds.\n- `stale-while-revalidate=M` — serve stale up to M seconds while async-fetching fresh.\n- `immutable` — content never changes; browser skips revalidation.\n- `no-store` — never cache anywhere.\n\n**The `Vary` header** — splits cache by request header values:\n```http\nVary: Accept-Encoding, Accept-Language\n```\nCritical: never `Vary: Cookie` or `Vary: Authorization` on a public response — explodes cache cardinality and risks cross-user leaks."
+          },
+          {
+            "type": "step",
+            "title": "Cache Key Design and Content-Addressed URLs",
+            "content": "**Cache key** = canonical request identity. Default is method + URL. Add headers via `Vary`.\n\n**Best practice for static assets: content-addressed URLs.**\n\n```\nbefore: /js/app.js  (changes content-but-not-URL → invalidation needed)\nafter:  /js/app.abc123def.js  (URL changes when content changes)\n```\n\nWith content-addressed URLs:\n- Cache forever (`max-age=31536000, immutable`).\n- New version = new URL = new cache entry; old URL still valid for users mid-flight.\n- No invalidation needed.\n\nWebpack, Vite, and similar bundlers do this automatically.\n\n**For dynamic content:** keep query params canonical (sorted, no extras), strip cookies that don't affect output, normalize before hashing into the cache key."
+          },
+          {
+            "type": "step",
+            "title": "Multi-Tier CDN and Origin Shield",
+            "content": "Modern CDNs are tiered:\n\n```\nUser  →  Edge POP (city)  →  Regional shield (continent)  →  Origin\n```\n\n- **Edge POPs** (~hundreds): serve hot content; ~80% hit rate for popular sites.\n- **Regional shield** (~tens): backstop for edge misses; aggregates traffic before hitting origin.\n- **Origin**: your servers / object store; final source of truth.\n\n**Why a shield tier:** without it, every edge miss hits origin; a viral piece of content with cold-cache POPs would overwhelm origin egress. The shield consolidates misses across all edges in a region.\n\n**Origin shield is also a defense against thundering herd** — if a viral video's segment isn't yet cached, only the shield-to-origin request happens, not 200 simultaneous edge-to-origin requests."
+          },
+          {
+            "type": "step",
+            "title": "Invalidation — TTL First, Purge Second",
+            "content": "**Two ways to expire cached content:**\n\n1. **TTL-based** (the right default) — set short `max-age` (e.g., 60s) with `stale-while-revalidate` (e.g., 600s).\n   - Always-fresh enough; never blocks origin on misses (SWR refreshes async).\n   - No coordination needed.\n\n2. **Purge-based** — explicit API call to evict cache entry.\n   - Slow (seconds-to-minutes for global propagation).\n   - Quotas often limit purges per second.\n   - Reserve for emergencies (legal takedown, security fix).\n\n**Tag-based purging** (where supported, e.g., Fastly Surrogate-Key, Cloudflare Cache-Tag):\n- Attach tags to responses (`Cache-Tag: product-42, category-electronics`).\n- Purge by tag invalidates all entries with that tag.\n- Useful for catalog updates that touch many cached pages.\n\n**Stale-while-revalidate is your friend** — user gets instant response (stale), CDN refreshes in background; next user sees fresh. No user ever sees the slow miss path."
+          },
+          {
+            "type": "step",
+            "title": "Edge Compute — Personalization Without Losing Cache",
+            "content": "Modern CDNs (Cloudflare Workers, Fastly Compute@Edge, AWS Lambda@Edge) run code at the POP.\n\n**Pattern:** cache the base HTML aggressively; personalize with edge JavaScript that injects user-specific bits (greeting, cart count) using cookies or auth tokens — without round-tripping to origin.\n\n```js\n// Cloudflare Worker pseudo\naddEventListener('fetch', e => e.respondWith(handle(e.request)));\nasync function handle(req) {\n  const cached = await caches.default.match(req);\n  if (!cached) return fetch(req);                                  // origin\n  const userId = req.headers.get('cookie')?.match(/uid=(\\w+)/)?.[1];\n  if (!userId) return cached;\n  const html = await cached.text();\n  return new Response(html.replace('{{user}}', userId),\n    {headers: cached.headers});\n}\n```\n\nGives you the cache hit rate of public content with per-user personalization."
+          },
+          {
+            "type": "step",
+            "title": "Multi-CDN, Failure Modes, and Operational Hazards",
+            "content": "**Multi-CDN steering:**\n- Use 2–3 providers (Cloudflare + Akamai + Fastly).\n- DNS-based or client-side picks fastest/cheapest per viewer.\n- Resilience: one provider's outage doesn't take you down.\n- Cost arbitrage by region.\n\n**Failure modes:**\n- **CDN serves stale on origin error** (most CDNs do this by default with `stale-if-error`) — user sees old content rather than 5xx during origin outage.\n- **CDN cache poisoning** — a malformed or attacker-crafted request gets cached and replayed; mitigate with strict cache key normalization and request validation at edge.\n- **Geo failures** — single POP outage; CDN auto-routes to next-nearest.\n- **`Vary` cardinality explosion** — vary on too many headers → cache hit rate collapses.\n- **TTL-stampede on synchronized expiry** — if all users hit a popular page right at the moment cache expires, 1 request goes to origin (serializable via SWR or origin shield), so it's mostly self-healing if SWR is enabled."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **CDN = global edge POPs** terminating requests near the user; reduces RTT from hundreds of ms to tens of ms.\n- **Cache static assets aggressively** with content-addressed URLs (`app.abc123.js`) and `max-age=31536000, immutable`.\n- **Cache public dynamic responses** with short `max-age` + `stale-while-revalidate` for SWR.\n- **`Vary` only on headers that genuinely affect output**; never on cookies / auth.\n- **Multi-tier (edge → regional shield → origin)** absorbs misses; origin sees a fraction of total traffic.\n- **TTL-based expiry beats explicit purges** for high-churn content; purge for emergencies / tag-based for catalog updates.\n- **Edge compute** lets you personalize without losing cache.\n- **Multi-CDN** for resilience and cost optimization."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**The why**\n\nSpeed of light through fiber across continents is hundreds of milliseconds round-trip; load 50 assets and you're at 12+ seconds before any compute. CDNs put cached content within ~30ms of the user via edge POPs. Second benefit: scale absorption — a viral page served from edge means origin sees a tiny fraction of total traffic.\n\n**What belongs on CDN**\n\n- Always: static assets (JS/CSS/images/fonts), video segments, public API responses\n- With care: HTML for mostly-static pages, search results for popular queries, geo-targeted\n- Never: per-user authenticated, mutations, very low-traffic dynamic\n\n**Cache-Control is the key knob**\n\n- `public, max-age=60, stale-while-revalidate=120` for cacheable API responses\n- `public, max-age=31536000, immutable` for content-addressed static assets\n- `private, max-age=10` for personalized\n- `Vary` only on headers that genuinely affect output — NEVER on cookies or auth (cardinality explosion + cross-user leak risk)\n\n**Content-addressed URLs**\n\n`app.abc123.js` so URL changes when content changes; cache forever; no invalidation needed; old URL still valid for in-flight users. Webpack/Vite do this automatically.\n\n**Multi-tier topology**\n\n- Edge POP (city) → Regional shield (continent) → Origin\n- Edge hits ~80% for popular content; shield aggregates misses; origin sees ~5-10% of total\n- Shield also defends against thundering herd — viral video's segment hits origin once, not from 200 edges simultaneously\n\n**Invalidation — TTL first, purge second**\n\n- TTL with stale-while-revalidate is the default — user gets instant stale response, CDN refreshes in background\n- Explicit purge is slow (seconds-to-minutes globally), quota-limited; reserve for emergencies\n- Tag-based purging for catalog-wide updates (Cache-Tag / Surrogate-Key)\n\n**Edge compute for personalization**\n\n- Cloudflare Workers / Fastly Compute@Edge run code at the POP\n- Cache the base HTML aggressively; inject user-specific bits at edge using cookies\n- Public-content cache hit rate with per-user personalization\n\n**Multi-CDN**\n\n- 2-3 providers; DNS or client-side steering picks fastest/cheapest per viewer\n- Resilience: one provider down doesn't take you down\n- Cost arbitrage across regions\n\n**Failure handling**\n\n- `stale-if-error` serves stale during origin outage\n- Cache poisoning: strict key normalization + edge request validation\n- Geo POP outage: CDN auto-routes to next-nearest\n\n**Recommendation**\n\n**Use a CDN for any static asset, video segment, or cacheable API response. Set short `max-age` with `stale-while-revalidate` for dynamic content; content-address static assets to cache forever. Use a multi-tier topology with origin shield to protect origin from viral spikes. Reach for explicit purges only in emergencies; everything else is TTL + SWR + content addressing.** That's how Netflix, Cloudflare, and modern web stacks run."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Design the cache strategy for a personalized news feed where 90% of items are public but the ranking is per-user.",
+        "How would you structure Cache-Control headers for an e-commerce product page with prices that change every few minutes?",
+        "Compare CDN purge-by-tag vs short TTLs — when does each win?",
+        "How do you keep a CDN's cache warm after a deploy that invalidates everything?"
+      ],
+      "seo": {
+        "metaTitle": "CDN and Edge Caching — Cache-Control, TTL, SWR, Multi-CDN",
+        "metaDescription": "How CDNs reduce latency: edge POPs, content-addressed URLs, Cache-Control directives, Vary header pitfalls, multi-tier with origin shield, stale-while-revalidate, edge compute personalization, multi-CDN steering."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P06",
+        "hook": "The why Speed of light through fiber across continents is hundreds of milliseconds round-trip; load 50 assets and you're at 12+ seconds before any compute.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Speed of light through fiber is roughly 200,000 km/s. A round trip from Sydney to a US-East origin is ~250 ms physically — before any compute. For a page that loads 50 assets, that's 12+ seconds of pure network latency. CDNs solve this by terminating requests at edge POPs — hundreds of small datacenters spread across the globe. The user's request hits the nearest POP (often <30 ms away), which serves a cached response if available, or proxies to origin and caches the result. The second job of a CDN is scale absorption — a viral page that would melt your origin can be served entirely from edge cache, with origin seeing a tiny fraction of total traffic."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Speed of light through fiber is roughly 200,000 km/s. A round trip from Sydney to a US-East origin is ~250 ms physically — before any compute. For a page that loads 50 assets, that's 12+ seconds of pure network latency. CDNs solve this by terminating requests at edge POPs — hundreds of small datacenters spread across the globe. The user's request hits the nearest POP (often <30 ms away), which serves a cached response if available, or proxies to origin and caches the result. The second job of a CDN is scale absorption — a viral page that would melt your origin can be served entirely from edge cache, with."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Always cache: Static assets (JS, CSS, images, fonts) — immutable when content-addressed (app",
+              "Video segments (HLS/DASH",
+              "m4s) — immutable",
+              "Public API responses with stable URLs (top products list, news feed for anonymous users)",
+              "Cache with care: HTML pages — if mostly static; use short TTL + SWR for personalization at edge"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Speed of light through fiber is roughly 200,000 km/s. A round trip from Sydney to a US-East origin is ~250 ms physically — before any compute. For a page that loads 50 assets, that's 12+ seconds of pure network latency. CDNs solve this by terminating requests at edge POPs — hundreds of small datacenters spread across the globe. The user's request hits the nearest POP (often <30 ms away), which serves a cached response if available, or proxies to origin and caches the result. The second job of a CDN is scale absorption — a viral page that would melt your origin can be served entirely from edge cache, with origin seeing a tiny fraction of total traffic."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Speed of light through fiber is roughly 200,000 km/s. A round trip from Sydney to a US-East origin is ~250 ms physically — before any compute. For a page that loads 50 assets, that's 12+ seconds of pure network latency. CDNs solve this by terminating requests at edge POPs — hundreds of small datacenters spread across the globe. The user's request hits the nearest POP (often <30 ms away), which serves a cached response if available, or proxies to origin and caches the result. The second job of a CDN is scale absorption — a viral page that would melt your origin can be served entirely from edge cache, with origin seeing a tiny fraction of total traffic."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Caching personalized responses without Vary or auth-token consideration (cross-user data leak), or relying on explicit purges for high-churn content."
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "CDN = global edge POPs terminating requests near the user; reduces RTT from hundreds of ms to tens of ms. Cache static assets aggressively with content-addressed URLs (app.abc123.js) and max-age=31536000, immutable. Cache public dynamic responses with short max-age + stale-while-revalidate for SWR. Vary only on headers that genuinely affect output; never on cookies / auth. Multi-tier (edge → regional shield → origin) absorbs misses; origin sees a fraction of total traffic. TTL-based expiry beats explicit purges for high-churn content; purge for emergencies / tag-based for."
+          }
+        ],
+        "cap": "That's how Netflix, Cloudflare, and modern web stacks run.",
+        "familiarity_anchors": [
+          "Latency",
+          "Cache",
+          "Control"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Design the cache strategy for a personalized news feed where 90% of items are public but the ranking is per-user.",
+          "How would you structure Cache-Control headers for an e-commerce product page with prices that change every few minutes?",
+          "Compare CDN purge-by-tag vs short TTLs — when does each win?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Distributed Java system handling 10k requests per second"
+      }
+    },
+    {
+      "id": "sdl-001",
+      "slug": "design-thread-safe-lru-cache-java",
+      "question": "Design a thread-safe LRU cache in Java. How do you handle concurrent reads and writes efficiently?",
+      "title": "Design a Thread-Safe LRU Cache in Java",
+      "direct_answer": "Use a **`HashMap` for O(1) lookup + a doubly linked list for O(1) recency moves**, guarded by a single lock for the simple version. For high concurrency, prefer **`ConcurrentHashMap` + striped locks** (per-segment) or, in production, use **Caffeine's W-TinyLFU** — lock-free reads, batched recency updates via a ring buffer, and far better hit rate than pure LRU. The interview-favorite version implements the HashMap-plus-DLL approach with a `ReentrantLock` and demonstrates `get`/`put` with eviction.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Data structure choice (HashMap + DLL), thread-safety strategy, eviction algorithm correctness, and awareness of concurrency optimizations beyond the naive lock.",
+        "common_mistake": "Using `LinkedHashMap` with `synchronized` blocks (works but doesn't scale), or moving DLL nodes inside `get` without holding the lock (race-prone).",
+        "to_stand_out": "Walk through stripe-locking, batched ring-buffer recency updates (Caffeine's trick), and W-TinyLFU's hit-rate advantage over plain LRU."
+      },
+      "company_tags": [
+        "Google",
+        "Amazon",
+        "Meta",
+        "Caffeine",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "What an LRU Cache Must Do",
+            "content": "An LRU (Least Recently Used) cache holds at most N entries and, when full, evicts the entry not accessed for the longest time. Operations:\n\n- `get(key)` — return value or null; mark this key as most-recently-used.\n- `put(key, value)` — insert or update; mark as MRU; if size exceeds capacity, evict the LRU entry.\n\nBoth must be **O(1) amortized** and **thread-safe** across concurrent callers.\n\nThe two interesting questions: which data structure (HashMap + DLL is canonical) and how to make it thread-safe without serialising every access."
+          },
+          {
+            "type": "step",
+            "title": "The Canonical Single-Threaded Design — HashMap + Doubly Linked List",
+            "content": "- **HashMap** maps key → list node, giving O(1) lookup.\n- **Doubly linked list** orders entries by recency; head = MRU, tail = LRU. O(1) move and O(1) eviction.\n- On `get`: lookup node → unlink → move to head → return value.\n- On `put`: if exists, update value + move to head; if not, create node + add to head; if size > capacity, remove tail node and erase from map.\n\nSentinel head and tail nodes simplify edge cases (no null checks for empty list / single element).\n\n```java\nclass Node<K, V> {\n    K key; V value;\n    Node<K, V> prev, next;\n}\n```\n\nDoubly linked (not singly) because we need O(1) removal of an arbitrary node — the node found via the map."
+          },
+          {
+            "type": "step",
+            "title": "Naive Thread-Safe Version — Single Lock",
+            "content": "```java\npublic class LruCache<K, V> {\n    private final int capacity;\n    private final Map<K, Node<K, V>> map;\n    private final Node<K, V> head, tail;\n    private final ReentrantLock lock = new ReentrantLock();\n\n    public LruCache(int capacity) {\n        this.capacity = capacity;\n        this.map = new HashMap<>(capacity * 2);\n        this.head = new Node<>(); this.tail = new Node<>();\n        head.next = tail; tail.prev = head;\n    }\n\n    public V get(K key) {\n        lock.lock();\n        try {\n            Node<K, V> n = map.get(key);\n            if (n == null) return null;\n            moveToHead(n);\n            return n.value;\n        } finally { lock.unlock(); }\n    }\n\n    public void put(K key, V value) {\n        lock.lock();\n        try {\n            Node<K, V> n = map.get(key);\n            if (n != null) {\n                n.value = value;\n                moveToHead(n);\n                return;\n            }\n            n = new Node<>(); n.key = key; n.value = value;\n            map.put(key, n);\n            addToHead(n);\n            if (map.size() > capacity) {\n                Node<K, V> lru = tail.prev;\n                removeNode(lru);\n                map.remove(lru.key);\n            }\n        } finally { lock.unlock(); }\n    }\n\n    private void moveToHead(Node<K, V> n) { removeNode(n); addToHead(n); }\n    private void addToHead(Node<K, V> n) {\n        n.prev = head; n.next = head.next;\n        head.next.prev = n; head.next = n;\n    }\n    private void removeNode(Node<K, V> n) {\n        n.prev.next = n.next; n.next.prev = n.prev;\n    }\n}\n```\n\nCorrect, but the single lock serialises every access — even `get`. That's fine for ~10K ops/sec but melts at 1M ops/sec."
+          },
+          {
+            "type": "step",
+            "title": "Scaling Concurrency — Striped Locks and Concurrent Maps",
+            "content": "**Stripe locks — partition the cache into N independent segments.**\n\n- Hash key → segment index.\n- Each segment has its own HashMap + DLL + lock.\n- Two threads accessing different segments don't contend.\n- This is exactly what Java 7's `ConcurrentHashMap` did internally; Caffeine extends the idea.\n\n**Trade-off:** the LRU ordering is now *per-segment*; you can't get a strict global LRU. In practice this is fine — the eviction approximation is good enough for cache hit rates.\n\n```java\nint segmentIndex = (key.hashCode() & 0x7fffffff) % numSegments;\nsegments[segmentIndex].put(key, value);\n```\n\n**Read-write lock per segment** can further reduce contention if reads vastly outnumber writes — but be careful: `get` mutates the DLL (moves to head), so it's actually a write operation under the hood. This is where Caffeine's batched-recency-updates trick wins."
+          },
+          {
+            "type": "step",
+            "title": "Caffeine's Trick — Batched Recency via Ring Buffer",
+            "content": "Caffeine (the modern JVM cache) achieves near-zero contention even on reads by **decoupling the read path from the recency update**:\n\n1. `get` is **lock-free** — just a `ConcurrentHashMap` lookup.\n2. The recency update event (\"key X was accessed\") is appended to a **per-thread ring buffer** (lock-free).\n3. A background drain thread (or piggyback on the writer thread) **batches recency updates** and replays them onto the eviction policy data structure.\n\nResult: read throughput approaches raw `ConcurrentHashMap` performance; eviction policy is updated slightly behind real-time but accurately.\n\n**W-TinyLFU policy** (Caffeine's eviction algo) gives 5–10% better hit rate than pure LRU on most workloads, especially under burst access patterns.\n\nFor production code: **use Caffeine**, not a hand-rolled LRU.\n\n```java\nCache<String, User> cache = Caffeine.newBuilder()\n    .maximumSize(10_000)\n    .expireAfterWrite(Duration.ofMinutes(10))\n    .build();\n```\n\nThe interview question is asking for the data-structure understanding, but the right production answer is \"I'd reach for Caffeine and explain why.\""
+          },
+          {
+            "type": "step",
+            "title": "LLD — Class Design",
+            "content": "```mermaid\nclassDiagram\n    class Cache~K,V~ {\n        <<interface>>\n        +get(key) V\n        +put(key, value)\n        +invalidate(key)\n        +size() int\n    }\n    class LruCache {\n        -capacity\n        -map\n        -head\n        -tail\n        -lock\n    }\n    class StripedLruCache {\n        -segments[]\n    }\n    class CaffeineCache {\n        -delegate\n    }\n    class Node~K,V~ {\n        key\n        value\n        prev\n        next\n    }\n\n    Cache <|.. LruCache\n    Cache <|.. StripedLruCache\n    Cache <|.. CaffeineCache\n    LruCache --> Node\n    StripedLruCache --> LruCache\n```\n\nProgramming to the `Cache` interface lets you start with the lock-based LRU for tests and swap to Caffeine in production without touching consumers. `StripedLruCache` is the educational middle step demonstrating segment-based scaling."
+          },
+          {
+            "type": "step",
+            "title": "Edge Cases and Correctness",
+            "content": "**Updating an existing key**\n- Update value AND move to head; both atomic under the lock.\n\n**Eviction during put when key exists**\n- If key already exists, no eviction needed (size unchanged).\n\n**Capacity = 0 or negative**\n- Reject in constructor.\n\n**Null keys/values**\n- Reject by contract; common to mirror `ConcurrentHashMap` (nulls forbidden).\n\n**Iteration**\n- Safe iteration is hard with concurrent eviction. Either snapshot under lock, or document weak-consistency semantics.\n\n**TTL combined with LRU**\n- Add an expiry timestamp per node; lazy expiration on access (`if (expired) remove + return null`); periodic sweep of obviously-expired entries to free memory."
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes and Trade-offs",
+            "content": "**Single-lock LRU**\n- Pro: simple, correct.\n- Con: contention bottleneck above ~100K ops/sec.\n\n**Striped LRU**\n- Pro: scales to ~1M ops/sec.\n- Con: per-segment LRU approximation (not strict global LRU); slightly worse hit rate.\n\n**Caffeine (W-TinyLFU)**\n- Pro: scales to ~10M ops/sec with better hit rate than LRU.\n- Con: dependency, more complex to debug.\n\n**Memory pressure**\n- Cache grows to capacity; large entries can OOM if capacity is set in entries (not bytes).\n- For value-size-aware caching, use `maximumWeight` + `Weigher` (Caffeine supports this).\n\n**Concurrent mutation during eviction**\n- Lock around eviction prevents two threads from evicting the same node.\n\n**False sharing on stripes**\n- Pad segment locks/heads/tails to cache line boundaries (`@Contended` JVM annotation) for absolute peak."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **HashMap + doubly linked list** is the canonical O(1) LRU structure.\n- **Single `ReentrantLock`** is correct and simple; serialises throughput.\n- **Striped locks** (segment per hash bucket range) scale concurrency, with per-segment LRU approximation.\n- **Caffeine + W-TinyLFU** is the production answer — lock-free reads via ring-buffered recency, better hit rate than LRU.\n- **`get` mutates state** (moves to head) — it's a write, not a pure read; that's why naive read-write locking doesn't help much.\n- **Combine TTL with LRU** for freshness-bounded size-bounded caches; lazy expiration on access."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**The data structure**\n\nHashMap for O(1) lookup, doubly linked list for O(1) recency moves. Map points to list nodes; list orders by recency with sentinel head and tail. On get, look up the node, unlink, move to head, return value. On put, insert at head, evict tail if over capacity.\n\nDoubly linked specifically because we need O(1) removal of an arbitrary node — the one found via the map. Singly linked would require an O(N) scan.\n\n**Naive thread-safe version**\n\nWrap everything in a single `ReentrantLock`. `get` and `put` both acquire/release. Correct and simple. Throughput caps at maybe 100K ops/sec because everything serialises — even reads, because get mutates the recency list.\n\n**Scaling — striped locks**\n\nPartition into N segments by `hashCode % N`. Each segment is a self-contained LRU with its own lock. Threads on different segments don't contend. Trade-off: LRU is now per-segment, not strictly global — the approximation is fine for hit rate.\n\nThis is conceptually what Java 7's ConcurrentHashMap did. Modern ConcurrentHashMap uses lock-free reads with synchronized bin updates.\n\n**Caffeine — the production answer**\n\nCaffeine decouples the read path from recency updates:\n- get is lock-free — just a ConcurrentHashMap lookup\n- The 'key X was accessed' event is appended to a per-thread ring buffer (lock-free)\n- A background drain batches and applies these to the eviction policy\n\nResult: read throughput near raw ConcurrentHashMap; eviction slightly behind real-time but accurate.\n\nW-TinyLFU is Caffeine's eviction policy — a hybrid using a TinyLFU frequency sketch + an LRU window. Gives 5-10% better hit rate than plain LRU on most workloads, especially under bursty access.\n\nFor production: I'd use Caffeine, set maximumSize and expireAfterWrite, done.\n\n**Edge cases**\n\n- Updating existing key: update value AND move to head, both under lock\n- Capacity = 0: reject in constructor\n- Null keys/values: reject by contract (mirrors ConcurrentHashMap)\n- Iteration: snapshot under lock or document weak-consistency\n- Combining TTL with LRU: store expiry per node, lazy-expire on access, periodic sweep\n\n**Failure modes**\n\n- Single lock: contention bottleneck above ~100K ops/sec\n- Striped: per-segment LRU approximation; slightly worse hit rate but scales to ~1M ops/sec\n- Caffeine: ~10M ops/sec, better hit rate, adds dependency\n- Memory pressure: configure by weight (bytes), not just count\n\n**Recommendation**\n\n**Hand-rolled HashMap+DLL with a single ReentrantLock for the interview answer to demonstrate the data structure understanding. For production, Caffeine — lock-free reads, batched recency updates via ring buffer, W-TinyLFU eviction with better hit rate than LRU. Reserve striped LRU for the educational middle step or for environments where adding a dependency isn't allowed.**"
+          }
+        ]
+      },
+      "followup_questions": [
+        "Extend the LRU to support per-key TTL in addition to size-based eviction.",
+        "How would you implement a write-back LRU where modifications are flushed to disk asynchronously?",
+        "Explain Caffeine's W-TinyLFU policy and why it outperforms plain LRU on real workloads.",
+        "Walk through an LFU cache implementation — what data structures change?"
+      ],
+      "seo": {
+        "metaTitle": "Design a Thread-Safe LRU Cache in Java — LLD Interview",
+        "metaDescription": "HashMap + doubly linked list canonical structure, single-lock vs striped-lock vs Caffeine W-TinyLFU, get/put implementation, eviction algorithm, and concurrency trade-offs."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P06",
+        "hook": "The data structure HashMap for O(1) lookup, doubly linked list for O(1) recency moves.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "An LRU (Least Recently Used) cache holds at most N entries and, when full, evicts the entry not accessed for the longest time. Operations: get(key) — return value or null; mark this key as most-recently-used. put(key, value) — insert or update; mark as MRU; if size exceeds capacity, evict the LRU entry. Both must be O(1) amortized and thread-safe across concurrent callers. The two interesting questions: which data structure (HashMap + DLL is canonical) and how to make it thread-safe without serialising every access."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "An LRU (Least Recently Used) cache holds at most N entries and, when full, evicts the entry not accessed for the longest time. Operations: get(key) — return value or null; mark this key as most-recently-used. put(key, value) — insert or update; mark as MRU; if size exceeds capacity, evict the LRU entry. Both must be O(1) amortized and thread-safe across concurrent callers. The two interesting questions: which data structure (HashMap + DLL is canonical) and how to make it thread-safe without serialising every access."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "HashMap maps key → list node, giving O(1) lookup",
+              "Doubly linked list orders entries by recency; head = MRU, tail = LRU",
+              "O(1) move and O(1) eviction",
+              "On get: lookup node → unlink → move to head → return value",
+              "On put: if exists, update value + move to head; if not, create node + add to head; if size > capacity, remove tail node and erase from map"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "An LRU (Least Recently Used) cache holds at most N entries and, when full, evicts the entry not accessed for the longest time. Operations: get(key) — return value or null; mark this key as most-recently-used. put(key, value) — insert or update; mark as MRU; if size exceeds capacity, evict the LRU entry. Both must be O(1) amortized and thread-safe across concurrent callers. The two interesting questions: which data structure (HashMap + DLL is canonical) and how to make it thread-safe without serialising every access."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "An LRU (Least Recently Used) cache holds at most N entries and, when full, evicts the entry not accessed for the longest time. Operations: get(key) — return value or null; mark this key as most-recently-used. put(key, value) — insert or update; mark as MRU; if size exceeds capacity, evict the LRU entry. Both must be O(1) amortized and thread-safe across concurrent callers. The two interesting questions: which data structure (HashMap + DLL is canonical) and how to make it thread-safe without serialising every access."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Using LinkedHashMap with synchronized blocks (works but doesn't scale), or moving DLL nodes inside get without holding the lock (race-prone)."
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "HashMap + doubly linked list is the canonical O(1) LRU structure. Single ReentrantLock is correct and simple; serialises throughput. Striped locks (segment per hash bucket range) scale concurrency, with per-segment LRU approximation. Caffeine + W-TinyLFU is the production answer — lock-free reads via ring-buffered recency, better hit rate than LRU. get mutates state (moves to head) — it's a write, not a pure read; that's why naive read-write locking doesn't help much. Combine TTL with LRU for freshness-bounded size-bounded caches; lazy expiration on access."
+          }
+        ],
+        "cap": "Reserve striped LRU for the educational middle step or for environments where adding a dependency isn't allowed.",
+        "familiarity_anchors": [
+          "HashMap",
+          "ConcurrentHashMap",
+          "Caffeine"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Extend the LRU to support per-key TTL in addition to size-based eviction.",
+          "How would you implement a write-back LRU where modifications are flushed to disk asynchronously?",
+          "Explain Caffeine's W-TinyLFU policy and why it outperforms plain LRU on real workloads."
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Distributed Java system handling 10k requests per second"
+      }
+    },
+    {
+      "id": "sdl-005",
+      "slug": "design-in-memory-kv-store-ttl-java",
+      "question": "Design an in-memory key-value store that supports per-key TTL (time-to-live) expiration in Java.",
+      "title": "Design an In-Memory Key-Value Store with TTL",
+      "direct_answer": "Use a **`ConcurrentHashMap` keyed by `String`** holding **`Entry(value, expiresAt)`** records. Combine **lazy expiration on access** (cheap, only touches keys you read) with **active expiration via a `DelayQueue`** or **hashed timing wheel** for efficient bulk eviction. For very large datasets, replace the global delay queue with a **hierarchical timing wheel** (Netty's pattern) — O(1) schedule and tick, low memory overhead, scales to millions of pending expirations.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-21",
+      "interviewer_intent": {
+        "testing": "Storage choice (ConcurrentHashMap), expiration strategies (lazy vs active), data structures for scheduled eviction (DelayQueue vs timing wheel), and concurrency correctness.",
+        "common_mistake": "Polling all keys on a timer (O(N) on every tick), or using `Timer`/`ScheduledExecutorService` for each key's expiration (memory blow-up).",
+        "to_stand_out": "Walk through the lazy + active hybrid, explain when DelayQueue is fine vs when a timing wheel is needed, and discuss memory reclamation for expired entries that haven't been evicted yet."
+      },
+      "company_tags": [
+        "Redis",
+        "Memcached",
+        "Hazelcast",
+        "Amazon ElastiCache",
+        "Caffeine"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "What the Store Must Do",
+            "content": "Operations:\n- `put(key, value, ttlMs)` — store with expiration time = now + ttlMs.\n- `get(key)` — return value if present and not expired; otherwise null.\n- `delete(key)` — explicit removal.\n- `setTtl(key, ttlMs)` — update TTL.\n\nNon-functional:\n- O(1) average for all operations.\n- Thread-safe under high read/write concurrency.\n- Bounded memory — expired entries must actually be reclaimed (not just \"hidden\").\n- Scale to millions of keys, possibly with TTLs from milliseconds to days.\n\nThe central challenge is **expiration efficiency**: how do we evict expired entries without scanning every key on every tick?"
+          },
+          {
+            "type": "step",
+            "title": "The Two Expiration Strategies — Lazy and Active",
+            "content": "**Lazy expiration:** check expiry on access.\n\n```java\npublic V get(K key) {\n    Entry<V> e = map.get(key);\n    if (e == null) return null;\n    if (e.expiresAt < now()) {\n        map.remove(key, e);                  // CAS-style remove\n        return null;\n    }\n    return e.value;\n}\n```\n\n- Pro: zero overhead for keys that are never read.\n- Con: keys never accessed again sit in memory forever until something purges them.\n\n**Active expiration:** background process removes expired entries.\n\n- Pro: bounded memory; expired entries actually disappear.\n- Con: needs a data structure that tells us \"what's expiring next\" cheaply.\n\n**Both together is the right answer.** Lazy ensures correctness (a never-active sweeper can't return stale data); active ensures memory bounds."
+          },
+          {
+            "type": "step",
+            "title": "Naive Approaches and Why They Fail",
+            "content": "**Approach 1: Periodic scan of every key.**\n\n```java\nscheduler.scheduleAtFixedRate(() -> {\n    long now = System.currentTimeMillis();\n    for (var e : map.entrySet()) {\n        if (e.getValue().expiresAt < now) map.remove(e.getKey());\n    }\n}, 1, 1, TimeUnit.SECONDS);\n```\n\n- O(N) per tick. With 10M keys at 1Hz tick, that's 10M comparisons/sec wasted on keys that aren't expiring.\n\n**Approach 2: One `ScheduledExecutorService` task per key.**\n\n```java\nscheduler.schedule(() -> map.remove(key), ttlMs, TimeUnit.MILLISECONDS);\n```\n\n- Each scheduled task takes ~200 bytes; 10M keys = 2 GB of scheduler overhead alone.\n- Cancelling a task on `setTtl` or `delete` is O(log N) at best.\n\n**Approach 3: `DelayQueue` of expiry events.**\n\n- A single PriorityQueue of `(key, expiresAt)` ordered by expiry.\n- Background thread drains expired entries.\n- O(log N) insertion (when `put` is called).\n- Acceptable up to ~1M pending entries; degrades for very large N.\n\n**Approach 4: Hashed timing wheel (Netty's pattern).**\n\n- Array of buckets representing time slots.\n- Insert: O(1) into the right bucket.\n- Tick: process the current bucket; entries in that bucket are expired.\n- Hierarchical wheels handle large TTL ranges efficiently."
+          },
+          {
+            "type": "step",
+            "title": "Hybrid Design — Lazy + DelayQueue Sweeper",
+            "content": "For most use cases, the right balance is **lazy on read + a single background thread draining a `DelayQueue`**.\n\n```java\npublic class TtlKvStore<K, V> {\n    private static class Entry<V> implements Delayed {\n        final V value;\n        final long expiresAtNs;\n        final K key;\n        // ... compareTo + getDelay using expiresAtNs\n    }\n\n    private final ConcurrentHashMap<K, Entry<V>> map = new ConcurrentHashMap<>();\n    private final DelayQueue<Entry<V>> expiryQ = new DelayQueue<>();\n    private final Thread sweeper;\n\n    public TtlKvStore() {\n        sweeper = new Thread(this::sweepLoop, \"ttl-sweeper\");\n        sweeper.setDaemon(true);\n        sweeper.start();\n    }\n\n    public void put(K key, V value, long ttlMs) {\n        long expiresAtNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ttlMs);\n        Entry<V> e = new Entry<>(key, value, expiresAtNs);\n        Entry<V> prev = map.put(key, e);\n        expiryQ.offer(e);\n        // prev's queue entry will be skipped during drain via map cross-check\n    }\n\n    public V get(K key) {\n        Entry<V> e = map.get(key);\n        if (e == null) return null;\n        if (System.nanoTime() >= e.expiresAtNs) {\n            map.remove(key, e);\n            return null;\n        }\n        return e.value;\n    }\n\n    private void sweepLoop() {\n        while (!Thread.currentThread().isInterrupted()) {\n            try {\n                Entry<V> e = expiryQ.take();          // blocks until next expiry\n                Entry<V> current = map.get(e.key);\n                if (current == e) {                    // not replaced/removed since\n                    map.remove(e.key, e);\n                }\n            } catch (InterruptedException ie) { return; }\n        }\n    }\n}\n```\n\n**Key correctness points:**\n\n- The sweeper checks `current == e` (reference equality) before removing — if `put` replaced the entry, the old DelayQueue entry is stale and skipped.\n- Lazy `get` handles the brief window between expiry and sweeper processing.\n- Sweeper runs as a daemon thread; doesn't block JVM shutdown.\n\n**When this is enough:** ~1M pending entries with second-to-minute TTLs. CPU overhead minimal.\n\n**When it isn't:** 100M+ entries with millisecond-precision TTLs — the DelayQueue's O(log N) insertion becomes the bottleneck."
+          },
+          {
+            "type": "step",
+            "title": "Hashed Timing Wheel — Netty / Kafka Pattern",
+            "content": "When DelayQueue isn't enough, use a **hashed timing wheel**:\n\n- Array of M buckets, each representing a time slot of duration `tickDuration` ms.\n- A pointer `currentTick` advances every `tickDuration`.\n- `schedule(taskAt = T)`: bucket = `(T / tickDuration) mod M`; add task to that bucket.\n- On tick: process bucket at `currentTick`; advance pointer.\n\n**Properties:**\n- O(1) schedule and cancel.\n- Tick processing time proportional to bucket size, not total scheduled tasks.\n- Memory ~ proportional to scheduled tasks (no per-task scheduler thread overhead).\n\n**Hierarchical timing wheel** for large TTL ranges:\n- Multiple wheels at different resolutions (e.g., 1ms wheel, 1s wheel, 1min wheel).\n- Long-lived tasks live in coarser wheels; promote to finer wheels as expiry approaches.\n- Used by Netty's `HashedWheelTimer`, Kafka's `TimingWheel`.\n\n**Trade-off:** complex to implement correctly; pull in `io.netty.util.HashedWheelTimer` if available rather than rolling your own."
+          },
+          {
+            "type": "step",
+            "title": "LLD — Class Design",
+            "content": "```mermaid\nclassDiagram\n    class TtlKvStore~K,V~ {\n        +put(key, value, ttlMs)\n        +get(key) V\n        +delete(key)\n        +setTtl(key, ttlMs)\n    }\n    class ExpirationStrategy {\n        <<interface>>\n        +schedule(key, expiresAt)\n        +cancel(key)\n        +start(evictor)\n    }\n    class DelayQueueExpiration\n    class TimingWheelExpiration\n    class LazyExpiration\n    class Entry~V~ {\n        +value\n        +expiresAt\n    }\n    class Storage {\n        <<interface>>\n        +put(key, entry)\n        +get(key) Entry\n        +remove(key, expected)\n    }\n    class ConcurrentMapStorage\n\n    TtlKvStore --> Storage\n    TtlKvStore --> ExpirationStrategy\n    ExpirationStrategy <|.. DelayQueueExpiration\n    ExpirationStrategy <|.. TimingWheelExpiration\n    ExpirationStrategy <|.. LazyExpiration\n    Storage <|.. ConcurrentMapStorage\n```\n\nProgramming to interfaces lets you swap strategies. `ConcurrentMapStorage` for the v1 in-memory; if scaling out later, swap to a sharded storage backend without changing expiration logic."
+          },
+          {
+            "type": "step",
+            "title": "Edge Cases and Correctness",
+            "content": "**Updating value with new TTL**\n- `put` replaces both value and expiry.\n- DelayQueue/wheel may still hold the old expiry entry; reference-equality check during sweep skips it.\n\n**setTtl on non-existent key**\n- Return false / no-op (or throw) per contract.\n\n**TTL = 0 or negative**\n- Reject (or treat as immediate expiry).\n\n**Clock skew / NTP jumps**\n- Use `System.nanoTime()` (monotonic) for relative TTL math; `currentTimeMillis` only for wall-clock display.\n\n**Memory reclamation**\n- Lazy expiration leaves expired entries in the map until accessed.\n- Active sweep ensures bound: track sweep lag (`time since last sweep`); alert if exceeds threshold.\n\n**Thread safety on concurrent put + sweep**\n- `map.remove(key, expectedEntry)` is the conditional-remove primitive of `ConcurrentHashMap`; ensures we don't accidentally remove a fresh entry.\n\n**Persistence (out of scope for in-memory but worth mentioning)**\n- For durable variants, use append-only log of `put`/`delete` operations and rebuild on startup; Redis's AOF model."
+          },
+          {
+            "type": "step",
+            "title": "Failure Modes and Trade-offs",
+            "content": "**Sweeper crashes**\n- Lazy expiration still ensures correctness for accessed keys.\n- Memory grows for unaccessed expired keys until sweeper is restarted.\n- Watchdog thread should restart the sweeper.\n\n**OOM from large values + slow sweep**\n- Combine TTL with size-based eviction (LRU on top); when memory tight, evict LRU regardless of TTL.\n\n**Hot key with frequent TTL updates**\n- Each `put` creates a new DelayQueue entry; old entries become garbage waiting for the sweeper to skip them.\n- Periodic compaction or use weak references on the queue side.\n\n**Latency spikes from large bucket processing (timing wheel)**\n- Process bucket in batches; spread work across multiple ticks if bucket is huge.\n\n**Wheel resolution vs precision**\n- 100ms tick → expiration is ±50ms precise; usually fine.\n- Tighter precision = more buckets = more memory + tick overhead."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`ConcurrentHashMap<K, Entry<V>>`** with `Entry(value, expiresAt)` records.\n- **Lazy expiration on `get`** for correctness; cheap, only touches accessed keys.\n- **Active sweep via `DelayQueue`** for memory bounds; works to ~1M pending entries.\n- **Hashed timing wheel** when DelayQueue isn't enough — O(1) schedule and tick.\n- **Reference-equality check** during sweep handles stale queue entries from updates.\n- **Use `System.nanoTime()`** for monotonic TTL math; clock-skew-proof.\n- **Combine with LRU** if memory pressure can outpace expiry."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**The data structure**\n\nConcurrentHashMap keyed by the user's key, value is an Entry record holding (value, expiresAt). All operations are O(1) average for the map; the interesting question is expiration.\n\n**Two strategies, used together**\n\n- Lazy on get: check expiresAt; if past, remove and return null. Cheap, only touches keys you actually read.\n- Active sweep: a background thread that knows what's expiring next and removes it.\n\nLazy alone leaves never-accessed-again expired keys sitting in memory forever. Active alone has a brief race window where get could return an expired value before the sweeper gets to it. Together: correctness from lazy, memory bound from active.\n\n**What active sweep data structure**\n\nNaive scan of all keys on a timer is O(N) per tick — melts at 10M keys.\n\nOne ScheduledExecutorService task per key blows up memory — 200 bytes per scheduled task times 10M = 2 GB just for scheduler overhead.\n\nDelayQueue — a single PriorityQueue of expiry events ordered by time. O(log N) insertion. Background thread blocks on `take()` until next expiry. Works well to about 1M pending entries.\n\nHashed timing wheel (Netty's pattern) — array of buckets each representing a time slot. Schedule is O(1), tick processing is proportional to bucket size, not total entries. Hierarchical wheels (multiple resolutions) handle large TTL ranges.\n\n**The hybrid implementation**\n\nDelayQueue + lazy is the sweet spot for most cases:\n- put creates an Entry, puts it in the map, offers it to the DelayQueue\n- get checks expiry lazily\n- A daemon sweeper thread blocks on `expiryQ.take()`, processes expired entries one at a time\n\nCritical correctness detail: when the sweeper picks up an entry, it checks `map.get(key) == thatExactEntry` before removing — because the user might have called put again with a different TTL, in which case the queue entry is stale and should be skipped.\n\nUse `System.nanoTime()` for TTL math (monotonic, clock-skew-proof); only use `currentTimeMillis` for human-display.\n\n**When to upgrade to timing wheel**\n\nDelayQueue's O(log N) insertion becomes the bottleneck somewhere around 10M+ pending entries with ms-precision TTLs. At that point, switch to a hashed wheel. For Java, use `io.netty.util.HashedWheelTimer` rather than rolling your own.\n\n**LLD**\n\n- `TtlKvStore` facade with put/get/delete/setTtl\n- `Storage` interface (ConcurrentMapStorage impl) — swappable for sharded backend later\n- `ExpirationStrategy` interface (DelayQueue impl, TimingWheel impl, lazy-only impl) — swap based on scale\n- `Entry` record with value + expiresAtNs\n\n**Edge cases**\n\n- Updating value with new TTL: put replaces both; old queue entry skipped via reference check\n- TTL = 0: reject or treat as immediate\n- setTtl on missing key: false/no-op per contract\n- Memory reclamation: track sweep lag; alert if active sweep falls behind\n- OOM risk if sweeper stalls: combine with LRU, evict by recency under memory pressure\n\n**Failure modes**\n\n- Sweeper crash: lazy expiration still correct for accessed keys; memory grows for the rest; watchdog restart\n- Hot key with frequent TTL updates: garbage queue entries accumulate; periodic compaction\n- Timing-wheel latency spikes from huge buckets: batch-process across ticks\n\n**Recommendation**\n\n**ConcurrentHashMap with Entry(value, expiresAtNs), lazy expiration on get for correctness, plus a single DelayQueue-backed sweeper thread for active eviction with reference-equality skip-stale logic. Upgrade to a hashed (or hierarchical) timing wheel once pending entries exceed the low millions or precision needs become tight. For production, lean on Caffeine's `expireAfterWrite`/`expireAfterAccess` or Netty's HashedWheelTimer rather than rolling your own.**"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement `ttl(key)` returning the remaining time to live?",
+        "Combine TTL with a max-size LRU policy — what's the eviction priority order?",
+        "How would you make the store distributed across multiple JVMs while preserving TTL semantics?",
+        "What changes if you need persistence (survive process restarts)?"
+      ],
+      "seo": {
+        "metaTitle": "Design an In-Memory Key-Value Store with TTL — LLD Interview",
+        "metaDescription": "ConcurrentHashMap storage, lazy + active expiration hybrid, DelayQueue vs hashed timing wheel for scheduled eviction, reference-equality skip-stale, monotonic-clock TTL math, and combining TTL with LRU."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P06",
+        "hook": "The data structure ConcurrentHashMap keyed by the user's key, value is an Entry record holding (value, expiresAt).",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Operations: put(key, value, ttlMs) — store with expiration time = now + ttlMs. get(key) — return value if present and not expired; otherwise null. delete(key) — explicit removal. setTtl(key, ttlMs) — update TTL. Non-functional: O(1) average for all operations. Thread-safe under high read/write concurrency. Bounded memory — expired entries must actually be reclaimed (not just \"hidden\"). Scale to millions of keys, possibly with TTLs from milliseconds to days. The central challenge is expiration efficiency: how do we evict expired entries without scanning every key on every tick?"
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Operations: put(key, value, ttlMs) — store with expiration time = now + ttlMs. get(key) — return value if present and not expired; otherwise null. delete(key) — explicit removal. setTtl(key, ttlMs) — update TTL. Non-functional: O(1) average for all operations. Thread-safe under high read/write concurrency. Bounded memory — expired entries must actually be reclaimed (not just \"hidden\"). Scale to millions of keys, possibly with TTLs from milliseconds to days. The central challenge is expiration efficiency: how do we evict expired entries without scanning every key on every tick?"
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Lazy expiration: check expiry on access",
+              "``java public V get(K key) { Entry<V> e = map",
+              "get(key); if (e == null) return null; if (e",
+              "expiresAt < now()) { map",
+              "remove(key, e); // CAS-style remove return null; } return e"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Operations: put(key, value, ttlMs) — store with expiration time = now + ttlMs. get(key) — return value if present and not expired; otherwise null. delete(key) — explicit removal. setTtl(key, ttlMs) — update TTL. Non-functional: O(1) average for all operations. Thread-safe under high read/write concurrency. Bounded memory — expired entries must actually be reclaimed (not just \"hidden\"). Scale to millions of keys, possibly with TTLs from milliseconds to days. The central challenge is expiration efficiency: how do we evict expired entries without scanning every key on every tick?"
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Operations: put(key, value, ttlMs) — store with expiration time = now + ttlMs. get(key) — return value if present and not expired; otherwise null. delete(key) — explicit removal. setTtl(key, ttlMs) — update TTL. Non-functional: O(1) average for all operations. Thread-safe under high read/write concurrency. Bounded memory — expired entries must actually be reclaimed (not just \"hidden\"). Scale to millions of keys, possibly with TTLs from milliseconds to days. The central challenge is expiration efficiency: how do we evict expired entries without scanning every key on every tick?"
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Polling all keys on a timer (O(N) on every tick), or using Timer/ScheduledExecutorService for each key's expiration (memory blow-up)."
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "ConcurrentHashMap<K, Entry<V>> with Entry(value, expiresAt) records. Lazy expiration on get for correctness; cheap, only touches accessed keys. Active sweep via DelayQueue for memory bounds; works to ~1M pending entries. Hashed timing wheel when DelayQueue isn't enough — O(1) schedule and tick. Reference-equality check during sweep handles stale queue entries from updates. Use System.nanoTime() for monotonic TTL math; clock-skew-proof. Combine with LRU if memory pressure can outpace expiry."
+          }
+        ],
+        "cap": "For production, lean on Caffeine's expireAfterWrite/expireAfterAccess or Netty's HashedWheelTimer rather than rolling your own.",
+        "familiarity_anchors": [
+          "ConcurrentHashMap",
+          "String",
+          "Entry"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement `ttl(key)` returning the remaining time to live?",
+          "Combine TTL with a max-size LRU policy — what's the eviction priority order?",
+          "How would you make the store distributed across multiple JVMs while preserving TTL semantics?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Distributed Java system handling 10k requests per second"
+      }
+    }
+  ]
+}

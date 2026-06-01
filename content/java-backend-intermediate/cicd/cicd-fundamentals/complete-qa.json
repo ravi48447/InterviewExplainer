@@ -1,0 +1,249 @@
+{
+  "topic": "Cicd Fundamentals",
+  "topicSlug": "cicd-fundamentals",
+  "questions": [
+    {
+      "id": "ga-003",
+      "slug": "matrix-strategy-multi-version-java-testing",
+      "question": "How does matrix strategy work for multi-version Java testing?",
+      "title": "Matrix Strategy for Multi-Version Java Testing in GitHub Actions",
+      "difficulty": "intermediate",
+      "layout_type": "concept-explainer",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "company_tags": [
+        "JetBrains",
+        "Gradle",
+        "Apache",
+        "Red Hat"
+      ],
+      "direct_answer": "The `strategy.matrix` field in GitHub Actions lets you run the same job multiple times with different variable combinations — for example JDK 11, 17, and 21 in parallel — so you can verify compatibility across versions without duplicating workflow code.",
+      "interviewer_intent": {
+        "testing": "Whether you understand how to test library or framework compatibility across multiple Java versions efficiently.",
+        "common_mistake": "Forgetting to use `fail-fast: false` when you want all matrix variants to complete even if one fails.",
+        "to_stand_out": "Mention combining multiple dimensions (Java version x OS x database), using `include`/`exclude` to fine-tune the matrix, and using matrix outputs to conditionally run downstream jobs."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "One Job Template, Six Parallel Runners — How Matrix Multiplies Your Coverage",
+            "content": "Without matrix strategy, testing a Java library against JDK 11, 17, and 21 means copy-pasting the same job three times with one line different — the Java version number. When you add OS variants, the copy-paste becomes nine jobs. When a test step changes, you update nine places and inevitably miss one. **Matrix strategy eliminates this entirely** by defining variables and letting GitHub Actions generate the combinatorial expansion automatically.\n\nYou declare a matrix of variables — `java-version: [11, 17, 21]` and optionally `os: [ubuntu-latest, windows-latest]` — and GitHub creates one isolated job run for each combination. Three JDK versions multiplied by two operating systems produces six parallel jobs, each with its own runner, its own log, and its own pass/fail status. The workflow YAML stays DRY because every job uses the same steps with `${{ matrix.java-version }}` substituted at runtime.\n\nThe critical default that catches most people is **`fail-fast: true`**. With this default, the first failing matrix variant cancels all others. That is fine if you want fast feedback, but terrible if you need to know whether a failure is specific to JDK 21 or affects all versions. Setting `fail-fast: false` keeps all variants running so you get the complete compatibility picture."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Matrix Expansion — One Workflow, N×M×K Jobs",
+            "content": "A matrix definition fans out one job into the cartesian product of every dimension. The CI scheduler then runs each combination in parallel.\n\n```mermaid\nflowchart TB\n    Trigger[git push or PR] --> Workflow[ci.yml workflow]\n    Workflow --> Matrix{matrix expansion<br/>java: [17, 21]<br/>os: [ubuntu, macos, windows]<br/>spring: [3.2, 3.3]}\n    Matrix -->|2x3x2 = 12 jobs| J1[java 17 / ubuntu / spring 3.2]\n    Matrix --> J2[java 17 / ubuntu / spring 3.3]\n    Matrix --> J3[java 17 / macos / spring 3.2]\n    Matrix --> Jdots[... 8 more parallel jobs]\n    Matrix --> J12[java 21 / windows / spring 3.3]\n    J1 --> Agg[Aggregate results<br/>fail if any combo fails]\n    J2 --> Agg\n    J3 --> Agg\n    Jdots --> Agg\n    J12 --> Agg\n    Agg --> Status[PR status check]\n    style Matrix fill:#fff3e0\n    style Agg fill:#c8e6c9\n```\n\n**12 parallel jobs from one workflow definition.** The matrix is the cheapest way to broaden coverage — cost scales linearly with combinations, but wall-clock time stays roughly constant."
+          },
+          {
+            "type": "phase",
+            "title": "How GitHub Actions Expands Variables Into Isolated Job Runs",
+            "content": "When a workflow triggers, GitHub reads the `strategy.matrix` field and **generates one job per combination** before any code runs. Each job gets its own fresh runner, its own checkout, and its own copy of the matrix variables injected as `${{ matrix.variable-name }}`.\n\nA multi-version Java library build with OS coverage looks like this.\n\n```yaml\njobs:\n  test:\n    runs-on: ${{ matrix.os }}\n    strategy:\n      fail-fast: false\n      matrix:\n        java-version: [11, 17, 21]\n        os: [ubuntu-latest, windows-latest]\n        exclude:\n          - os: windows-latest\n            java-version: 11\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-java@v4\n        with:\n          java-version: ${{ matrix.java-version }}\n          distribution: 'temurin'\n      - run: mvn -B test\n```\n\nThe `exclude` key removes specific combinations that do not make sense — here, skipping Java 11 on Windows because the project dropped Windows support for that version. The result is five parallel jobs instead of six. Each job's name includes the matrix values, so the GitHub UI shows `test (17, ubuntu-latest)` as a separate status check, making it immediately clear which combination failed."
+          },
+          {
+            "type": "phase",
+            "title": "Tuning the Matrix — Include, Max-Parallel, and Artifact Selection",
+            "content": "The `include` key attaches extra properties to specific matrix combinations without creating new dimensions. This is useful when **only one variant should produce the deployable artifact** while others serve as compatibility checks. You can flag JDK 21 on Ubuntu as the canonical build and conditionally upload artifacts from only that variant.\n\n```yaml\nmatrix:\n  java-version: [11, 17, 21]\n  include:\n    - java-version: 21\n      canonical: true\n```\n\nA step then conditionally uploads the artifact only when `matrix.canonical` is set. This keeps compatibility testing broad while producing exactly one deployable JAR from the pinned JDK, avoiding subtle bytecode differences between JDK versions.\n\n**`max-parallel`** throttles how many matrix jobs run concurrently. When tests call a shared staging API that rate-limits traffic, running six jobs simultaneously can trigger throttling failures that have nothing to do with code quality. Setting `max-parallel: 3` serializes the load. It also controls cost on self-hosted runner fleets where spinning six runners simultaneously may exhaust capacity.\n\nThe total job count is the **product of all matrix dimensions**, so adding a third dimension like database version (`postgres: [14, 16]`) expands three JDK variants into six — and with two OS variants, twelve. Be deliberate about which dimensions add real compatibility signal versus just multiplying CI time and cost."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs — Matrix Sprawl vs Coverage",
+            "content": "**Cost vs coverage.** Every new dimension multiplies job count. A 3-OS × 4-Java × 3-Spring matrix is 36 jobs. At GitHub Actions' $0.008/min for Linux runners, a 5-minute test running 36 times is $1.44 per push. For a busy repo with 100 pushes/day, that is $144/day just for matrix runs. Use `include`/`exclude` to skip uninteresting combinations (e.g., Spring 3.3 only on Java 21).\n\n**Fail-fast trade-off.** `fail-fast: true` (the default) cancels remaining jobs the moment any combination fails — cheaper but loses visibility into whether the failure is a single-combination flake or a systemic bug. `fail-fast: false` runs every combination so the team sees the full pattern at the cost of wasted runner time on already-failing PRs.\n\n**Matrix vs separate jobs.** Matrix is succinct but harder to debug — logs are scattered across N jobs. For a small fixed set of variants (just Java 17 and 21), separate jobs with explicit names can be clearer. Matrix wins above 4–6 combinations.\n\n**Resource constraints.** Public GitHub repos get unlimited free Linux minutes; private repos are charged. Matrix jobs on macOS cost 10x Linux. Filter aggressively: run macOS only on `main` branch, Linux on every PR.\n\n**Required vs optional matrix legs.** Configure branch protection to require only the most critical matrix combination (e.g., Java 21 + Linux + latest Spring). Other combos can fail-soft as informational. Otherwise a flaky Windows test blocks every PR."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`strategy.matrix` fan-out from one template** — declares tuples like JDK 11/17/21 and generates parallel isolated jobs without copy-pasting entire YAML blocks for each version\n- **`fail-fast: false` reveals version-specific failures** — the default `true` cancels all variants when one fails, hiding whether the issue is JDK-21-specific or systemic across the matrix\n- **`include` attaches extra properties per combination** — flags one variant as canonical for artifact upload so compatibility checks run broadly while only one pinned JDK produces the deployable artifact\n- **Job count is the product of all dimensions** — adding OS and database dimensions to three JDK versions can produce twelve parallel jobs; cap dimensions to control CI minutes and runner queue time\n- **`max-parallel` throttles shared resource contention** — limits concurrent matrix jobs when tests hit rate-limited APIs or when self-hosted runner capacity cannot absorb the full fan-out simultaneously"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A matrix strategy runs the same job with different input combinations simultaneously — in Java projects it is most commonly used to verify tests pass against multiple Java versions before releasing a library or tool.\n\n**Matrix definition**\n- The `strategy.matrix` key defines an object whose values are lists; GitHub Actions creates one job per combination — `java: [17, 21]` with `os: [ubuntu-latest, windows-latest]` creates four jobs\n- Reference matrix variables in steps with `${{ matrix.java }}` — `actions/setup-java` with `java-version: ${{ matrix.java }}` installs the correct JDK version in each parallel job\n- Matrix jobs run in parallel by default; the entire matrix completes faster than sequential execution — 4 matrix jobs that each take 3 minutes finish in 3 minutes wall time, not 12\n\n**`fail-fast` and `max-parallel` controls**\n- `fail-fast: false` allows all matrix jobs to complete even when one fails — the default `fail-fast: true` cancels remaining jobs when any job fails, which saves credits but hides whether the failure is specific to one JDK version or universal\n- For library compatibility testing, always use `fail-fast: false` — if JDK 17 passes and JDK 21 fails, you want to see both results to understand the scope; cancelling early gives an incomplete picture\n- `max-parallel: 2` throttles the number of concurrent matrix jobs — useful when the matrix is large and concurrent jobs compete for shared resources (a test database, a rate-limited external API)\n\n**Library release validation**\n- Run the matrix on every pull request targeting the library's release branch — catching JDK incompatibilities before merge is far cheaper than a bug report from a consumer running a different JDK\n- Add the matrix results as required status checks in branch protection — the PR cannot be merged unless every matrix combination passes; this enforces multi-version compatibility automatically"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you limit the number of parallel matrix jobs to control costs?",
+        "How do you use matrix outputs to conditionally trigger a deployment?",
+        "Can you dynamically generate a matrix from a JSON file or script?"
+      ],
+      "seo": {
+        "metaTitle": "GitHub Actions Matrix Strategy for Multi-Version Java Testing",
+        "metaDescription": "Learn how to use GitHub Actions matrix strategy to run tests across Java 11, 17, and 21 in parallel, with tips on fail-fast, include, and exclude."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "A matrix strategy runs the same job with different input combinations simultaneously — in Java projects it is most commonly used to verify tests pass against multiple Java versions before releasing a library or tool.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Without matrix strategy, testing a Java library against JDK 11, 17, and 21 means copy-pasting the same job three times with one line different — the Java version number. When you add OS variants, the copy-paste becomes nine jobs. When a test step changes, you update nine places and inevitably miss one. Matrix strategy eliminates this entirely by defining variables and letting GitHub Actions generate the combinatorial expansion automatically. You declare a matrix of variables — java-version: [11, 17, 21]."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand how to test library or framework compatibility across multiple Java versions efficiently."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "matrix fan-out from one template — declares tuples like JDK 11/17/21 and generates parallel isolated jobs without copy-pasting entire YAML blocks for each version fail-fast: false reveals version-specific failures — the default true cancels all variants when one fails, hiding whether the issue is JDK-21-specific or systemic across the matrix include attaches extra properties per combination — flags one variant as canonical for artifact upload so compatibility checks run broadly while only one pinned JDK produces the deployable artifact Job count is the product of all dimensions — adding OS and database dimensions to three JDK versions can produce twelve parallel jobs",
+              "cap dimensions to control CI minutes and runner queue time max-parallel throttles shared resource contention — limits concurrent matrix jobs when tests hit rate-limited APIs or when self-hosted runner capacity cannot absorb the full fan-out simultaneously"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Without matrix strategy, testing a Java library against JDK 11, 17, and 21 means copy-pasting the same job three times with one line different — the Java version number. When you add OS variants, the copy-paste becomes nine jobs. When a test step changes, you update nine places and inevitably miss one. Matrix strategy eliminates this entirely by defining variables and letting GitHub Actions generate the combinatorial expansion automatically. You declare a matrix of variables — java-version: [11, 17, 21] and optionally os: [ubuntu-latest, windows-latest] — and GitHub creates one isolated job run for each combination. Three JDK versions multiplied by two operating systems produces six parallel jobs, each with its own runner, its own log, and its own pass/fail."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Forgetting to use fail-fast: false when you want all matrix variants to complete even if one fails"
+            ]
+          }
+        ],
+        "cap": "Matrix definition The strategy.matrix key defines an object whose values are lists; GitHub Actions creates one job per combination — java: [17, 21] with os: [ubuntu-latest, windows-latest] creates fou",
+        "familiarity_anchors": [
+          "GitHub",
+          "Actions"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you limit the number of parallel matrix jobs to control costs?",
+          "How do you use matrix outputs to conditionally trigger a deployment?",
+          "Can you dynamically generate a matrix from a JSON file or script?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    },
+    {
+      "id": "ga-010",
+      "slug": "trigger-workflows-pull-requests-protect-branches",
+      "question": "How do you trigger workflows on pull requests and protect branches?",
+      "title": "Triggering Workflows on Pull Requests and Protecting Branches",
+      "difficulty": "intermediate",
+      "layout_type": "concept-explainer",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "company_tags": [
+        "GitHub",
+        "GitLab",
+        "Atlassian",
+        "Shopify"
+      ],
+      "direct_answer": "Use `on: pull_request:` to trigger a workflow when PRs are opened or updated, then enable branch protection rules in GitHub settings to require that workflow's status check to pass before merging.",
+      "interviewer_intent": {
+        "testing": "Whether you understand how CI integrates with GitHub's code review workflow to prevent broken code from reaching protected branches.",
+        "common_mistake": "Triggering workflows only on `push` to main, which means broken code is merged before CI catches it, rather than blocking the merge via PR checks.",
+        "to_stand_out": "Mention `pull_request_target` for workflows that need write access while running against fork PRs, concurrency groups to cancel redundant runs, and `paths:` filters to run only relevant checks when specific files change."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Catching Broken Code Before It Reaches Main, Not After",
+            "content": "The most common CI pipeline mistake is triggering workflows only on `push` to main. By the time CI runs, the broken code is already merged — the team discovers the failure after the fact, and the fix requires another commit, another review, and another merge. **Pull request triggers** flip this model by running CI before the merge happens, blocking the PR until checks pass.\n\nThe `pull_request` event fires on three actions by default: when a PR is opened, when new commits are pushed to the PR branch (synchronize), and when a reopened PR resumes. GitHub runs the workflow against a **temporary merge commit** — the hypothetical result of merging the PR branch into the base. This means CI tests the code as it would exist after merging, catching integration conflicts that would not appear from testing the branch in isolation.\n\nBranch protection rules complete the loop. In repository settings, you configure the main branch to require specific status checks to pass before the merge button is enabled. Without this configuration, the workflow runs but nothing prevents a developer from clicking merge while checks are still running — or even after they fail. The combination of PR triggers plus required status checks is the foundation of a quality gate that prevents broken code from reaching protected branches."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Branch Protection — Required Checks Gate the Merge",
+            "content": "Branch protection rules combine multiple status checks (CI, code review, signed commits) into a merge gate.\n\n```mermaid\nflowchart LR\n    Dev[Developer pushes branch] --> PR[Open PR to main]\n    PR --> CI[CI workflow runs<br/>on pull_request event]\n    CI --> Tests[Unit + integration tests]\n    CI --> Lint[Lint + SAST]\n    CI --> Sec[Trivy + OWASP dep-check]\n    PR --> Review[2 reviewers required]\n    PR --> Sign[Signed commits required]\n    Tests --> CheckPass{All checks green?}\n    Lint --> CheckPass\n    Sec --> CheckPass\n    Review --> CheckPass\n    Sign --> CheckPass\n    CheckPass -->|Yes| Merge[Merge button enabled]\n    CheckPass -->|No| Block[Merge blocked<br/>with reason]\n    Merge --> Main[main branch updated]\n    Main --> CD[CD workflow:<br/>deploy to staging]\n    style CheckPass fill:#fff9c4\n    style Block fill:#ffcdd2\n    style Merge fill:#c8e6c9\n```"
+          },
+          {
+            "type": "step",
+            "title": "PR Triggers, Path Filters, and Concurrency Groups That Save CI Minutes",
+            "content": "A well-configured PR workflow runs only when relevant, cancels stale runs, and limits scope to affected code. Three features make this practical.\n\n**Path filters** restrict the workflow to run only when specific files change. In a repository with backend Java code and frontend assets, a change to `README.md` should not trigger a 20-minute integration test suite.\n\n```yaml\non:\n  pull_request:\n    branches: [main]\n    paths:\n      - 'src/**/*.java'\n      - '**/pom.xml'\n\nconcurrency:\n  group: pr-${{ github.event.pull_request.number }}\n  cancel-in-progress: true\n\njobs:\n  build-and-test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-java@v4\n        with:\n          java-version: '17'\n          distribution: temurin\n          cache: maven\n      - run: mvn -B verify\n```\n\n**Concurrency groups** keyed by PR number prevent redundant builds. When a developer pushes three commits in quick succession, `cancel-in-progress: true` cancels the first two workflow runs and only runs the latest. Without this, three parallel builds consume runner capacity testing commits that are already superseded.\n\nThe **`pull_request_target`** event is the dangerous variant. It runs with the base repository's credentials and secrets, which means it has write access. Use it only for trusted automation like labeling or commenting — never for building untrusted fork code. Running `checkout` against the PR head ref in a `pull_request_target` workflow gives external contributors access to your repository secrets."
+          },
+          {
+            "type": "step",
+            "title": "Branch Protection Rules That Wire CI Into the Merge Gate",
+            "content": "Branch protection rules are configured in Settings > Branches > Branch protection rules. For the main branch, enable **\"Require status checks to pass before merging\"** and select your workflow job name from the list. The job name must match exactly — if your workflow calls the job `build-and-test`, that is the name that appears in the status check dropdown.\n\nA subtle trap with path filters and required status checks: if a PR only changes files outside the `paths` filter, the workflow never triggers and the status check never reports. The PR is blocked indefinitely waiting for a check that will never run. **Solve this with a skip-detection job** that always runs and reports success for unchanged modules, or use `dorny/paths-filter` to conditionally skip job steps while still reporting the check status.\n\nFor monorepos with multiple services, required status checks can target specific job names per module. The `changes` detection job outputs which modules were affected, and downstream jobs run conditionally. Each module's CI job has a distinct name that branch protection recognizes independently.\n\nBeyond required checks, branch protection can enforce **linear history** (require rebase instead of merge commits), **require signed commits** for auditability, and **dismiss stale reviews** when new commits are pushed. The `merge_group` event adds merge queue support — when high churn causes frequent integration breaks, the merge queue serializes merges and reruns checks on each sequential integration before landing commits. This prevents the scenario where two PRs pass individually but break when combined."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Branch Protection Patterns",
+            "content": "**Required reviewers — 1 vs 2 vs CODEOWNERS.** One reviewer is the default for fast-moving teams; two reviewers slows things significantly but catches more issues. CODEOWNERS routing requires specific people for specific paths — best for teams with domain experts but creates bottlenecks when owners are on vacation.\n\n**`pull_request` vs `pull_request_target` events.** `pull_request` runs on the merge ref with no secrets exposed to fork PRs (safe). `pull_request_target` runs on the base branch with secrets available (can deploy preview environments) but can be exploited by malicious PRs that modify workflow files. Use `pull_request` by default; only use `pull_request_target` for very specific cases with extra hardening.\n\n**Status check naming stability.** Required checks are matched by name. If you rename a workflow job, the protection rule still requires the old name and blocks all PRs. Establish a naming convention early; treat job renames as a coordination task with security/admin who manages branch protection.\n\n**Linear history vs merge commits.** `Require linear history` enforces rebase or squash-merge. Cleaner git log but loses the visual indication of feature-branch work. Most teams prefer squash-merge for PRs.\n\n**Bypass for hotfixes.** Branch protection without an `Allow specified actors to bypass` escape hatch becomes a problem during incidents — fixing a P0 outage requires merging without 2 reviewers. Configure a small group (SRE on-call rotation) with bypass and audit every use."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`on: pull_request` tests the merge commit** — CI exercises the hypothetical result of merging the PR into base, catching integration conflicts that branch-only testing would miss\n- **Required status checks block the merge button** — branch protection rules wire named workflow jobs into the code review contract so broken PRs cannot be merged, even accidentally\n- **`concurrency` groups with `cancel-in-progress`** — keyed by PR number, stops stale workflow runs when contributors push rapidly so reviewers never wait on outdated checks\n- **`paths:` filters prevent wasted CI minutes** — a README change should not trigger a 20-minute Java build, but a skip-detection job must still report success or the required check blocks the PR indefinitely\n- **`pull_request_target` is dangerous for untrusted code** — it runs with base repository credentials; using `checkout` against a fork PR's head ref in this context exposes repository secrets to external contributors"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Branch protection rules and workflow triggers together enforce the quality bar that code must meet before merging. The branch protection rules define the required status checks; the workflow triggers define when those checks run.\n\n**PR workflow triggers**\n- `on: pull_request: types: [opened, synchronize, reopened]` is the standard trigger for CI validation — it runs on new PRs, every push to an existing PR, and reopened closed PRs; this covers the complete PR lifecycle\n- `github.event.pull_request.head.repo.full_name == github.repository` checks whether the PR is from the same repository or a fork — useful for conditionally enabling steps that need secrets, since fork PRs cannot access repository secrets\n- Add `paths:` filters to skip expensive jobs when only documentation changes: `paths-ignore: ['**.md', 'docs/**']` avoids running a 5-minute test suite when only a README changed\n\n**Branch protection configuration**\n- Required status checks enforce that specific workflow jobs must pass before merge; add the CI job name exactly as it appears in the workflow YAML to the required checks list in branch protection settings\n- Enable \"Require branches to be up to date before merging\" — this forces PRs to rebase on main before the final required check runs, preventing a PR that passes tests against an old main from merging after a breaking change landed on main\n- \"Require linear history\" disables direct merge commits and requires squash or rebase merges — enforces the team's chosen branching strategy at the repository level rather than through convention\n\n**CODEOWNERS and approval requirements**\n- A `.github/CODEOWNERS` file assigns automatic review requirements by file path — changes to `src/main/java/security/` require the security team's approval; changes to `helm/` require the platform team's approval regardless of who opens the PR\n- Combine CODEOWNERS with \"Dismiss stale pull request approvals when new commits are pushed\" — approvals do not carry forward when the PR adds commits after review, preventing approvals that predate the actual changes being reviewed"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you require multiple status checks from different workflows before merging?",
+        "What is the difference between `pull_request` and `pull_request_target` triggers?",
+        "How do you automatically dismiss stale pull request reviews when new commits are pushed?"
+      ],
+      "seo": {
+        "metaTitle": "GitHub Actions PR Triggers and Branch Protection | Java CI",
+        "metaDescription": "Learn how to trigger GitHub Actions workflows on pull requests and configure branch protection rules to enforce required status checks before merging."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P09",
+        "hook": "Branch protection rules and workflow triggers together enforce the quality bar that code must meet before merging.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The most common CI pipeline mistake is triggering workflows only on push to main. By the time CI runs, the broken code is already merged — the team discovers the failure after the fact, and the fix requires another commit, another review, and another merge. Pull request triggers flip this model by running CI before the merge happens, blocking the PR until checks pass. The pull_request event fires on three actions by default: when a PR is opened, when new."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand how CI integrates with GitHub's code review workflow to prevent broken code from reaching protected branches."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "on: pull_request tests the merge commit — CI exercises the hypothetical result of merging the PR into base, catching integration conflicts that branch-only testing would miss Required status checks block the merge button — branch protection rules wire named workflow jobs into the code review contract so broken PRs cannot be merged, even accidentally concurrency groups with cancel-in-progress — keyed by PR number, stops stale workflow runs when contributors push rapidly so reviewers never wait on outdated checks paths: filters prevent wasted CI minutes — a README change should not trigger a 20-minute Java build, but a skip-detection job must still report success or the required check blocks the PR indefinitely pull_request_target is dangerous for untrusted code — it runs with base repository credentials",
+              "using checkout against a fork PR's head ref in this context exposes repository secrets to external contributors"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The most common CI pipeline mistake is triggering workflows only on push to main. By the time CI runs, the broken code is already merged — the team discovers the failure after the fact, and the fix requires another commit, another review, and another merge. Pull request triggers flip this model by running CI before the merge happens, blocking the PR until checks pass. The pull_request event fires on three actions by default: when a PR is opened, when new commits are pushed to the PR branch (synchronize), and when a reopened PR resumes. GitHub runs the workflow against a temporary merge commit — the hypothetical result of merging the PR branch into the base. This means CI tests the."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Triggering workflows only on push to main, which means broken code is merged before CI catches it, rather than blocking the merge via PR checks"
+            ]
+          }
+        ],
+        "cap": "PR workflow triggers on: pull_request: types: [opened, synchronize, reopened] is the standard trigger for CI validation — it runs on new PRs, every push to an existing PR, and reopened closed PRs; thi",
+        "familiarity_anchors": [
+          "GitHub"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you require multiple status checks from different workflows before merging?",
+          "What is the difference between `pull_request` and `pull_request_target` triggers?",
+          "How do you automatically dismiss stale pull request reviews when new commits are pushed?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with GitHub Actions CI/CD pipeline"
+      }
+    }
+  ]
+}

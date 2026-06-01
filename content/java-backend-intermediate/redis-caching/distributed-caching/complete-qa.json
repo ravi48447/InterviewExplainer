@@ -1,0 +1,133 @@
+{
+  "topic": "Distributed Caching",
+  "topicSlug": "distributed-caching",
+  "questions": [
+    {
+      "id": "redis-005",
+      "slug": "distributed-locking-redisson",
+      "question": "How do you implement distributed locking in Java using Redisson, and what pitfalls should you avoid?",
+      "title": "Distributed Locking with Redisson in Spring Boot",
+      "direct_answer": "Redisson provides a RLock implementation that uses the Redlock algorithm to acquire a distributed lock across Redis nodes, ensuring mutual exclusion across JVM instances. You call lock.tryLock() with a wait time and lease time, execute your critical section, and release in a finally block. Key pitfalls include not releasing the lock in a finally block, setting lease times too short relative to the critical section duration, and using a single Redis node instead of RedLock's majority-quorum approach for strong guarantees.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Practical experience with distributed coordination problems and the specific challenges of lock expiry, clock skew, and crash scenarios.",
+        "common_mistake": "Using SETNX directly without an expiry, which can leave orphaned locks if the process crashes, permanently blocking other nodes.",
+        "to_stand_out": "Discuss the Martin Kleppmann vs Salvatore Sanfilippo debate about Redlock's safety guarantees and mention fencing tokens as a complement to Redlock."
+      },
+      "company_tags": [
+        "Stripe",
+        "Square",
+        "Uber",
+        "Airbnb",
+        "PayPal"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "How it works under the hood",
+            "content": "Distributed locking solves a coordination problem that arises whenever multiple JVM instances need mutual exclusion over a shared resource — for example, ensuring that only one instance processes a payment, sends a notification, or runs a scheduled batch at any given time. Redis is a natural fit because its single-threaded command execution makes `SET key value NX PX ttl` inherently atomic: the key is set only if it does not already exist, and the TTL ensures automatic cleanup if the holder crashes.\n\nRedisson's `RLock` builds on this primitive with several production-grade features. The watchdog mechanism is the most important: when you call `lock()` without a lease time, Redisson spawns a background Netty timer that renews the lock's TTL every `lockWatchdogTimeout / 3` milliseconds (default ~10 seconds) as long as the owning thread is alive. This prevents the lock from expiring while the critical section is still executing due to GC pauses, network delays, or slow I/O. If the JVM crashes, the watchdog dies with it and the lock TTL expires naturally, avoiding orphaned locks.\n\nThe Redlock algorithm, proposed by Redis's author, extends single-node locking to N independent Redis instances. The client attempts to acquire the lock on each instance within a bounded time window and considers the lock acquired only if a majority (N/2 + 1) succeed. This tolerates the failure of any minority of nodes. However, Martin Kleppmann's analysis showed that Redlock's safety relies on bounded clock drift and process pauses — assumptions that real systems can violate. For truly critical paths (financial transfers, inventory decrements), the industry consensus is to complement the lock with a fencing token: a monotonically increasing counter attached to the lock that downstream systems check before accepting writes, so a delayed holder that lost the lock cannot perform a stale write."
+          },
+          {
+            "type": "step",
+            "title": "Step 1 — Add Redisson Dependency",
+            "content": "Add Redisson to your Maven or Gradle build:\n\n```xml\n<!-- pom.xml -->\n<dependency>\n    <groupId>org.redisson</groupId>\n    <artifactId>redisson-spring-boot-starter</artifactId>\n    <version>3.27.0</version>\n</dependency>\n```\n\nRedisson bundles its own Redis client (based on Netty) and provides distributed implementations of `java.util.concurrent` structures — `Lock`, `Semaphore`, `CountDownLatch`, `ReadWriteLock`, and more. The starter auto-configures a `RedissonClient` bean from `application.yml`."
+          },
+          {
+            "type": "step",
+            "title": "Step 2 — Configure Redisson Client",
+            "content": "Configure the Redisson client in `application.yml` or via a `Config` bean:\n\n```yaml\n# application.yml — single server mode\nspring:\n  redis:\n    host: localhost\n    port: 6379\n\nredisson:\n  single-server-config:\n    address: \"redis://localhost:6379\"\n    connection-pool-size: 64\n    connection-minimum-idle-size: 10\n```\n\nFor a RedLock setup across independent Redis nodes:\n\n```java\n@Configuration\npublic class RedissonConfig {\n\n    @Bean\n    public RedissonClient redissonClient() {\n        Config config = new Config();\n        // Single server for development\n        config.useSingleServer()\n            .setAddress(\"redis://localhost:6379\")\n            .setConnectionPoolSize(64)\n            .setConnectionMinimumIdleSize(10);\n        return Redisson.create(config);\n    }\n}\n```\n\nFor production multi-node RedLock, create multiple `RedissonClient` instances pointing to independent Redis deployments and use `RedissonMultiLock`."
+          },
+          {
+            "type": "step",
+            "title": "Step 3 — Acquire and Release the Lock",
+            "content": "Acquire and release locks with proper error handling:\n\n```java\n@Service\npublic class PaymentService {\n\n    private final RedissonClient redisson;\n\n    public PaymentResult processPayment(String orderId, BigDecimal amount) {\n        // Lock scoped to this specific order\n        RLock lock = redisson.getLock(\"lock:payment:\" + orderId);\n        boolean acquired = false;\n        try {\n            // Wait up to 5s to acquire, auto-release after 30s\n            acquired = lock.tryLock(5, 30, TimeUnit.SECONDS);\n            if (!acquired) {\n                throw new PaymentConflictException(\n                    \"Another instance is processing order \" + orderId);\n            }\n\n            // Critical section — only one JVM executes this at a time\n            return doProcessPayment(orderId, amount);\n\n        } catch (InterruptedException e) {\n            Thread.currentThread().interrupt();\n            throw new PaymentException(\"Lock acquisition interrupted\", e);\n        } finally {\n            // Only unlock if we actually hold the lock\n            if (acquired && lock.isHeldByCurrentThread()) {\n                lock.unlock();\n            }\n        }\n    }\n}\n```\n\n**Key parameters:** The wait time (5s) bounds how long a thread will block waiting for a contended lock. The lease time (30s) caps how long the lock is held — if the critical section takes longer, the lock expires and another instance can proceed. Use Redisson's watchdog (omit lease time) to auto-extend while the thread is alive."
+          },
+          {
+            "type": "step",
+            "title": "Step 4 — Watch for Common Pitfalls",
+            "content": "Common pitfalls and how to avoid each one:\n\n**Pitfall 1 — Forgetting to release in `finally`:**\nIf an exception occurs inside the critical section and you do not release in `finally`, the lock stays held until the lease expires, blocking all other instances.\n\n**Pitfall 2 — Blind `unlock()` without ownership check:**\n```java\n// WRONG — throws IllegalMonitorStateException if lock expired\nlock.unlock();\n\n// CORRECT — verify current thread still owns the lock\nif (lock.isHeldByCurrentThread()) {\n    lock.unlock();\n}\n```\nIf your critical section runs longer than the lease, the lock expires and another thread acquires it. Calling `unlock()` on a lock you no longer own releases someone else's lock.\n\n**Pitfall 3 — Lease time shorter than critical section:**\nSet lease time with headroom (2–3× expected execution time), or omit it to enable the watchdog, which extends the lease every 10 seconds while the thread is alive.\n\n**Pitfall 4 — Single Redis node for strong guarantees:**\nA single Redis node is a single point of failure. If Redis restarts, all locks vanish. For critical paths, use `RedissonMultiLock` across 3+ independent Redis instances (RedLock algorithm).\n\n**Pitfall 5 — No fencing token for downstream writes:**\nEven with distributed locks, a slow thread can lose the lock and still complete its write. Use a monotonically increasing fencing token to let downstream services reject stale operations."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`SET key NX EX` is fragile on failover** — if the Redis primary fails after setting the key before replication, the new primary has no record of the lock; Redlock on N independent instances prevents this\n- **Redlock requires majority quorum** — acquire on at least N/2 + 1 of N independent Redis nodes; a single node failure doesn't break the lock because the majority still holds it\n- **Redisson watchdog renews the TTL automatically** — the watchdog thread extends the lease every 10s while the holder is alive; stops renewing on process death so the lock expires naturally without a crashed holder blocking forever\n- **Always set a lease time** — a lock with no TTL causes permanent blocking if the holder crashes; set lease time longer than the longest expected critical section plus safety margin\n- **Prefer database optimistic locking for most cases** — `@Version` in JPA with `OptimisticLockException` retry is simpler and avoids Redis dependency for mutual exclusion on database records"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to explain this in an interview",
+            "content": "Distributed locking with Redis is a common interview topic because it looks simple but has real failure modes. The naive implementation — `SET key NX EX 30` — works in single-node Redis but not across a cluster under failure scenarios.\n\n**Why the naive `SETNX` approach is fragile**\n- `SET key NX EX 30` creates a key only if it doesn't exist, with a 30-second TTL — which means the first caller acquires the lock and others fail fast; this works on a single Redis instance\n- The problem: if the Redis primary fails after the key is set but before the replica replicates it, a new primary is elected without the lock key, and a second caller acquires the lock — two holders of the \"exclusive\" lock simultaneously\n\n**Redlock — the multi-node algorithm**\n- Redlock acquires the lock on N independent Redis instances (not a cluster) — for a lock to be held, it must be acquired on a majority (N/2 + 1) of instances; a single instance failure doesn't break the lock because the majority still holds it\n- Redisson implements Redlock in Java with `RLock` — `lock.tryLock(waitTime, leaseTime, TimeUnit.SECONDS)` handles the multi-instance coordination automatically\n\n**Lease time and watchdog**\n- Every distributed lock needs a TTL to prevent a crashed holder from holding the lock forever — Redisson's `RLock` defaults to a 30-second lease and a watchdog thread that renews the TTL every 10 seconds while the holder is alive\n- The watchdog stops renewing if the application process dies — which means the lock eventually expires naturally, and other holders can acquire it\n\n**When distributed locking is overkill**\n- For most application-level mutual exclusion, optimistic locking with a database version column is simpler and doesn't require Redis — use `@Version` in JPA; a conflicting update throws `OptimisticLockException` and the caller retries"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is Redisson's watchdog mechanism and why does it matter?",
+        "How does the Redlock algorithm differ from a simple single-node distributed lock?",
+        "What is a fencing token and when would you use it alongside a distributed lock?"
+      ],
+      "seo": {
+        "metaTitle": "Distributed Locking with Redisson and Redis in Java | Interview Guide",
+        "metaDescription": "Learn how to implement distributed locking in Spring Boot using Redisson with code examples, pitfall explanations, and Redlock algorithm discussion."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "Distributed locking with Redis is a common interview topic because it looks simple but has real failure modes.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Distributed locking solves a coordination problem that arises whenever multiple JVM instances need mutual exclusion over a shared resource — for example, ensuring that only one instance processes a payment, sends a notification, or runs a scheduled batch at any given time. Redis is a natural fit because its single-threaded command execution makes SET key value NX PX ttl inherently atomic: the key is set only if it does not already exist, and the TTL ensures automatic cleanup if the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical experience with distributed coordination problems and the specific challenges of lock expiry, clock skew, and crash scenarios."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "SET key NX EX is fragile on failover — if the Redis primary fails after setting the key before replication, the new primary has no record of the lock",
+              "Redlock on N independent instances prevents this Redlock requires majority quorum — acquire on at least N/2 + 1 of N independent Redis nodes",
+              "a single node failure doesn't break the lock because the majority still holds it Redisson watchdog renews the TTL automatically — the watchdog thread extends the lease every 10s while the holder is alive",
+              "stops renewing on process death so the lock expires naturally without a crashed holder blocking forever Always set a lease time — a lock with no TTL causes permanent blocking if the holder crashes",
+              "set lease time longer than the longest expected critical section plus safety margin Prefer database optimistic locking for most cases — @Version in JPA with OptimisticLockException retry is simpler and avoids Redis dependency for mutual exclusion on database records"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Distributed locking solves a coordination problem that arises whenever multiple JVM instances need mutual exclusion over a shared resource — for example, ensuring that only one instance processes a payment, sends a notification, or runs a scheduled batch at any given time. Redis is a natural fit because its single-threaded command execution makes SET key value NX PX ttl inherently atomic: the key is set only if it does not already exist, and the TTL ensures automatic cleanup if the holder crashes. Redisson's RLock builds on this primitive with several production-grade features. The watchdog mechanism is the most important: when you call lock() without a lease time, Redisson spawns a background Netty timer that renews the lock's TTL every lockWatchdogTimeout."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using SETNX directly without an expiry, which can leave orphaned locks if the process crashes, permanently blocking other nodes"
+            ]
+          }
+        ],
+        "cap": "Why the naive SETNX approach is fragile SET key NX EX 30 creates a key only if it doesn't exist, with a 30-second TTL — which means the first caller acquires the lock and others.",
+        "familiarity_anchors": [
+          "Redisson",
+          "RLock",
+          "Redlock"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is Redisson's watchdog mechanism and why does it matter?",
+          "How does the Redlock algorithm differ from a simple single-node distributed lock?",
+          "What is a fencing token and when would you use it alongside a distributed lock?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app using Redis for session and cache"
+      }
+    }
+  ]
+}

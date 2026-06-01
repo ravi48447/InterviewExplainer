@@ -1,0 +1,289 @@
+{
+  "topic": "Multi Tenancy",
+  "topicSlug": "multi-tenancy",
+  "questions": [
+    {
+      "id": "jpa-multi-datasource",
+      "slug": "multi-datasource-spring-boot",
+      "question": "How do you configure multiple DataSources in a Spring Boot application with routing?",
+      "title": "Multiple DataSources in Spring Boot — Configuration and Routing",
+      "direct_answer": "Spring Boot auto-configures a **single** `DataSource`. For multiple databases, manually define each `DataSource` as a `@Bean`, build a separate **`EntityManagerFactory`** and **`TransactionManager`** per `DataSource`, and use `@Qualifier` (or `@Primary`) plus `@EnableJpaRepositories(entityManagerFactoryRef, transactionManagerRef, basePackages)` so each repository targets the right one. **`AbstractRoutingDataSource`** dynamically routes a single logical DataSource to multiple physical databases based on a `ThreadLocal` context key — used for **read/write splitting** (replica vs primary) or **multi-tenancy** (per-tenant DB). Mixing `EntityManagerFactory` instances across DataSources is the most common bug — entities end up in the wrong persistence context.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can configure multiple databases and understands transaction manager isolation",
+        "common_mistake": "Forgetting that each `DataSource` needs its own `EntityManagerFactory` and `TransactionManager` — mixing them causes entities to be managed by the wrong persistence context",
+        "to_stand_out": "Explain `AbstractRoutingDataSource` for read/write splitting or multi-tenancy, and discuss how `@Transactional` must specify which transaction manager to use"
+      },
+      "company_tags": [
+        "Booking.com",
+        "Salesforce",
+        "Atlassian",
+        "Stripe",
+        "Wise",
+        "Adyen"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "One DataSource Is Auto-Configured — Two Requires Manual Wiring of Everything",
+            "content": "Spring Boot's auto-configuration assumes a single database.\n- Add `spring.datasource.url` and everything works.\n- **The moment you need a second database**, auto-configuration cannot decide which `DataSource` to use for which entities, so you must configure everything manually: two `DataSource` beans, two `LocalContainerEntityManagerFactoryBean` instances (each scanning different entity packages), and two `PlatformTransactionManager` beans.\n\nThe critical mistake is sharing a single `EntityManagerFactory` across both databases. Each `EntityManagerFactory` must know which entities it manages and which `DataSource` to use. If they overlap, entities end up in the wrong persistence context and queries hit the wrong database.\n\n**`AbstractRoutingDataSource`** is the alternative for dynamic routing — a single logical `DataSource` that delegates to different physical databases based on a context key.\n- Use it for **read/write splitting** or **multi-tenancy**.\n- The context key is typically stored in a `ThreadLocal` set by an interceptor, filter, or AOP aspect."
+          },
+          {
+            "type": "step",
+            "title": "Wiring Two DataSources End-to-End",
+            "content": "**Step 1 — Two `DataSource` beans:**\n- One `@Primary` to satisfy ambiguous injection.\n- Bind separate Spring Boot property prefixes (`spring.datasource.primary.*`, `spring.datasource.replica.*`).\n\n**Step 2 — Two `EntityManagerFactory` beans:**\n- Use `LocalContainerEntityManagerFactoryBean` with explicit `setPackagesToScan(...)`.\n- Each EMF references its own `DataSource`.\n- Distinct `persistenceUnitName` per EMF.\n\n**Step 3 — Two `PlatformTransactionManager` beans:**\n- One per EMF (`JpaTransactionManager`).\n- Mark one `@Primary` so unannotated `@Transactional` resolves predictably.\n\n**Step 4 — Two `@EnableJpaRepositories` blocks:**\n- Each scans a different package.\n- Each names its `entityManagerFactoryRef` and `transactionManagerRef`.\n- Repositories under each package automatically use the correct infrastructure.\n\n**Step 5 — Use `@Transactional(\"replicaTxManager\")` for non-primary work:**\n- Without the qualifier, Spring uses the `@Primary` transaction manager.\n- Cross-DataSource transactions are not atomic by default — see XA / outbox below."
+          },
+          {
+            "type": "step",
+            "title": "`AbstractRoutingDataSource` for Read/Write Splitting — The Production Pattern",
+            "content": "**How routing happens:**\n- Override `determineCurrentLookupKey()` to return a key from a `ThreadLocal`.\n- A `Map<Object, Object>` of `(key -> targetDataSource)` is configured at startup.\n- Hibernate calls `getConnection()` on the routing DataSource; the routing DataSource resolves the key and forwards to the matching target.\n\n**`@Transactional(readOnly = true)` is the natural split signal:**\n- A custom `AbstractRoutingDataSource` checks the current transaction's read-only flag (via `TransactionSynchronizationManager.isCurrentTransactionReadOnly()`).\n- Read-only transactions go to the replica.\n- Write transactions go to the primary.\n\n**Timing subtlety:**\n- The DataSource is selected when the connection is acquired — at the start of the transaction.\n- If you set the routing key inside the transaction, it is too late.\n- The routing key must be set **before** `@Transactional` begins, typically in an AOP aspect that runs before the transaction advice (`@Order(0)` while transactions default to `Ordered.LOWEST_PRECEDENCE`).\n\n**Replica lag awareness:**\n- Read after write may not see the write on the replica.\n- For request-scoped consistency, route the entire request to the primary if it has just performed a write (sticky session per request)."
+          },
+          {
+            "type": "step",
+            "title": "Three Multi-Tenancy Strategies — Database, Schema, and Row-Level",
+            "content": "**Database-per-tenant:**\n- Each tenant has its own database (own `DataSource`, own `EntityManagerFactory`).\n- Strongest isolation — a tenant's noisy query cannot affect another tenant.\n- Backup/restore is tenant-granular.\n- Cost scales linearly: each DB is its own pool, cached statements, replication stream.\n- Becomes expensive past ~50 tenants.\n- Routing via `AbstractRoutingDataSource` with tenant ID as the key.\n- Right choice for enterprise SaaS with a small number of high-value tenants who demand contractual data isolation.\n\n**Schema-per-tenant:**\n- One database, one connection pool, multiple schemas.\n- Each tenant sees only their schema.\n- Routing via Hibernate's `MultiTenantConnectionProvider` — at connection acquisition, Hibernate calls `SET search_path` (Postgres) or `USE schema` (MySQL).\n- Lower resource cost than database-per-tenant; still gives logical isolation.\n- Catch: schema migrations must run per-schema (Flyway's `schemas` config or a loop).\n- Good for mid-size SaaS with hundreds of tenants.\n\n**Row-level with `tenant_id` column:**\n- Every table has a `tenant_id` column.\n- Every query filters on it.\n- Hibernate filters or `@Filter` enforce the predicate automatically; safety net is application code.\n- Cheapest and most scalable — single database serves thousands of tenants.\n- Weakest isolation: a missing `WHERE tenant_id=?` is a cross-tenant data leak.\n- Use **Postgres Row Level Security (RLS)** as defense-in-depth — define an RLS policy at the table level so the database itself rejects queries without a valid tenant context.\n\n**Hibernate integration:**\n- `hibernate.multiTenancy=DATABASE`, `SCHEMA`, or `DISCRIMINATOR`.\n- Provide a `CurrentTenantIdentifierResolver` and a `MultiTenantConnectionProvider`.\n- Framework switches the connection or schema per tenant transparently."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Three Multi-Tenancy Strategies Side-by-Side",
+            "content": "Isolation gradient: database-per-tenant strongest, row-level cheapest. Cost increases left-to-right is reversed for isolation.",
+            "mermaid": "flowchart TB\n    req[\"Request: tenant=acme\"] --> resolver[\"CurrentTenantIdentifierResolver\"]\n    resolver --> router[\"AbstractRoutingDataSource / MultiTenantConnectionProvider\"]\n\n    subgraph dbPerTenant[\"Strategy 1: Database per tenant\"]\n        d1[(\"acme DB - own pool\")]\n        d2[(\"initech DB - own pool\")]\n        d3[(\"50+ databases, 50+ pools\")]\n    end\n\n    subgraph schemaPerTenant[\"Strategy 2: Schema per tenant\"]\n        sharedDb1[(\"One database, shared pool\")]\n        s1[\"schema acme\"]\n        s2[\"schema initech\"]\n        s3[\"schema ...\"]\n        sharedDb1 --- s1\n        sharedDb1 --- s2\n        sharedDb1 --- s3\n    end\n\n    subgraph rowLevel[\"Strategy 3: Row level + RLS\"]\n        sharedDb2[(\"One database, one schema\")]\n        tbl[\"orders WHERE tenant_id = 'acme'\"]\n        rls[\"Postgres RLS policy: defense in depth\"]\n        sharedDb2 --- tbl\n        tbl --- rls\n    end\n\n    router -. strategy 1 .-> d1\n    router -. strategy 2 .-> sharedDb1\n    router -. strategy 3 .-> sharedDb2\n\n    iso[\"Isolation: high to low\"] --> dbPerTenant\n    iso --> schemaPerTenant\n    iso --> rowLevel\n    cost[\"Cost: high to low\"] --> dbPerTenant\n    cost --> schemaPerTenant\n    cost --> rowLevel"
+          },
+          {
+            "type": "step",
+            "title": "XA Transactions, Outbox Pattern, and Why Distributed Transactions Are Usually Wrong",
+            "content": "Once you have two DataSources, the next question is what happens when a single operation must modify both.\n\n**XA / two-phase commit:**\n- Requires a JTA transaction manager (Atomikos, Narayana, Bitronix).\n- Coordinator prepares both DataSources, then commits.\n- If any prepare fails, both roll back.\n- Provides atomicity across DataSources.\n- Heavy cost: longer-held locks (prepare phase blocks), coordinator is a single point of failure, recovery after coordinator crash is manual.\n- Incompatible with many cloud-managed databases (most RDS variants do not expose XA interfaces well).\n- Consider XA only when regulatory constraints demand atomic consistency on traditional on-prem databases.\n\n**Outbox pattern (eventual consistency):**\n- Write to DB1 (source of truth) and insert a record into an `outbox` table in the **same** transaction.\n- A separate process (Debezium CDC, polling job, Kafka Connect) reads the outbox and publishes events that downstream consumers apply to DB2.\n- Key insight: the write to DB1 and the outbox insert are in a **single local transaction** — atomic by construction.\n- Publish-to-downstream is eventually consistent but retryable.\n- Used by most modern microservices for cross-service consistency.\n\n**Decision rule:**\n- Single service with multiple DataSources and strong consistency demand -> XA (if feasible).\n- Microservices or cross-service updates -> outbox + CDC.\n- Never reach for XA just because 'I need to write to two databases' without first asking whether eventual consistency would satisfy the business requirement. It almost always would."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Each `DataSource` needs its own `EntityManagerFactory` and `TransactionManager`** — auto-config only handles one.\n- **Mark one `TransactionManager` as `@Primary`** — `@Transactional` without a qualifier uses it; otherwise specify `@Transactional(\"otherTxManager\")`.\n- **`@EnableJpaRepositories`** — must specify `entityManagerFactoryRef`, `transactionManagerRef`, and `basePackages` per group.\n- **`AbstractRoutingDataSource`** — single logical DataSource routing on a `ThreadLocal` key; used for read/write split and multi-tenancy.\n- **Routing key must be set before transaction starts** — the connection (and thus the target DataSource) is acquired at transaction begin.\n- **Multi-tenancy strategies** — database-per-tenant (max isolation, max cost), schema-per-tenant (logical isolation), row-level + RLS (cheapest, weakest).\n- **Cross-DataSource atomicity** — prefer outbox + CDC over XA; use XA only when regulation forces it."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Multiple DataSources are required when your application reads from multiple databases — primary/replica separation, microservice-owned databases, or multi-tenant schemas.\n\n**Per-DataSource configuration:**\n- `DataSource` bean (HikariCP)\n- `EntityManagerFactory` bean — the JPA context for that DataSource's entity classes\n- `PlatformTransactionManager` bean\n- `@EnableJpaRepositories(basePackages, entityManagerFactoryRef, transactionManagerRef)` routes repositories to the correct infrastructure\n\n**Primary bean designation:**\n- `@Primary` on one `DataSource`, one EMF, one TM\n- `@Transactional` without qualifier uses the primary TM\n- `@Transactional(\"replicaTxManager\")` explicitly uses the secondary\n\n**`AbstractRoutingDataSource` for dynamic routing:**\n- Override `determineCurrentLookupKey()` to read a `ThreadLocal`\n- Set the key before `@Transactional` begins via an AOP aspect\n- Read-only transactions route to the replica; writes route to the primary\n\n**Multi-tenancy choices:**\n- Database-per-tenant for strongest isolation, hundreds of tenants max\n- Schema-per-tenant for logical isolation at lower cost\n- Row-level with `tenant_id` and Postgres RLS for cost-optimized scale-out"
+          },
+          {
+            "type": "code_example",
+            "title": "Routing Between Multiple DataSources",
+            "content": "Spring Boot auto-configures one DataSource by default. For read/write splitting or multi-tenant setups, you define each DataSource manually and mark one `@Primary`. An `AbstractRoutingDataSource` then picks the active one per request.\n\n```java\n@Configuration\npublic class DataSourceConfig {\n\n    @Bean @Primary @ConfigurationProperties(\"app.datasource.primary\")\n    public DataSource primaryDataSource() { return DataSourceBuilder.create().build(); }\n\n    @Bean @ConfigurationProperties(\"app.datasource.replica\")\n    public DataSource replicaDataSource() { return DataSourceBuilder.create().build(); }\n\n    @Bean\n    public DataSource routingDataSource(@Qualifier(\"primaryDataSource\") DataSource primary,\n                                        @Qualifier(\"replicaDataSource\") DataSource replica) {\n        RoutingDataSource r = new RoutingDataSource();\n        r.setTargetDataSources(Map.of(\"PRIMARY\", primary, \"REPLICA\", replica));\n        r.setDefaultTargetDataSource(primary);\n        return r;\n    }\n}\n\npublic class RoutingDataSource extends AbstractRoutingDataSource {\n    private static final ThreadLocal<String> KEY = ThreadLocal.withInitial(() -> \"PRIMARY\");\n    public static void useReplica() { KEY.set(\"REPLICA\"); }\n    public static void useWriter()  { KEY.set(\"PRIMARY\"); }\n    public static void clear()      { KEY.remove(); }\n    @Override protected Object determineCurrentLookupKey() { return KEY.get(); }\n}\n\n@Aspect @Component\nclass ReadOnlyRoutingAspect {\n    @Around(\"@annotation(org.springframework.transaction.annotation.Transactional)\")\n    public Object route(ProceedingJoinPoint pjp) throws Throwable {\n        Transactional tx = ((MethodSignature) pjp.getSignature())\n            .getMethod().getAnnotation(Transactional.class);\n        if (tx != null && tx.readOnly()) RoutingDataSource.useReplica();\n        try { return pjp.proceed(); } finally { RoutingDataSource.clear(); }\n    }\n}\n```\n\n```yaml\napp:\n  datasource:\n    primary:\n      jdbc-url: jdbc:postgresql://primary:5432/app\n    replica:\n      jdbc-url: jdbc:postgresql://replica:5432/app\n      read-only: true\n```\n\n- Each DataSource needs its own `EntityManagerFactory` and `PlatformTransactionManager` when you use JPA — bind them with `@EnableJpaRepositories(basePackages=..., entityManagerFactoryRef=..., transactionManagerRef=...)`.\n- The aspect flips the `ThreadLocal` key before the transaction starts; swapping mid-transaction is unsafe because the connection is already bound to one DataSource.\n- For multi-tenant apps, key by tenant ID (`RoutingDataSource.useTenant(currentTenantId())`) instead of read/write — same mechanism, different lookup key."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does `AbstractRoutingDataSource` interact with HikariCP — does each target need its own pool?",
+        "What goes wrong if you set the routing `ThreadLocal` inside the `@Transactional` method?",
+        "How do you handle Flyway migrations across many tenant schemas?",
+        "When does outbox + CDC fail to provide acceptable consistency, forcing you to consider XA?"
+      ],
+      "seo": {
+        "metaTitle": "Multiple DataSources in Spring Boot — Configuration and Routing",
+        "metaDescription": "Configure multiple DataSources in Spring Boot, route with AbstractRoutingDataSource, and choose between database, schema, and row-level multi-tenancy strategies."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Multiple DataSources are required when your application reads from multiple databases — primary/replica separation, microservice-owned databases, or multi-tenant schemas.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring Boot's auto-configuration assumes a single database. Add spring.datasource.url and everything works. The moment you need a second database, auto-configuration cannot decide which DataSource to use for which entities, so you must configure everything manually: two DataSource beans, two LocalContainerEntityManagerFactoryBean instances (each scanning different entity packages), and two PlatformTransactionManager beans. The critical mistake is sharing a single EntityManagerFactory across both databases. Each EntityManagerFactory must know which entities it manages and which DataSource to use. If they overlap, entities end up."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate can configure multiple databases and understands transaction manager isolation"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Each DataSource needs its own EntityManagerFactory and TransactionManager — auto-config only handles one",
+              "Mark one TransactionManager as @Primary — @Transactional without a qualifier uses it; otherwise specify @Transactional(\"otherTxManager\")",
+              "@EnableJpaRepositories — must specify entityManagerFactoryRef, transactionManagerRef, and basePackages per group",
+              "AbstractRoutingDataSource — single logical DataSource routing on a ThreadLocal key; used for read/write split and multi-tenancy",
+              "Routing key must be set before transaction starts — the connection (and thus the target DataSource) is acquired at transaction begin"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Spring Boot auto-configures one DataSource by default. For read/write splitting or multi-tenant setups, you define each DataSource manually and mark one @Primary. An AbstractRoutingDataSource then picks the active one per request. ``java @Configuration public class DataSourceConfig { @Bean @Primary @ConfigurationProperties(\"app.datasource.primary\") public DataSource primaryDataSource() { return DataSourceBuilder.create().build(); } @Bean @ConfigurationProperties(\"app.datasource.replica\") public DataSource replicaDataSource() { return DataSourceBuilder.create().build(); } @Bean public DataSource routingDataSource(@Qualifier(\"primaryDataSource\") DataSource primary, @Qualifier(\"replicaDataSource\") DataSource replica) { RoutingDataSource r = new RoutingDataSource(); r.setTargetDataSources(Map.of(\"PRIMARY\", primary, \"REPLICA\", replica)); r.setDefaultTargetDataSource(primary); return r; } } public class RoutingDataSource extends AbstractRoutingDataSource { private static final ThreadLocal<String> KEY = ThreadLocal.withInitial(() -> \"PRIMARY\"); public static void useReplica() { KEY.set(\"REPLICA\"); } public static void useWriter() { KEY.set(\"PRIMARY\"); } public static void clear() { KEY.remove(); } @Override protected Object determineCurrentLookupKey()."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Forgetting that each DataSource needs its own EntityManagerFactory and TransactionManager",
+              "mixing them causes entities to be managed by the wrong persistence context"
+            ]
+          }
+        ],
+        "cap": "Per-DataSource configuration: DataSource bean (HikariCP) EntityManagerFactory bean — the JPA context for that DataSource's entity classes PlatformTransactionManager bean @EnableJpaRepositories(basePac",
+        "familiarity_anchors": [
+          "Spring",
+          "DataSource",
+          "EntityManagerFactory"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does `AbstractRoutingDataSource` interact with HikariCP — does each target need its own pool?",
+          "What goes wrong if you set the routing `ThreadLocal` inside the `@Transactional` method?",
+          "How do you handle Flyway migrations across many tenant schemas?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "mt-002",
+      "slug": "discriminator-vs-schema-vs-database-multitenancy-implementation",
+      "title": "Implementing Discriminator, Schema, and Database Multi-Tenancy in Hibernate",
+      "question": "How do you implement discriminator, schema, and database multi-tenancy strategies in Hibernate, and how do you decide which one to use?",
+      "direct_answer": "Hibernate exposes three native multi-tenancy modes via the property **`hibernate.multiTenancy`** = **`DISCRIMINATOR`**, **`SCHEMA`**, or **`DATABASE`**. All three share the same plug points: a **`CurrentTenantIdentifierResolver`** that returns the active tenant per request (typically from `ThreadLocal` set by a filter), and — for `SCHEMA`/`DATABASE` — a **`MultiTenantConnectionProvider`** that hands back a connection bound to the right schema or database. **DISCRIMINATOR** auto-appends `WHERE tenant_id = ?` (Hibernate 6.x). **SCHEMA** issues `SET search_path` per connection. **DATABASE** routes to a per-tenant pool. Choose by isolation requirement, tenant count, and cost: regulated/few -> DATABASE; many -> SCHEMA; massive -> DISCRIMINATOR with Postgres RLS as the safety net.",
+      "layout_type": "comparison-arena",
+      "difficulty": "advanced",
+      "importance": "high",
+      "reading_time_minutes": 10,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Practical knowledge of Hibernate's multi-tenancy SPI: who supplies the tenant identity, who supplies the connection, and how filtering is enforced",
+        "common_mistake": "Implementing `tenant_id` as plain `WHERE` in repositories — easily forgotten, leading to cross-tenant data leaks; also confusing tenant identity with security identity",
+        "to_stand_out": "Discuss `MultiTenantConnectionProvider` reset semantics, Postgres RLS as defense-in-depth for DISCRIMINATOR mode, and the operational realities of running migrations across hundreds of schemas or databases"
+      },
+      "company_tags": [
+        "Salesforce",
+        "Atlassian",
+        "Shopify",
+        "Workday",
+        "ServiceNow",
+        "Twilio"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Hibernate Has First-Class Multi-Tenancy — You Plug in Identity and Connection",
+            "content": "Hibernate's multi-tenancy support is a small SPI you plug into. **You provide the tenant identity** (`CurrentTenantIdentifierResolver`) and the **connection-routing logic** (`MultiTenantConnectionProvider`); Hibernate handles the rest — filtering for `DISCRIMINATOR`, schema switching for `SCHEMA`, connection routing for `DATABASE`.\n\nThe decision between modes is mostly about **how strong the isolation needs to be** and **how many tenants you scale to.** Strong isolation, few tenants, regulated industry -> `DATABASE`.\n- Many tenants, logical isolation acceptable -> `SCHEMA`.\n- Massive tenant count, cost over isolation -> `DISCRIMINATOR` with Postgres Row Level Security as defense-in-depth.\n\n**Identity must be set before the first query in the request.** A `Filter` or `OncePerRequestFilter` reads the tenant from a header / JWT claim / subdomain, stashes it in a `ThreadLocal`, and clears it on completion. The resolver returns that value to Hibernate."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Three Hibernate Multi-Tenancy Modes",
+            "content": "Property: `hibernate.multiTenancy`. Values: `DISCRIMINATOR` (Hibernate 6+), `SCHEMA`, `DATABASE`.\n\n| Aspect | DISCRIMINATOR | SCHEMA | DATABASE |\n|---|---|---|---|\n| **Storage** | One DB, one schema, one table per entity with `tenant_id` column | One DB, multiple schemas (one per tenant) | One database per tenant |\n| **Connection pool** | Single shared pool | Single shared pool | Pool per tenant |\n| **Routing mechanism** | Hibernate adds `WHERE tenant_id = ?` to every query | `SET search_path` (Postgres) / `USE schema` (MySQL) on connection acquisition | `MultiTenantConnectionProvider` returns connection from the tenant's pool |\n| **Migrations** | Single Flyway run on one schema | Per-schema run (Flyway `schemas`) or loop | Per-database run |\n| **Isolation** | Logical (application + DB-side RLS) | Logical (schema-scoped) | Physical (separate DBs) |\n| **Tenants supported** | Thousands+ | Hundreds | Tens (cost-bounded) |\n| **Backup/restore granularity** | Hard — must filter | Per schema | Per database |\n\n**Hibernate 6 added native `DISCRIMINATOR` mode** with `@TenantId`. Older codebases used `@Filter` or application-level `WHERE tenant_id = ?` enforcement."
+          },
+          {
+            "type": "code_example",
+            "title": "Tenant Identity Resolver (Common to All Modes)",
+            "content": "```java\npublic class TenantContext {\n    private static final ThreadLocal<String> CURRENT = new ThreadLocal<>();\n    public static void set(String tenantId) { CURRENT.set(tenantId); }\n    public static String get() { return CURRENT.get(); }\n    public static void clear() { CURRENT.remove(); }\n}\n\npublic class TenantFilter extends OncePerRequestFilter {\n    @Override\n    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain)\n            throws ServletException, IOException {\n        String tenant = req.getHeader(\"X-Tenant-Id\");\n        if (tenant == null || tenant.isBlank()) {\n            res.sendError(HttpServletResponse.SC_BAD_REQUEST, \"Missing tenant\");\n            return;\n        }\n        TenantContext.set(tenant);\n        try {\n            chain.doFilter(req, res);\n        } finally {\n            TenantContext.clear();\n        }\n    }\n}\n\npublic class TenantIdResolver implements CurrentTenantIdentifierResolver {\n    @Override public String resolveCurrentTenantIdentifier() {\n        String t = TenantContext.get();\n        return t != null ? t : \"public\";\n    }\n    @Override public boolean validateExistingCurrentSessions() { return true; }\n}\n```\n\nRegister via Spring Boot:\n\n```yaml\nspring:\n  jpa:\n    properties:\n      hibernate.multi_tenant_connection_provider: com.acme.MyConnectionProvider\n      hibernate.tenant_identifier_resolver: com.acme.TenantIdResolver\n```"
+          },
+          {
+            "type": "step",
+            "title": "Implementing DISCRIMINATOR Mode (Hibernate 6+)",
+            "content": "**Configuration:**\n- `hibernate.multiTenancy = DISCRIMINATOR`\n- No `MultiTenantConnectionProvider` needed (single DataSource).\n- `CurrentTenantIdentifierResolver` provides the active tenant.\n\n**Entity mapping:**\n```java\n@Entity\npublic class Order {\n    @Id @GeneratedValue Long id;\n    @TenantId String tenantId;\n    String status;\n}\n```\n\n**What Hibernate does:**\n- On INSERT, populates `tenantId` from the resolver.\n- On every SELECT/UPDATE/DELETE, automatically adds `WHERE tenant_id = ?`.\n- Application code is unchanged — `orderRepo.findAll()` returns only the current tenant's orders.\n\n**Postgres RLS as defense-in-depth:**\n- Application-side filtering can be bypassed by a bug or native query.\n- Define an RLS policy at the table:\n\n```sql\nALTER TABLE orders ENABLE ROW LEVEL SECURITY;\nCREATE POLICY tenant_isolation ON orders\n    USING (tenant_id = current_setting('app.tenant_id'));\n```\n\n- Set the session variable from the connection: `SET app.tenant_id = 'acme'` after connection acquisition.\n- Database itself rejects out-of-tenant rows even if the application forgets a `WHERE`.\n\n**Operational notes:**\n- Single Flyway migration; no per-tenant work.\n- Backup/restore is global — restoring one tenant requires filtered export.\n- Index every table on `(tenant_id, ...)` to keep query plans selective."
+          },
+          {
+            "type": "step",
+            "title": "Implementing SCHEMA Mode",
+            "content": "**Configuration:**\n- `hibernate.multiTenancy = SCHEMA`\n- Custom `MultiTenantConnectionProvider` switches the schema after connection acquisition.\n\n**Connection provider:**\n```java\npublic class SchemaPerTenantConnectionProvider\n        implements MultiTenantConnectionProvider<String> {\n    private final DataSource dataSource;\n\n    public Connection getAnyConnection() throws SQLException {\n        return dataSource.getConnection();\n    }\n    public Connection getConnection(String tenant) throws SQLException {\n        Connection c = getAnyConnection();\n        try (Statement s = c.createStatement()) {\n            s.execute(\"SET search_path TO \\\"\" + tenant + \"\\\", public\");\n        }\n        return c;\n    }\n    public void releaseConnection(String tenant, Connection c) throws SQLException {\n        try (Statement s = c.createStatement()) {\n            s.execute(\"SET search_path TO public\");\n        }\n        c.close();\n    }\n    // boilerplate omitted\n}\n```\n\n**Important reset semantics:**\n- Connection is returned to the shared pool; the next acquirer may be a different tenant.\n- Always reset `search_path` (or schema) on release — otherwise leaks tenant context.\n- Validate tenant name to prevent SQL injection (whitelist or strict regex).\n\n**Migrations:**\n- Flyway: configure `spring.flyway.schemas=acme,initech,...` or run Flyway programmatically per tenant on tenant creation.\n- A new-tenant onboarding job creates the schema and runs migrations to baseline.\n\n**Trade-offs:**\n- Lower cost than `DATABASE` (one pool, one DB instance).\n- Logical isolation strong enough for most SaaS.\n- Connection-level operations (e.g., advisory locks) are scoped to the tenant's schema."
+          },
+          {
+            "type": "step",
+            "title": "Implementing DATABASE Mode",
+            "content": "**Configuration:**\n- `hibernate.multiTenancy = DATABASE`\n- `MultiTenantConnectionProvider` holds a `Map<String, DataSource>` of tenant -> pool.\n\n**Connection provider:**\n```java\npublic class DatabasePerTenantConnectionProvider\n        implements MultiTenantConnectionProvider<String> {\n    private final Map<String, DataSource> pools;\n    private final DataSource defaultDs;\n\n    public Connection getAnyConnection() throws SQLException {\n        return defaultDs.getConnection();\n    }\n    public Connection getConnection(String tenant) throws SQLException {\n        DataSource ds = pools.get(tenant);\n        if (ds == null) throw new IllegalStateException(\"Unknown tenant: \" + tenant);\n        return ds.getConnection();\n    }\n    // ...\n}\n```\n\n**Pool sizing:**\n- Each tenant gets a pool with its own min/max connections.\n- 50 tenants x 10 max connections = 500 backend connections — plan capacity.\n- Lazy pool creation on first use is common; warm pools for VIP tenants.\n\n**Onboarding a new tenant:**\n- Provision the database (Terraform / cloud SDK).\n- Run Flyway against the new database to create schema.\n- Register the new pool with the `MultiTenantConnectionProvider`.\n- Cache invalidation on tenant catalog changes.\n\n**Why this strategy:**\n- Strongest physical isolation — noisy neighbor cannot affect others.\n- Backup, restore, point-in-time recovery, encryption keys per tenant.\n- Required for some compliance regimes (HIPAA, PCI, SOC 2 with tenant-key requirements).\n\n**Why not for everyone:**\n- Operational cost is linear in tenant count.\n- Schema drift between tenants is a real risk — automate migrations rigorously."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Choosing the Right Strategy",
+            "content": "**When DISCRIMINATOR helps:**\n- Thousands of tenants where per-tenant infra cost is prohibitive.\n- Tenants are similar in size and access pattern.\n- Postgres RLS is available as a database-side safety net.\n\n**When DISCRIMINATOR hurts:**\n- A single bug or native query can leak data across tenants.\n- Hot tenants share resources with cold ones (no isolation under load).\n- Per-tenant backup/restore is awkward.\n\n**When SCHEMA helps:**\n- Hundreds of tenants needing logical isolation without per-tenant DBs.\n- Per-tenant schema export gives clean backups.\n- Connection pooling is shared (cost-effective).\n\n**When SCHEMA hurts:**\n- Migrations multiply with schema count.\n- Connection reset bugs leak tenant context across requests.\n- Some tools (DB monitoring, query analysis) struggle with hundreds of schemas.\n\n**When DATABASE helps:**\n- Regulated industries (HIPAA, PCI, finance) requiring physical isolation.\n- High-value enterprise tenants with dedicated SLAs.\n- Per-tenant point-in-time recovery and encryption.\n\n**When DATABASE hurts:**\n- Cost balloons with tenant count.\n- Connection pool count multiplies (resource pressure on backend).\n- Onboarding/offboarding is heavyweight.\n\n**Watch for:**\n- Tenant identity must be **immutable per request** — set in filter, never mutated by handlers.\n- L2 cache must be **tenant-aware** — Hibernate handles this if multi-tenancy is configured before EMF construction.\n- Avoid native queries that bypass Hibernate filtering — use parameterized JPQL or carefully review native SQL.\n- Test with two tenants in the same JVM to catch isolation bugs early."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`hibernate.multiTenancy`** — `DISCRIMINATOR`, `SCHEMA`, or `DATABASE` selects the mode.\n- **`CurrentTenantIdentifierResolver`** — your code returns the active tenant from a `ThreadLocal` set by a filter.\n- **`MultiTenantConnectionProvider`** — your code returns a connection scoped to the tenant (schema switch or per-tenant pool).\n- **`@TenantId`** (Hibernate 6+) — entity-level annotation that auto-fills the tenant column and adds `WHERE tenant_id = ?` to queries.\n- **Postgres RLS** is the safety net for `DISCRIMINATOR` — database rejects cross-tenant rows even if the app forgets to filter.\n- **Connection reset is critical for `SCHEMA`** — always reset `search_path` on release to avoid context leak.\n- **Migrations multiply** for `SCHEMA` and `DATABASE` — automate per-tenant Flyway runs on onboarding.\n- **Strategy choice = isolation vs cost** — pick by tenant count and regulatory pressure."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Hibernate has first-class multi-tenancy support. You configure one of three modes and plug in two interfaces.\n\n**The two plug points:**\n- `CurrentTenantIdentifierResolver` — returns the active tenant from a `ThreadLocal`\n- `MultiTenantConnectionProvider` — supplies the connection bound to the right schema or database\n\n**The three modes:** - `DISCRIMINATOR` — single DB, single schema, `tenant_id` column on every table; Hibernate 6 auto-filters with `@TenantId`.\n- Postgres RLS adds defense-in-depth.\n- `SCHEMA` — single DB, multiple schemas; connection provider runs `SET search_path` per acquisition.\n- Reset on release is mandatory.\n- `DATABASE` — one database per tenant; connection provider routes to per-tenant pool.\n\n**How to choose:**\n- Regulated industry, few tenants, max isolation -> `DATABASE`\n- Mid-size SaaS, hundreds of tenants -> `SCHEMA`\n- Massive scale, cost over physical isolation -> `DISCRIMINATOR` plus RLS\n\n**Operational realities:**\n- Set tenant identity in a filter; clear in `finally`\n- Migrations multiply for `SCHEMA` and `DATABASE` — automate per tenant on onboarding\n- Test with two tenants in the same JVM to catch leaks"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Hibernate's L2 cache behave under multi-tenancy — is it tenant-aware automatically?",
+        "What happens if a request fails to set the tenant identifier — what does Hibernate do?",
+        "How would you implement per-tenant rate limiting on top of the DISCRIMINATOR strategy?",
+        "Can you migrate from DISCRIMINATOR to SCHEMA without downtime, and how?"
+      ],
+      "seo": {
+        "metaTitle": "Hibernate Multi-Tenancy — Discriminator, Schema, Database",
+        "metaDescription": "Implement Hibernate's three multi-tenancy modes: DISCRIMINATOR with @TenantId, SCHEMA with MultiTenantConnectionProvider, DATABASE per tenant — with trade-offs and Postgres RLS."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Hibernate has first-class multi-tenancy support.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Hibernate's multi-tenancy support is a small SPI you plug into. You provide the tenant identity (CurrentTenantIdentifierResolver) and the connection-routing logic (MultiTenantConnectionProvider); Hibernate handles the rest — filtering for DISCRIMINATOR, schema switching for SCHEMA, connection routing for DATABASE. The decision between modes is mostly about how strong the isolation needs to be and how many tenants you scale to. Strong isolation, few tenants, regulated industry -> DATABASE. Many tenants, logical isolation acceptable -> SCHEMA. Massive tenant count, cost over isolation ->."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical knowledge of Hibernate's multi-tenancy SPI: who supplies the tenant identity, who supplies the connection, and how filtering is enforced"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "multiTenancy — DISCRIMINATOR, SCHEMA, or DATABASE selects the mode",
+              "CurrentTenantIdentifierResolver — your code returns the active tenant from a ThreadLocal set by a filter",
+              "MultiTenantConnectionProvider — your code returns a connection scoped to the tenant (schema switch or per-tenant pool)",
+              "@TenantId (Hibernate 6+) — entity-level annotation that auto-fills the tenant column and adds WHERE tenant_id = ? to queries",
+              "Postgres RLS is the safety net for DISCRIMINATOR — database rejects cross-tenant rows even if the app forgets to filter"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "``java public class TenantContext { private static final ThreadLocal<String> CURRENT = new ThreadLocal<>(); public static void set(String tenantId) { CURRENT.set(tenantId); } public static String get() { return CURRENT.get(); } public static void clear() { CURRENT.remove(); } } public class TenantFilter extends OncePerRequestFilter { @Override protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException { String tenant = req.getHeader(\"X-Tenant-Id\"); if (tenant == null || tenant.isBlank()) { res.sendError(HttpServletResponse.SC_BAD_REQUEST, \"Missing tenant\"); return; } TenantContext.set(tenant); try { chain.doFilter(req, res); } finally { TenantContext.clear(); } } } public class TenantIdResolver implements CurrentTenantIdentifierResolver { @Override public String resolveCurrentTenantIdentifier() { String t = TenantContext.get(); return t != null ? t : \"public\"; } @Override public boolean validateExistingCurrentSessions() { return true; } } ` Register via."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Implementing tenant_id as plain WHERE in repositories — easily forgotten, leading to cross-tenant data leaks",
+              "also confusing tenant identity with security identity"
+            ]
+          }
+        ],
+        "cap": "How to choose: Regulated industry, few tenants, max isolation -> DATABASE Mid-size SaaS, hundreds of tenants -> SCHEMA Massive scale, cost over physical isolation -> DISCRIMINATOR plus RLS Operational",
+        "familiarity_anchors": [
+          "Hibernate",
+          "DISCRIMINATOR",
+          "SCHEMA"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Hibernate's L2 cache behave under multi-tenancy — is it tenant-aware automatically?",
+          "What happens if a request fails to set the tenant identifier — what does Hibernate do?",
+          "How would you implement per-tenant rate limiting on top of the DISCRIMINATOR strategy?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    }
+  ]
+}

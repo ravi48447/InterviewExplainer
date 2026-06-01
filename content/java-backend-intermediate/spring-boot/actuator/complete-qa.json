@@ -1,0 +1,280 @@
+{
+  "topic": "Actuator",
+  "topicSlug": "actuator",
+  "questions": [
+    {
+      "id": "sbo-005",
+      "slug": "spring-boot-actuator-endpoints-security",
+      "question": "What is Spring Boot Actuator and how do you secure its endpoints in production?",
+      "title": "Spring Boot Actuator — Endpoints and Security",
+      "direct_answer": "Spring Boot Actuator exposes operational HTTP and JMX endpoints — `/health`, `/info`, `/metrics`, `/env`, `/beans`, `/heapdump`, `/threaddump` — without writing custom monitoring code. By default only **`/health` and `/info` are exposed over HTTP**; everything else requires explicit opt-in via `management.endpoints.web.exposure.include`. In production, layer four defenses: **expose only what monitoring needs**, **secure with Spring Security role-based access**, **isolate on a separate `management.server.port`**, and **split health into liveness/readiness groups** for Kubernetes probes. Setting `exposure.include=*` in production is the most common Actuator security incident.",
+      "layout_type": "recipe-builder",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you know Actuator endpoints are a security risk if left open and can describe a layered defence strategy",
+        "common_mistake": "Exposing `management.endpoints.web.exposure.include=*` in production without authentication, leaking environment variables, heap dumps, and internal metrics",
+        "to_stand_out": "Describe using a separate `management.server.port` with a firewall rule so only internal services reach Actuator, plus `/actuator/health` groups for liveness and readiness probes in Kubernetes"
+      },
+      "company_tags": [
+        "Amazon",
+        "Google",
+        "Zalando",
+        "ING",
+        "HSBC"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Production Observability — and a Security Liability If Left Open",
+            "content": "Spring Boot Actuator adds **production-ready endpoints** that give instant visibility into a running application: health checks, metrics, environment inspection, thread dumps, heap dumps, bean graphs. No custom monitoring code, no extra agent — add the starter, configure exposure, and you have observability.\n\nThe danger is that several endpoints leak **dangerously sensitive information**.\n- `/env` shows every environment variable, including database passwords and API keys.\n- `/heapdump` lets anyone download a full JVM snapshot containing in-memory secrets and session tokens.\n- `/beans` reveals the entire architecture.\n- Setting `management.endpoints.web.exposure.include=*` in production — recommended in many tutorials for development — is the most common Actuator security mistake.\n\n**The default in Spring Boot 2.x+ is conservative**: only `/health` and `/info` are exposed over HTTP. Everything else requires explicit opt-in. Production hardening is a layered strategy of exposure control, authentication, network isolation, and health-group design — not just one property change."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Actuator Endpoint Exposure Pipeline",
+            "content": "```mermaid\nflowchart TB\n    Request[\"HTTP request to /actuator/*\"]\n    PortCheck{\"On management.server.port?\"}\n    Filter[\"Endpoint exposure filter\"]\n    Include[\"management.endpoints.web.exposure.include\"]\n    Exclude[\"management.endpoints.web.exposure.exclude\"]\n    Enabled{\"Endpoint enabled?\"}\n    Security[\"Spring Security filter chain\"]\n    Allow[\"EndpointRequest matcher\"]\n    Health[\"/health  /info  permitAll\"]\n    Other[\"all other endpoints  hasRole ACTUATOR\"]\n    Handler[\"Endpoint handler\"]\n    Reject[\"404 Not Found\"]\n    Forbid[\"401 / 403\"]\n\n    Request --> PortCheck\n    PortCheck -->|yes| Filter\n    PortCheck -->|wrong port| Reject\n    Filter --> Include\n    Include --> Exclude\n    Exclude --> Enabled\n    Enabled -->|no| Reject\n    Enabled -->|yes| Security\n    Security --> Allow\n    Allow --> Health\n    Allow --> Other\n    Health --> Handler\n    Other -->|authorized| Handler\n    Other -->|not authorized| Forbid\n```"
+          },
+          {
+            "type": "step",
+            "title": "Layer 1 — Exposure Control",
+            "content": "**Default exposure**\n- Spring Boot 2.x+ exposes only `/health` and `/info` over HTTP\n- All other endpoints (`/env`, `/beans`, `/heapdump`, `/threaddump`) are off by default\n- JMX exposure is broader but JMX is rarely exposed externally\n\n**Production exposure list**\n- Limit to what monitoring genuinely needs: `health`, `metrics`, `info`, `prometheus`\n- Never set `include=*` outside of local development\n- Use `exclude` to subtract specific endpoints if a starter forced one on\n\n**Configuration**\n\n```properties\nmanagement.endpoints.web.exposure.include=health,info,metrics,prometheus\nmanagement.endpoints.web.exposure.exclude=env,beans,heapdump,threaddump\nmanagement.endpoint.health.show-details=when-authorized\nmanagement.endpoint.health.show-components=when-authorized\n```\n\n**Health detail levels**\n- `never` — only `UP`/`DOWN` (safe for public load balancer checks)\n- `when-authorized` — authenticated callers see component-level details\n- `always` — leaks DB connection strings; never use in production"
+          },
+          {
+            "type": "step",
+            "title": "Layer 2 — Spring Security on Actuator",
+            "content": "**Why a dedicated filter chain**\n- Actuator endpoints should not share rules with the main API\n- Mixing them risks accidental exposure when application security changes\n- `EndpointRequest` matcher targets only Actuator paths so the rule is scoped\n\n**A typical secure configuration**\n- `/health` and `/info` stay public for load-balancer probes\n- All other Actuator endpoints require an `ACTUATOR` role\n- HTTP Basic auth is enough for an internal monitoring user\n\n```java\n@Bean\npublic SecurityFilterChain actuatorSecurity(HttpSecurity http) throws Exception {\n    return http\n        .securityMatcher(EndpointRequest.toAnyEndpoint())\n        .authorizeHttpRequests(auth -> auth\n            .requestMatchers(EndpointRequest.to(\"health\", \"info\")).permitAll()\n            .anyRequest().hasRole(\"ACTUATOR\")\n        )\n        .httpBasic(Customizer.withDefaults())\n        .csrf(csrf -> csrf.disable())\n        .build();\n}\n```\n\n**Operational notes**\n- The `securityMatcher(EndpointRequest.toAnyEndpoint())` ensures this chain only handles `/actuator/**`\n- A second `SecurityFilterChain` bean handles application endpoints separately\n- Disable CSRF on Actuator only — POST endpoints like `/loggers` need it off for tooling integration"
+          },
+          {
+            "type": "step",
+            "title": "Layer 3 — Network Isolation via Separate Management Port",
+            "content": "**The strongest defence is not authentication**\n- Setting `management.server.port` moves all Actuator endpoints to a separate TCP port\n- The application port (8080) is exposed publicly through the ingress\n- The management port (9090) is reachable only from internal networks\n\n**Configuration**\n\n```properties\nserver.port=8080\nmanagement.server.port=9090\nmanagement.server.address=10.0.0.0\nmanagement.endpoints.web.base-path=/actuator\nmanagement.server.ssl.enabled=true\nmanagement.server.ssl.client-auth=need\n```\n\n**Operational benefits**\n- `/heapdump`, `/env`, `/threaddump` are unreachable from the internet regardless of auth config\n- Even a security misconfig cannot leak data because port 9090 is not routed externally\n- `management.server.address=127.0.0.1` binds to localhost only on single-server deployments\n- The management port supports independent SSL — mutual TLS for internal monitoring\n- In Kubernetes, a NetworkPolicy restricts port 9090 to the monitoring namespace"
+          },
+          {
+            "type": "step",
+            "title": "Layer 4 — Health Groups for Kubernetes Liveness and Readiness",
+            "content": "**Why one /health is not enough**\n- Liveness probe asks: is this process alive and not deadlocked?\n- Readiness probe asks: can this pod serve traffic right now?\n- Mixing them causes pod restarts when only routing changes are needed\n\n**The classic mistake**\n- Including a database health check in the liveness probe\n- Database goes down → every pod fails liveness → Kubernetes restarts every pod\n- Restarts do nothing useful because the database is still down\n- Outcome: cascading restart storm during a downstream incident\n\n**Spring Boot health groups**\n\n```properties\nmanagement.endpoint.health.group.liveness.include=ping\nmanagement.endpoint.health.group.readiness.include=db,redis,kafka\nmanagement.endpoint.health.probes.enabled=true\n```\n\n**Endpoint mapping**\n- `/actuator/health/liveness` — minimal check; pod restart only on real process failure\n- `/actuator/health/readiness` — full dependency check; pod removed from service when DOWN\n- Auto-enabled in Kubernetes (detected via `KUBERNETES_SERVICE_HOST` env var)\n- Wire into pod spec `livenessProbe` and `readinessProbe` independently"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Configuration Trade-offs",
+            "content": "**When `show-details=always` helps:**\n- Internal-only deployments behind a corporate VPN with no external exposure\n- Local development where component-level health is the point\n- Diagnostic environments where debugging speed matters more than security\n\n**When `show-details=always` hurts:**\n- Any production endpoint reachable from the internet\n- Health endpoint included in load balancer probes that bypass auth\n- Multi-tenant environments where component names leak architecture\n\n**Watch for:**\n- Custom `HealthIndicator` beans that include user-supplied data in `Health.down().withDetail(...)` — leaks PII\n- `/loggers` POST endpoint that lets anyone change log levels at runtime; protect with role\n- Spring Boot defaulting `/info` content from `git.properties` — leaks commit hash and build time"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`exposure.include=*` is a production incident waiting to happen** — `/env` dumps passwords; `/heapdump` gives the full JVM heap; expose only `health,info,metrics,prometheus`.\n- **Separate `management.server.port`** — isolates Actuator from the app port; combine with NetworkPolicy or firewall to restrict to internal networks.\n- **`/actuator/health` shows `UP`/`DOWN` only by default** — `show-details=when-authorized` reveals component-level info to authenticated users only.\n- **`EndpointRequest.toAnyEndpoint()`** — the `securityMatcher` that scopes a `SecurityFilterChain` to Actuator routes; keeps Actuator security separate from app security.\n- **Health groups split liveness from readiness** — DB checks belong in readiness only; mixing them causes Kubernetes restart storms during downstream outages.\n- **Custom `HealthIndicator` for app-specific checks** — implement the interface, return `Health.up()` / `Health.down().withDetail(...)`; gets included automatically.\n- **`/actuator/prometheus` exposes Micrometer metrics** — add `micrometer-registry-prometheus`; no code changes; Prometheus scrapes the endpoint."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Boot Actuator gives you production observability — health, metrics, environment, thread dumps — without deploying a separate monitoring agent. The defaults are safe for development; exposing it fully in production is a security incident.\n\n**The four hardening layers**\n- Exposure control: `management.endpoints.web.exposure.include=health,info,metrics,prometheus` — never `*`\n- Spring Security with `EndpointRequest.toAnyEndpoint()` — keep `/health` and `/info` public, require `ACTUATOR` role for everything else\n- Separate management port: `management.server.port=9090` — moves Actuator off the public port; combine with a NetworkPolicy so only monitoring can reach it\n- Health groups: split `liveness` (minimal ping) from `readiness` (DB, Redis, Kafka) so Kubernetes restarts only when the process is genuinely broken\n\n**Why exposure matters**\n- `/env` leaks every property including passwords if injected as env vars\n- `/heapdump` returns the full JVM memory — secrets, session tokens, decrypted credentials\n- `/beans` and `/conditions` reveal the architecture and let attackers plan further probes\n\n**Health detail control**\n- `management.endpoint.health.show-details=when-authorized` — `UP`/`DOWN` for the load balancer, component details for authenticated callers\n- Custom `HealthIndicator` beans add app-specific checks — external API reachability, queue depth — and integrate into the same response monitoring already watches\n\nIn an interview, I'd emphasize that **the strongest defence is network isolation**, not authentication. Authentication is a layer; an isolated management port behind a NetworkPolicy is a moat."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you configure separate liveness and readiness health groups for Kubernetes?",
+        "How would you add a custom health indicator that checks an external dependency?",
+        "What is the difference between `/actuator/metrics` and `/actuator/prometheus`?",
+        "How do you protect the `/actuator/loggers` endpoint that allows runtime log-level changes?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Boot Actuator Endpoints and Security Hardening",
+        "metaDescription": "Spring Boot Actuator endpoints, exposure control, Spring Security integration, separate management port isolation, and Kubernetes liveness/readiness health groups."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Boot Actuator gives you production observability — health, metrics, environment, thread dumps — without deploying a separate monitoring agent.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring Boot Actuator adds production-ready endpoints that give instant visibility into a running application: health checks, metrics, environment inspection, thread dumps, heap dumps, bean graphs. No custom monitoring code, no extra agent — add the starter, configure exposure, and you have observability. The danger is that several endpoints leak dangerously sensitive information. /env shows every environment variable, including database passwords and API keys. /heapdump lets anyone download a full JVM snapshot containing in-memory secrets and session tokens. /beans reveals the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you know Actuator endpoints are a security risk if left open and can describe a layered defence strategy"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "include=* is a production incident waiting to happen — /env dumps passwords; /heapdump gives the full JVM heap; expose only health,info,metrics,prometheus",
+              "Separate management",
+              "port — isolates Actuator from the app port; combine with NetworkPolicy or firewall to restrict to internal networks",
+              "/actuator/health shows UP/DOWN only by default — show-details=when-authorized reveals component-level info to authenticated users only",
+              "EndpointRequest"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Spring Boot Actuator adds production-ready endpoints that give instant visibility into a running application: health checks, metrics, environment inspection, thread dumps, heap dumps, bean graphs. No custom monitoring code, no extra agent — add the starter, configure exposure, and you have observability. The danger is that several endpoints leak dangerously sensitive information. /env shows every environment variable, including database passwords and API keys. /heapdump lets anyone download a full JVM snapshot containing in-memory secrets and session tokens. /beans reveals the entire architecture. Setting management.endpoints.web.exposure.include=* in production — recommended in many tutorials for development — is the most common Actuator security mistake. The default in Spring Boot 2.x+ is conservative: only /health and /info are exposed over HTTP. Everything else requires."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Exposing management",
+              "include=* in production without authentication, leaking environment variables, heap dumps, and internal metrics"
+            ]
+          }
+        ],
+        "cap": "Authentication is a layer; an isolated management port behind a NetworkPolicy is a moat.",
+        "familiarity_anchors": [
+          "Spring",
+          "Actuator",
+          "Security"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you configure separate liveness and readiness health groups for Kubernetes?",
+          "How would you add a custom health indicator that checks an external dependency?",
+          "What is the difference between `/actuator/metrics` and `/actuator/prometheus`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JPA repository"
+      }
+    },
+    {
+      "id": "sbo-005-prometheus",
+      "slug": "actuator-custom-endpoint-and-prometheus-exposition",
+      "question": "How do you build a custom Actuator endpoint and expose Micrometer metrics to Prometheus?",
+      "title": "Custom Actuator Endpoint and Prometheus Exposition",
+      "direct_answer": "Create a custom Actuator endpoint with `@Endpoint(id = \"name\")` and methods annotated `@ReadOperation`, `@WriteOperation`, or `@DeleteOperation` — Spring Boot exposes them at `/actuator/name` automatically. Register the bean and add the ID to `management.endpoints.web.exposure.include`. For Prometheus, add `micrometer-registry-prometheus` and Spring Boot auto-configures `/actuator/prometheus` returning OpenMetrics-format text. Inject `MeterRegistry` to publish custom metrics: counters, gauges, timers, distribution summaries. Always tag metrics with **bounded label sets** — high-cardinality tags (user IDs, request IDs) explode Prometheus storage and become operationally unmanageable.",
+      "layout_type": "recipe-builder",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether you can implement custom Actuator extension points and integrate Spring Boot metrics into a Prometheus monitoring pipeline",
+        "common_mistake": "Tagging metrics with unbounded values (user IDs, URL paths with IDs), causing Prometheus cardinality explosion and OOM in the time-series database",
+        "to_stand_out": "Mention `MeterFilter` for cardinality limits, `@Timed` annotation for declarative timer instrumentation, and the difference between Counter/Gauge/Timer/DistributionSummary metric types"
+      },
+      "company_tags": [
+        "Netflix",
+        "Datadog",
+        "Grafana Labs",
+        "Cloudflare",
+        "DoorDash"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Custom Endpoints and Metrics — Two Different Extension Points",
+            "content": "Spring Boot Actuator supports two extension paths that solve different problems.\n- **Custom endpoints** (`@Endpoint`) expose application-specific operational data through the same `/actuator/*` URL space — feature flag state, internal queue depth, license expiry, deploy metadata.\n- They behave like first-class Actuator endpoints: the same exposure controls, the same security configuration.\n\n**Custom metrics** publish through Micrometer's `MeterRegistry`.\n- Counters track event counts, gauges read instantaneous values, timers measure latency distributions.\n- Spring Boot wires Micrometer to a registry implementation based on what's on the classpath — Prometheus, Datadog, CloudWatch, Graphite.\n- Adding `micrometer-registry-prometheus` makes Spring Boot auto-configure `/actuator/prometheus` returning **OpenMetrics-format** text that Prometheus scrapes.\n\n**The trap is cardinality**.\n- A `Counter` tagged with user ID looks innocent in development but creates one time series per user in production — millions of series in Prometheus, gigabytes of memory, and metrics queries that time out.\n- Tag design is the single most important decision when adding custom metrics."
+          },
+          {
+            "type": "step",
+            "title": "Building a Custom @Endpoint",
+            "content": "**Endpoint anatomy**\n- `@Endpoint(id = \"features\")` registers an endpoint at `/actuator/features`\n- `@ReadOperation` — handles GET requests; return value serialized to JSON\n- `@WriteOperation` — handles POST requests; method parameters become request body fields\n- `@DeleteOperation` — handles DELETE requests; for state removal\n- `@Selector` — captures path variables: `/actuator/features/{name}`\n\n**Implementation example**\n\n```java\n@Component\n@Endpoint(id = \"features\")\npublic class FeatureFlagsEndpoint {\n\n    private final FeatureFlagService flags;\n\n    public FeatureFlagsEndpoint(FeatureFlagService flags) {\n        this.flags = flags;\n    }\n\n    @ReadOperation\n    public Map<String, Boolean> all() {\n        return flags.snapshot();\n    }\n\n    @ReadOperation\n    public Boolean one(@Selector String name) {\n        return flags.isEnabled(name);\n    }\n\n    @WriteOperation\n    public void toggle(@Selector String name, boolean enabled) {\n        flags.set(name, enabled);\n    }\n}\n```\n\n**Registration and exposure**\n- Mark with `@Component` so Spring discovers it\n- Add `features` to `management.endpoints.web.exposure.include`\n- Apply the same Spring Security rules as other Actuator endpoints\n- For JMX-only or web-only restriction, use `@WebEndpoint` or `@JmxEndpoint`"
+          },
+          {
+            "type": "step",
+            "title": "Publishing Custom Metrics with MeterRegistry",
+            "content": "**Inject MeterRegistry**\n- Spring Boot auto-configures the registry based on classpath\n- Use constructor injection like any other bean\n- Common metric types: Counter, Gauge, Timer, DistributionSummary\n\n**Counter — monotonically increasing event count**\n\n```java\n@Service\npublic class OrderService {\n    private final Counter ordersPlaced;\n    private final Counter ordersFailed;\n\n    public OrderService(MeterRegistry registry) {\n        this.ordersPlaced = Counter.builder(\"orders.placed\")\n            .description(\"Total orders successfully placed\")\n            .tag(\"region\", System.getenv(\"REGION\"))\n            .register(registry);\n        this.ordersFailed = registry.counter(\"orders.failed\");\n    }\n\n    public void placeOrder(Order order) {\n        try {\n            persist(order);\n            ordersPlaced.increment();\n        } catch (Exception e) {\n            ordersFailed.increment();\n            throw e;\n        }\n    }\n}\n```\n\n**Timer — latency histograms with percentile estimates**\n\n```java\nTimer dbTimer = Timer.builder(\"orders.db.save\")\n    .publishPercentiles(0.5, 0.95, 0.99)\n    .publishPercentileHistogram()\n    .register(registry);\n\ndbTimer.record(() -> repository.save(order));\n```\n\n**Declarative timing with @Timed**\n- Annotate any Spring-managed method: `@Timed(value = \"orders.process\", percentiles = {0.95, 0.99})`\n- Requires `TimedAspect` bean: `@Bean public TimedAspect timedAspect(MeterRegistry r) { return new TimedAspect(r); }`\n- Skips boilerplate for common timer instrumentation"
+          },
+          {
+            "type": "step",
+            "title": "Prometheus Exposition and Tag Cardinality",
+            "content": "**Add the registry**\n- Add `io.micrometer:micrometer-registry-prometheus` to dependencies\n- Spring Boot auto-configures `/actuator/prometheus`\n- Add `prometheus` to `management.endpoints.web.exposure.include`\n\n**Endpoint output**\n\n```\n# HELP orders_placed_total Total orders successfully placed\n# TYPE orders_placed_total counter\norders_placed_total{region=\"us-east-1\",} 4823.0\n\n# HELP orders_db_save_seconds  \n# TYPE orders_db_save_seconds summary\norders_db_save_seconds{quantile=\"0.5\",} 0.012\norders_db_save_seconds{quantile=\"0.95\",} 0.048\norders_db_save_seconds{quantile=\"0.99\",} 0.183\n```\n\n**Cardinality rules**\n- Tag values must come from a **bounded set** — region, status code, HTTP method, error class\n- Never tag with user ID, request ID, full URL path, customer ID, or any unbounded value\n- One unbounded tag turns one metric into millions of series — Prometheus OOM\n- Total series target: under 100,000 per app instance for healthy operation\n\n**Enforce limits with MeterFilter**\n\n```java\n@Bean\nMeterFilter cardinalityLimit() {\n    return MeterFilter.maximumAllowableTags(\n        \"http.server.requests\", \"uri\", 100,\n        MeterFilter.deny()\n    );\n}\n```\n\n**Prometheus scrape configuration** (on the Prometheus side)\n\n```yaml\nscrape_configs:\n  - job_name: 'spring-boot-app'\n    metrics_path: '/actuator/prometheus'\n    scrape_interval: 15s\n    static_configs:\n      - targets: ['app:8080']\n```"
+          },
+          {
+            "type": "comparison_table",
+            "title": "Micrometer Meter Types and When to Use Each",
+            "content": "Choose the meter type that matches the question you want to answer at query time, not the data shape during collection.\n\n| Meter | Captures | Example | Prometheus Output |\n|---|---|---|---|\n| `Counter` | Monotonic event count | Orders placed, errors thrown | `_total` suffix; use `rate()` to get per-second |\n| `Gauge` | Instantaneous value | Queue depth, cache size, active connections | Single sample; use `_size` or `_count` naming |\n| `Timer` | Latency distribution + count | Method execution time, DB query latency | `_seconds` summary with quantiles |\n| `DistributionSummary` | Non-time value distribution | Response payload size, batch size | `_bytes` or `_count` summary with quantiles |\n| `LongTaskTimer` | Long-running task duration | Active background jobs, scheduled task durations | `_active_seconds` for in-flight measurement |\n\n**The naming convention** matters for Prometheus tooling: use `_total` for counters, `_seconds` for time durations, `_bytes` for sizes. Micrometer applies these suffixes automatically when exporting to Prometheus, but the base name should follow the convention so dashboards and alerts work."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Custom Metrics Design Trade-offs",
+            "content": "**When custom metrics help:**\n- Business KPIs not exposed by framework metrics — orders per second, revenue, signups\n- Per-feature observability — feature flag adoption, A/B test split\n- Domain-specific SLOs — checkout latency, payment success rate\n\n**When custom metrics hurt:**\n- Logging implemented as metrics — every event tagged with unbounded values\n- Duplicating framework metrics — Spring Boot already publishes HTTP, JVM, JDBC pools\n- Metrics for low-frequency events better tracked as logs or traces\n\n**Watch for:**\n- High cardinality from URL path tags — use `MeterFilter` to bucket or drop\n- Counter resets on app restart — use `rate()` in PromQL, never raw counter values\n- Gauge values from expensive computation — Micrometer calls the supplier on every scrape\n- Tag drift across app versions — adding/removing tags creates inconsistent dashboards"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Endpoint(id = \"...\")`** — registers a custom Actuator endpoint at `/actuator/{id}`; combine with `@ReadOperation`/`@WriteOperation`/`@DeleteOperation` and `@Selector` for path variables.\n- **Custom endpoints respect exposure rules** — must add the ID to `management.endpoints.web.exposure.include`; Spring Security `EndpointRequest` matchers apply automatically.\n- **`MeterRegistry` is the central metric API** — Spring Boot auto-configures it based on classpath; add `micrometer-registry-prometheus` for Prometheus exposition.\n- **`/actuator/prometheus` returns OpenMetrics text** — Prometheus scrapes it; no app code changes beyond the dependency and exposure include.\n- **Cardinality kills Prometheus** — never tag with unbounded values (user ID, URL with IDs); use `MeterFilter.maximumAllowableTags` to enforce limits.\n- **`@Timed` annotation for declarative timers** — requires a `TimedAspect` bean; cleaner than manual `Timer.record()` for service methods.\n- **Meter type drives query semantics** — Counter → `rate()`; Gauge → instantaneous; Timer → `_seconds_bucket` for percentile queries."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Boot Actuator has two extension points: **custom endpoints** for app-specific operational data and **custom metrics** through Micrometer for everything that's quantitative.\n\n**Custom endpoints**\n- Annotate a Spring bean with `@Endpoint(id = \"features\")`\n- Add `@ReadOperation`, `@WriteOperation`, `@DeleteOperation` methods\n- `@Selector` captures path variables: `/actuator/features/{name}`\n- Register by adding the ID to `management.endpoints.web.exposure.include`\n- Same Spring Security rules apply as built-in endpoints\n\n**Custom metrics**\n- Inject `MeterRegistry`; create `Counter`, `Gauge`, `Timer`, or `DistributionSummary`\n- Use `@Timed` for declarative method timing — needs a `TimedAspect` bean\n- Add `micrometer-registry-prometheus` and Spring Boot auto-configures `/actuator/prometheus`\n- Output is OpenMetrics text; Prometheus scrapes it on a configured interval\n\n**Cardinality is the trap**\n- Never tag metrics with unbounded values: user ID, request ID, URL path with IDs\n- A `Counter` tagged with user ID becomes one time series per user — millions of series, Prometheus OOM\n- Use `MeterFilter.maximumAllowableTags` to cap tag cardinality\n- Bounded tags are fine: region, HTTP method, status code, error class\n\nIn an interview, I'd close with the operational rule: **measure first, instrument second**. Spring Boot already publishes HTTP latency, JVM memory, JDBC pool stats, and Tomcat thread counts through Micrometer — no custom code needed. Add custom metrics only for KPIs the framework doesn't already cover."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement a `MeterFilter` that drops metrics with more than 100 tag values?",
+        "Why should you use `rate()` rather than raw counter values in PromQL queries?",
+        "How does `@Timed` differ from manually recording with `Timer.record()`?",
+        "What is a `LongTaskTimer` and when would you use it instead of a regular `Timer`?"
+      ],
+      "seo": {
+        "metaTitle": "Custom Actuator Endpoints and Prometheus Metrics in Spring Boot",
+        "metaDescription": "Build custom Spring Boot Actuator endpoints with @Endpoint and publish Micrometer metrics to Prometheus. Cardinality control, meter types, and OpenMetrics exposition."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Boot Actuator has two extension points: custom endpoints for app-specific operational data and custom metrics through Micrometer for everything that's quantitative.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Spring Boot Actuator supports two extension paths that solve different problems. Custom endpoints (@Endpoint) expose application-specific operational data through the same /actuator/* URL space — feature flag state, internal queue depth, license expiry, deploy metadata. They behave like first-class Actuator endpoints: the same exposure controls, the same security configuration. Custom metrics publish through Micrometer's MeterRegistry. Counters track event counts, gauges read instantaneous values, timers measure latency distributions. Spring Boot wires Micrometer to a registry implementation based on what's on the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can implement custom Actuator extension points and integrate Spring Boot metrics into a Prometheus monitoring pipeline"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@Endpoint(id = \"",
+              "\") — registers a custom Actuator endpoint at /actuator/{id}; combine with @ReadOperation/@WriteOperation/@DeleteOperation and @Selector for path variables",
+              "Custom endpoints respect exposure rules — must add the ID to management",
+              "include; Spring Security EndpointRequest matchers apply automatically",
+              "MeterRegistry is the central metric API — Spring Boot auto-configures it based on classpath; add micrometer-registry-prometheus for Prometheus exposition"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Spring Boot Actuator supports two extension paths that solve different problems. Custom endpoints (@Endpoint) expose application-specific operational data through the same /actuator/* URL space — feature flag state, internal queue depth, license expiry, deploy metadata. They behave like first-class Actuator endpoints: the same exposure controls, the same security configuration. Custom metrics publish through Micrometer's MeterRegistry. Counters track event counts, gauges read instantaneous values, timers measure latency distributions. Spring Boot wires Micrometer to a registry implementation based on what's on the classpath — Prometheus, Datadog, CloudWatch, Graphite. Adding micrometer-registry-prometheus makes Spring Boot auto-configure /actuator/prometheus returning OpenMetrics-format text that Prometheus scrapes. The trap is cardinality. A Counter tagged with user ID looks innocent in development but creates one time series per user."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Tagging metrics with unbounded values (user IDs, URL paths with IDs), causing Prometheus cardinality explosion and OOM in the time-series database"
+            ]
+          }
+        ],
+        "cap": "Add custom metrics only for KPIs the framework doesn't already cover.",
+        "familiarity_anchors": [
+          "Create",
+          "Actuator",
+          "Endpoint"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement a `MeterFilter` that drops metrics with more than 100 tag values?",
+          "Why should you use `rate()` rather than raw counter values in PromQL queries?",
+          "How does `@Timed` differ from manually recording with `Timer.record()`?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 REST API with JPA repository"
+      }
+    }
+  ]
+}

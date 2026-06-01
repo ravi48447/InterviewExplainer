@@ -1,0 +1,126 @@
+{
+  "topic": "Git & Build Tool Scenarios",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "gbt-sc-002",
+      "slug": "maven-build-fails-only-on-ci",
+      "question": "Maven build passes locally but fails on CI with 'cannot resolve dependency'. How do you debug?",
+      "title": "Maven Works Locally, Fails on CI: Reproducibility Debug",
+      "direct_answer": "Almost always one of: (1) the dependency resolves from a private repo not configured on CI — check `~/.m2/settings.xml` vs CI settings; (2) snapshot vs release version drift — local has cached old SNAPSHOT, CI fetches new broken one; (3) auth credentials missing on CI for private Maven repo (Nexus, Artifactory); (4) JDK or Maven version mismatch. Fix: pin Maven version in CI, mount a `settings.xml` with auth, prefer release versions over SNAPSHOTs, run `mvn -U` to force update locally to reproduce.",
+      "layout_type": "scenario-walkthrough",
+      "interviewer_intent": {
+        "testing": "Practical debugging of build environment differences — a common real-world issue",
+        "common_mistake": "Adding the dependency to a different repo without checking why CI didn't see it; cargo-culting fixes without diagnosing",
+        "to_stand_out": "Discuss reproducible builds, settings.xml profile management, the SNAPSHOT-version trap, dependency mediation, and using `mvn dependency:tree` to debug"
+      },
+      "company_tags": [
+        "jetbrains",
+        "atlassian",
+        "redhat",
+        "spring"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-22",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Local-vs-CI Drift Is Almost Always About Configuration",
+            "content": "\"Works on my machine, fails on CI\" for Maven is rarely a Maven bug — it's almost always an environment difference. The five most common causes:\n\n1. **Private repo not configured on CI.** Local `~/.m2/settings.xml` has a `<server>` entry for Nexus or Artifactory with credentials; CI runs without that file or with a stub.\n2. **SNAPSHOT version drift.** Local cached `1.0-SNAPSHOT` from last week; CI fetches the latest `1.0-SNAPSHOT` published yesterday with a breaking change.\n3. **Auth credentials missing on CI.** The repo is configured but credentials aren't passed (env vars, Jenkins credentials, GitHub secrets).\n4. **JDK or Maven version mismatch.** Local Maven 3.9 + JDK 17; CI uses Maven 3.6 + JDK 11. Some plugins behave differently.\n5. **Local cache hides a missing dependency.** A transitive dependency is in your local `~/.m2` from another project but isn't actually declared anywhere; CI starts fresh and can't find it.\n\nThe debug methodology is the same as any environment-drift problem: list the differences, narrow to the cause, fix the root, prevent recurrence."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Local vs CI Maven Resolution",
+            "content": "```mermaid\nflowchart LR\n    subgraph Local[Local machine]\n        LP[pom.xml] --> LR[mvn]\n        LR --> LS[~/.m2/settings.xml<br/>w/ private repo + creds]\n        LR --> LC[~/.m2/repository<br/>local cache]\n        LS --> LRepo1[Maven Central]\n        LS --> LRepo2[Nexus/Artifactory<br/>company repo]\n    end\n    subgraph CI[CI runner]\n        CP[pom.xml] --> CR[mvn]\n        CR --> CS[settings.xml<br/>where? mounted? complete?]\n        CR --> CC[Empty or partial cache]\n        CS --> CRepo1[Maven Central]\n        CS -.missing or no creds.-> CRepo2[Nexus/Artifactory<br/>FAIL]\n    end\n    style CRepo2 fill:#ff8a80\n```\n\nThe drift is almost always in `settings.xml` (which repos, with what credentials) and in the cache state (local has the dependency cached; CI doesn't)."
+          },
+          {
+            "type": "step",
+            "title": "The Systematic Debug Process",
+            "content": "**Step 1 — Reproduce locally with a clean cache.**\n\n```bash\n# Force re-fetch all dependencies, ignoring local cache\nmvn -U clean install\n# Or fully clear cache for the failing artifact\nrm -rf ~/.m2/repository/com/example/failing-artifact\nmvn clean install\n```\n\nIf this fails locally too, the issue is reproducible — your local was lying because of a cached artifact. If it passes locally even with -U, the issue is CI-specific.\n\n**Step 2 — Compare effective settings.**\n\n```bash\n# Locally\nmvn help:effective-settings > local-settings.xml\nmvn help:effective-pom > local-pom.xml\n```\n\nRun the same on CI (echo the output of `mvn help:effective-settings`). Diff the results. Look for:\n- Different `<repositories>` lists (CI missing the private repo)\n- Different `<servers>` sections (CI missing credentials)\n- Different `<mirrors>` (CI routing through a mirror that lacks the artifact)\n- Different `<profiles>` activated\n\n**Step 3 — Inspect the dependency tree.**\n\n```bash\nmvn dependency:tree -Dverbose\n# Or for the specific failing dependency\nmvn dependency:tree | grep failing-artifact\n```\n\nThe verbose flag shows omitted/conflicting versions. Look for `(version managed from X)` or `omitted for duplicate` — indicates dependency mediation hiding the real version being used.\n\n**Step 4 — Mount settings.xml on CI with auth.**\n\nGitHub Actions example:\n\n```yaml\n- name: Configure Maven settings\n  uses: s4u/maven-settings-action@v3\n  with:\n    servers: |\n      [{\n        \"id\": \"nexus\",\n        \"username\": \"${{ secrets.NEXUS_USER }}\",\n        \"password\": \"${{ secrets.NEXUS_PASSWORD }}\"\n      }]\n```\n\nOr template a settings.xml at runtime:\n\n```bash\nmkdir -p ~/.m2\ncat > ~/.m2/settings.xml <<EOF\n<settings>\n  <servers>\n    <server>\n      <id>nexus</id>\n      <username>${NEXUS_USER}</username>\n      <password>${NEXUS_PASSWORD}</password>\n    </server>\n  </servers>\n</settings>\nEOF\n```\n\n**Step 5 — Pin Maven and JDK versions.**\n\nAdd `.mvn/maven-wrapper.properties` to use Maven Wrapper (`./mvnw`). Then both local and CI use the same Maven version. Pin JDK via `actions/setup-java`:\n\n```yaml\n- uses: actions/setup-java@v4\n  with:\n    distribution: temurin\n    java-version: '17.0.10'\n```\n\nUse `.tool-versions` (asdf) or `mise` locally to enforce the same JDK.\n\n**Step 6 — Address SNAPSHOT drift.**\n\nIf the failing dependency is a SNAPSHOT, you've found the cause. SNAPSHOTs change without warning. Mitigations:\n- Pin to release versions in production code paths\n- Use a dependency lock plugin (`maven-lockfile`) to freeze resolved versions\n- For genuinely needed SNAPSHOTs, use `mvn versions:resolve-ranges` to fix the version at build time"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Trade-offs and Subtle Pitfalls",
+            "content": "**Local cache is a liability for reproducibility.** It speeds up your build but masks missing dependencies and hides version drift. CI builds with empty caches — closer to a true reproduction. Periodically `rm -rf ~/.m2/repository` or test with `mvn -U` to catch issues before they hit CI.\n\n**Maven dependency resolution is order-dependent.** Two repos with the same artifact at different versions — Maven picks the first one declared in `<repositories>`. If your CI has different repo order than local, you may get different versions. Always test with the same `<repositories>` order.\n\n**SNAPSHOT versions are operational hot stove.** Convenient for fast iteration on internal libs but introduce non-determinism. A team that publishes 1.0-SNAPSHOT 50 times a day will have someone's build break tomorrow. Move to date-stamped versions (1.0-20260422.143000) or release versions for anything beyond active local development.\n\n**Maven Wrapper (`mvnw`) is mandatory for shared builds.** It bundles a specific Maven version with the project; both local and CI run the same. Without it, version drift is inevitable. Generate with `mvn wrapper:wrapper`.\n\n**Settings.xml encryption.** Don't store plaintext passwords in `settings.xml`. Maven supports encrypted master passwords (`mvn --encrypt-master-password`). Better: use environment variables and template the settings.xml at build time.\n\n**Dependency lock files (`maven-lockfile-plugin`)** are gaining adoption — freeze resolved versions to a lockfile, similar to `package-lock.json` or `Cargo.lock`. Standard in Gradle (`gradle.lockfile`) but newer in Maven. Worth adopting for reproducibility.\n\n**Use a Maven mirror in CI for speed.** Configure a `<mirror>` to a Nexus/Artifactory proxy in CI; subsequent builds hit cached artifacts instead of Maven Central, speeding builds and reducing flakes from Central outages."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Most CI-only failures are configuration drift** — missing private repo, missing credentials, version mismatch, or SNAPSHOT drift; not a Maven bug\n- **Reproduce with `mvn -U` locally** — forces re-fetch ignoring cache; if it now fails locally, the local cache was hiding the issue\n- **Diff `mvn help:effective-settings`** between local and CI to spot configuration drift\n- **Mount settings.xml with auth on CI** — use templates or actions like `s4u/maven-settings-action` to inject credentials from secrets\n- **Pin Maven and JDK** — use Maven Wrapper (`./mvnw`) and `actions/setup-java` to eliminate version drift\n- **SNAPSHOT versions are non-deterministic** — prefer release versions or date-stamped versions; consider `maven-lockfile-plugin` for full reproducibility"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Maven failing on CI but passing locally is almost always environment drift, not a Maven bug. The five most common causes, in order of frequency:\n\n**The five usual suspects**\n- Private repo not configured on CI — your local settings.xml has a server entry for Nexus or Artifactory; CI runs without that file\n- SNAPSHOT version drift — local has cached an old SNAPSHOT from last week; CI fetches the latest one published yesterday with a breaking change\n- Auth credentials missing on CI — the repo is configured but credentials aren't passed via env vars, Jenkins credentials, or GitHub secrets\n- JDK or Maven version mismatch — local Maven 3.9 with JDK 17; CI uses Maven 3.6 with JDK 11; some plugins behave differently\n- Local cache hides a missing dependency — a transitive is in your local .m2 from another project but isn't actually declared; CI starts fresh and can't find it\n\n**The systematic debug**\n\n*Step 1 — reproduce locally with a clean cache*\n- Run `mvn -U clean install` to force re-fetch ignoring cache, or remove the failing artifact from `~/.m2/repository`\n- If it now fails locally, your cache was lying — the issue is reproducible\n- If it still passes, the issue is CI-specific configuration\n\n*Step 2 — compare effective settings*\n- Run `mvn help:effective-settings` and `mvn help:effective-pom` on both local and CI; diff the output\n- Look for different repositories, different servers, different mirrors, different profiles activated\n\n*Step 3 — inspect the dependency tree*\n- `mvn dependency:tree -Dverbose` shows omitted and conflicting versions; look for dependency mediation hiding the real version\n\n*Step 4 — mount settings.xml on CI with auth*\n- Use templates or actions like `s4u/maven-settings-action` to inject credentials from secrets\n- Or template settings.xml at build time using environment variables\n\n*Step 5 — pin Maven and JDK*\n- Use Maven Wrapper (`./mvnw`); bundles a specific Maven version with the project so local and CI run the same\n- Pin JDK via `actions/setup-java` with a specific version like `17.0.10`\n\n*Step 6 — address SNAPSHOT drift*\n- Pin to release versions in production code paths\n- Consider `maven-lockfile-plugin` to freeze resolved versions to a lockfile, similar to package-lock.json\n\n**The pitfalls to call out**\n- Local cache is a liability for reproducibility — it speeds builds but masks missing dependencies; periodically clear it or test with `-U`\n- Maven dependency resolution is order-dependent — different repo order in settings.xml gives different versions\n- SNAPSHOT versions are non-deterministic — a team that publishes 1.0-SNAPSHOT 50 times a day will have someone's build break tomorrow\n- Don't store plaintext passwords in settings.xml — use encrypted master passwords or environment-variable templating\n\n**The strategic answer**\n- The root cause of most local-vs-CI drift is that the local environment isn't pinned to match CI\n- Maven Wrapper plus pinned JDK plus mounted settings.xml plus release versions over SNAPSHOTs eliminates most of these issues structurally\n- For full reproducibility, adopt a dependency lockfile plugin so the resolved versions are frozen explicitly"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Maven Wrapper (`./mvnw`) work and why is it preferred over a system Maven?",
+        "What's the difference between SNAPSHOT and release versions in Maven?",
+        "How does `maven-lockfile-plugin` provide reproducible builds?",
+        "What is dependency mediation and how does Maven choose between conflicting versions?"
+      ],
+      "seo": {
+        "metaTitle": "Maven Works Locally Fails on CI: Debug Guide | InterviewExplainer",
+        "metaDescription": "Debug Maven builds that pass locally but fail on CI. Configuration drift, SNAPSHOT versions, settings.xml credentials, JDK pinning, and reproducibility."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P09",
+        "hook": "Maven failing on CI but passing locally is almost always environment drift, not a Maven bug.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "\"Works on my machine, fails on CI\" for Maven is rarely a Maven bug — it's almost always an environment difference. The five most common causes: 1. Private repo not configured on CI. Local ~/.m2/settings.xml has a <server> entry for Nexus or Artifactory with credentials; CI runs without that file or with a stub. 2. SNAPSHOT version drift. Local cached 1.0-SNAPSHOT from last week; CI fetches the latest 1.0-SNAPSHOT published yesterday with a breaking change. 3. Auth credentials missing on CI. The repo is configured but credentials aren't passed (env."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Step 1 — Reproduce locally with a clean cache.",
+              "``bash Force re-fetch all dependencies, ignoring local cache mvn -U clean install Or fully clear cache for the failing artifact rm -rf ~/.m2/repository/com/example/failing-artifact mvn clean install ` If this fails locally too, the issue is reproducible — your local was lying because of a cached artifact.",
+              "If it passes locally even with -U, the issue is CI-specific.",
+              "Step 2 — Compare effective settings.",
+              "`bash Locally mvn help:effective-settings > local-settings.xml mvn help:effective-pom > local-pom.xml ` Run the same on CI (echo the output of mvn help:effective-settings).",
+              "Diff the results."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Most CI-only failures are configuration drift — missing private repo, missing credentials, version mismatch, or SNAPSHOT drift; not a Maven bug Reproduce with mvn -U locally — forces re-fetch ignoring cache; if it now fails locally, the local cache was hiding the issue Diff mvn help:effective-settings between local and CI to spot configuration drift Mount settings",
+              "xml with auth on CI — use templates or actions like s4u/maven-settings-action to inject credentials from secrets Pin Maven and JDK — use Maven Wrapper (",
+              "/mvnw) and actions/setup-java to eliminate version drift SNAPSHOT versions are non-deterministic — prefer release versions or date-stamped versions; consider maven-lockfile-plugin for full reproducibility"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Adding the dependency to a different repo without checking why CI didn't see it; cargo-culting fixes without diagnosing"
+          }
+        ],
+        "cap": "The five most common causes, in order of frequency: The five usual suspects Private repo not configured on CI — your local settings.xml has a server entry for Nexus or Artifactory; CI runs without tha",
+        "familiarity_anchors": [
+          "Almost",
+          "SNAPSHOT",
+          "Maven"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Maven Wrapper (`./mvnw`) work and why is it preferred over a system Maven?",
+          "What's the difference between SNAPSHOT and release versions in Maven?",
+          "How does `maven-lockfile-plugin` provide reproducible builds?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Maven multi-module Spring Boot project"
+      }
+    }
+  ]
+}

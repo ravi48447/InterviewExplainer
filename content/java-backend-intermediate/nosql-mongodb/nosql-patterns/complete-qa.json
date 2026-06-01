@@ -1,0 +1,508 @@
+{
+  "topic": "NoSQL Patterns",
+  "topicSlug": "nosql-patterns",
+  "questions": [
+    {
+      "id": "nosql-pat-001",
+      "slug": "dynamodb-single-table-design-patterns",
+      "question": "Walk through DynamoDB single-table design — why, how, and when it's the wrong tool.",
+      "title": "DynamoDB Single-Table Design",
+      "direct_answer": "**Single-table design** puts all entity types into one DynamoDB table by overloading the partition key (`PK`) and sort key (`SK`). Instead of separate `Users`, `Orders`, and `OrderItems` tables, keys like `PK=USER#42, SK=ORDER#100#ITEM#1` encode type and relationship so one `Query` retrieves related data co-located on a partition. Combined with **Global Secondary Indexes (GSIs)** for alternate access patterns — often overloaded across entity types — a single table handles many patterns at single-digit-ms latency. The price: you must enumerate every access pattern up front; adding a new query usually means a new GSI or data remodeling. When access patterns are fluid or relational, reach for Postgres instead.",
+      "layout_type": "concept-explainer",
+      "difficulty": "hard",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Deep NoSQL modeling skill and understanding of DynamoDB's access-pattern-driven design idiom",
+        "common_mistake": "Multi-table-per-entity design, overloading GSIs badly, not planning access patterns, or using DynamoDB for relational data",
+        "to_stand_out": "Show PK/SK schema, adjacency list, GSI overloading, sparse indexes, write sharding for hot partitions, reference Rick Houlihan talks"
+      },
+      "company_tags": [
+        "aws",
+        "amazon",
+        "stripe",
+        "discord",
+        "lyft"
+      ],
+      "reading_time_minutes": 11,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Single-Table Design Exists",
+            "content": "DynamoDB rewards schemas that co-locate related data on a single partition so a `Query` returns them in one round trip. This is the **opposite of relational normalization** where you model entities separately and join at read time.\n\nJoins don't exist in DynamoDB — you either pre-join (denormalize) at write, or make multiple `GetItem` calls at read. Every query pattern must map to a partition key plus an optional sort-key range. You pay per request, so fewer requests equals lower cost and latency.\n\n**Single-table design** means all entity types share one table; `PK` and `SK` encode type + id + relationship. One `Query` can return a user, their orders, and all line items in one network call — at the cost of having to enumerate every access pattern before you design the keys."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Single-Table Layout Example",
+            "content": "```mermaid\nflowchart TB\n    subgraph tableMain[\"DynamoDB Table: AppData\"]\n        r1[\"PK=USER#42 | SK=PROFILE (name, email)\"]\n        r2[\"PK=USER#42 | SK=ORDER#100 (total, status)\"]\n        r3[\"PK=USER#42 | SK=ORDER#100#ITEM#1 (sku, qty)\"]\n        r4[\"PK=USER#42 | SK=ORDER#100#ITEM#2 (sku, qty)\"]\n        r5[\"PK=USER#42 | SK=ADDRESS#HOME (line1, city)\"]\n        r6[\"PK=PRODUCT#SKU-99 | SK=DETAILS (price, stock)\"]\n    end\n    subgraph gsi1[\"GSI1: OrdersByStatus\"]\n        g1[\"GSI1PK=STATUS#SHIPPED | GSI1SK=2026-04-22\"]\n        g2[\"GSI1PK=STATUS#PENDING | GSI1SK=2026-04-22\"]\n    end\n    q1[\"Query PK=USER#42\"] --> r1\n    q1 --> r2\n    q1 --> r3\n    q1 --> r4\n    q1 --> r5\n    q2[\"Query GSI1PK=STATUS#SHIPPED\"] --> g1\n```"
+          },
+          {
+            "type": "step",
+            "title": "Designing the Schema",
+            "content": "**Step 1: Enumerate every access pattern**\n- Get user profile by userId\n- Get all orders for a user\n- Get order + its line items\n- Get orders by status (fulfillment dashboard)\n- Get orders created in last 24h\n- Get product details by SKU\n\n**Step 2: Design PK + SK to support primary patterns**\n\n| Entity | PK | SK |\n|---|---|---|\n| User profile | `USER#<userId>` | `PROFILE` |\n| Order | `USER#<userId>` | `ORDER#<orderId>` |\n| Order item | `USER#<userId>` | `ORDER#<orderId>#ITEM#<itemId>` |\n| Address | `USER#<userId>` | `ADDRESS#<type>` |\n| Product | `PRODUCT#<sku>` | `DETAILS` |\n\n**Step 3: Resolve each access pattern**\n- Get user profile → `GetItem(PK=USER#42, SK=PROFILE)`\n- Get all orders → `Query(PK=USER#42, SK begins_with 'ORDER#')`\n- Get order + items → `Query(PK=USER#42, SK begins_with 'ORDER#100')`\n- Everything for user → `Query(PK=USER#42)`\n\n**Step 4: Add GSIs for alternate patterns**\n- `GSI1PK = STATUS#<status>`, `GSI1SK = createdAt ISO`\n- Only items with these attributes appear — **sparse index** saves cost\n- Overload the same GSI across entity types (status, category, city)\n\n**Step 5: Plan for hot partitions**\n- Per-partition limits: 3000 RCU / 1000 WCU\n- Write sharding — `PK=USER#42#1...USER#42#10` spreads load\n- Cache via DAX in front for read hotspots\n- Adaptive capacity helps but has hard limits"
+          },
+          {
+            "type": "step",
+            "title": "Query Patterns in Code",
+            "content": "**Java AWS SDK v2 enhanced client**\n\n```java\n@DynamoDbBean\npublic class Order {\n    private String pk;       // USER#42\n    private String sk;       // ORDER#100\n    private String gsi1Pk;   // STATUS#SHIPPED\n    private String gsi1Sk;  // 2026-04-22T10:00:00Z\n\n    @DynamoDbPartitionKey public String getPk() { return pk; }\n    @DynamoDbSortKey public String getSk() { return sk; }\n    @DynamoDbSecondaryPartitionKey(indexNames = \"GSI1\") public String getGsi1Pk() { return gsi1Pk; }\n    @DynamoDbSecondarySortKey(indexNames = \"GSI1\") public String getGsi1Sk() { return gsi1Sk; }\n}\n\n// Get all orders for user 42\nQueryConditional q = QueryConditional.sortBeginsWith(\n    Key.builder().partitionValue(\"USER#42\").sortValue(\"ORDER#\").build());\ntable.query(q).items().forEach(this::process);\n\n// Get shipped orders yesterday via GSI1\nQueryConditional range = QueryConditional.sortBetween(\n    Key.builder().partitionValue(\"STATUS#SHIPPED\").sortValue(\"2026-04-21\").build(),\n    Key.builder().partitionValue(\"STATUS#SHIPPED\").sortValue(\"2026-04-22\").build());\ntable.index(\"GSI1\").query(range).stream().flatMap(p -> p.items().stream()).forEach(this::process);\n```\n\n**Conditional updates prevent race conditions**\n\n```java\ntable.updateItem(UpdateItemEnhancedRequest.builder(Order.class)\n    .item(order)\n    .conditionExpression(Expression.builder()\n        .expression(\"attribute_exists(pk) AND #s <> :shipped\")\n        .putExpressionName(\"#s\", \"status\")\n        .putExpressionValue(\":shipped\", AttributeValue.fromS(\"SHIPPED\"))\n        .build())\n    .build());\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When It Helps, When It Hurts",
+            "content": "**When it helps:**\n- Serverless/AWS stack with Lambda + DynamoDB on hot path\n- Access patterns are known and bounded\n- Very high read/write volume where per-op latency matters\n- Cost-sensitive at scale\n\n**When it hurts:**\n- Access patterns change frequently — every new query may need a GSI\n- Ad-hoc analytical queries required\n- Data fundamentally relational with many-to-many relationships\n- Team lacks deep DynamoDB experience\n\n**Watch for:**\n- Each GSI doubles write cost and is eventually consistent (sub-second lag)\n- Scans read every item — never use in hot path\n- Item size limit 400KB; store blobs in S3\n- Query limit 1MB per call — paginate via `LastEvaluatedKey`\n- Migrations are painful — plan streams + Lambda for dual-writes"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **One table holds all entity types** with PK/SK overloaded to encode type + id\n- **Adjacency list pattern** co-locates related entities under one partition for single-`Query` retrieval\n- **GSIs handle alternate access patterns** — overload + sparse to save cost\n- **Access patterns must be enumerated up front** — adding new queries later is painful\n- **Hot partition mitigations**: write sharding, DAX cache, adaptive capacity\n- **Transactions**: `TransactWriteItems` up to 100 items / 4MB\n- **Wrong tool when** access patterns evolve, ad-hoc queries needed, data is relational"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Frame the idea**\n- Single-table design puts all entity types in one table by overloading PK and SK\n- One `Query` returns co-located related data in one round trip\n- Opposite of relational normalization\n\n**Show the design process**\n- Enumerate every access pattern first\n- Map each pattern to a PK/SK shape\n- Use GSIs for alternate access; overload + sparse to save cost\n- Plan hot partitions with write sharding and DAX\n\n**Call out the cost**\n- Access patterns frozen at design — new queries require GSIs or remodeling\n- Each GSI doubles write cost\n- Scans are the enemy\n- Migrations are painful\n\n**Close with when to avoid**\n- Evolving access patterns, ad-hoc queries, relational data, team inexperience → use Postgres\n- Hybrid DynamoDB (hot KV) + Postgres (relational) is common"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do sparse GSIs work and when do they save cost?",
+        "What's the adjacency list pattern and how does it model many-to-many?",
+        "How do you handle a celebrity user hot partition in DynamoDB?",
+        "When does DynamoDB multi-table design make more sense than single-table?"
+      ],
+      "seo": {
+        "metaTitle": "DynamoDB Single-Table Design: Patterns, GSIs, Hot Partitions",
+        "metaDescription": "Master DynamoDB single-table design — adjacency lists, GSI overloading, sparse indexes, write sharding, and when single-table is the wrong tool."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "Frame the idea Single-table design puts all entity types in one table by overloading PK and SK One Query returns co-located related data in one round trip Opposite of relational normalization Show the",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "DynamoDB rewards schemas that co-locate related data on a single partition so a Query returns them in one round trip. This is the opposite of relational normalization where you model entities separately and join at read time. Joins don't exist in DynamoDB — you either pre-join (denormalize) at write, or make multiple GetItem calls at read. Every query pattern must map to a partition key plus an optional sort-key range. You pay per request, so fewer requests equals lower cost."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Deep NoSQL modeling skill and understanding of DynamoDB's access-pattern-driven design idiom"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "One table holds all entity types with PK/SK overloaded to encode type + id Adjacency list pattern co-locates related entities under one partition for single-Query retrieval GSIs handle alternate access patterns",
+              "overload + sparse to save cost Access patterns must be enumerated up front",
+              "adding new queries later is painful Hot partition mitigations: write sharding, DAX cache, adaptive capacity Transactions: TransactWriteItems up to 100 items / 4MB Wrong tool when access patterns evolve, ad-hoc queries needed, data is relational"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "DynamoDB rewards schemas that co-locate related data on a single partition so a Query returns them in one round trip. This is the opposite of relational normalization where you model entities separately and join at read time. Joins don't exist in DynamoDB — you either pre-join (denormalize) at write, or make multiple GetItem calls at read. Every query pattern must map to a partition key plus an optional sort-key range. You pay per request, so fewer requests equals lower cost and latency. Single-table design means all entity types share one table; PK and SK encode type + id + relationship. One Query can return a user, their orders, and all line items in one network call — at the cost."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Multi-table-per-entity design, overloading GSIs badly, not planning access patterns, or using DynamoDB for relational data"
+            ]
+          }
+        ],
+        "cap": "Frame the idea Single-table design puts all entity types in one table by overloading PK and SK One Query returns co-located related data in one round trip Opposite of relational normalization Show the",
+        "familiarity_anchors": [
+          "Single",
+          "DynamoDB",
+          "Instead"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do sparse GSIs work and when do they save cost?",
+          "What's the adjacency list pattern and how does it model many-to-many?",
+          "How do you handle a celebrity user hot partition in DynamoDB?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "nosql-pat-002",
+      "slug": "mongodb-bucket-pattern-time-series",
+      "question": "Explain the MongoDB bucket pattern for time-series data — when it beats one-document-per-event and how to implement it.",
+      "title": "MongoDB Bucket Pattern for Time-Series",
+      "direct_answer": "The **bucket pattern** stores many small time-stamped events grouped into a single parent document (one bucket per entity per time window), instead of one document per event. Each bucket has a `bucketId`, a time range, a `measurements` array, and pre-aggregated summary fields like `count`, `sum`, `min`, `max`. This cuts document count by 10–1000x, shrinks index size dramatically, reduces storage overhead, and accelerates range queries — ideal for **IoT sensors, metrics, logs, and stock ticks**. MongoDB 5.0+ introduced native **time-series collections** that automate bucketing, but the hand-rolled pattern still wins when you need custom grouping (per-user per-hour) or non-time keys.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Whether you can identify and apply MongoDB schema patterns beyond naïve one-document-per-event modeling",
+        "common_mistake": "Inserting one document per sensor reading, ignoring index/storage blow-up; or picking bucket size without considering the 16MB doc limit",
+        "to_stand_out": "Mention MongoDB 5.0+ native time-series collections, show pre-aggregation fields, and explain the 16MB cap driving bucket-size choice"
+      },
+      "company_tags": [
+        "mongodb",
+        "tesla",
+        "bloomberg",
+        "uber",
+        "datadog"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Bucket Time-Series Data",
+            "content": "Naïve time-series modeling inserts **one document per event** — a sensor reading, a metric, a stock tick. At 100 events/sec per device, a 30-day window is 260M documents per device. Index overhead dominates storage; queries over time ranges pull millions of documents.\n\nThe **bucket pattern** groups events by a natural window (one hour, one day, one minute) into a single parent document with a `measurements` array. Each bucket also carries **pre-aggregated summary fields** — `count`, `sum`, `min`, `max`, `avg` — so dashboards read the summary without scanning the array.\n\nThe result is **10–1000× fewer documents**, dramatically smaller indexes, fewer seeks per range query, and compressed array storage that's roughly 50–70% of the row-per-event size. MongoDB 5.0 added native time-series collections that automate bucketing internally — but the hand-rolled pattern remains useful when you need custom group keys or pre-aggregation shapes."
+          },
+          {
+            "type": "architecture_diagram",
+            "title": "Bucket Pattern Grouping",
+            "content": "```mermaid\nflowchart LR\n    subgraph ingest[\"Incoming Stream\"]\n        e1[\"Reading t=10:00:01\"]\n        e2[\"Reading t=10:00:02\"]\n        e3[\"Reading t=10:59:59\"]\n    end\n    subgraph bucket[\"Bucket Document (one per sensor-hour)\"]\n        head[\"sensorId, bucketStart=10:00, bucketEnd=11:00\"]\n        arr[\"measurements: array of readings\"]\n        agg[\"count, sum, min, max, avg pre-aggregated\"]\n    end\n    e1 --> arr\n    e2 --> arr\n    e3 --> arr\n    arr --> agg\n    query[\"Dashboard query: last 24h\"] --> head\n```"
+          },
+          {
+            "type": "step",
+            "title": "Hand-Rolled Bucket Schema",
+            "content": "**Document shape — one bucket per sensor per hour**\n\n```javascript\n{\n  _id: ObjectId(\"...\"),\n  sensorId: \"temp-42\",\n  bucketStart: ISODate(\"2026-04-24T10:00:00Z\"),\n  bucketEnd:   ISODate(\"2026-04-24T11:00:00Z\"),\n  count: 3600,\n  sum:   72540.2,\n  min:   19.8,\n  max:   21.4,\n  measurements: [\n    { t: ISODate(\"2026-04-24T10:00:01Z\"), v: 20.1 },\n    { t: ISODate(\"2026-04-24T10:00:02Z\"), v: 20.0 }\n    // ... up to ~3600 readings\n  ]\n}\n```\n\n**Upsert on insert — append + increment aggregates atomically**\n\n```javascript\nconst t = new Date();\nconst bucketStart = new Date(t.getFullYear(), t.getMonth(), t.getDate(), t.getHours());\n\nawait readings.updateOne(\n  { sensorId: \"temp-42\", bucketStart },\n  {\n    $push:    { measurements: { t, v: 20.1 } },\n    $inc:     { count: 1, sum: 20.1 },\n    $min:     { min: 20.1 },\n    $max:     { max: 20.1 },\n    $setOnInsert: { bucketEnd: new Date(bucketStart.getTime() + 3600 * 1000) }\n  },\n  { upsert: true }\n);\n```\n\n**Index**\n\n```javascript\ndb.readings.createIndex({ sensorId: 1, bucketStart: -1 });\n```\n\n**Query last 24 hours — reads ~24 documents per sensor instead of 86,400**\n\n```javascript\ndb.readings.find({\n  sensorId: \"temp-42\",\n  bucketStart: { $gte: new Date(Date.now() - 24 * 3600 * 1000) }\n}).sort({ bucketStart: -1 });\n```"
+          },
+          {
+            "type": "step",
+            "title": "MongoDB 5.0+ Native Time-Series Collections",
+            "content": "**Create collection with time-series options**\n\n```javascript\ndb.createCollection(\"readings\", {\n  timeseries: {\n    timeField:   \"t\",\n    metaField:   \"sensorId\",\n    granularity: \"hours\"        // seconds | minutes | hours\n  },\n  expireAfterSeconds: 60 * 60 * 24 * 30  // 30-day TTL\n});\n\ndb.readings.insertMany([\n  { t: new Date(), sensorId: \"temp-42\", v: 20.1 },\n  { t: new Date(), sensorId: \"temp-42\", v: 20.2 }\n]);\n```\n\n**What MongoDB does internally**\n- Creates a hidden `system.buckets.readings` collection\n- Groups inserts into optimized buckets keyed by `metaField` + time\n- Compresses numeric columns and timestamps aggressively\n- Exposes a normal-looking collection API with automatic bucket transparency\n\n**Queries use the regular find/aggregate API; MongoDB unpacks buckets under the hood.**\n\n**When to still hand-roll buckets:**\n- You need pre-aggregated fields (`count`, `sum`, etc.) directly on the bucket\n- Group key isn't purely time (e.g., bucket per customer per shift)\n- You want to control bucket boundaries explicitly\n- You're on MongoDB < 5.0"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Bucket Size and Limits",
+            "content": "**When it helps:**\n- 10–1000× fewer documents\n- Index shrinks proportionally — huge win for working-set fit\n- Range queries scan far fewer documents\n- Pre-aggregated fields answer dashboard queries without unpacking\n\n**When it hurts:**\n- 16MB document limit — if a bucket could exceed ~10MB, shorten the window\n- Arrays grow over time — in-place updates may move the document; reserve capacity if possible\n- Late-arriving data (event at 10:05 delivered at 11:30) needs retroactive upsert\n\n**Watch for:**\n- Oversized buckets cause `DocumentTooLarge` errors\n- Queries that need individual measurements still unwind the array\n- Changing granularity later requires rewriting historical data\n- Unbounded `$push` without size cap can silently approach 16MB"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Bucket pattern** groups time-ordered events into one document per entity per window\n- **Pre-aggregated fields** (count/sum/min/max) on the bucket accelerate dashboards\n- **Upsert + `$push` + `$inc`** is the standard append pattern\n- **16MB doc limit** dictates bucket window — choose granularity so peak bucket < ~10MB\n- **MongoDB 5.0+ native time-series** automates bucketing via `timeseries` collection options\n- **Index** on `(metaField, timeField)` answers most range queries\n- **TTL** via `expireAfterSeconds` deletes old buckets automatically"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Frame the problem**\n- Naïve one-doc-per-event blows up index and storage\n- Bucket pattern groups events into one document per entity per window\n\n**Describe the shape**\n- `bucketStart`, `bucketEnd`, `measurements` array, pre-aggregated `count/sum/min/max`\n- Upsert with `$push` + `$inc` + `$min` + `$max` + `$setOnInsert`\n- Index on `(metaField, bucketStart)`\n\n**Mention the 16MB limit**\n- Choose bucket granularity so peak bucket stays below ~10MB\n- Late-arriving data requires retroactive upsert\n\n**Call out MongoDB 5.0+ time-series**\n- `timeseries: { timeField, metaField, granularity }`\n- MongoDB auto-buckets, auto-compresses, exposes normal API\n- Hand-roll still wins for custom pre-aggregation or non-time group keys"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle late-arriving measurements that belong to a closed bucket?",
+        "What's the trade-off between hourly and minute-level bucket granularity?",
+        "How do MongoDB 5.0+ time-series collections compress numeric columns internally?",
+        "When would you prefer InfluxDB or TimescaleDB over MongoDB time-series?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Bucket Pattern for Time-Series Data",
+        "metaDescription": "Hand-rolled bucket pattern vs MongoDB 5.0+ native time-series collections — schema, upsert idiom, and pre-aggregation for metrics and IoT."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "Frame the problem Naïve one-doc-per-event blows up index and storage Bucket pattern groups events into one document per entity per window Describe the shape bucketStart, bucketEnd, measurements array,",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Naïve time-series modeling inserts one document per event — a sensor reading, a metric, a stock tick. At 100 events/sec per device, a 30-day window is 260M documents per device. Index overhead dominates storage; queries over time ranges pull millions of documents. The bucket pattern groups events by a natural window (one hour, one day, one minute) into a single parent document with a measurements array. Each bucket also carries pre-aggregated summary fields — count, sum, min, max, avg —."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can identify and apply MongoDB schema patterns beyond naïve one-document-per-event modeling"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Bucket pattern groups time-ordered events into one document per entity per window Pre-aggregated fields (count/sum/min/max) on the bucket accelerate dashboards Upsert + $push + $inc is the standard append pattern 16MB doc limit dictates bucket window — choose granularity so peak bucket < ~10MB MongoDB 5",
+              "0+ native time-series automates bucketing via timeseries collection options Index on (metaField, timeField) answers most range queries TTL via expireAfterSeconds deletes old buckets automatically"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Naïve time-series modeling inserts one document per event — a sensor reading, a metric, a stock tick. At 100 events/sec per device, a 30-day window is 260M documents per device. Index overhead dominates storage; queries over time ranges pull millions of documents. The bucket pattern groups events by a natural window (one hour, one day, one minute) into a single parent document with a measurements array. Each bucket also carries pre-aggregated summary fields — count, sum, min, max, avg — so dashboards read the summary without scanning the array. The result is 10–1000× fewer documents, dramatically smaller indexes, fewer seeks per range query, and compressed array storage that's roughly 50–70% of the row-per-event size. MongoDB 5.0 added native time-series collections."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Inserting one document per sensor reading, ignoring index/storage blow-up",
+              "or picking bucket size without considering the 16MB doc limit"
+            ]
+          }
+        ],
+        "cap": "Frame the problem Naïve one-doc-per-event blows up index and storage Bucket pattern groups events into one document per entity per window Describe the shape bucketStart, bucketEnd, measurements array,",
+        "familiarity_anchors": [
+          "MongoDB"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle late-arriving measurements that belong to a closed bucket?",
+          "What's the trade-off between hourly and minute-level bucket granularity?",
+          "How do MongoDB 5.0+ time-series collections compress numeric columns internally?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "nosql-pat-003",
+      "slug": "mongodb-subset-and-computed-pattern",
+      "question": "Explain the MongoDB subset and computed patterns — when and how do you use them?",
+      "title": "MongoDB Subset and Computed Patterns",
+      "direct_answer": "The **subset pattern** keeps a hot slice of a growing array (last 10 reviews, recent 20 comments) in the primary document and moves the tail to a separate collection — so the main document stays small and fast to load. The **computed pattern** stores pre-calculated values (averages, totals, rankings) alongside the raw data so reads never recompute on the fly. Both patterns trade **a bit of write complexity for dramatically cheaper reads**, and both exist because MongoDB's **16MB document cap** plus working-set economics punish unbounded embedding. Use subset when 90% of reads want only the recent slice; use computed when the same aggregation runs thousands of times per read.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Whether you recognize the write-time denormalization idiom that makes read-heavy MongoDB workloads fast",
+        "common_mistake": "Embedding unbounded arrays leading to 16MB overflow, or recomputing aggregates on every read",
+        "to_stand_out": "Show both patterns composed together, explain staleness handling with background refresh, and cite real examples (product reviews, leaderboards)"
+      },
+      "company_tags": [
+        "mongodb",
+        "ebay",
+        "shopify",
+        "hbo",
+        "airbnb"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Patterns, One Idea: Denormalize Smartly",
+            "content": "Both patterns address the same pain: a MongoDB document that starts small but grows unbounded — reviews on a product, comments on a post, orders for a customer. Left alone, the document crosses tens of MB and every read pulls everything even though the UI shows only the latest few items.\n\nThe **subset pattern** fixes the size problem by embedding only the **hot slice** (last 10 reviews) in the parent document and keeping the full history in a separate collection. 90% of reads are happy with the slice; the 10% that need history pay an extra query.\n\nThe **computed pattern** fixes the compute problem by storing **pre-calculated aggregates** — average rating, total orders, leaderboard rank — directly on the document. Writes do the math once; reads never recompute. Together these patterns make read-heavy workloads cheap and keep documents far below the 16MB ceiling."
+          },
+          {
+            "type": "step",
+            "title": "Subset Pattern: Hot Slice + Cold Tail",
+            "content": "**Product document keeps the 10 most recent reviews embedded**\n\n```javascript\n// products collection\n{\n  _id: \"prod-42\",\n  name: \"Wireless Headphones\",\n  price: 199.00,\n  recentReviews: [\n    { userId: \"u9\", rating: 5, text: \"Great\",   t: ISODate(\"2026-04-24\") },\n    { userId: \"u7\", rating: 4, text: \"Good\",    t: ISODate(\"2026-04-23\") }\n    // up to 10 items\n  ],\n  reviewCount: 1843,\n  ratingAvg: 4.6\n}\n\n// reviews collection holds the full history\n{ _id: \"...\", productId: \"prod-42\", userId: \"u9\", rating: 5, text: \"Great\", t: ... }\n```\n\n**Append-and-trim on new review**\n\n```javascript\nconst review = { userId: \"u9\", rating: 5, text: \"Great\", t: new Date() };\n\nawait reviews.insertOne({ productId: \"prod-42\", ...review });\n\nawait products.updateOne(\n  { _id: \"prod-42\" },\n  {\n    $push: {\n      recentReviews: {\n        $each:  [review],\n        $sort:  { t: -1 },\n        $slice: 10\n      }\n    },\n    $inc: { reviewCount: 1 }\n  }\n);\n```\n\n**Read pattern — hot path pulls one document**\n\n```javascript\ndb.products.findOne({ _id: \"prod-42\" });  // 10 recent reviews in main doc\n```\n\n**Cold path — 'See all reviews' fetches from the reviews collection paginated.**"
+          },
+          {
+            "type": "step",
+            "title": "Computed Pattern: Pre-Aggregate on Write",
+            "content": "**Stored aggregates eliminate per-read recomputation**\n\n```javascript\n// users collection with computed stats\n{\n  _id: \"u9\",\n  name: \"Asha\",\n  stats: {\n    totalOrders:    42,\n    totalSpent:     3180.00,\n    lastOrderAt:    ISODate(\"2026-04-22\"),\n    lifetimeRanking: 128\n  }\n}\n```\n\n**Update stats atomically on each new order**\n\n```javascript\nawait users.updateOne(\n  { _id: order.userId },\n  {\n    $inc: {\n      \"stats.totalOrders\": 1,\n      \"stats.totalSpent\":  order.total\n    },\n    $set: { \"stats.lastOrderAt\": order.createdAt }\n  }\n);\n```\n\n**Heavier aggregates via background job + `$merge`**\n\n```javascript\n// Recompute product rating average once per hour\ndb.reviews.aggregate([\n  { $group: {\n      _id: \"$productId\",\n      ratingAvg:   { $avg: \"$rating\" },\n      reviewCount: { $sum: 1 }\n  }},\n  { $merge: {\n      into: \"products\",\n      on:   \"_id\",\n      whenMatched:    \"merge\",\n      whenNotMatched: \"discard\"\n  }}\n]);\n```\n\n**When fresh-enough is good enough**, `$merge` writes results back into the source collection efficiently."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Subset vs Computed vs Naïve",
+            "content": "| Aspect | Naïve Embed | Subset Pattern | Computed Pattern |\n|---|---|---|---|\n| Main doc size | Unbounded | Bounded (hot slice) | Bounded + aggregates |\n| Read cost | High (full array) | Low (hot slice) | Very low (pre-computed) |\n| Write cost | Low | Slightly higher (append + trim) | Higher (write + recompute) |\n| Staleness risk | None | None | Possible if async refresh |\n| Good for | Small, bounded lists | Feeds, recent comments | Dashboards, leaderboards |\n| Breaks at | >16MB, hot doc | Multi-collection read for 'see all' | Complex multi-source math |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Using the Patterns in Production",
+            "content": "**When they help:**\n- Read-heavy workloads where the same info is read thousands of times per write\n- Documents approaching the 16MB cap\n- Dashboards where pre-aggregated stats hide expensive queries\n- Leaderboards, product ratings, user profiles\n\n**When they hurt:**\n- Write-heavy workloads where recomputing on every write costs more than recomputing on read\n- Rapidly churning aggregates (real-time trading) where staleness is unacceptable\n- Teams that can't keep two copies of the truth in sync\n\n**Watch for:**\n- Forgetting to update the computed field when the source changes\n- Subset drift — reviews edited or deleted later require refreshing the embedded slice\n- Compound failures: partial writes that update the child but not the aggregate\n- Mitigate by wrapping in a transaction or running a nightly reconcile job"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Subset pattern** embeds the hot slice (recent 10) and offloads the tail to another collection\n- **Computed pattern** stores pre-aggregated values on the document to skip per-read math\n- **$push with $slice and $sort** is the standard append-and-trim idiom\n- **$inc** keeps simple counters atomic on each write\n- **$merge** writes heavy aggregate results back to source collections\n- **16MB doc limit** is the hard wall these patterns keep you away from\n- **Staleness window** is acceptable for most aggregates — design the refresh cadence"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**Frame both patterns**\n- Subset keeps only the hot slice in the main document, tail in a side collection\n- Computed stores pre-calculated aggregates so reads never recompute\n- Both trade a bit of write complexity for much cheaper reads\n\n**Show the idioms**\n- `$push` with `$slice` and `$sort` for subset\n- `$inc` for counters; background `$merge` for heavier aggregates\n- Index the hot slice fields if you query them\n\n**Call out the trade-offs**\n- Write-heavy workloads can flip the math\n- Staleness is acceptable for most aggregates; design refresh cadence\n- Compound failures — wrap in transaction or run nightly reconcile\n\n**Wrap up**\n- Both exist because the 16MB limit plus working-set economics punish unbounded embedding\n- Combine them — `products` with `recentReviews` slice plus `ratingAvg` computed field is a canonical shape"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you keep the subset in sync when an old review is edited or deleted?",
+        "When does computing aggregates via `$merge` beat updating them inline on each write?",
+        "How do MongoDB transactions help keep subset and source consistent?",
+        "What's the trade-off between embedding recent items vs a full materialized view collection?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Subset and Computed Patterns Explained",
+        "metaDescription": "How to use the MongoDB subset and computed patterns — hot slice embedding, pre-aggregated fields, $push with $slice, and $merge materialization."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "Frame both patterns Subset keeps only the hot slice in the main document, tail in a side collection Computed stores pre-calculated aggregates so reads never recompute Both trade a bit of write complex",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Both patterns address the same pain: a MongoDB document that starts small but grows unbounded — reviews on a product, comments on a post, orders for a customer. Left alone, the document crosses tens of MB and every read pulls everything even though the UI shows only the latest few items. The subset pattern fixes the size problem by embedding only the hot slice (last 10 reviews) in the parent document and keeping the full history in a separate collection."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you recognize the write-time denormalization idiom that makes read-heavy MongoDB workloads fast"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Subset pattern embeds the hot slice (recent 10) and offloads the tail to another collection Computed pattern stores pre-aggregated values on the document to skip per-read math $push with $slice and $sort is the standard append-and-trim idiom $inc keeps simple counters atomic on each write $merge writes heavy aggregate results back to source collections 16MB doc limit is the hard wall these patterns keep you away from Staleness window is acceptable for most aggregates",
+              "design the refresh cadence"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Both patterns address the same pain: a MongoDB document that starts small but grows unbounded — reviews on a product, comments on a post, orders for a customer. Left alone, the document crosses tens of MB and every read pulls everything even though the UI shows only the latest few items. The subset pattern fixes the size problem by embedding only the hot slice (last 10 reviews) in the parent document and keeping the full history in a separate collection. 90% of reads are happy with the slice; the 10% that need history pay an extra query. The computed pattern fixes the compute problem by storing pre-calculated aggregates — average rating, total orders, leaderboard rank — directly on the document."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Embedding unbounded arrays leading to 16MB overflow, or recomputing aggregates on every read"
+            ]
+          }
+        ],
+        "cap": "Frame both patterns Subset keeps only the hot slice in the main document, tail in a side collection Computed stores pre-calculated aggregates so reads never recompute Both trade a bit of write complex",
+        "familiarity_anchors": [
+          "MongoDB"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you keep the subset in sync when an old review is edited or deleted?",
+          "When does computing aggregates via `$merge` beat updating them inline on each write?",
+          "How do MongoDB transactions help keep subset and source consistent?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    },
+    {
+      "id": "nosql-pat-004",
+      "slug": "mongodb-schema-versioning-pattern",
+      "question": "How do you use the schema versioning pattern to evolve MongoDB documents safely in production?",
+      "title": "MongoDB Schema Versioning Pattern",
+      "direct_answer": "The **schema versioning pattern** tags every document with a `schemaVersion` field so your application can handle multiple document shapes simultaneously and migrate lazily. New writes use the current version; readers detect the version and transform older shapes on the fly (or a background job rewrites them). This avoids **big-bang migrations** that lock a live collection and lets you **evolve schemas with zero downtime**. Combined with **JSON Schema validation** (`$jsonSchema`) at the collection level and an **anti-corruption layer** in the app, it gives you SQL-style migration discipline in a schema-flexible store — without the downtime of `ALTER TABLE`.",
+      "layout_type": "concept-explainer",
+      "difficulty": "medium",
+      "importance": "high",
+      "interviewer_intent": {
+        "testing": "Whether you can evolve a production MongoDB schema safely without downtime or data corruption",
+        "common_mistake": "Running a big-bang migration on a live collection, or letting schema drift accumulate untagged variants",
+        "to_stand_out": "Combine schemaVersion with MongoDB `$jsonSchema` validator, lazy migration on read, and Debezium/change-stream-driven backfill"
+      },
+      "company_tags": [
+        "mongodb",
+        "atlassian",
+        "sap",
+        "paypal",
+        "coinbase"
+      ],
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Schemas Still Matter in MongoDB",
+            "content": "MongoDB is schema-flexible, not schema-less.\n- Your application has a schema — it just lives in code rather than in `CREATE TABLE`.\n- Over years, documents accumulate shape drift: renamed fields, split objects, new required properties.\n- Without discipline you end up with a collection where **three schema variants coexist and nobody remembers which is current**.\n\nThe **schema versioning pattern** solves this by stamping every document with an explicit `schemaVersion` (integer or semver). Readers dispatch on version to upgrade old shapes on the fly; writers always emit the current version. A background migration job rewrites old documents in place at a pace that doesn't impact production.\n\nPaired with a `$jsonSchema` validator on the collection, this gives you **explicit, enforced contracts** and zero-downtime evolution — the discipline of SQL migrations with NoSQL's flexibility."
+          },
+          {
+            "type": "step",
+            "title": "Tagging Documents with a Version",
+            "content": "**Every document carries a version**\n\n```javascript\n// v1 (2024)\n{ _id: ..., name: \"Asha Patel\", email: \"a@x.com\", schemaVersion: 1 }\n\n// v2 (2025) — split name into firstName/lastName\n{ _id: ..., firstName: \"Asha\", lastName: \"Patel\", email: \"a@x.com\", schemaVersion: 2 }\n\n// v3 (2026) — emails become a list; preferred flag\n{\n  _id: ...,\n  firstName: \"Asha\",\n  lastName:  \"Patel\",\n  emails: [{ address: \"a@x.com\", preferred: true, verified: true }],\n  schemaVersion: 3\n}\n```\n\n**New inserts always use the current version**\n\n```javascript\nconst CURRENT_VERSION = 3;\n\nawait users.insertOne({\n  firstName: \"Asha\",\n  lastName:  \"Patel\",\n  emails: [{ address: \"a@x.com\", preferred: true, verified: false }],\n  schemaVersion: CURRENT_VERSION\n});\n```"
+          },
+          {
+            "type": "step",
+            "title": "Lazy Upgrade on Read",
+            "content": "**Application-level anti-corruption layer**\n\n```javascript\nfunction toCurrent(user) {\n  let u = { ...user };\n  if (!u.schemaVersion || u.schemaVersion < 2) {\n    const [first, ...rest] = (u.name ?? \"\").split(\" \");\n    u.firstName = first;\n    u.lastName  = rest.join(\" \");\n    delete u.name;\n    u.schemaVersion = 2;\n  }\n  if (u.schemaVersion < 3) {\n    u.emails = [{ address: u.email, preferred: true, verified: false }];\n    delete u.email;\n    u.schemaVersion = 3;\n  }\n  return u;\n}\n\nconst raw = await users.findOne({ _id: id });\nconst user = toCurrent(raw);\n```\n\n**Optional: persist the upgraded document on read**\n\n```javascript\nif (raw.schemaVersion !== CURRENT_VERSION) {\n  await users.replaceOne({ _id: user._id }, user);  // upgrade-on-read\n}\n```\n\nThis **self-migrates** hot documents naturally under live traffic, without a big-bang job."
+          },
+          {
+            "type": "step",
+            "title": "Background Backfill and Validation",
+            "content": "**Background migration for cold documents**\n\n```javascript\n// Throttled backfill — 1000 docs at a time, pause to avoid CPU spikes\nconst cursor = users.find({ schemaVersion: { $lt: 3 } }).batchSize(1000);\n\nfor await (const raw of cursor) {\n  const upgraded = toCurrent(raw);\n  await users.replaceOne({ _id: raw._id, schemaVersion: raw.schemaVersion }, upgraded);\n  await sleep(20);  // throttle\n}\n```\n\n**Enforce the current shape with `$jsonSchema`**\n\n```javascript\ndb.runCommand({\n  collMod: \"users\",\n  validator: {\n    $jsonSchema: {\n      bsonType: \"object\",\n      required: [\"firstName\", \"lastName\", \"emails\", \"schemaVersion\"],\n      properties: {\n        schemaVersion: { bsonType: \"int\", minimum: 2, maximum: 3 },\n        firstName:     { bsonType: \"string\" },\n        lastName:      { bsonType: \"string\" },\n        emails: {\n          bsonType: \"array\",\n          items: {\n            bsonType: \"object\",\n            required: [\"address\"],\n            properties: {\n              address:   { bsonType: \"string\" },\n              preferred: { bsonType: \"bool\" },\n              verified:  { bsonType: \"bool\" }\n            }\n          }\n        }\n      }\n    }\n  },\n  validationLevel:  \"moderate\",   // warn for legacy, enforce for new\n  validationAction: \"error\"\n});\n```\n\n**`moderate` validation** only enforces new writes and updates on matching documents — perfect for migrations in progress."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Why Not Big-Bang Migrations",
+            "content": "**When versioning helps:**\n- Large collections where a rewrite would lock or saturate the cluster\n- Live traffic with strict SLOs\n- Multi-service deployments where not every service upgrades at once\n- Evolving schemas frequently — monthly or faster\n\n**When versioning hurts:**\n- Tiny collection (< 1M docs) where a one-shot update is fine\n- Only one consumer and strict schema contracts make versions noise\n- Breaking changes that can't be transformed without dropping data\n\n**Watch for:**\n- Unversioned legacy docs (`schemaVersion` missing) — treat as v1\n- Forgetting the anti-corruption layer in one service → reads crash\n- Removing old version handlers too early — keep them until backfill finishes\n- `$jsonSchema` running in `strict` mode can block existing legacy writes; start with `moderate`"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`schemaVersion` on every document** enables multiple shapes to coexist safely\n- **Lazy upgrade on read** migrates hot documents under live traffic\n- **Background backfill** handles cold documents without locking the cluster\n- **`$jsonSchema` validator** enforces the current shape for new writes\n- **`moderate` validation level** lets legacy docs stay while enforcing new writes\n- **Keep old version handlers** until backfill completes — remove in a later release\n- **Zero-downtime schema evolution** is achievable with discipline"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "**State the problem**\n- MongoDB is schema-flexible, not schema-less\n- Without discipline, three shapes coexist and nobody knows which is current\n\n**Describe the pattern**\n- Tag every document with `schemaVersion`\n- Readers dispatch on version through an anti-corruption layer\n- New writes always use current version\n- Background job backfills old documents at safe throttle\n\n**Show the enforcement**\n- `$jsonSchema` validator on the collection\n- `moderate` mode during migration, tighten to `strict` after backfill\n- `validationAction: \"error\"` once stable\n\n**Close with production advice**\n- Keep old version handlers until backfill finishes\n- Lazy upgrade on read is the workhorse — hot docs migrate naturally\n- Zero-downtime schema evolution is achievable with discipline"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle a breaking schema change that drops a required field?",
+        "Why start with `validationLevel: moderate` instead of `strict`?",
+        "How do change streams help a consumer service stay in sync during schema migration?",
+        "When is a big-bang migration acceptable in MongoDB?"
+      ],
+      "seo": {
+        "metaTitle": "MongoDB Schema Versioning Pattern for Zero-Downtime Evolution",
+        "metaDescription": "Evolve MongoDB schemas safely with schemaVersion tagging, lazy upgrade on read, $jsonSchema validators, and throttled background backfill."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P03",
+        "hook": "State the problem MongoDB is schema-flexible, not schema-less Without discipline, three shapes coexist and nobody knows which is current Describe the pattern Tag every document with schemaVersion Read",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "MongoDB is schema-flexible, not schema-less. Your application has a schema — it just lives in code rather than in CREATE TABLE. Over years, documents accumulate shape drift: renamed fields, split objects, new required properties. Without discipline you end up with a collection where three schema variants coexist and nobody remembers which is current. The schema versioning pattern solves this by stamping every document with an explicit schemaVersion (integer or semver). Readers dispatch on version to upgrade old shapes on the."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can evolve a production MongoDB schema safely without downtime or data corruption"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "schemaVersion on every document enables multiple shapes to coexist safely Lazy upgrade on read migrates hot documents under live traffic Background backfill handles cold documents without locking the cluster $jsonSchema validator enforces the current shape for new writes moderate validation level lets legacy docs stay while enforcing new writes Keep old version handlers until backfill completes",
+              "remove in a later release Zero-downtime schema evolution is achievable with discipline"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "MongoDB is schema-flexible, not schema-less. Your application has a schema — it just lives in code rather than in CREATE TABLE. Over years, documents accumulate shape drift: renamed fields, split objects, new required properties. Without discipline you end up with a collection where three schema variants coexist and nobody remembers which is current. The schema versioning pattern solves this by stamping every document with an explicit schemaVersion (integer or semver). Readers dispatch on version to upgrade old shapes on the fly; writers always emit the current version. A background migration job rewrites old documents in place at a pace that doesn't impact production. Paired with a $jsonSchema validator on the collection, this gives you explicit, enforced contracts and zero-downtime evolution."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Running a big-bang migration on a live collection, or letting schema drift accumulate untagged variants"
+            ]
+          }
+        ],
+        "cap": "State the problem MongoDB is schema-flexible, not schema-less Without discipline, three shapes coexist and nobody knows which is current Describe the pattern Tag every document with schemaVersion Read",
+        "familiarity_anchors": [
+          "Combined",
+          "Schema",
+          "ALTER"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle a breaking schema change that drops a required field?",
+          "Why start with `validationLevel: moderate` instead of `strict`?",
+          "How do change streams help a consumer service stay in sync during schema migration?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot app with MongoDB for product catalogue"
+      }
+    }
+  ]
+}

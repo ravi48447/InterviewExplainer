@@ -1,0 +1,494 @@
+{
+  "topic": "Profiling And Debugging",
+  "topicSlug": "profiling-and-debugging",
+  "questions": [
+    {
+      "id": "how-to-profile-java-application",
+      "slug": "how-to-profile-java-application",
+      "title": "How to Profile a Java Application — Sampling vs Instrumenting Profilers",
+      "question": "How do you profile a Java application? Explain the difference between sampling and instrumenting profilers and when to use each.",
+      "direct_answer": "There are two fundamentally different approaches to Java profiling. **Sampling profilers** periodically capture stack traces (typically 100-1000 times per second) and aggregate the data statistically. They have very low overhead (1-3%) and are safe for production. **Instrumenting profilers** modify bytecode to insert timing code at every method entry and exit, producing exact call counts and timings but with 10-50% overhead — only suitable for development. Modern best practice: use **async-profiler** for CPU and allocation flame graphs, **JFR** for holistic JVM event correlation, and instrumenting profilers (YourKit, JProfiler) only in dev for exact call-count analysis.",
+      "layout_type": "deep-dive",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-23",
+      "interviewer_intent": {
+        "testing": "Whether you understand WHY sampling profilers are production-safe and instrumenting profilers are not, and can match the right tool to the diagnostic question",
+        "common_mistake": "Using JMH micro-benchmarks or YourKit in production to investigate latency, then drawing wrong conclusions because the instrumentation itself caused the slowdown",
+        "to_stand_out": "Explain safepoint bias in JVMTI sampling and why async-profiler's `AsyncGetCallTrace` mechanism avoids it; mention flame graph reading techniques"
+      },
+      "company_tags": [
+        "Netflix",
+        "Twitter",
+        "Cloudflare",
+        "Datadog",
+        "Azul",
+        "JetBrains"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Profiling Approaches With Fundamentally Different Trade-Offs",
+            "content": "Java profiling solves one of two questions: \"where is my application spending time?\" (CPU profiling) or \"what is allocating all this memory?\" (allocation profiling). Both questions can be answered with two architecturally different mechanisms — **sampling** or **instrumentation** — and choosing the wrong one for the wrong context produces measurements that mislead your optimization work.\n\n**Sampling profilers** work like statistical surveys. At a fixed interval (typically every 1-10ms, or 100-1000 samples per second), the profiler interrupts the JVM and records the current stack trace of each running thread. Over a few seconds of sampling, methods that consume more CPU time appear in proportionally more samples. The aggregate becomes a statistical estimate of where the application spends its time. Overhead is low — typically 1-3% — because the only work per sample is capturing a stack trace.\n\n**Instrumenting profilers** work by modifying the application's bytecode. They insert timing code at every method entry and every method exit, producing exact call counts (\"this method was called 42,159,883 times\") and exact total time per method. The information is more precise, but the overhead is 10-50% because every method call now carries instrumentation. Worse, the instrumentation can prevent the JIT from inlining methods that would normally be inlined — making the profile show false hot spots that don't exist in production.\n\n**The decision rule is simple:** use sampling profilers (async-profiler, JFR) for any production-grade investigation; use instrumenting profilers (YourKit, JProfiler) in development only when you need exact call counts for algorithmic analysis."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Sampling vs Instrumenting — Match the Tool to the Question",
+            "content": "Each profiler type has a sweet spot. Knowing which to reach for saves hours of misdirected optimization.\n\n| Dimension | Sampling Profilers | Instrumenting Profilers |\n|---|---|---|\n| Mechanism | Periodically capture stack traces | Modify bytecode to insert timing code |\n| Overhead | 1-3% (production-safe) | 10-50% (dev only) |\n| Output | Statistical estimate of hot methods | Exact call counts and timings |\n| Affects JIT | No (samples real, optimized code) | Yes (prevents inlining; distorts measurements) |\n| Examples | async-profiler, JFR, YourKit (sampling mode) | YourKit, JProfiler (instrumentation mode), VisualVM tracing |\n| Best for | Production diagnosis, hotspot identification | Algorithmic complexity analysis, exact call counts |\n| Flame graph quality | Excellent — based on real execution | Distorted by instrumentation overhead |\n\n**Sampling profilers** further subdivide by **how** they capture the stack trace. JVMTI-based samplers (the standard for older tools) can only capture stacks at safepoints — points in the code where the JVM is in a known state. Native methods, tight loops, and JNI calls happen between safepoints and are invisible. **`AsyncGetCallTrace`** (used by async-profiler) is an undocumented HotSpot API that captures stack traces at arbitrary execution points, including inside JIT-compiled code, native methods, and kernel context. This eliminates **safepoint bias** — the systematic underrepresentation of safepoint-invisible code in JVMTI samplers.\n\n**JFR (Java Flight Recorder)** is a special case. It is a sampling profiler embedded directly in the JVM since Java 11, with under 1% overhead and access to internal JVM events that no external profiler can see — GC phases, JIT compilation events, allocation profiling sampled per allocation type, biased lock revocation events, and class loading. JFR plus JMC (JVM Mission Control) is the gold-standard production diagnostic combination."
+          },
+          {
+            "type": "step",
+            "title": "Capturing a CPU Profile with async-profiler — Quickstart",
+            "content": "async-profiler is the most accurate CPU profiler for Java in 2026. It is open-source, requires no JVM flags, attaches to a running process without restart, and produces interactive flame graphs as HTML.\n\n**1. Download and prepare.**\n\n```bash\n# Linux x86_64\nwget https://github.com/async-profiler/async-profiler/releases/download/v3.0/async-profiler-3.0-linux-x64.tar.gz\ntar xf async-profiler-3.0-linux-x64.tar.gz\ncd async-profiler-3.0-linux-x64\n```\n\n**2. Find your JVM PID.**\n\n```bash\njps -l\n# 12345 com.example.MyApp\n```\n\n**3. Capture a 30-second CPU flame graph.**\n\n```bash\n./bin/asprof -d 30 -e cpu -f /tmp/cpu.html 12345\n```\n\nOpen `/tmp/cpu.html` in any browser. The flame graph shows methods stacked vertically (callers below, callees above), with bar width proportional to time spent. Wide bars at the top are the optimization targets. Look for:\n\n- **Application code wider than framework code** — your code is the hotspot, not Spring/Hibernate\n- **`Thread.sleep` or `LockSupport.park`** — threads are waiting; investigate why\n- **Native methods near the top** — JNI calls, encryption, compression hot spots\n\n**4. Capture an allocation flame graph (find what is allocating most).**\n\n```bash\n./bin/asprof -d 30 -e alloc -f /tmp/alloc.html 12345\n```\n\nThe allocation flame graph shows which call paths allocate the most bytes. This is invaluable for reducing GC pressure — fix the wide bars in the allocation graph and minor GC frequency drops measurably.\n\n**5. Profile lock contention.**\n\n```bash\n./bin/asprof -d 30 -e lock -f /tmp/lock.html 12345\n```\n\nThe lock event mode shows which monitors have the most contention. Use this to guide migrations from `synchronized` to `ReentrantLock` or `StampedLock`, or to identify global locks that should be partitioned.\n\n**Reading flame graphs:**\n- **Width = time spent** (not number of calls)\n- **Height = stack depth** (no inherent meaning)\n- **Color = arbitrary** (just for visual differentiation; ignore)\n- Look for **plateaus** — wide methods that don't have wider callers; those are CPU hot spots inside that one method"
+          },
+          {
+            "type": "step",
+            "title": "Capturing JFR for Holistic JVM Diagnostics",
+            "content": "JFR captures everything that's happening in the JVM — CPU samples, GC events, thread state, lock contention, I/O, allocation patterns — in a single recording. It is the right tool when you need to correlate multiple subsystems.\n\n**Always-on JFR for production (recommended):**\n\n```bash\njava \\\n  -XX:+FlightRecorder \\\n  -XX:StartFlightRecording=duration=24h,filename=/var/recordings/app.jfr,dumponexit=true,settings=profile \\\n  -jar app.jar\n```\n\nThe `settings=profile` preset captures a richer event set than the default; overhead is still around 2%. The `dumponexit=true` ensures a recording is written when the JVM shuts down — invaluable for crash diagnosis.\n\n**On-demand JFR via jcmd:**\n\n```bash\n# Start a 60-second recording\njcmd <pid> JFR.start name=adhoc duration=60s filename=/tmp/recording.jfr settings=profile\n\n# Check active recordings\njcmd <pid> JFR.check\n\n# Force-dump an in-progress recording\njcmd <pid> JFR.dump name=adhoc filename=/tmp/snapshot.jfr\n```\n\n**Open the .jfr file in JVM Mission Control (JMC).** JMC is a free Eclipse-based GUI from Oracle. It provides correlated timeline views of:\n\n- CPU usage per thread\n- GC pause durations and reasons\n- Allocation pressure broken down by call site\n- Thread lock contention with the contending stacks\n- I/O latency for sockets and files\n- Class loading and JIT compilation events\n\nThe killer use case is **correlating a latency spike with its cause**. If your monitoring shows a p99 latency spike at 14:23:05, scrub to that timestamp in JMC and you can see — in a single view — that there was a 200ms G1 mixed GC pause, a thread held a database connection lock during that window, and three downstream HTTP calls timed out as a result. No other tool gives you this correlated picture for free."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Use Each Tool — A Decision Tree",
+            "content": "Different questions need different tools. Pick wrong, and the answer is misleading.\n\n**Question: \"Where is the CPU going?\"**\n- → async-profiler with `-e cpu` for a flame graph\n- async-profiler avoids safepoint bias; the flame graph immediately shows hot methods\n- Don't use YourKit in instrumentation mode — it distorts the JIT\n\n**Question: \"What is allocating all this memory?\"**\n- → async-profiler with `-e alloc` for an allocation flame graph\n- Identifies the call path responsible for allocation pressure\n- Cannot be answered by a heap dump (which shows static state, not allocation rate)\n\n**Question: \"Why is my service slow at 14:23 every day?\"**\n- → JFR continuous recording, scrub to the timestamp in JMC\n- Correlates GC, locks, threads, I/O in one view\n- Other tools show pieces; JFR shows the whole picture\n\n**Question: \"What is the exact call count of method X?\"**\n- → YourKit or JProfiler in instrumentation mode (dev only)\n- Sampling profilers cannot give exact counts\n- Use this for algorithmic analysis: \"is this method called 100 times or 100,000 times?\"\n\n**Question: \"Where are my threads stuck?\"**\n- → Thread dump with `jstack` or `jcmd Thread.print`\n- Three dumps five seconds apart for ground truth\n- Faster than profiler attach for hangs and deadlocks\n\n**Question: \"What is the latency distribution of method X?\"**\n- → Application-level metrics (Micrometer + Prometheus + histogram)\n- Profilers show CPU time; metrics show user-perceived latency including I/O wait\n- Don't conflate the two\n\n**Anti-patterns:**\n- Profiling in production with YourKit/JProfiler attached in instrumentation mode\n- Optimizing based on a single 5-second profile snapshot — capture multiple, look for consistency\n- Trusting JVMTI sampler output without considering safepoint bias\n- Using JMH for end-to-end performance testing (JMH is for microbenchmarks; use load tests for end-to-end)"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Sampling profilers** — periodically capture stack traces; 1-3% overhead; production-safe.\n- **Instrumenting profilers** — modify bytecode; 10-50% overhead; dev only; can prevent JIT inlining.\n- **async-profiler** — best CPU/allocation/lock flame graphs; uses `AsyncGetCallTrace` to avoid safepoint bias.\n- **JFR** — built-in JVM profiler since Java 11; 1-2% overhead; correlates GC, threads, locks, I/O in one view.\n- **JMC (JVM Mission Control)** — the GUI for analyzing JFR recordings.\n- **Flame graph reading** — width = time, height = stack depth, color = arbitrary; look for wide bars at the top.\n- **Match tool to question** — async-profiler for hotspots, JFR for correlation, thread dumps for hangs, instrumenting profilers for exact counts in dev only."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Java profiling falls into two architecturally different approaches, and choosing the wrong one for production produces misleading data.\n\n**Sampling profilers:**\n- Periodically capture stack traces — typically 100-1000 samples per second\n- Statistical estimate of where time is spent\n- 1-3% overhead — production-safe\n- Best examples: **async-profiler** and **Java Flight Recorder (JFR)**\n\n**Instrumenting profilers:**\n- Modify bytecode to insert timing code at every method entry and exit\n- Exact call counts and timings\n- 10-50% overhead — only suitable for development\n- Can prevent JIT inlining, distorting the very measurements they produce\n- Examples: YourKit, JProfiler in instrumentation mode\n\n**Why async-profiler is the modern default:**\n- Uses **`AsyncGetCallTrace`** — a HotSpot API that captures stack traces at arbitrary points\n- Avoids **safepoint bias** that plagues older JVMTI-based profilers\n- Produces interactive HTML flame graphs out of the box\n- Three modes: `-e cpu`, `-e alloc`, `-e lock`\n\n**Why JFR is the gold standard for correlated diagnostics:**\n- Embedded in the JVM since Java 11 with under 1% overhead\n- Captures GC events, thread states, lock contention, I/O, allocation profiling, JIT events — all in one recording\n- Open in JMC to correlate latency spikes with their root cause across subsystems\n\n**My recommended approach:**\n- async-profiler first for CPU and allocation hot spots\n- JFR continuously enabled in production for after-the-fact diagnosis\n- Thread dumps with `jstack` for hangs and deadlocks\n- Instrumenting profilers in dev only when you need exact call counts\n\nIn an interview, I'd emphasize the safepoint bias point — it shows you understand WHY async-profiler is more accurate than older tools, not just that it is."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is safepoint bias and why does it affect JVMTI-based profilers?",
+        "How do you read a flame graph and identify optimization targets?",
+        "What's the difference between a sampling profiler and a tracing profiler?",
+        "When would you use JMH instead of a profiler?"
+      ],
+      "seo": {
+        "metaTitle": "How to Profile a Java Application — Sampling vs Instrumenting",
+        "metaDescription": "Java profiling explained. Sampling vs instrumenting profilers, async-profiler quickstart, JFR setup, flame graph reading, and how to choose the right tool."
+      },
+      "order": 1,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Java profiling falls into two architecturally different approaches, and choosing the wrong one for production produces misleading data.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Java profiling solves one of two questions: \"where is my application spending time?\" (CPU profiling) or \"what is allocating all this memory?\" (allocation profiling). Both questions can be answered with two architecturally different mechanisms — sampling or instrumentation — and choosing the wrong one for the wrong context produces measurements that mislead your optimization work. Sampling profilers work like statistical surveys. At a fixed interval (typically every 1-10ms, or 100-1000 samples per second), the profiler interrupts the JVM and records."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand WHY sampling profilers are production-safe and instrumenting profilers are not, and can match the right tool to the diagnostic question"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Sampling profilers — periodically capture stack traces; 1-3% overhead; production-safe",
+              "Instrumenting profilers — modify bytecode; 10-50% overhead; dev only; can prevent JIT inlining",
+              "async-profiler — best CPU/allocation/lock flame graphs; uses AsyncGetCallTrace to avoid safepoint bias",
+              "JFR — built-in JVM profiler since Java 11; 1-2% overhead; correlates GC, threads, locks, I/O in one view",
+              "JMC (JVM Mission Control) — the GUI for analyzing JFR recordings"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Java profiling solves one of two questions: \"where is my application spending time?\" (CPU profiling) or \"what is allocating all this memory?\" (allocation profiling). Both questions can be answered with two architecturally different mechanisms — sampling or instrumentation — and choosing the wrong one for the wrong context produces measurements that mislead your optimization work. Sampling profilers work like statistical surveys. At a fixed interval (typically every 1-10ms, or 100-1000 samples per second), the profiler interrupts the JVM and records the current stack trace of each running thread. Over a few seconds of sampling, methods that consume more CPU time appear in proportionally more samples. The aggregate becomes a statistical estimate of where the application spends its time. Overhead is."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using JMH micro-benchmarks or YourKit in production to investigate latency, then drawing wrong conclusions because the instrumentation itself caused the slowdown"
+            ]
+          }
+        ],
+        "cap": "Sampling profilers: Periodically capture stack traces — typically 100-1000 samples per second Statistical estimate of where time is spent 1-3% overhead — production-safe Best examples: async-profiler",
+        "familiarity_anchors": [
+          "There",
+          "Sampling",
+          "Instrumenting"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is safepoint bias and why does it affect JVMTI-based profilers?",
+          "How do you read a flame graph and identify optimization targets?",
+          "What's the difference between a sampling profiler and a tracing profiler?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 Spring Boot app running in production on JVM 17"
+      }
+    },
+    {
+      "id": "jvm-006",
+      "slug": "java-profiling-async-profiler",
+      "question": "How do you profile a Java application in production? What tools do you use?",
+      "title": "Java Profiling in Production — async-profiler and JFR",
+      "direct_answer": "Use async-profiler for CPU and memory profiling with minimal overhead (1-3%). Java Flight Recorder (JFR) is built into the JVM and captures CPU, GC, threads, and I/O in production. Avoid traditional profilers (YourKit, JProfiler) in production — they add 10-30% overhead.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Awareness of production-safe profiling tools vs dev-only tools",
+        "common_mistake": "Enabling JVMTI-based profilers in production — they add significant overhead and affect measurements",
+        "to_stand_out": "Explain safepoint bias in JVMTI profilers (they only sample at safepoints, missing native and I/O wait) and why async-profiler avoids this"
+      },
+      "company_tags": [
+        "Netflix",
+        "Cloudflare",
+        "JetBrains",
+        "Azul"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Traditional Profilers Lie in Production — Safepoint Bias Hides the Real Hotspots",
+            "content": "Production profiling requires fundamentally different tools than development profiling. Traditional profilers like YourKit and JProfiler use the **JVMTI** (JVM Tool Interface) for sampling, which introduces two critical problems: they add 10-30% runtime overhead that distorts the measurements themselves, and they suffer from **safepoint bias** — they can only capture stack samples when JVM threads reach a safepoint. Code running in tight loops, native methods, and I/O waits between safepoints is invisible to these profilers.\n\nThis means a JVMTI-based profiler might show a method as consuming 40% of CPU when the actual hotspot is a native memory copy operation happening between safepoints. The profile looks authoritative but sends you optimizing the wrong code.\n\nTwo tools solve this problem for production use. **async-profiler** bypasses JVMTI entirely, using Linux `perf_events` or macOS `DTrace` to sample stack traces at arbitrary points — including inside JIT-compiled code, native methods, and kernel calls. The overhead is 1-3%, making it safe for production. **Java Flight Recorder** (JFR), built directly into the JVM since Java 11, captures CPU samples, GC events, thread activity, I/O operations, and allocation patterns simultaneously with under 1% overhead.\n\nThe choice between async-profiler and JFR depends on the question you are answering. CPU flame graphs from async-profiler pinpoint hotspots visually. JFR provides holistic diagnostics when you need to correlate CPU, GC, and I/O in a single recording."
+          },
+          {
+            "type": "step",
+            "title": "Capture a CPU Profile and Flame Graph with async-profiler and JFR",
+            "content": "Attaching async-profiler to a running JVM requires no restart and no JVM flags. The profiler agent attaches to the process using the `asprof` command-line tool.\n\n```bash\n./asprof -d 30 -f /tmp/profile.html <pid>\n./asprof -d 30 -e alloc -f /tmp/alloc.html <pid>\n```\n\nThe resulting HTML flame graph displays methods as horizontal bars where **width represents the proportion of time spent**. Wide bars at the top of the graph are the optimization targets — these are the methods where the application spends the most wall-clock time. Look for your application code being wider than framework code, and for `Thread.sleep` or `LockSupport.park` bars that indicate threads waiting on locks or I/O.\n\nFor **JFR**, attach to a running process without restart using `jcmd`. A 60-second recording captures a cross-section of GC activity, CPU usage, thread states, and allocations.\n\n```bash\njcmd <pid> JFR.start name=profile duration=60s filename=/tmp/app.jfr\n```\n\nOpen the `.jfr` file in **JVM Mission Control** to see correlated timelines of CPU load, GC pauses, thread contention, and I/O latency. The power of JFR over async-profiler is this holistic view — you can see that a latency spike at a specific timestamp coincided with a 200ms G1 pause and a burst of thread contention on a database connection pool. For allocation pressure, combine async-profiler's `-e alloc` mode with `jcmd VM.native_memory summary` to distinguish between managed heap churn and native memory growth."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **JVMTI profilers (YourKit, JProfiler) miss safepoint-invisible code** — native calls, tight loops; profile looks complete but is misleading.\n- **async-profiler** — uses `AsyncGetCallTrace`; captures traces regardless of safepoints; near-zero overhead; safe in production.\n- **Flame graphs** — visual hot-path identification; generated by async-profiler; best first tool for CPU profiling.\n- **Java Flight Recorder (JFR)** — built in since Java 11; 1-2% overhead; records GC, thread, lock, class loading events.\n- **Always-on JFR in production** — `-XX:StartFlightRecording=filename=recording.jfr,dumponexit=true`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Java profilers fall into two categories with fundamentally different accuracy characteristics: JVMTI-based profilers that can only sample at safepoints, and async-profiler which samples at arbitrary execution points. The distinction matters because safepoint-biased sampling can make hot code invisible in flame graphs.\n\n**Why standard profilers mislead:**\n- YourKit and JProfiler use JVMTI safepoint sampling — 10-30% overhead and can only capture stack traces at safepoints\n- Code running between safepoints (native calls, tight loops, kernel I/O) is invisible — the profile looks complete but systematically misrepresents hot paths\n\n**async-profiler:**\n- Uses Linux `perf_events` + `AsyncGetCallTrace` — captures traces regardless of safepoints\n- Near-zero overhead — safe in production; generates flame graphs for visual hot-path identification\n\n**Java Flight Recorder (JFR):**\n- Built into the JVM since Java 11 — 1-2% overhead; records GC events, class loading, thread activity, exceptions\n- Always-on in production: `-XX:+FlightRecorder -XX:StartFlightRecording=filename=recording.jfr,dumponexit=true`\n\n**Recommended approach:**\n- Flame graphs from async-profiler first — identify CPU hot spots\n- JFR for GC, thread, and lock contention data\n- Never optimize based on JVMTI profiler output that may be missing safepoint-invisible regions\n\nI recommend async-profiler as the first tool for CPU profiling and JFR for JVM event analysis — both are production-safe."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is safepoint bias and why does it affect JVMTI profilers?",
+        "How do you create and read a flame graph?",
+        "What is the difference between CPU profiling and allocation profiling?"
+      ],
+      "seo": {
+        "metaTitle": "Java Profiling async-profiler JFR Production — JVM Interview",
+        "metaDescription": "Java production profiling with async-profiler and Java Flight Recorder. Flame graphs, JFR setup, tool comparison, and safepoint bias explained."
+      },
+      "order": 2,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Java profilers fall into two categories with fundamentally different accuracy characteristics: JVMTI-based profilers that can only sample at safepoints, and async-profiler which samples at arbitrary execution points.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Production profiling requires fundamentally different tools than development profiling. Traditional profilers like YourKit and JProfiler use the JVMTI (JVM Tool Interface) for sampling, which introduces two critical problems: they add 10-30% runtime overhead that distorts the measurements themselves, and they suffer from safepoint bias — they can only capture stack samples when JVM threads reach a safepoint. Code running in tight loops, native methods, and I/O waits between safepoints is invisible to these profilers. This means a JVMTI-based profiler might."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Awareness of production-safe profiling tools vs dev-only tools"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "JVMTI profilers (YourKit, JProfiler) miss safepoint-invisible code — native calls, tight loops; profile looks complete but is misleading",
+              "async-profiler — uses AsyncGetCallTrace; captures traces regardless of safepoints; near-zero overhead; safe in production",
+              "Flame graphs — visual hot-path identification; generated by async-profiler; best first tool for CPU profiling",
+              "Java Flight Recorder (JFR) — built in since Java 11; 1-2% overhead; records GC, thread, lock, class loading events",
+              "Always-on JFR in production — -XX:StartFlightRecording=filename=recording"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Production profiling requires fundamentally different tools than development profiling. Traditional profilers like YourKit and JProfiler use the JVMTI (JVM Tool Interface) for sampling, which introduces two critical problems: they add 10-30% runtime overhead that distorts the measurements themselves, and they suffer from safepoint bias — they can only capture stack samples when JVM threads reach a safepoint. Code running in tight loops, native methods, and I/O waits between safepoints is invisible to these profilers. This means a JVMTI-based profiler might show a method as consuming 40% of CPU when the actual hotspot is a native memory copy operation happening between safepoints. The profile looks authoritative but sends you optimizing the wrong code. Two tools solve this problem for production use."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Enabling JVMTI-based profilers in production",
+              "they add significant overhead and affect measurements"
+            ]
+          }
+        ],
+        "cap": "Why standard profilers mislead: YourKit and JProfiler use JVMTI safepoint sampling — 10-30% overhead and can only capture stack traces at safepoints Code running between safepoints (native calls, tigh",
+        "familiarity_anchors": [
+          "Flight",
+          "Recorder",
+          "Avoid"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is safepoint bias and why does it affect JVMTI profilers?",
+          "How do you create and read a flame graph?",
+          "What is the difference between CPU profiling and allocation profiling?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 Spring Boot app running in production on JVM 17"
+      }
+    },
+    {
+      "id": "jvm-007",
+      "slug": "thread-dumps-deadlock-analysis",
+      "question": "How do you take and analyze a Java thread dump? How do you identify deadlocks?",
+      "title": "Thread Dumps and Deadlock Analysis",
+      "direct_answer": "Take thread dumps with jstack <pid> or kill -3 <pid>. Look for BLOCKED threads with conflicting lock patterns. Deadlocks show as cycles in the waiting-for chain. JVM automatically detects deadlocks and reports them at the bottom of the thread dump.",
+      "layout_type": "problem-detective",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Practical debugging skill for concurrency issues in production",
+        "common_mistake": "Taking one thread dump vs three — one snapshot can be misleading. Three dumps 5 seconds apart reveal whether threads are stuck or just slow",
+        "to_stand_out": "Explain how to distinguish deadlock from thread starvation and from waiting for external I/O"
+      },
+      "company_tags": [
+        "Oracle",
+        "Netflix",
+        "Atlassian",
+        "JetBrains"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "BLOCKED Means Lock Contention, WAITING Means Voluntary Pause — Confusing Them Wastes Hours",
+            "content": "When a Java service freezes without throwing exceptions, thread dumps reveal whether the problem is a deadlock, lock contention, or threads waiting on external resources. The dump captures every thread's current state, stack trace, and lock relationships in a single snapshot. Most engineers know how to take a dump with `jstack` — the real skill is interpreting the states correctly.\n\nEvery thread reports one of six states. **RUNNABLE** means actively executing or ready to run. **BLOCKED** means the thread is attempting to enter a `synchronized` block but another thread holds the monitor — this is genuine lock contention. **WAITING** means the thread called `Object.wait()`, `LockSupport.park()`, or `Thread.join()` and is voluntarily paused — this is often normal behavior like a thread pool waiting for work. Confusing BLOCKED with WAITING leads to false deadlock diagnoses.\n\nA **deadlock** exists when two or more threads form a cycle in their lock dependencies: Thread A holds monitor X and needs monitor Y, while Thread B holds Y and needs X. HotSpot detects this automatically and appends a \"Found one Java-level deadlock\" section to the dump output. The practice of taking **three dumps five seconds apart** separates truly stuck threads from temporarily contended ones — if a thread shows the same BLOCKED state and same monitor address across all three snapshots, it is not making progress."
+          },
+          {
+            "type": "step",
+            "title": "From jstack Output to Root Cause — Reading Lock Chains and Fixing Deadlocks",
+            "content": "Thread dump capture starts with identifying the JVM process. **`jcmd`** is preferred over `jstack` because it provides cleaner output and supports additional diagnostics like heap histograms in the same tool.\n\n```bash\n# Capture three dumps five seconds apart for comparison\njcmd <pid> Thread.print > dump1.txt\nsleep 5\njcmd <pid> Thread.print > dump2.txt\nsleep 5\njcmd <pid> Thread.print > dump3.txt\n```\n\nThree snapshots spaced five seconds apart are essential because a single dump captures a moment in time — a thread might appear BLOCKED briefly during normal contention. If the same thread shows the same stack in all three dumps, the thread is stuck.\n\nEach thread entry shows the state and lock information. The diagnostic key is the **waiting to lock** and **locked** annotations — they map the dependency graph between threads. When Thread-1 shows \"waiting to lock <0x76ab5>\" and Thread-2 shows \"locked <0x76ab5>\" plus \"waiting to lock <0x76ab4>\" which Thread-1 holds, you have a cycle.\n\nThe standard fix is **consistent lock ordering** — always acquire locks in the same deterministic sequence. For account transfers, locking by ascending account ID eliminates circular waits entirely.\n\n```java\n// Lock ordering by account ID prevents deadlock cycles\nvoid transfer(Account from, Account to, BigDecimal amount) {\n    Account first  = from.getId() < to.getId() ? from : to;\n    Account second = from.getId() < to.getId() ? to   : from;\n    synchronized (first) {\n        synchronized (second) {\n            from.debit(amount);\n            to.credit(amount);\n        }\n    }\n}\n```\n\nWhen total ordering across all locks is impractical, **`ReentrantLock.tryLock`** with a timeout provides a fallback — the thread attempts to acquire both locks within a bounded window and retries or fails gracefully instead of blocking forever. Thread dumps also reveal **thread starvation** — all worker threads stuck in TIMED_WAITING on an external HTTP call or database query with a long timeout. The fix there is connection pool sizing and aggressive client timeouts, not lock ordering."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Thread dump = snapshot of every thread's state** — primary tool for diagnosing hangs, high CPU, and deadlocks.\n- **Capture with `jstack <pid>`** — or `kill -3 <pid>` on Linux; `ThreadMXBean.findDeadlockedThreads()` programmatically.\n- **BLOCKED threads pointing to same monitor** — lock contention; the lock-holder is shown in the dump.\n- **Repeated identical RUNNABLE stacks** — CPU-burning loop or active spin.\n- **`jstack` detects deadlock cycles** — prints \"Found N deadlock\" with the cycle shown explicitly."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Thread dumps capture the state of every thread at a moment in time — they're the primary tool for diagnosing live hangs, high CPU, and deadlocks.\n\n**Capturing thread dumps:**\n- `jstack <pid>`: on-demand snapshot from the command line\n- `kill -3 <pid>` on Linux: writes dump to stdout/log without stopping the process\n- `ThreadMXBean.findDeadlockedThreads()`: programmatic detection for health-check endpoints\n\n**Reading a thread dump:**\n- BLOCKED threads all pointing to the same monitor → lock contention; the lock-holder is identified in the dump\n- Repeated identical RUNNABLE stacks → CPU-burning loop or active spin\n- WAITING threads in `java.util.concurrent` structures → normal producer-consumer; check if they ever wake\n\n**Deadlock detection:**\n- `jstack` automatically detects monitor cycles and prints \"Found N deadlock\" at the bottom\n- Shows which thread holds which lock and which lock it needs — the cycle is immediately visible\n\n**Prevention:**\n- Lock ordering: always acquire locks in the same predetermined order — circular wait condition can't form\n- `ReentrantLock.tryLock(timeout)`: bounded wait instead of indefinite blocking\n\nI recommend setting up `ThreadMXBean.findDeadlockedThreads()` in a health-check endpoint so deadlocks surface in monitoring before users report a frozen service."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a deadlock and a livelock?",
+        "How do you diagnose high lock contention that isn't a deadlock?",
+        "What is ThreadMXBean and how can you use it for monitoring?"
+      ],
+      "seo": {
+        "metaTitle": "Java Thread Dump Deadlock Analysis — JVM Performance Interview",
+        "metaDescription": "Java thread dump analysis and deadlock detection. jstack, lock ordering fix, tryLock timeout, and programmatic deadlock detection with ThreadMXBean."
+      },
+      "order": 3,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Thread dumps capture the state of every thread at a moment in time — they're the primary tool for diagnosing live hangs, high CPU, and deadlocks.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "When a Java service freezes without throwing exceptions, thread dumps reveal whether the problem is a deadlock, lock contention, or threads waiting on external resources. The dump captures every thread's current state, stack trace, and lock relationships in a single snapshot. Most engineers know how to take a dump with jstack — the real skill is interpreting the states correctly. Every thread reports one of six states. RUNNABLE means actively executing or ready to run. BLOCKED means the thread is."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Practical debugging skill for concurrency issues in production"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Thread dump = snapshot of every thread's state — primary tool for diagnosing hangs, high CPU, and deadlocks",
+              "Capture with jstack <pid> — or kill -3 <pid> on Linux; ThreadMXBean",
+              "findDeadlockedThreads() programmatically",
+              "BLOCKED threads pointing to same monitor — lock contention; the lock-holder is shown in the dump",
+              "Repeated identical RUNNABLE stacks — CPU-burning loop or active spin"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "When a Java service freezes without throwing exceptions, thread dumps reveal whether the problem is a deadlock, lock contention, or threads waiting on external resources. The dump captures every thread's current state, stack trace, and lock relationships in a single snapshot. Most engineers know how to take a dump with jstack — the real skill is interpreting the states correctly. Every thread reports one of six states. RUNNABLE means actively executing or ready to run. BLOCKED means the thread is attempting to enter a synchronized block but another thread holds the monitor — this is genuine lock contention. WAITING means the thread called Object.wait(), LockSupport.park(), or Thread.join() and is voluntarily paused — this is often normal behavior like a thread."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Taking one thread dump vs three — one snapshot can be misleading",
+              "Three dumps 5 seconds apart reveal whether threads are stuck or just slow"
+            ]
+          }
+        ],
+        "cap": "Capturing thread dumps: jstack <pid>: on-demand snapshot from the command line kill -3 <pid> on Linux: writes dump to stdout/log without stopping the process ThreadMXBean.findDeadlockedThreads(): prog",
+        "familiarity_anchors": [
+          "BLOCKED",
+          "Deadlocks"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a deadlock and a livelock?",
+          "How do you diagnose high lock contention that isn't a deadlock?",
+          "What is ThreadMXBean and how can you use it for monitoring?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 Spring Boot app running in production on JVM 17"
+      }
+    },
+    {
+      "id": "jfr-java-flight-recorder",
+      "slug": "jfr-java-flight-recorder",
+      "title": "Java Flight Recorder (JFR) — Continuous Production Profiling Built Into the JVM",
+      "question": "What is Java Flight Recorder? How do you capture and analyze JFR recordings, and when is it the right tool?",
+      "direct_answer": "Java Flight Recorder (JFR) is a low-overhead event recorder built directly into the HotSpot JVM. It captures GC events, CPU samples, thread states, lock contention, allocation patterns, JIT compilation, class loading, and I/O — all in a single recording with under 1% overhead. Open-sourced in Java 11, JFR is designed to run continuously in production. Start it via `-XX:StartFlightRecording=...` at JVM launch or on-demand with `jcmd <pid> JFR.start`. Analyze the resulting `.jfr` file in **JVM Mission Control (JMC)** for correlated timeline views, or query the events programmatically via the `jdk.jfr.consumer` API. JFR is the right tool for after-the-fact diagnosis — when monitoring shows a latency spike, JFR tells you what was happening inside the JVM at that moment.",
+      "layout_type": "deep-dive",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-23",
+      "interviewer_intent": {
+        "testing": "Whether you know JFR is production-grade and continuous (not just an on-demand profiler) and can articulate when JFR is better than async-profiler",
+        "common_mistake": "Treating JFR as a heavy-weight tool to be enabled only when investigating — it is designed for always-on use and provides far more value continuously than reactively",
+        "to_stand_out": "Explain the Method Profiling Sample event mechanism (default 10ms sampling) and how to write a custom JFR event in application code for business-level observability"
+      },
+      "company_tags": [
+        "Oracle",
+        "Netflix",
+        "Datadog",
+        "New Relic",
+        "Azul",
+        "Cloudflare"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "JFR Is the Closest Thing to a Black-Box Recorder for the JVM",
+            "content": "Java Flight Recorder solves a problem that monitoring tools and reactive profilers cannot: **what was happening inside the JVM at the exact moment of a production incident, and how do I see it later?** Application metrics tell you that p99 latency spiked at 14:23:05, but they don't show the GC pause, the lock contention, the thread starvation, or the I/O stall that caused it. By the time you reach for a profiler, the moment has passed. JFR records continuously with under 1% overhead so the data is already on disk when you need it.\n\nJFR was originally a commercial Oracle feature known as **JRockit Mission Control**, ported to HotSpot, and was a paid add-on until Oracle open-sourced it in Java 11 as part of OpenJDK. It is now part of every modern OpenJDK distribution (Adoptium, Amazon Corretto, Azul Zulu, Microsoft Build of OpenJDK, Red Hat). Unlike external profilers that attach via JVMTI, JFR is **built into the JVM** — its events are emitted directly from the runtime with no agent overhead, no safepoint bias, and access to internal events that no external tool can see.\n\nThe data model is **events**. Each event has a name, a timestamp, a duration, and typed fields. Categories include `jdk.GarbageCollection`, `jdk.JavaMonitorWait`, `jdk.ThreadAllocationStatistics`, `jdk.JITCompilation`, `jdk.SocketRead`, `jdk.ExceptionStatistics`, and many more — over 150 event types in modern JFR. You can also define **custom events** in application code to record business-level data alongside JVM data, giving you a single correlated timeline of business and runtime behavior.\n\nThe killer use case is **post-incident forensics**. With continuous JFR enabled, when an alert fires you scrub to the exact timestamp in JMC and see — in one view — what the GC was doing, which threads were contending which locks, what the heap was doing, and which application code was on the CPU. No other tool gives you this picture for free."
+          },
+          {
+            "type": "step",
+            "title": "Enabling Continuous JFR in Production",
+            "content": "JFR is designed to be always-on. The recommended production configuration captures the last 24 hours of events, dumps to disk on JVM exit, and uses chunked rolling files to avoid unbounded growth.\n\n**Recommended production startup flags:**\n\n```bash\njava \\\n  -XX:+FlightRecorder \\\n  -XX:StartFlightRecording=name=continuous,maxage=24h,maxsize=2g,filename=/var/recordings/app.jfr,dumponexit=true,settings=profile \\\n  -jar app.jar\n```\n\nKey parameters:\n- `name=continuous` — names the recording for management commands\n- `maxage=24h` — JFR retains the last 24 hours of events; older events are evicted\n- `maxsize=2g` — caps the on-disk file at 2GB\n- `filename=...` — writes the rolling recording here\n- `dumponexit=true` — ensures a recording is written when the JVM exits (essential for crash diagnosis)\n- `settings=profile` — uses the higher-fidelity profile preset (overhead ~2%); the default preset is lighter (~1%) but captures fewer events\n\n**Dumping a snapshot from the continuous recording on demand:**\n\n```bash\n# Get the snapshot covering the last 5 minutes\njcmd <pid> JFR.dump name=continuous filename=/tmp/incident.jfr\n```\n\n**Starting an additional ad-hoc recording for a specific investigation:**\n\n```bash\njcmd <pid> JFR.start name=adhoc duration=60s filename=/tmp/adhoc.jfr settings=profile\njcmd <pid> JFR.check\njcmd <pid> JFR.stop name=adhoc\n```\n\n**Container considerations:**\n- Mount the recording directory to a persistent volume so recordings survive container restarts\n- Set `maxsize` conservatively — 2GB is a reasonable default for most services\n- For Kubernetes, configure a sidecar that copies completed `.jfr` files to S3 or a central recording store\n- The overhead is genuinely under 2% in practice; do not let perceived risk prevent enabling it"
+          },
+          {
+            "type": "step",
+            "title": "Analyzing JFR in JVM Mission Control (JMC)",
+            "content": "**JVM Mission Control** is the official GUI for analyzing JFR recordings. It is free, open-source, and runs on Windows, macOS, and Linux. Download from the Adoptium website or your JDK vendor.\n\n**Open the recording.** File → Open → select the `.jfr` file. JMC indexes the events; large recordings may take a minute on first open.\n\n**The Automated Analysis tab** is the right starting point. Like Eclipse MAT's Leak Suspects, JMC's Automated Analysis runs a battery of heuristics over the recording and identifies likely problems — long GC pauses, lock contention hotspots, exception storms, thread starvation, code cache exhaustion. Each finding has a severity rating and one-click drill-down into the underlying events. For routine triage, this is often the only screen you need.\n\n**The Timeline view** is the main exploration tool. It shows multiple parallel tracks:\n\n- **CPU usage** — total and per-thread\n- **GC events** — color-coded by collector phase, with pause durations\n- **Threads** — state changes (RUNNABLE, BLOCKED, WAITING)\n- **Locks** — contention events with the contending stack traces\n- **I/O** — socket reads/writes, file I/O\n- **Allocation** — by call site\n\nWhen monitoring tells you about a spike at 14:23:05, scrub to that timestamp. The correlation is usually visible immediately — a GC pause, a lock storm, or a downstream I/O stall lined up in time with the latency increase.\n\n**The Method Profiling tab** shows aggregated CPU samples — effectively a flame graph view of the recording. JFR samples threads at 10ms intervals by default; the aggregated view is comparable to async-profiler's flame graphs but with built-in JVM context.\n\n**The Memory tab** shows heap usage over time, GC behavior per collector phase, and allocation hotspots by class. Use this to confirm a memory leak hypothesis without taking a separate heap dump.\n\n**The Lock Instances tab** shows every monitor that experienced contention, ranked by total wait time. Drill into a hotspot to see the contending threads and their stack traces — far more efficient than analyzing thread dumps manually."
+          },
+          {
+            "type": "step",
+            "title": "Custom JFR Events for Business-Level Observability",
+            "content": "One of JFR's most underused features is the ability to define **custom events** in application code. These events appear alongside JVM events in the same recording, letting you correlate business-level activity with runtime behavior.\n\n**Defining a custom event:**\n\n```java\nimport jdk.jfr.*;\n\n@Name(\"com.example.OrderProcessed\")\n@Label(\"Order Processed\")\n@Category(\"Application\")\n@Description(\"Records the processing of a customer order\")\n@StackTrace(false)\npublic class OrderProcessedEvent extends Event {\n    @Label(\"Order ID\")\n    public String orderId;\n\n    @Label(\"Customer Tier\")\n    public String customerTier;\n\n    @Label(\"Order Value (cents)\")\n    public long orderValueCents;\n\n    @Label(\"Item Count\")\n    public int itemCount;\n}\n```\n\n**Emitting the event in application code:**\n\n```java\npublic void processOrder(Order order) {\n    OrderProcessedEvent event = new OrderProcessedEvent();\n    event.begin();\n    try {\n        validate(order);\n        chargeCard(order);\n        reserveInventory(order);\n        sendConfirmation(order);\n    } finally {\n        event.end();\n        if (event.shouldCommit()) {\n            event.orderId = order.id();\n            event.customerTier = order.customer().tier();\n            event.orderValueCents = order.totalCents();\n            event.itemCount = order.items().size();\n            event.commit();\n        }\n    }\n}\n```\n\nNow `OrderProcessedEvent` events appear in the JFR recording with timing data and the custom fields. In JMC you can:\n- Group orders by tier and see processing time distribution\n- Correlate slow orders with GC pauses or lock contention happening at the same moment\n- Filter the timeline to only show high-value orders to investigate VIP customer latency\n\n**The `shouldCommit()` check** is JFR's threshold mechanism — events shorter than the configured threshold are dropped before any field assignment, keeping the overhead truly negligible for fast operations.\n\n**Use cases for custom JFR events:**\n- HTTP request lifecycle (correlate request latency with GC pauses)\n- Database query execution (find slow queries that coincide with lock contention)\n- Cache hit/miss events (correlate eviction storms with allocation spikes)\n- Business-domain events (orders, payments, sessions) for business-level latency analysis\n\nCustom events are also queryable programmatically via the `jdk.jfr.consumer.RecordingFile` API, enabling automated analysis pipelines."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "JFR vs async-profiler — When to Use Which",
+            "content": "JFR and async-profiler are complementary, not competitive. Each has a sweet spot.\n\n**Use JFR when:**\n- You want **continuous, always-on** recording for incident forensics\n- You need to **correlate** GC, threads, locks, I/O, and CPU in a single view\n- You want **internal JVM events** like JIT compilation, class loading, biased lock revocation\n- You want **custom application events** alongside JVM events for business-level correlation\n- You need to share recordings with people who don't have access to the production environment\n\n**Use async-profiler when:**\n- You need a **focused CPU flame graph** for one specific investigation\n- You need **allocation profiling** by call site (more detailed than JFR's allocation events)\n- You need **lock contention flame graphs** specifically attributed to call sites\n- You're on an environment that doesn't have a JFR-capable JDK\n- You need **off-CPU profiling** to see where threads are waiting on syscalls\n\n**Use both together:**\n- async-profiler for ad-hoc deep dives on a specific question\n- JFR continuously for the always-on safety net\n\n**Performance comparison in practice:**\n- JFR default settings: ~0.5% overhead\n- JFR profile settings: ~1-2% overhead\n- async-profiler: ~1-3% overhead during active sampling\n- Combined (both running): typically under 5% — acceptable for most production workloads\n\n**Common misconception:** \"JFR is too heavy for production.\" This was true in the JRockit era and the early HotSpot port. Modern JFR is designed for always-on production use. Netflix, Datadog, and other large Java shops run continuous JFR on every JVM in their fleets."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Built into the JVM** since Java 11; open-source; no agent overhead or safepoint bias.\n- **Continuous recording** with under 1-2% overhead — designed for always-on production use.\n- **Captures everything** — GC, CPU samples, threads, locks, allocation, JIT, class loading, I/O.\n- **Enable with** `-XX:StartFlightRecording=maxage=24h,maxsize=2g,filename=...,dumponexit=true,settings=profile`.\n- **Analyze in JVM Mission Control (JMC)** — Automated Analysis, Timeline, Method Profiling, Memory, Lock Instances tabs.\n- **Custom events** — define application events with `extends Event` for business-level observability.\n- **Programmatic API** — `jdk.jfr.consumer.RecordingFile` for automated analysis pipelines.\n- **JFR vs async-profiler** — JFR for correlated continuous recording; async-profiler for focused flame graphs."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Java Flight Recorder is a low-overhead event recorder built directly into the HotSpot JVM. It is open-source in Java 11 and later, and it is the closest thing Java has to a flight recorder for production incidents.\n\n**What makes JFR special:**\n- Built into the JVM — no agent overhead, no safepoint bias, access to internal events external tools cannot see\n- Designed for **continuous recording** with under 1-2% overhead — always-on in production\n- Captures over 150 event types: GC, CPU samples, threads, locks, allocation, JIT, class loading, I/O\n\n**Production setup:**\n- Add `-XX:StartFlightRecording=maxage=24h,maxsize=2g,filename=/var/recordings/app.jfr,dumponexit=true,settings=profile` at JVM launch\n- Recording rolls automatically; oldest events are evicted; on-disk file capped at 2GB\n- On any incident, dump a snapshot with `jcmd <pid> JFR.dump name=continuous filename=/tmp/incident.jfr`\n\n**Analysis with JMC (JVM Mission Control):**\n- Free GUI from Oracle/Adoptium\n- **Automated Analysis** tab runs heuristics and identifies likely problems\n- **Timeline** view shows GC, threads, locks, I/O all correlated against time — scrub to a latency spike and see the cause immediately\n\n**Custom events for business observability:**\n- Extend `jdk.jfr.Event` to define application events with custom fields\n- Emit them around HTTP requests, database queries, business operations\n- Now you can correlate slow orders with GC pauses or lock contention happening at the same moment\n\n**JFR vs async-profiler:**\n- JFR: continuous, correlated, always-on\n- async-profiler: focused flame graphs for one specific question\n- Use both — JFR continuously, async-profiler for deep dives\n\n**Common misconception:**\n- JFR is no longer a heavy-weight tool — modern JFR is designed for always-on production use\n- Netflix, Datadog, and similar shops run continuous JFR on every JVM\n\nIn an interview, the differentiator is mentioning custom JFR events — most candidates know JFR exists; few know they can extend it for business-level observability."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What's the difference between JFR and a sampling profiler like async-profiler?",
+        "How do you write a custom JFR event for application-level observability?",
+        "How do you analyze a JFR recording programmatically without JMC?",
+        "What is the overhead of running JFR continuously in production?"
+      ],
+      "seo": {
+        "metaTitle": "Java Flight Recorder JFR Guide — Continuous Production Profiling",
+        "metaDescription": "Java Flight Recorder explained. Continuous low-overhead JVM recording, JMC analysis, custom JFR events, production setup, and JFR vs async-profiler comparison."
+      },
+      "order": 4,
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Java Flight Recorder is a low-overhead event recorder built directly into the HotSpot JVM.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Java Flight Recorder solves a problem that monitoring tools and reactive profilers cannot: what was happening inside the JVM at the exact moment of a production incident, and how do I see it later? Application metrics tell you that p99 latency spiked at 14:23:05, but they don't show the GC pause, the lock contention, the thread starvation, or the I/O stall that caused it. By the time you reach for a profiler, the moment has passed. JFR records continuously with."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you know JFR is production-grade and continuous (not just an on-demand profiler) and can articulate when JFR is better than async-profiler"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Built into the JVM since Java 11; open-source; no agent overhead or safepoint bias",
+              "Continuous recording with under 1-2% overhead — designed for always-on production use",
+              "Captures everything — GC, CPU samples, threads, locks, allocation, JIT, class loading, I/O",
+              "Enable with -XX:StartFlightRecording=maxage=24h,maxsize=2g,filename=",
+              ",dumponexit=true,settings=profile"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Java Flight Recorder solves a problem that monitoring tools and reactive profilers cannot: what was happening inside the JVM at the exact moment of a production incident, and how do I see it later? Application metrics tell you that p99 latency spiked at 14:23:05, but they don't show the GC pause, the lock contention, the thread starvation, or the I/O stall that caused it. By the time you reach for a profiler, the moment has passed. JFR records continuously with under 1% overhead so the data is already on disk when you need it. JFR was originally a commercial Oracle feature known as JRockit Mission Control, ported to HotSpot, and was a paid add-on until Oracle open-sourced it in Java."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Treating JFR as a heavy-weight tool to be enabled only when investigating",
+              "it is designed for always-on use and provides far more value continuously than reactively"
+            ]
+          }
+        ],
+        "cap": "What makes JFR special: Built into the JVM — no agent overhead, no safepoint bias, access to internal events external tools cannot see Designed for continuous recording with under 1-2% overhead — alwa",
+        "familiarity_anchors": [
+          "Flight",
+          "Recorder",
+          "HotSpot"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What's the difference between JFR and a sampling profiler like async-profiler?",
+          "How do you write a custom JFR event for application-level observability?",
+          "How do you analyze a JFR recording programmatically without JMC?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Java 17 Spring Boot app running in production on JVM 17"
+      }
+    }
+  ]
+}

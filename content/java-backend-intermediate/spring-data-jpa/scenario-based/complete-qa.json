@@ -1,0 +1,276 @@
+{
+  "topic": "Scenario Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "jpa-011",
+      "slug": "audit-logging-created-date-last-modified-date",
+      "title": "Audit Logging with @CreatedDate and @LastModifiedDate",
+      "question": "How do you implement automatic audit logging (created/modified timestamps and users) in Spring Data JPA?",
+      "direct_answer": "Enable Spring Data JPA auditing with **`@EnableJpaAuditing`** on a `@Configuration` class, define a **`@MappedSuperclass`** annotated with **`@EntityListeners(AuditingEntityListener.class)`** carrying **`@CreatedDate`**, **`@LastModifiedDate`**, **`@CreatedBy`**, and **`@LastModifiedBy`** fields, and implement **`AuditorAware<T>`** to supply the current user (typically from `SecurityContextHolder`). Every entity that extends the superclass inherits auditing automatically. **Use `Instant` for timestamps** — UTC and unambiguous across server locations. **The silent failure**: forgetting `@EnableJpaAuditing` leaves all annotations inert with no error. Bulk `@Modifying` queries bypass the listener — set `lastModifiedAt = CURRENT_TIMESTAMP` explicitly in the JPQL. For full change history, layer **Hibernate Envers** on top.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Practical Spring Data JPA feature knowledge and ability to avoid boilerplate by using framework capabilities",
+        "common_mistake": "Using `@PrePersist`/`@PreUpdate` callbacks manually instead of Spring Data auditing, leading to duplicated code across entities",
+        "to_stand_out": "Discuss `Instant` vs `LocalDateTime` for timestamps, how `@EnableJpaAuditing` interacts with the ApplicationContext, and plugging the current user from Spring Security's `SecurityContextHolder` inside `AuditorAware`"
+      },
+      "company_tags": [
+        "Red Hat",
+        "JetBrains",
+        "Atlassian",
+        "Elastic",
+        "GitLab",
+        "Salesforce"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Manual @PrePersist Timestamps Are the Problem Spring Data Auditing Already Solved",
+            "content": "Most developers implement audit logging by adding `@PrePersist` and `@PreUpdate` callbacks with `LocalDateTime.now()` in every entity. This works but leads to **duplicated code across entities**, inconsistent timestamp handling, and no clean way to capture the current user without injecting `SecurityContextHolder` into entity classes.\n\n**Spring Data's `@EnableJpaAuditing`** solves all three problems with a single mechanism.\n- Annotate fields with `@CreatedDate`, `@LastModifiedDate`, `@CreatedBy`, and `@LastModifiedBy`.\n- Spring Data hooks into the persistence lifecycle and populates these fields automatically — timestamps from the clock, users from an `AuditorAware<T>` bean.\n\nThe setup uses a `@MappedSuperclass` base entity with the audit fields, so every entity inherits auditing without repeating annotations.\n- The `@EntityListeners(AuditingEntityListener.class)` annotation wires the listener that intercepts persist and update events.\n- **Without `@EnableJpaAuditing` on a configuration class, these annotations are silently ignored** — timestamps stay null, no error is thrown, the bug is invisible until someone checks the database.\n- This silent failure is the single most common setup mistake."
+          },
+          {
+            "type": "step",
+            "title": "Setting Up Auditing — Base Entity, AuditorAware, and Timestamp Type Choice",
+            "content": "**Base `@MappedSuperclass`:**\n\n```java\n@MappedSuperclass\n@EntityListeners(AuditingEntityListener.class)\npublic abstract class AuditableEntity {\n    @CreatedDate\n    private Instant createdAt;\n    @LastModifiedDate\n    private Instant updatedAt;\n    @CreatedBy\n    private String createdBy;\n    @LastModifiedBy\n    private String updatedBy;\n}\n```\n\n**`AuditorAware<String>` from Spring Security:**\n\n```java\n@Configuration\n@EnableJpaAuditing(auditorAwareRef = \"auditorProvider\")\npublic class AuditConfig {\n    @Bean\n    AuditorAware<String> auditorProvider() {\n        return () -> Optional.ofNullable(SecurityContextHolder.getContext().getAuthentication())\n            .filter(Authentication::isAuthenticated)\n            .map(Authentication::getName);\n    }\n}\n```\n\n**Timestamp type choice:**\n- Use `Instant` — UTC, unambiguous across server timezones.\n- `LocalDateTime` is timezone-naive — different JVM TZ produces inconsistent values.\n- `OffsetDateTime` works but is heavier; pick `Instant` unless you specifically need offsets.\n\n**Without `@EnableJpaAuditing`:**\n- Annotations silently ignored.\n- No log warning, no exception.\n- Easiest miss to detect: check the inserted row — `created_at IS NULL` -> auditing disabled."
+          },
+          {
+            "type": "step",
+            "title": "When JPA Auditing Is Not Enough — Bulk, Async, and History",
+            "content": "**Bulk `@Modifying` queries bypass auditing:**\n- `@Modifying @Query(\"UPDATE Order o SET o.status = :s\")` updates rows directly.\n- `@LastModifiedDate` hook never fires; `updatedAt` stays stale.\n- Fix: include audit columns in JPQL.\n  ```\n  UPDATE Order o\n  SET o.status = :s, o.updatedAt = CURRENT_TIMESTAMP, o.updatedBy = :actor\n  ```\n- Pass user as parameter explicitly — not automatic.\n\n**Async / message-driven contexts have no Spring Security context:**\n- `SecurityContextHolder` uses `ThreadLocal`, empty in `@Async`, Kafka listeners, scheduled jobs.\n- `AuditorAware` returns `Optional.empty()` -> `createdBy` stores `null`.\n- Fix 1 — `DelegatingSecurityContextAsyncTaskExecutor` for `@Async`.\n- Fix 2 — set system principal explicitly for scheduled jobs (filter or aspect).\n- Fix 3 — for Kafka, extract user from message headers and set context before the listener runs.\n\n**Full change history requirements:**\n- `@CreatedDate` / `@LastModifiedDate` track only current state.\n- For 'who changed what field from what value to what value', use **Hibernate Envers** (`@Audited`) — generates parallel `_aud` table per audited entity.\n- For external storage: implement a `@PrePersist` / `@PreUpdate` listener that writes to an explicit `audit_log` table.\n- For downstream events: publish change events via CDC (Debezium).\n\n**Rule of thumb:**\n- JPA auditing for 'who last touched this'.\n- Envers for 'show me the history of this record'.\n- CDC for 'emit changes to downstream systems'."
+          },
+          {
+            "type": "after_code",
+            "title": "Auditing in Tests, Schedulers, and Bulk Updates",
+            "content": "**Tests with no security context:**\n\n```java\n@TestConfiguration\nstatic class TestAuditConfig {\n    @Bean AuditorAware<String> testAuditor() { return () -> Optional.of(\"test-user\"); }\n}\n```\n\n**Scheduler / system principal:**\n\n```java\n@Component\npublic class ArchivalJob {\n    @Scheduled(cron = \"0 0 2 * * *\")\n    public void run() {\n        SecurityContext ctx = SecurityContextHolder.createEmptyContext();\n        ctx.setAuthentication(new UsernamePasswordAuthenticationToken(\n            \"system-archival\", null, List.of()));\n        SecurityContextHolder.setContext(ctx);\n        try {\n            archivalService.archiveOldOrders();\n        } finally {\n            SecurityContextHolder.clearContext();\n        }\n    }\n}\n```\n\n**Bulk audit-aware update:**\n\n```java\n@Modifying(clearAutomatically = true, flushAutomatically = true)\n@Query(\"\"\"\n    UPDATE Order o\n    SET o.status = :newStatus,\n        o.updatedAt = CURRENT_TIMESTAMP,\n        o.updatedBy = :actor\n    WHERE o.status = :oldStatus AND o.createdAt < :cutoff\n\"\"\")\nint archive(@Param(\"newStatus\") OrderStatus newStatus,\n            @Param(\"oldStatus\") OrderStatus oldStatus,\n            @Param(\"cutoff\") Instant cutoff,\n            @Param(\"actor\") String actor);\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Choose JPA Auditing, Envers, or CDC",
+            "content": "**When JPA auditing helps:**\n- Standard CRUD entities needing 'who created / last modified'.\n- Single source of truth for `createdAt` / `updatedAt`.\n- Minimal boilerplate via `@MappedSuperclass`.\n\n**When JPA auditing hurts:**\n- Bulk modifying queries skip it silently.\n- Async / scheduler contexts lose principal.\n- No way to recover historical values.\n\n**When Envers helps:**\n- Regulatory requirement to keep change history.\n- Need to render 'audit timeline' UI.\n- Want point-in-time entity reconstruction.\n\n**When Envers hurts:**\n- Doubles storage (parallel `_aud` tables).\n- Schema evolution requires Envers-aware migrations.\n- Performance overhead on every modifying transaction.\n\n**When CDC helps:**\n- Need to fan out changes to other systems (search, analytics).\n- Audit log lives outside the OLTP database.\n- Decouples auditing from application code.\n\n**Watch for:**\n- Tests must provide an `AuditorAware` (or accept `null` `createdBy`).\n- `@CreatedDate` is set once on persist; do not overwrite manually.\n- Hibernate also offers `@CreationTimestamp` / `@UpdateTimestamp` (Hibernate-specific) — ties you to Hibernate but does not need `@EnableJpaAuditing`."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@EnableJpaAuditing` activates auditing** — without it the annotations are silently ignored.\n- **`AuditorAware<T>`** supplies the principal from `SecurityContextHolder`.\n- **`Instant` over `LocalDateTime`** — UTC and timezone-safe.\n- **`@MappedSuperclass`** plus `@EntityListeners(AuditingEntityListener.class)` shares audit fields across entities.\n- **Bulk `@Modifying` queries bypass auditing** — set audit columns explicitly in JPQL.\n- **Async / scheduler contexts need a propagated or system principal**.\n- **Use Envers or CDC** for full change history, not JPA auditing alone."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Data JPA Auditing automates the bookkeeping that every entity needs. Setting it up correctly once in a `@MappedSuperclass` covers every entity in the application.\n\n**Setup:**\n- Add `@EnableJpaAuditing` to a `@Configuration` class\n- Create a `@MappedSuperclass` with the audit fields:\n  - `@CreatedDate Instant createdAt`\n  - `@LastModifiedDate Instant updatedAt`\n  - `@CreatedBy String createdBy`\n  - `@LastModifiedBy String modifiedBy`\n- Extend this superclass in every entity\n- Add `@EntityListeners(AuditingEntityListener.class)` on the superclass\n\n**Providing the current user:**\n- Implement `AuditorAware<String>` as a `@Bean`\n- Return `Optional.of(SecurityContextHolder.getContext().getAuthentication().getName())`\n\n**`Instant` vs `LocalDateTime`:**\n- `Instant` is always UTC — safe across timezones\n- `LocalDateTime` is timezone-naive — different JVM TZ produces inconsistent values\n\n**When JPA auditing is not enough:**\n- Bulk `@Modifying` queries skip the listener — set audit columns explicitly in JPQL\n- Async / scheduler contexts have no principal — propagate or set a system principal\n- For full change history use Hibernate Envers; for downstream sync use CDC"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle auditing in tests where there is no Spring Security context?",
+        "What is the difference between `@MappedSuperclass` and `@Embeddable` for sharing audit fields?",
+        "Can you use `@CreatedDate` without `@EnableJpaAuditing` — for example, using Hibernate's `@CreationTimestamp` instead?",
+        "How does Hibernate Envers compare to writing to a custom audit table?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Data JPA Audit Logging @CreatedDate @LastModifiedDate — Java Interview",
+        "metaDescription": "Implement automatic audit logging in Spring Data JPA: @EnableJpaAuditing, @MappedSuperclass with @CreatedDate/@LastModifiedDate, AuditorAware, and bulk-update gotchas."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P02",
+        "hook": "Spring Data JPA Auditing automates the bookkeeping that every entity needs.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "Most developers implement audit logging by adding @PrePersist and @PreUpdate callbacks with LocalDateTime.now() in every entity. This works but leads to duplicated code across entities, inconsistent timestamp handling, and no clean way to capture the current user without injecting SecurityContextHolder into entity classes. Spring Data's @EnableJpaAuditing solves all three problems."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Practical Spring Data JPA feature knowledge and ability to avoid boilerplate by using framework capabilities"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "Base @MappedSuperclass: ``java @MappedSuperclass @EntityListeners(AuditingEntityListener.class) public abstract class AuditableEntity { @CreatedDate private Instant createdAt; @LastModifiedDate private Instant updatedAt; @CreatedBy private String createdBy; @LastModifiedBy private String updatedBy; } ` AuditorAware<String> from Spring Security: `java @Configuration @EnableJpaAuditing(auditorAwareRef = \"auditorProvider\") public class AuditConfig { @Bean AuditorAware<String> auditorProvider() { return () -> Optional.ofNullable(SecurityContextHolder.getContext().getAuthentication()) .filter(Authentication::isAuthenticated) .map(Authentication::getName); } } ` Timestamp type choice: Use Instant — UTC, unambiguous across server timezones.",
+              "LocalDateTime is timezone-naive — different JVM TZ produces inconsistent values.",
+              "OffsetDateTime works but is heavier; pick Instant unless you specifically need offsets.",
+              "Without @EnableJpaAuditing: Annotations silently ignored.",
+              "No log warning, no exception.",
+              "Easiest miss to detect: check the inserted row — created_at IS NULL` -> auditing disabled."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "@EnableJpaAuditing activates auditing — without it the annotations are silently ignored",
+              "AuditorAware<T> supplies the principal from SecurityContextHolder",
+              "Instant over LocalDateTime — UTC and timezone-safe",
+              "@MappedSuperclass plus @EntityListeners(AuditingEntityListener",
+              "class) shares audit fields across entities"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "When JPA auditing helps: Standard CRUD entities needing 'who created / last modified'. Single source of truth for createdAt / updatedAt. Minimal boilerplate via @MappedSuperclass. When JPA auditing hurts: Bulk modifying queries skip it silently. Async / scheduler contexts lose principal. No way to recover historical values. When Envers helps: Regulatory requirement to keep change history. Need to render 'audit timeline' UI. Want point-in-time entity reconstruction. When Envers hurts: Doubles."
+          }
+        ],
+        "cap": "Setup: Add @EnableJpaAuditing to a @Configuration class Create a @MappedSuperclass with the audit fields: @CreatedDate Instant createdAt @LastModifiedDate Instant updatedAt @CreatedBy String createdBy",
+        "familiarity_anchors": [
+          "Enable",
+          "Spring",
+          "EnableJpaAuditing"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle auditing in tests where there is no Spring Security context?",
+          "What is the difference between `@MappedSuperclass` and `@Embeddable` for sharing audit fields?",
+          "Can you use `@CreatedDate` without `@EnableJpaAuditing` — for example, using Hibernate's `@CreationTimestamp` instead?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    },
+    {
+      "id": "jpa-hikari",
+      "slug": "hikaricp-connection-pooling-spring",
+      "question": "How does HikariCP connection pooling work in Spring Boot, and how do you configure and tune it?",
+      "title": "HikariCP Connection Pool — Configuration and Tuning in Spring Boot",
+      "direct_answer": "**HikariCP** is Spring Boot's default JDBC connection pool. It maintains a pool of reusable connections to avoid the overhead of creating one per request. Key settings: **`maximumPoolSize`** (default 10), **`minimumIdle`** (defaults to `maximumPoolSize`), **`connectionTimeout`** (default 30s), **`maxLifetime`** (30 min), **`idleTimeout`** (10 min), and **`leakDetectionThreshold`** (off by default). The counter-intuitive truth: **more connections does not mean more throughput** — the HikariCP formula is **`(2 x cores) + effective spindles`**. Oversizing causes database CPU context switching and lock contention; undersizing causes request queuing. Diagnose pool exhaustion with Micrometer metrics (`hikaricp.connections.active`, `pending`, `usage`), enable `leakDetectionThreshold` temporarily to catch leaks, and shrink long `@Transactional` scopes that hold connections during HTTP / I/O calls.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "importance": "high",
+      "reading_time_minutes": 9,
+      "last_updated": "2026-04-24",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands connection pool sizing and its impact on application performance",
+        "common_mistake": "Setting `maximumPoolSize` to 100 thinking more connections means better performance — database servers perform worse with many concurrent connections due to CPU context switching and lock contention",
+        "to_stand_out": "Mention the formula `connections = (2 * CPU cores) + disk spindles`, explain leak detection with `leakDetectionThreshold`, and discuss how `@Transactional` scope affects connection hold time"
+      },
+      "company_tags": [
+        "Netflix",
+        "Stripe",
+        "Adyen",
+        "Wise",
+        "Booking.com",
+        "Atlassian"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "100 Connections Does Not Mean 100x Throughput — It Usually Means Worse Performance",
+            "content": "Developers set `maximumPoolSize=100` thinking more connections means more throughput.\n- **The opposite is often true.** A PostgreSQL benchmark by the HikariCP team showed that **a pool of 10 connections outperformed a pool of 100** on the same hardware.\n- More connections means more CPU context switching, more lock contention in the database, and more memory consumed per connection.\n\n**The general formula** is `connections = (2 x CPU cores) + effective disk spindles`. For an 8-core database server with SSDs, that is roughly **17-20 connections**. Going beyond this does not increase parallelism — it increases contention.\n\n**HikariCP** is Spring Boot's default connection pool.\n- It starts with `minimumIdle` connections (defaults to `maximumPoolSize`) and grows up to `maximumPoolSize` (default 10).\n- When a request needs a connection and none are available, it waits up to `connectionTimeout` (30 seconds) before throwing an exception.\n- **Undersized pools cause request queuing; oversized pools waste database resources and reduce throughput.**"
+          },
+          {
+            "type": "step",
+            "title": "Critical Configuration Properties and Leak Detection",
+            "content": "**`maximumPoolSize`:**\n- Should match your database's capacity divided by application instances.\n- 4 instances sharing a database with 80 max connections = 20 per instance, minus admin/migration overhead.\n- HikariCP formula: `(2 x cores) + effective spindle count`.\n\n**`connectionTimeout` (default 30s):**\n- How long a thread waits for a connection.\n- 30s is too long for high-traffic APIs — request is already timed out at the load balancer.\n- Set to **2-5 seconds** and fail fast.\n\n**`maxLifetime` (default 30 min):**\n- Maximum age of a connection before recycling.\n- Set slightly below the database's connection idle timeout (e.g., AWS RDS Proxy defaults).\n- Prevents stale connections from causing intermittent errors.\n\n**`idleTimeout` (default 10 min):**\n- How long idle connections survive before closing down to `minimumIdle`.\n- Set to 0 to keep all connections; `minimumIdle == maximumPoolSize` is the more direct way.\n\n**`leakDetectionThreshold`:**\n- Logs a warning when a connection is held longer than the threshold without being returned.\n- Set to expected maximum query time (e.g., **2-10 seconds**).\n- Connection leaks are the most common pool exhaustion cause.\n- HikariCP logs the stack trace of the leak point.\n\n**`@Transactional` scope directly affects hold time:**\n- A transaction holds a connection for its entire duration.\n- A `@Transactional` method calling an external HTTP service holds the connection during network I/O.\n- Wastes pool capacity on non-database work."
+          },
+          {
+            "type": "step",
+            "title": "Diagnosing Pool Exhaustion — Symptoms, Metrics, and Fix Playbook",
+            "content": "**Symptoms in order of appearance:**\n- p99 latency on database endpoints rises sharply; CPU and memory normal.\n- `SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms` in logs.\n- Cascading timeouts as upstream callers hit deadlines.\n- Database itself is **idle** — bottleneck is the pool, not the DB.\n\n**Metrics that pinpoint the problem (Micrometer + Actuator):**\n- `hikaricp.connections.active` — connections in use; constantly at `maximumPoolSize` = saturated.\n- `hikaricp.connections.pending` — threads blocked waiting; non-zero for sustained periods = exhaustion.\n- `hikaricp.connections.usage` — distribution of how long connections are held; long tail = something holds for seconds.\n- `hikaricp.connections.acquire` — time to acquire; spikes = undersized or leaked.\n\n**Alerts:**\n- `pending > 0 for 30s`.\n- `usage p99 > connectionTimeout / 2`.\n- These fire before users see 500s.\n\n**Fix playbook in order:** 1.\n- **Enable `leakDetectionThreshold=5000` temporarily.** If logs immediately show stack traces -> you have a leak (raw `JdbcTemplate` without try-with-resources, custom DataSource bypassing Spring tx, manually opened `EntityManager`).\n2.\n- **Look for long-running transactions.** A `@Transactional` method making HTTP calls, sleeping, waiting on locks, or iterating large result sets holds its connection.\n- Any transaction over **500ms** deserves review.\n3.\n- **Check for N+1 under load.** N+1 multiplies connection acquisitions.\n- Fix the N+1 (`@EntityGraph`, `JOIN FETCH`), not the pool size.\n4.\n- **Only then increase `maximumPoolSize`** — and only up to the HikariCP formula.\n- Beyond that you move contention from app to DB.\n\n**Anti-pattern:**\n- Raising `maximumPoolSize` to 100 to 'solve' the problem hides the leak or slow transaction, increases DB CPU context-switching, and produces a worse incident."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Key HikariCP Properties — Defaults and Tuning Direction",
+            "content": "Quick reference for production tuning.\n\n| Property | Default | Tuning direction | Why |\n|---|---|---|---|\n| `maximumPoolSize` | 10 | `(2 * cores) + spindles` per instance | More = DB contention, not throughput |\n| `minimumIdle` | = `maximumPoolSize` | Keep equal to `maximumPoolSize` | Avoid connection churn |\n| `connectionTimeout` | 30s | 2-5s in high-traffic APIs | Fail fast before LB timeout |\n| `maxLifetime` | 30 min | Slightly below DB idle timeout | Avoid stale connections |\n| `idleTimeout` | 10 min | Match `maxLifetime` policy | Prevent silent recycling churn |\n| `leakDetectionThreshold` | 0 (off) | 2000-10000 ms in production | Catch missing close / long tx |\n| `validationTimeout` | 5s | < `connectionTimeout` | Fast unhealthy-connection rejection |\n\n**Spring Boot config:**\n```yaml\nspring:\n  datasource:\n    hikari:\n      maximum-pool-size: 20\n      minimum-idle: 20\n      connection-timeout: 3000\n      max-lifetime: 1500000\n      leak-detection-threshold: 5000\n```"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Tuning Trade-offs and Production Guardrails",
+            "content": "**When small pools help:**\n- Single-DB workloads — fewer connections = better DB throughput.\n- Low-latency requirements — fewer threads contending.\n- Cloud-managed DBs (RDS, Aurora) where connection limits are billing-relevant.\n\n**When large pools help (rare):**\n- Many short transactions on a large DB instance.\n- Mixed sync + async workloads where some connections idle on I/O.\n- Reporting workloads with long-running queries.\n\n**Watch for:** - **Each application instance has its own pool.** Total DB connections = `pool size x instance count`.\n- Plan capacity centrally.\n- **`@Transactional(readOnly = true)`** lets HikariCP route via `AbstractRoutingDataSource` to a replica.\n- **Calling external services inside `@Transactional`** is an anti-pattern.\n- Move HTTP/IO outside the tx scope.\n- **Long iterations over `Stream<Order>` results** hold the connection for the full iteration.\n- Use cursor batching with explicit close.\n- **JPA `findAll()` without pagination** can lock a connection for seconds on large tables.\n- **HikariCP eagerly creates `minimumIdle` connections at startup** — be ready for the burst on app startup.\n- **`autoCommit` defaults to `true`** at the JDBC level; Spring's `JpaTransactionManager` flips it for transactions. Do not override unless you know why.\n\n**Production checklist:**\n- Pool size right-sized via formula, not guessed.\n- `connectionTimeout` set to fail fast.\n- `leakDetectionThreshold` enabled in prod (low overhead).\n- HikariCP metrics exposed via Actuator.\n- Alerts on `pending > 0` and `usage p99 > connectionTimeout / 2`.\n- No HTTP / external calls inside `@Transactional` blocks.\n- Long-running tasks use `StatelessSession` or scheduled jobs with their own DataSource."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Optimal pool size != largest pool size** — formula `(cores * 2) + spindles`.\n- **`connectionTimeout` should be short** — 2-5s in high-traffic APIs, not 30s.\n- **`maxLifetime` < DB idle timeout** to avoid stale connections.\n- **`leakDetectionThreshold`** logs the borrow stack trace for connections held too long.\n- **`maximumPoolSize` caps JDBC concurrency** — exhaustion = thread queue, latency spike, cascading timeouts.\n- **Spring Boot exposes Hikari metrics** via Micrometer when Actuator is present.\n- **Pool size x instance count = total DB connections** — plan capacity centrally."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "HikariCP is Spring Boot's default connection pool — chosen for low overhead and consistent throughput. Misconfiguring pool size is one of the most common sources of database performance problems.\n\n**Pool size — the counter-intuitive formula:**\n- More connections != better performance\n- Each connection requires a thread on the DB server; too many connections increase CPU context switching\n- HikariCP's recommended formula: `(2 x CPU cores) + effective spindle count`\n- For a 4-core server with SSD storage: ~9 connections\n\n**Key timeouts:**\n- `connectionTimeout` (30s default) — how long a thread waits for an available connection\n- `maxLifetime` (30 min default) — maximum age before HikariCP recycles a connection\n- `idleTimeout` (10 min default) — how long idle connections sit before being closed down to `minimumIdle`\n\n**Diagnosing problems:**\n- `leakDetectionThreshold=2000` — logs stack trace for connections held > 2 seconds\n- Expose HikariCP metrics via Actuator/Micrometer: `hikaricp.connections.active`, `pending` — alert when pending spikes\n- Look for long `@Transactional` methods that make HTTP calls; move I/O outside the transaction"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What happens if `maxLifetime` is longer than the database's connection idle timeout?",
+        "How do you debug a `SQLTransientConnectionException: Connection is not available` in production?",
+        "Why is calling an external HTTP API inside a `@Transactional` method a problem for the connection pool?",
+        "How does `@Transactional(readOnly = true)` interact with HikariCP and replica routing?"
+      ],
+      "seo": {
+        "metaTitle": "HikariCP Connection Pool — Configuration and Tuning in Spring Boot",
+        "metaDescription": "How HikariCP works in Spring Boot, the (2*cores)+spindles sizing formula, leakDetectionThreshold, maxLifetime, and how to diagnose pool exhaustion with Micrometer."
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P02",
+        "hook": "HikariCP is Spring Boot's default connection pool — chosen for low overhead and consistent throughput.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": "Developers set maximumPoolSize=100 thinking more connections means more throughput. The opposite is often true. A PostgreSQL benchmark by the HikariCP team showed that a pool of 10 connections outperformed a pool of 100 on the same hardware. More connections means more CPU context switching, more lock contention in the database."
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands connection pool sizing and its impact on application performance"
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              "maximumPoolSize: Should match your database's capacity divided by application instances.",
+              "4 instances sharing a database with 80 max connections = 20 per instance, minus admin/migration overhead.",
+              "HikariCP formula: (2 x cores) + effective spindle count.",
+              "connectionTimeout (default 30s): How long a thread waits for a connection.",
+              "30s is too long for high-traffic APIs — request is already timed out at the load balancer.",
+              "Set to 2-5 seconds and fail fast."
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              "Optimal pool size != largest pool size — formula (cores * 2) + spindles",
+              "connectionTimeout should be short — 2-5s in high-traffic APIs, not 30s",
+              "maxLifetime < DB idle timeout to avoid stale connections",
+              "leakDetectionThreshold logs the borrow stack trace for connections held too long",
+              "maximumPoolSize caps JDBC concurrency — exhaustion = thread queue, latency spike, cascading timeouts"
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": "When small pools help: Single-DB workloads — fewer connections = better DB throughput. Low-latency requirements — fewer threads contending. Cloud-managed DBs (RDS, Aurora) where connection limits are billing-relevant. When large pools help (rare): Many short transactions on a large DB instance. Mixed sync + async workloads where some connections idle on I/O. Reporting workloads with long-running queries. Watch for: - Each application instance has its own pool. Total DB connections."
+          }
+        ],
+        "cap": "Pool size — the counter-intuitive formula: More connections != better performance Each connection requires a thread on the DB server; too many connections increase CPU context switching HikariCP's rec",
+        "familiarity_anchors": [
+          "HikariCP",
+          "Spring",
+          "Oversizing"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What happens if `maxLifetime` is longer than the database's connection idle timeout?",
+          "How do you debug a `SQLTransientConnectionException: Connection is not available` in production?",
+          "Why is calling an external HTTP API inside a `@Transactional` method a problem for the connection pool?"
+        ],
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "standard_example": "Spring Boot 3.2 app with Hibernate and PostgreSQL"
+      }
+    }
+  ]
+}
