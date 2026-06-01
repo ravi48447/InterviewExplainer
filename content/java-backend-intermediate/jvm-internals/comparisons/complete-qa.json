@@ -1,0 +1,341 @@
+{
+  "topic": "Comparisons",
+  "topicSlug": "comparisons",
+  "questions": [
+    {
+      "id": "minor-gc-vs-full-gc-comparison",
+      "slug": "minor-gc-vs-full-gc-comparison",
+      "title": "Minor GC vs Full GC — Scope, Pause Duration, Causes, and Log Signatures",
+      "question": "Compare minor GC and full GC: scope, pause duration, common causes, and how to identify each in GC logs.",
+      "direct_answer": "**Minor GC** collects only the young generation (Eden + active Survivor). It runs frequently — every few seconds in a busy app — completes in 10-50ms, and is healthy. It is triggered when Eden fills. **Full GC** stops all application threads and collects the entire heap (young + old + Metaspace). It can take 1-30 seconds depending on heap size and is always pathological in modern collectors. Common triggers: promotion failure, to-space exhausted (G1), Metaspace OOM, explicit `System.gc()`, allocation failure when heap is undersized. In Java 9+ unified logs, look for `Pause Young (Normal)` (minor) vs `Pause Full (G1 Evacuation Pause)` with a reason in parentheses (full). Treat any non-rare full GC as a problem to investigate.",
+      "layout_type": "comparison-arena",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-23",
+      "interviewer_intent": {
+        "testing": "Whether you can read a GC log and immediately tell whether the app is healthy or in trouble — and whether you know the specific triggers of full GC",
+        "common_mistake": "Treating any GC pause as a problem (minor GCs are normal background activity) or assuming full GC frequency is just about heap size (most are caused by specific preventable triggers)",
+        "to_stand_out": "Distinguish G1's `Pause Mixed` (incremental old-gen collection, healthy) from `Pause Full` (fallback to serial collector, pathological), and list the specific JVM flags that disable each preventable full-GC trigger"
+      },
+      "company_tags": [
+        "Oracle",
+        "Netflix",
+        "Atlassian",
+        "Uber",
+        "Cloudera"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Minor GC Is Background Noise — Full GC Is the Pathology",
+            "content": "Garbage collection in Java is not a single event with a single duration. It is a family of operations targeting different heap regions with vastly different costs. The fundamental distinction every Java engineer needs is **minor GC vs full GC** — these terms describe entirely different things, with different scopes, pause durations, frequencies, triggers, and operational implications.\n\n**Minor GC** is the rapid, frequent reclamation of the young generation. It exploits the **weak generational hypothesis** — most objects die young — by collecting only the small region where new objects live. Because most objects in Eden are dead by the time the GC arrives, the work scales with the few survivors rather than the entire heap. This is why minor GC pauses are typically 10-50ms even on multi-gigabyte heaps. **Minor GCs are normal**. A healthy busy web service may run hundreds of minor GCs per minute and never produce visible latency.\n\n**Full GC** is the catastrophic alternative — a stop-the-world walk of the entire heap, including the young generation, old generation, and (in older JVMs) Metaspace. It compacts the heap end-to-end. On modern collectors like G1 and ZGC, full GC is a **fallback mode** entered only when normal incremental collection has failed. The pause scales with **total heap size** rather than just live data, which is why a 16GB heap can produce a 30-second full GC pause. **Full GCs are always worth investigating** — they break SLAs, trigger false-positive failure detection in distributed systems, and signal that something is misconfigured or genuinely leaking.\n\nThe terminology gets murky around **major GC**. In CMS and Parallel GC, \"major GC\" meant old-generation collection. In G1, the equivalent is **mixed GC** (`Pause Mixed`), which collects young gen plus a few old-gen regions chosen by garbage density. Mixed GC is healthy — it is G1's normal way of incrementally reclaiming the old generation without triggering a full GC. Confusing mixed GC with full GC is a common misreading of G1 logs."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Minor GC vs Full GC — Side-by-Side Comparison",
+            "content": "Each dimension matters for diagnosis. Learn the table; reading GC logs becomes second nature.\n\n| Dimension | Minor GC | Full GC |\n|---|---|---|\n| Scope | Young generation only (Eden + active Survivor) | Entire heap (young + old + Metaspace) |\n| Pause duration | 10-50ms | 1-30 seconds (heap-size dependent) |\n| Frequency in healthy app | Every few seconds | Should be rare or zero |\n| Stops application threads | Yes (briefly) | Yes (extensively) |\n| Algorithm | Copy survivors to Survivor space (or promote) | Mark + sweep + compact entire heap |\n| Triggered by | Eden fills | Promotion failure, OOM threshold, Metaspace OOM, `System.gc()` |\n| In G1, log marker | `Pause Young (Normal)` | `Pause Full` |\n| In G1, healthy alternative | — | `Pause Mixed` (incremental old-gen) |\n| Application impact | Negligible | p99 latency spike; possible false-positive health-check failure |\n| Common diagnosis result | None — healthy | Memory leak, undersized heap, classloader leak, explicit GC call |\n\n**Why minor GC is fast.** The young generation is small (typically 30-40% of heap). Within the young gen, Eden is small (~80% of young gen). Most allocations land in Eden, and most die there before the next collection. The collector copies the few survivors to a Survivor space and reclaims Eden in one shot — the work is proportional to **live data**, which is a small fraction of Eden.\n\n**Why full GC is slow.** It walks every reachable object across the entire heap, marks them, sweeps the dead, and (on G1 and other compacting collectors) relocates survivors to eliminate fragmentation. On a 16GB heap with 8GB of live data, that's 8GB of objects to mark and potentially relocate — single-threaded in G1's full-GC fallback. The pause scales with total live data, not garbage produced.\n\n**G1's `Pause Mixed` is the healthy middle ground.** When the old generation needs reclamation, G1 doesn't do a single big stop-the-world full GC. Instead, it picks a few old-gen regions per cycle (those with the most garbage) and evacuates them during what would otherwise be a young GC. This is `Pause Mixed` — it spreads old-gen collection across many small pauses, keeping each within the soft target. Seeing many `Pause Mixed` events is a sign G1 is working correctly. Seeing `Pause Full` is a sign G1 has fallen back."
+          },
+          {
+            "type": "step",
+            "title": "Reading GC Logs — Recognizing Each Type",
+            "content": "Java 9+ uses the unified logging framework. Enable with `-Xlog:gc*:file=/var/log/gc.log:time,uptime,level,tags`.\n\n**A healthy minor GC entry:**\n\n```\n[2026-04-23T10:15:32.123+0000][2.345s][info][gc] GC(42) Pause Young (Normal) (G1 Evacuation Pause) 512M->480M(4096M) 8.2ms\n```\n\n- `GC(42)` — 42nd GC since JVM start\n- `Pause Young (Normal)` — minor GC, no anomalies\n- `(G1 Evacuation Pause)` — G1's standard young-gen evacuation\n- `512M->480M(4096M)` — heap before → after, total heap size\n- `8.2ms` — pause duration\n\nThis is exactly what you want to see — frequent, short minor GCs reclaiming most of the young gen with negligible pause time.\n\n**A healthy G1 mixed GC entry:**\n\n```\n[2026-04-23T10:20:45.456+0000][312.456s][info][gc] GC(78) Pause Mixed (G1 Mixed GC) 3200M->1100M(4096M) 145ms\n```\n\n- `Pause Mixed` — G1's incremental old-gen collection\n- 3200MB → 1100MB — significant memory reclaimed; healthy\n- 145ms — within the default 200ms pause target\n\nMixed GCs replace traditional major GCs in G1. Their presence is normal; their absence over a long run is suspicious (means old gen isn't being reclaimed at all).\n\n**An unhealthy full GC entry:**\n\n```\n[2026-04-23T10:30:12.789+0000][878.789s][info][gc] GC(99) Pause Full (G1 Evacuation Pause) (To-space exhausted) 4090M->3800M(4096M) 1850ms\n```\n\n- `Pause Full` — full GC; bad\n- `(To-space exhausted)` — G1 ran out of fresh regions for evacuation\n- 4090MB → 3800MB — only 290MB reclaimed; live set is growing or heap is undersized\n- 1850ms — 1.8 second pause; will violate any latency SLA\n\nThe **reason in parentheses** is the diagnostic key. Common reasons:\n\n- `(System.gc())` — find and remove the explicit call (or set `-XX:+DisableExplicitGC`)\n- `(To-space exhausted)` — G1 ran out of regions; increase heap or `-XX:G1ReservePercent`\n- `(Metadata GC Threshold)` — Metaspace exhausted; raise `-XX:MaxMetaspaceSize`\n- `(Allocation Failure)` — heap is undersized for the allocation rate\n- `(Last ditch collection)` — JVM is about to throw OOM; this is a final attempt\n- `(Ergonomics)` — JVM auto-tuning decided a full GC was needed; usually pathological"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Preventing Full GCs — A Trigger-by-Trigger Mitigation Guide",
+            "content": "Most full GCs are preventable once you know the trigger. Here's the practical mitigation playbook.\n\n**Trigger: `(System.gc())`**\n- **Source**: monitoring agents, RMI's distributed GC, libraries that defensively call GC\n- **Mitigation**: `-XX:+DisableExplicitGC` (ignore all calls), or `-XX:+ExplicitGCInvokesConcurrent` (convert to a concurrent G1 cycle instead of stop-the-world)\n- The latter is preferred when you can't fully eliminate the calls — it neutralizes the impact without breaking the contract\n\n**Trigger: `(To-space exhausted)` or promotion failure**\n- **Source**: allocation rate exceeds what minor GC can promote; old gen has no headroom for incoming survivors\n- **Mitigation**: increase `-Xmx`, increase `-XX:G1ReservePercent` (default 10%), reduce allocation rate in application code\n- For G1: setting `-XX:InitiatingHeapOccupancyPercent=35` (default 45) starts the concurrent cycle earlier, giving more time to reclaim old gen before pressure builds\n\n**Trigger: `(Metadata GC Threshold)` or Metaspace OOM**\n- **Source**: dynamic class loading without unloading; common with Mockito, CGLIB, hot-redeploy frameworks, or scripting languages on the JVM\n- **Mitigation**: bound Metaspace with `-XX:MaxMetaspaceSize=512m`, monitor with JFR's `MetaspaceSummary` event, fix the underlying ClassLoader leak\n\n**Trigger: genuine memory leak**\n- **Source**: static collections growing forever, listeners never removed, `ThreadLocal` in pooled threads\n- **Mitigation**: capture heap dump with `-XX:+HeapDumpOnOutOfMemoryError`, analyze in Eclipse MAT, fix in application code\n- Increasing `-Xmx` only delays the problem\n\n**Trigger: heap simply undersized**\n- **Source**: live data set grew over time as the application scaled; was correctly sized originally but no longer is\n- **Mitigation**: increase `-Xmx` — the legitimate case where adding memory is the right answer\n- Confirmed by stable post-full-GC live set in GC logs\n\n**Anti-pattern**: calling `System.gc()` from application code to \"clean up\" before a critical operation. Modern collectors decide better than you can; explicit calls usually trigger expensive full GCs that hurt rather than help."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Minor GC = young gen only** — 10-50ms; runs frequently; healthy.\n- **Full GC = entire heap** — seconds; should be rare; always investigate.\n- **G1's `Pause Mixed` ≠ `Pause Full`** — mixed is incremental old-gen (healthy); full is fallback to serial (pathological).\n- **Java 9+ log markers** — `Pause Young (Normal)`, `Pause Mixed`, `Pause Full`.\n- **The reason in parentheses** is the diagnostic key — `(To-space exhausted)`, `(Metadata GC Threshold)`, `(System.gc())`, `(Allocation Failure)`.\n- **`-XX:+DisableExplicitGC`** — silences `System.gc()` from libraries.\n- **`-XX:+ExplicitGCInvokesConcurrent`** — converts explicit GC to concurrent cycle (preferred when you can't remove the calls).\n- **Always pair GC logging with `-XX:+HeapDumpOnOutOfMemoryError`** — capture diagnostic state when OOM strikes."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Minor GC and full GC describe entirely different events with completely different operational implications.\n\n**Minor GC:**\n- Collects only the young generation — Eden plus the active Survivor space\n- Typically 10-50ms — runs frequently in healthy apps; background noise\n- Triggered when Eden fills\n- Log marker: `Pause Young (Normal)` in Java 9+\n\n**Full GC:**\n- Collects the entire heap — young, old, and Metaspace\n- Stops all application threads — pauses can take seconds on large heaps\n- Always worth investigating in a modern collector\n- Log marker: `Pause Full` with a reason in parentheses\n\n**G1 has a healthy middle ground — mixed GC:**\n- `Pause Mixed` collects young gen plus a few old-gen regions per cycle\n- Spreads old-gen reclamation across many small pauses\n- Replaces what older collectors called major GC\n\n**Common full GC triggers, with mitigations:**\n- `(System.gc())` from libraries → `-XX:+DisableExplicitGC` or `-XX:+ExplicitGCInvokesConcurrent`\n- `(To-space exhausted)` in G1 → increase `-Xmx` or `-XX:G1ReservePercent`\n- `(Metadata GC Threshold)` → cap Metaspace and fix classloader leak\n- `(Allocation Failure)` → heap is undersized\n- Memory leak → capture heap dump, analyze in Eclipse MAT, fix in code\n\n**The diagnostic discipline:**\n- Always enable GC logging in production: `-Xlog:gc*` on Java 9+\n- Treat minor GC as background; investigate every full GC\n- Use GCEasy or JMC for visual analysis\n- Pair with `-XX:+HeapDumpOnOutOfMemoryError` so you have evidence when OOM strikes\n\nIn an interview, the differentiator is distinguishing G1's `Pause Mixed` from `Pause Full` — most candidates conflate them, missing the fact that mixed GC is the healthy operation while full GC is the fallback."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What does 'To-space exhausted' mean in a G1 GC log?",
+        "Why is `-XX:+ExplicitGCInvokesConcurrent` preferred over `DisableExplicitGC` in some situations?",
+        "How does G1's mixed GC differ from CMS's old-gen collection?",
+        "What's the difference between 'GC overhead limit exceeded' and a regular OOM?"
+      ],
+      "seo": {
+        "metaTitle": "Minor GC vs Full GC — Scope, Pause, Triggers, Log Signatures",
+        "metaDescription": "Difference between minor GC and full GC in Java. Scope, pause duration, common triggers, log signatures in Java 9+, and how to prevent unnecessary full GCs."
+      },
+      "order": 1,
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "speakable_status": "pending_review",
+        "familiarity_anchors": [
+          "minor GC collects the young generation only — fast, frequent",
+          "full GC collects the whole heap — slow, stop-the-world",
+          "full GC is the one that causes latency spikes in production"
+        ],
+        "standard_example": "Minor GC: 1–10ms, happens every few seconds. Full GC: 100ms–10s, causes latency spike.",
+        "hook": "Minor GC takes milliseconds. Full GC takes hundreds. Know the difference before you read a GC log in production.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "grouped_paragraphs",
+            "groups": [
+              {
+                "heading": "Minor GC",
+                "text": "Collects Eden and Survivor spaces only. Most objects die young — it reclaims a lot quickly. Stop-the-world but brief: 1–10ms."
+              },
+              {
+                "heading": "Full GC",
+                "text": "Collects the whole heap — young, old, and Metaspace. Stop-the-world can run hundreds of milliseconds. Triggered when old gen fills up."
+              }
+            ]
+          },
+          {
+            "kind": "differences",
+            "layout": "mini_table",
+            "columns": [
+              "Minor GC",
+              "Full GC"
+            ],
+            "rows": [
+              {
+                "axis": "scope",
+                "values": [
+                  "young generation only",
+                  "whole heap + Metaspace"
+                ]
+              },
+              {
+                "axis": "pause",
+                "values": [
+                  "1–10ms",
+                  "100ms–10s"
+                ]
+              },
+              {
+                "axis": "frequency",
+                "values": [
+                  "frequent (every few seconds)",
+                  "rare (triggered by old-gen full)"
+                ]
+              },
+              {
+                "axis": "impact",
+                "values": [
+                  "minimal",
+                  "latency spike — SLA risk"
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "bullets",
+            "items": [
+              "You don't choose when GC runs — you diagnose it",
+              "Frequent full GCs usually mean objects are being promoted too fast",
+              "Trap: check for memory leaks or cache bloat — that's what keeps objects alive in old gen"
+            ]
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "GC log shows minor GC every 2s at 5ms — healthy. Then a full GC at 800ms. That's a promotion failure: the old gen couldn't fit promoted objects. Either increase old-gen size or fix object retention."
+          }
+        ],
+        "cap": "Minor GC is fast and frequent — don't worry about it. Full GC is your latency spike. Frequent full GCs mean objects are living too long.",
+        "followup_handoff": [
+          "What triggers promotion from young gen to old gen?",
+          "How do you diagnose excessive full GCs in production?",
+          "What's the difference between G1 GC's mixed GC and a traditional full GC?"
+        ],
+        "tts_overrides": {
+          "GC": "garbage collection",
+          "Eden": "eden",
+          "Metaspace": "meta space",
+          "1–10ms": "1 to 10 milliseconds",
+          "100ms–10s": "100 milliseconds to 10 seconds"
+        }
+      }
+    },
+    {
+      "id": "aot-vs-jit-compilation-comparison",
+      "slug": "aot-vs-jit-compilation-comparison",
+      "title": "AOT vs JIT Compilation in Java — Startup, Throughput, Memory, and Build Trade-offs",
+      "question": "Compare AOT (Ahead-of-Time) and JIT (Just-in-Time) compilation in Java. Discuss startup time, peak throughput, memory footprint, and development trade-offs.",
+      "direct_answer": "**JIT compilation** (HotSpot's default) interprets bytecode initially, then compiles hot methods to optimized native code at runtime using profile data. It produces excellent peak throughput but has slow startup (3-8 seconds for Spring Boot) and a warmup period during which performance ramps up. **AOT compilation** (GraalVM native-image, Project Leyden) compiles the entire application to native code at build time. It delivers sub-100ms startup and 30-50% lower memory footprint but typically lower peak throughput (no profile-guided runtime optimization) and requires explicit reflection configuration. The right choice depends on whether your workload values startup latency (serverless, CLI tools, scaling) or peak throughput (long-running services, batch processing).",
+      "layout_type": "comparison-arena",
+      "difficulty": "medium",
+      "importance": "high",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-23",
+      "interviewer_intent": {
+        "testing": "Whether you understand the deep trade-off between profile-guided runtime optimization (JIT) and the predictability of build-time compilation (AOT)",
+        "common_mistake": "Assuming AOT is always better because 'sub-100ms startup' (it isn't — peak throughput is often lower; reflection configuration is a real burden; build complexity increases significantly)",
+        "to_stand_out": "Explain how Tiered Compilation works in HotSpot (C1 → C2), how PGO closes some of the throughput gap for AOT, and when CRaC offers a middle path"
+      },
+      "company_tags": [
+        "Oracle",
+        "GraalVM",
+        "Spring",
+        "Quarkus",
+        "Micronaut",
+        "Azul"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "JIT and AOT Optimize for Different Lifecycles",
+            "content": "Java has historically been a **JIT-compiled** language. The HotSpot JVM starts by interpreting bytecode (slow but immediate), gathers runtime profile data about which methods are hot and which branches are taken, and then compiles those hot methods to highly optimized native code. By the time the application has been running for a few minutes, the steady-state performance can match or exceed C++ for many workloads — because the JIT has runtime information that an ahead-of-time compiler simply does not have.\n\nThe price for this peak performance is **startup latency** and **warmup time**. A Spring Boot application takes 3-8 seconds to start; another 30-60 seconds elapse before the JIT has compiled all the hot code paths to peak efficiency. For long-running services, this is fine. For serverless functions that need to respond to a single request and scale to zero, for CLI tools that must complete in milliseconds, or for autoscaling environments where pods come and go constantly, JIT's lifecycle is wrong.\n\n**AOT (Ahead-of-Time) compilation** flips the trade-off. The compiler runs at **build time**, analyzing the entire application closed-world (no dynamic class loading) and producing a self-contained native binary. Startup is sub-100ms because there is no JVM bootstrap, no class loading, no JIT warmup. Memory footprint drops 30-50% because there's no JIT compiler, no class metadata structures, no profiling data. The trade-off is that the AOT compiler **cannot use runtime profile data** — it must make optimization decisions based on static analysis alone. Peak throughput is typically 10-30% lower than fully-warm JIT-compiled code.\n\n**The Java AOT landscape in 2026:**\n- **GraalVM Native Image** — mature, production-ready, used by Quarkus and Micronaut, supported by Spring Boot 3+\n- **Project Leyden** — Oracle's official OpenJDK AOT initiative; ships incremental AOT features (AOT class loading, AOT method caching) without requiring full native image\n- **CRaC (Coordinated Restore at Checkpoint)** — not AOT in the strict sense, but achieves sub-second startup by snapshotting a fully-warm JIT-compiled JVM and restoring it later\n\nThe choice between JIT and AOT is increasingly nuanced. For most long-running services, JIT remains the right default. For serverless and CLI tools, AOT wins decisively. CRaC offers a middle path that preserves JIT throughput while achieving AOT-like startup."
+          },
+          {
+            "type": "comparison_table",
+            "title": "JIT vs AOT — Side-by-Side Comparison",
+            "content": "Each dimension matters for different deployment models.\n\n| Dimension | JIT (HotSpot) | AOT (Native Image) |\n|---|---|---|\n| When compilation runs | Runtime, on hot methods | Build time, on whole application |\n| Startup time (Spring Boot) | 3-8 seconds | <100ms |\n| Peak throughput | Highest (profile-guided) | 10-30% lower |\n| Warmup time to peak | 30-60 seconds | None — peak from start |\n| Memory footprint | High (JVM + JIT + metadata) | 30-50% lower |\n| Build time | Fast (seconds) | Slow (5-15 minutes) |\n| Build artifact size | JAR (small) | Native binary (large, 50-200MB) |\n| Reflection support | Full | Requires explicit config |\n| Dynamic class loading | Full | Closed-world (none) |\n| Adaptive optimization | Yes (continuous) | No (one-shot at build) |\n| Best for | Long-running services | Serverless, CLI, autoscaling |\n\n**JIT in detail.** HotSpot uses **Tiered Compilation** (`-XX:+TieredCompilation`, default since Java 8). The flow is:\n1. **Tier 0** — bytecode interpretation. Slow but immediate; no compilation cost.\n2. **Tier 1-3** — C1 compiler produces fast-compiled, lightly-optimized native code with profiling probes inserted.\n3. **Tier 4** — C2 compiler produces aggressively-optimized native code using the profile data collected by C1.\n\nC2 makes **speculative optimizations** like inlining virtual calls based on observed receivers, eliminating dead branches based on observed values, and aggressive escape analysis to allocate objects on the stack. If a speculation turns out wrong (a new class is loaded that breaks an inlining decision), C2 **deoptimizes** — discards the compiled code and falls back to interpretation, then recompiles. This is the dynamic adaptation that AOT cannot do.\n\n**AOT in detail.** GraalVM Native Image uses **closed-world analysis** to enumerate every reachable class, method, and field at build time. Anything reflectively accessed must be declared in `reflect-config.json`. The output is a single native binary that loads in milliseconds and uses a custom heap layout optimized for cold start. **Profile-Guided Optimization (PGO)** is GraalVM Enterprise's answer to JIT's profile advantage — you run instrumented binary, collect profile data, then rebuild using that data. PGO closes much of the throughput gap with JIT but adds another step to the build pipeline."
+          },
+          {
+            "type": "step",
+            "title": "Building a Spring Boot App with GraalVM Native Image",
+            "content": "Spring Boot 3+ has first-class native image support. The minimum viable workflow is:\n\n**1. Add the native build profile.** Spring Boot 3 generates the AOT processing automatically; the `spring-boot-maven-plugin` integrates with GraalVM's `native-maven-plugin`.\n\n```xml\n<build>\n    <plugins>\n        <plugin>\n            <groupId>org.springframework.boot</groupId>\n            <artifactId>spring-boot-maven-plugin</artifactId>\n        </plugin>\n        <plugin>\n            <groupId>org.graalvm.buildtools</groupId>\n            <artifactId>native-maven-plugin</artifactId>\n        </plugin>\n    </plugins>\n</build>\n```\n\n**2. Build the native image.**\n\n```bash\n./mvnw -Pnative native:compile\n```\n\nThis takes 5-15 minutes — significantly longer than a regular JAR build. The build process performs closed-world analysis, generates the reflection configuration, and compiles the entire application + dependencies to a single binary.\n\n**3. Run.**\n\n```bash\n./target/myapp\n# Started MyApplication in 0.082 seconds\n```\n\n**4. Handle reflection.** Libraries that use reflection (Jackson, Hibernate, custom proxies) need explicit configuration. Spring Boot generates most of this automatically via its AOT processing, but custom reflection requires manual `reflect-config.json` entries.\n\n```json\n[\n  {\n    \"name\": \"com.example.MyDto\",\n    \"allDeclaredConstructors\": true,\n    \"allDeclaredFields\": true,\n    \"allDeclaredMethods\": true\n  }\n]\n```\n\nGraalVM provides a `tracing-agent` mode you can run during testing — it observes reflection at runtime and writes the configuration files automatically.\n\n**5. Validate.** Run your full integration test suite against the native binary, not just the JAR. Native image and JIT have subtly different runtime semantics (especially around class loading and reflection), and bugs that don't appear in JIT can appear in native.\n\n**Real-world startup numbers (Spring Boot 3):**\n\n| Build mode | Startup | Memory | Build time |\n|---|---|---|---|\n| Standard JAR | 3.5s | 380MB | 30s |\n| AppCDS-enhanced JAR | 2.1s | 360MB | 35s |\n| Spring Boot AOT JAR | 1.8s | 340MB | 50s |\n| GraalVM Native Image | 0.08s | 110MB | 12 min |"
+          },
+          {
+            "type": "tradeoffs",
+            "title": "When to Use JIT vs AOT vs CRaC",
+            "content": "Choosing between compilation strategies is a workload analysis problem.\n\n**Use JIT (default HotSpot) when:**\n- Long-running services where startup is amortized over months of uptime\n- CPU-bound workloads where peak throughput dominates total cost\n- Applications with extensive dynamic behavior (reflection-heavy frameworks, scripting, hot redeployment)\n- You need adaptive optimization — the workload's hot paths shift over time\n- Build pipeline simplicity matters more than runtime startup latency\n\n**Use AOT (GraalVM Native Image) when:**\n- Serverless functions (AWS Lambda, GCP Cloud Run) where cold start latency directly affects user experience\n- CLI tools where startup must be sub-second\n- Containers in autoscaling environments where pods come and go many times per day\n- Memory-constrained deployments where the JVM's footprint is prohibitive\n- Scaling to many small instances (Kubernetes daemonsets, sidecars)\n\n**Use CRaC when:**\n- You want sub-second cold starts but cannot accept native-image's throughput penalty or reflection limitations\n- You have a long warmup curve (lots of JIT compilation, lazy bean initialization, cache pre-loading) that you want to amortize across all instances\n- You're on Azul Zulu, Bellsoft Liberica, or any JDK with CRaC enabled\n- Trade-off: the checkpoint contains all in-memory state; secrets and connections need to be re-established on restore\n\n**Honest trade-offs of native image to consider:**\n- **Build complexity**: 5-15 minute build vs 30-second JAR build; requires GraalVM toolchain\n- **Reflection burden**: every reflectively-accessed class needs configuration; libraries vary in support\n- **Throughput penalty**: 10-30% lower peak throughput without PGO; matters for CPU-bound services\n- **Debugging difficulty**: native binaries are harder to debug than JIT-compiled JVM processes\n- **Library ecosystem**: most Java libraries work, but some (especially older or reflection-heavy ones) require effort\n- **Garbage collector limitations**: native image has its own GC (Serial by default; G1 in enterprise); fewer tuning options than HotSpot\n\n**The pragmatic decision rule:** start with JIT. Switch to AOT only when measurement shows startup latency is materially affecting user experience or operational cost. Don't chase native image because it sounds modern; chase it when it solves a real problem in your deployment model."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **JIT (HotSpot)** — interprets bytecode initially; profiles at runtime; compiles hot methods to optimized native code via Tiered Compilation (C1 → C2).\n- **AOT (GraalVM Native Image)** — compiles entire app at build time; closed-world analysis; sub-100ms startup; 30-50% lower memory.\n- **JIT trade-off** — slow startup, long warmup, but highest peak throughput from profile-guided optimization.\n- **AOT trade-off** — instant startup, low memory, but no runtime adaptation; 10-30% lower peak throughput; reflection requires explicit config.\n- **PGO (GraalVM Enterprise)** — closes the throughput gap by feeding profile data back to the AOT compiler.\n- **CRaC** — middle ground; snapshots a fully-warm JVM and restores in under a second; preserves JIT performance.\n- **Decision rule** — JIT for long-running services; AOT for serverless and CLI; CRaC for fast-restart with full HotSpot semantics.\n- **Spring Boot 3+** has first-class support for both AOT (Spring Boot AOT processing) and Native Image (via GraalVM)."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "JIT and AOT optimize for different lifecycles, and the right choice depends on whether your workload values startup latency or peak throughput.\n\n**JIT compilation (HotSpot's default):**\n- Starts by interpreting bytecode — immediate but slow\n- Profiles at runtime — gathers data on hot methods, taken branches, observed receivers\n- Compiles hot methods via **Tiered Compilation** — C1 for fast-compiled lightly-optimized code, C2 for aggressively-optimized code using profile data\n- Result: highest peak throughput, but 3-8 second startup and 30-60 second warmup\n\n**AOT compilation (GraalVM Native Image):**\n- Compiles the entire application at **build time** using closed-world analysis\n- Sub-100ms startup, 30-50% lower memory footprint\n- No runtime adaptation — must make optimization decisions from static analysis alone\n- Peak throughput typically 10-30% lower than fully-warm JIT\n- Requires explicit reflection configuration\n\n**Why JIT achieves higher peak throughput:**\n- C2 makes **speculative optimizations** like inlining virtual calls based on observed receivers\n- If speculation turns out wrong, the JVM **deoptimizes** and recompiles — adaptive\n- AOT cannot do this; everything must be decided once, at build time\n\n**The middle ground — CRaC:**\n- Snapshots a fully-warm JIT-compiled JVM and restores in under a second\n- Preserves JIT's peak throughput while achieving AOT-like startup\n- Trade-off: in-memory state is captured; secrets and connections need refresh on restore\n\n**When to choose each:**\n- **JIT**: long-running services, CPU-bound workloads, dynamic behavior (reflection, hot redeploy)\n- **AOT**: serverless functions, CLI tools, autoscaling environments where pods come and go\n- **CRaC**: when you want fast cold starts but cannot accept native image's throughput penalty\n\n**Honest trade-offs of AOT:**\n- 5-15 minute builds vs 30-second JAR builds\n- Reflection burden — every reflectively-accessed class needs configuration\n- Library ecosystem — most work, some don't\n- Debugging is harder than JIT-compiled JVM\n\n**Pragmatic decision rule:**\n- Start with JIT — Spring Boot 3 with AppCDS is fast enough for most use cases\n- Switch to AOT when measurement shows startup is materially affecting UX or cost\n\nIn an interview, the differentiator is mentioning Tiered Compilation and PGO — most candidates know AOT is faster to start; few understand WHY JIT achieves higher peak throughput."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is Tiered Compilation in HotSpot and how does it work?",
+        "How does Profile-Guided Optimization (PGO) close the throughput gap for AOT?",
+        "When is CRaC the right choice over both JIT and AOT?",
+        "What library ecosystem limitations exist for GraalVM Native Image in 2026?"
+      ],
+      "seo": {
+        "metaTitle": "AOT vs JIT in Java — Startup Throughput Memory Trade-offs",
+        "metaDescription": "JIT vs AOT compilation in Java compared. HotSpot Tiered Compilation, GraalVM Native Image, CRaC, peak throughput vs startup latency trade-offs."
+      },
+      "order": 2,
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "audience_assumption": "familiar",
+        "voice": "friendly",
+        "speakable_status": "pending_review",
+        "familiarity_anchors": [
+          "interpreter to start, JIT compiles hot paths to native code",
+          "C1 (client) vs C2 (server) compilers",
+          "tiered compilation by default"
+        ],
+        "standard_example": "a tight loop interpreted, then C1-compiled, then C2-compiled",
+        "hook": "JIT trades slow startup for peak throughput. AOT flips that — instant start, lower peak. Microservices forced Java to care about AOT.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "grouped_paragraphs",
+            "groups": [
+              {
+                "heading": "JIT (Just-In-Time)",
+                "text": "Interpreter starts, JIT compiles hot paths to native code. Tiered compilation by default: interpreted first, then C1, then C2. It profiles at runtime — that's the sharp edge: it can inline and speculate in ways AOT can't."
+              },
+              {
+                "heading": "AOT (Ahead-Of-Time)",
+                "text": "Compiles to native at build time. No warm-up. Starts in milliseconds. Can't profile — it doesn't know runtime behaviour. GraalVM Native Image is the main path."
+              }
+            ]
+          },
+          {
+            "kind": "differences",
+            "layout": "mini_table",
+            "columns": [
+              "JIT",
+              "AOT (Native Image)"
+            ],
+            "rows": [
+              {
+                "axis": "compilation time",
+                "values": [
+                  "runtime (on hot methods)",
+                  "build time"
+                ]
+              },
+              {
+                "axis": "startup",
+                "values": [
+                  "slow (warm-up)",
+                  "fast — milliseconds"
+                ]
+              },
+              {
+                "axis": "peak throughput",
+                "values": [
+                  "excellent (profile-guided)",
+                  "lower — no runtime profile"
+                ]
+              },
+              {
+                "axis": "memory",
+                "values": [
+                  "higher — JVM overhead",
+                  "lower — no JVM"
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "grouped_paragraphs",
+            "groups": [
+              {
+                "heading": "JIT",
+                "text": "Long-running services where warm-up pays off. Anything needing peak throughput — APIs, batch jobs."
+              },
+              {
+                "heading": "AOT",
+                "text": "Serverless, CLI tools, containers with strict cold-start SLAs. The gotcha: reflection, dynamic proxies, and classpath scanning don't work out of the box — you need reachability metadata."
+              }
+            ]
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "A Lambda function gets 15ms to respond. JIT hasn't warmed up in 15ms — you're dead. AOT Native Image starts in under 50ms total. That's why AWS Lambda Java moved to SnapStart and GraalVM Native."
+          }
+        ],
+        "cap": "JIT for long-running services, AOT for fast-start containers and serverless. The trap: AOT breaks reflection unless you register it at build time.",
+        "followup_handoff": [
+          "How does tiered compilation work in HotSpot JIT?",
+          "What reachability metadata does GraalVM Native Image need?",
+          "How does SnapStart differ from Native Image?"
+        ],
+        "tts_overrides": {
+          "JIT": "just in time",
+          "AOT": "ahead of time",
+          "GraalVM": "graal VM",
+          "C1": "C 1",
+          "C2": "C 2",
+          "SnapStart": "snap start"
+        }
+      }
+    }
+  ]
+}
