@@ -633,6 +633,17 @@ function toDisplayName(slug: string | null | undefined): string {
   return safe.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+/** Flatten markdown (bold, code, links) into plain text for meta descriptions. */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*([^*]*)\*\*/g, '$1')
+    .replace(/\*([^*]*)\*/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // ─── Visibility helpers ───────────────────────────────────────────────────────
 
 interface DirConfig {
@@ -694,6 +705,13 @@ interface RawQAEntry {
   /** Optional explicit ordering inside `complete-qa.json` (lower first). */
   order?: number;
   stub?: boolean;
+  /** Optional hero / 30-second answer used as a metadata-description fallback. */
+  direct_answer?: string;
+  /** Author-supplied SEO overrides; preferred over generated title/description. */
+  seo?: {
+    metaTitle?: string;
+    metaDescription?: string;
+  };
   answer?: {
     summary?: string;
     sections?: RawSection[];
@@ -704,6 +722,21 @@ interface RawCompleteQA {
   topic: string;
   topicSlug?: string;
   questions: RawQAEntry[];
+}
+
+/** Some topic files use `{ questions: [...] }`; others are a bare `[...]` array. */
+function questionsFromCompleteQA(raw: unknown): RawQAEntry[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.filter(
+      (q): q is RawQAEntry =>
+        q != null && typeof q === 'object' && typeof (q as RawQAEntry).slug === 'string',
+    );
+  }
+  if (typeof raw === 'object' && Array.isArray((raw as RawCompleteQA).questions)) {
+    return (raw as RawCompleteQA).questions;
+  }
+  return [];
 }
 
 // ─── Section converters ───────────────────────────────────────────────────────
@@ -728,10 +761,27 @@ function followupsToMarkdown(questions: RawFollowup[]): string {
     .join('\n\n');
 }
 
+function comparisonTableToMarkdown(content: { headers: string[]; rows: string[][] }): string {
+  const { headers, rows } = content;
+  if (!headers?.length || !rows?.length) return '';
+  const sep = headers.map(() => '---').join(' | ');
+  const headerRow = headers.join(' | ');
+  const bodyRows = rows.map(r => r.join(' | ')).join('\n');
+  return `${headerRow}\n${sep}\n${bodyRows}`;
+}
+
 function sectionToContent(s: RawSection): string {
   if (s.content) {
     if (typeof s.content === 'string' && s.content.trim()) return s.content.trim();
     if (Array.isArray(s.content)) return (s.content as string[]).map(item => `- ${item}`).join('\n');
+    // comparison_table: {"headers":[...],"rows":[[...]]}
+    if (
+      typeof s.content === 'object' &&
+      !Array.isArray(s.content) &&
+      'headers' in (s.content as object)
+    ) {
+      return comparisonTableToMarkdown(s.content as { headers: string[]; rows: string[][] });
+    }
   }
   if (s.summary && typeof s.summary === 'string' && s.summary.trim()) return s.summary.trim();
   if (s.mistakes && s.mistakes.length) return mistakesToMarkdown(s.mistakes);
@@ -1103,10 +1153,10 @@ export function getAllQuestionsForStack(
     const qaFile = subcatSlug === '_root'
       ? path.join(dir, 'complete-qa.json')
       : path.join(dir, subcatSlug, 'complete-qa.json');
-    const qaData = readJson<RawCompleteQA>(qaFile);
+    const qaQuestions = questionsFromCompleteQA(readJson<unknown>(qaFile));
 
-    if (qaData && qaData.questions.length > 0) {
-      for (const q of orderedRawQAEntries(qaData.questions)) {
+    if (qaQuestions.length > 0) {
+      for (const q of orderedRawQAEntries(qaQuestions)) {
         result.push({
           id: 0,
           title: q.title || toDisplayName(q.slug),
@@ -1163,9 +1213,9 @@ export function getSubcategoriesWithQuestions(
   domainSlug: string,
   stackSlug: string
 ): StackSubcategory[] {
-  // ::v4 — bumped after dropping per-topic `theory` from the subcat shape;
-  // module-level revision is now served separately via getModuleRevision().
-  const cacheKey = `${domainSlug}::${stackSlug}::subcatsV4`;
+  // ::v5 — bumped to invalidate stale empty-question caches from concurrent
+  // enrichment writes. Also ensures array-format complete-qa.json questions load.
+  const cacheKey = `${domainSlug}::${stackSlug}::subcatsV5`;
   if (_subcatCache.has(cacheKey)) return _subcatCache.get(cacheKey)!;
 
   const dir = stackDir(domainSlug, stackSlug);
@@ -1219,10 +1269,10 @@ export function getSubcategoriesWithQuestions(
     const qaFile = subcatSlug === '_root'
       ? path.join(dir, 'complete-qa.json')
       : path.join(dir, subcatSlug, 'complete-qa.json');
-    const qaData = readJson<RawCompleteQA>(qaFile);
+    const qaQuestions = questionsFromCompleteQA(readJson<unknown>(qaFile));
 
-    if (qaData && qaData.questions.length > 0) {
-      const orderedQs = orderedRawQAEntries(qaData.questions);
+    if (qaQuestions.length > 0) {
+      const orderedQs = orderedRawQAEntries(qaQuestions);
       const questions: QuestionSummary[] = orderedQs.map(q => ({
         id: 0,
         title: q.title || toDisplayName(q.slug),
@@ -1302,9 +1352,8 @@ function findQAEntryAnywhere(
     const qaFile = subcatSlug === '_root'
       ? path.join(dir, 'complete-qa.json')
       : path.join(dir, subcatSlug, 'complete-qa.json');
-    const qaData = readJson<RawCompleteQA>(qaFile);
-    if (!qaData) continue;
-    const entry = qaData.questions.find(q => q.slug === questionSlug);
+    const qaQuestions = questionsFromCompleteQA(readJson<unknown>(qaFile));
+    const entry = qaQuestions.find(q => q.slug === questionSlug);
     if (entry) return { qaEntry: entry, subcatSlug };
   }
   return null;
@@ -1357,8 +1406,10 @@ export function getQuestionPagePayload(
     const hintFile = hintSubcat === '_root'
       ? path.join(dir, 'complete-qa.json')
       : path.join(dir, hintSubcat, 'complete-qa.json');
-    const hintData = readJson<RawCompleteQA>(hintFile);
-    const hintEntry = hintData?.questions.find(q => q.slug === questionSlug) ?? null;
+    const hintEntry =
+      questionsFromCompleteQA(readJson<unknown>(hintFile)).find(
+        q => q.slug === questionSlug,
+      ) ?? null;
 
     if (hintEntry) {
       qaEntry = hintEntry;
@@ -1512,12 +1563,18 @@ export function getQuestionPagePayload(
     slug: questionSlug,
     difficulty: (qaEntry.difficulty as QuestionPagePayload['difficulty']) || 'medium',
     estimatedReadTime: estimateReadTime(totalText),
-    metaTitle: qaEntry.title
-      ? `${qaEntry.title} | ${toDisplayName(stackSlug)} Interview Q&A | InterviewExplainer`
-      : null,
-    metaDescription: qaEntry.question
-      ? `${qaEntry.question.slice(0, 140)}...`
-      : null,
+    metaTitle:
+      qaEntry.seo?.metaTitle?.trim() ||
+      (qaEntry.title
+        ? `${qaEntry.title} | ${toDisplayName(stackSlug)} Interview Q&A | InterviewExplainer`
+        : null),
+    metaDescription:
+      qaEntry.seo?.metaDescription?.trim() ||
+      (qaEntry.direct_answer
+        ? stripMarkdown(qaEntry.direct_answer).slice(0, 155)
+        : qaEntry.question
+          ? `${qaEntry.question.slice(0, 140)}...`
+          : null),
     stackId: null,
     stackName: toDisplayName(stackSlug),
     stackSlug,
@@ -1563,17 +1620,18 @@ export function getJBIRawQuestion(
   // Check a direct complete-qa.json at the module root first (flat layout).
   const rootQA = path.join(modDir, 'complete-qa.json');
   if (fs.existsSync(rootQA)) {
-    const data = readJson<RawCompleteQA>(rootQA);
-    const match = data?.questions?.find(q => q.slug === questionSlug);
+    const match = questionsFromCompleteQA(readJson<unknown>(rootQA)).find(
+      q => q.slug === questionSlug,
+    );
     if (match) return match as unknown as Record<string, unknown>;
   }
 
   for (const entry of fs.readdirSync(modDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const qa = path.join(modDir, entry.name, 'complete-qa.json');
-    const data = readJson<RawCompleteQA>(qa);
-    if (!data) continue;
-    const match = (data.questions ?? []).find(q => q.slug === questionSlug);
+    const match = questionsFromCompleteQA(readJson<unknown>(qa)).find(
+      q => q.slug === questionSlug,
+    );
     if (match) return match as unknown as Record<string, unknown>;
   }
   return null;
@@ -1621,11 +1679,8 @@ function scanContentRoot(
         // Also check complete-qa.json (new style)
         const qaFile = path.join(subcatPath, 'complete-qa.json');
         if (fs.existsSync(qaFile)) {
-          const data = readJson<{ questions: { slug: string }[] }>(qaFile);
-          if (data?.questions) {
-            for (const q of data.questions) {
-              if (q.slug) params.push({ domainSlug, stackSlug, questionSlug: q.slug });
-            }
+          for (const q of questionsFromCompleteQA(readJson<unknown>(qaFile))) {
+            if (q.slug) params.push({ domainSlug, stackSlug, questionSlug: q.slug });
           }
         }
       }
