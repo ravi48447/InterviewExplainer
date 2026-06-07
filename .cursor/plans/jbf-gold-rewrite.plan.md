@@ -278,4 +278,19 @@ thread-vs-runnable 6, volatile-keyword 6, concurrency-problems 6). 7 of 8 topics
   phrases per archetype, and 3+-item beats off `paragraph` layout. Set speakable_status → approved.
 - **M06 FINAL: 48 Q, 0 CRITICAL / 0 MODERATE, 48/48 speakable PASS (all 100/100).**
 
-- [ ] M07 … M33 (apply: deep-dive ladder-from-zero + key_points + speakable_v2 PASS audit + rich visuals, common_mistakes everywhere, mermaid <br/>; NOTE check for the type->kind beat bug — it recurs)
+# M07 — java8-features — COMPLETE (gold)
+48 Q across 8 topics (lambda-expressions 3, functional-interfaces 7, stream-basics 7, stream-operations 7,
+optional-class 7, default-and-static-methods 7, method-references 5, comparisons 5). This module had NOT been
+through any prior gold pass: all 48 were content-WEAK and 7/8 topics' speakable_v2 were FAIL (lambda-expressions
+had NO speakable_v2 at all). Ran as two waves of 4 single-file agents (author→lint→fix), then verified all 3 gates.
+- New audit tool added this session: `scripts/_jbf_content_audit.py` checks the deep-dive bar the two linters miss
+  (ladder-from-zero overview, >=2 inline-code pills, a bullet/blockquote, diagram, runnable code, common_mistakes,
+  >=5 key_points). Use it on every future module: `python3 scripts/_jbf_content_audit.py content/java-backend-fresher/<module>/`.
+- speakable_v2 failure cause here was NOT the type->kind bug but beats using NON-SCHEMA `kind` values
+  (e.g. `each_is`, `what_it_is`, `examples_from_jdk`, `depth_marker`, archetype `E`). Fix = convert to the real
+  archetype-A/B beats. Several comparison Qs needed `familiarity_override` where the codex topic mis-resolved.
+- **M07 FINAL: 48 Q, 0 CRITICAL / 0 MODERATE, 48/48 content GOLD, 48/48 speakable PASS.**
+
+- [ ] M08 … M33 (apply: deep-dive ladder-from-zero + key_points + speakable_v2 PASS audit + rich visuals,
+  common_mistakes everywhere, mermaid <br/>; verify with validate_jbf + _jbf_content_audit + audit_speakable.
+  NOTE: speakable_v2 in un-uplifted modules tends to use wrong/non-schema beat kinds — expect to rebuild them.)
