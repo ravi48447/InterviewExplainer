@@ -10,7 +10,7 @@
       "difficulty": "easy",
       "importance": "high",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Whether you understand pooling reuses costly connections and bounds the count.",
         "common_mistake": "Opening a new connection per request, hurting performance and overloading the DB.",
@@ -35,9 +35,14 @@
             "content": "```mermaid\nflowchart TB\n  subgraph App[App threads]\n    R1[Request 1]\n    R2[Request 2]\n    R3[Request 3]\n  end\n  R1 -->|borrow| P[Connection Pool<br/>HikariCP max=10]\n  R2 -->|borrow| P\n  R3 -->|wait if full| P\n  P -->|reused connections| DB[(Database)]\n  P -.return on close.- R1\n```"
           },
           {
-            "type": "code_example",
-            "title": "Pool vs new-connection-per-request",
-            "content": "```java\n// WITHOUT a pool: new physical connection each request (slow)\n// Connection con = DriverManager.getConnection(url, user, pass);\n\n// WITH a pool (HikariCP): borrow an already-open connection\nHikariConfig cfg = new HikariConfig();\ncfg.setJdbcUrl(url); cfg.setUsername(user); cfg.setPassword(pass);\ncfg.setMaximumPoolSize(10);\nDataSource pool = new HikariDataSource(cfg);\n\ntry (Connection con = pool.getConnection()) {  // borrow (no handshake)\n    // ... query ...\n}                                              // returned to pool, reused\n```"
+            "type": "before_code",
+            "title": "Without a pool: a new physical connection per request",
+            "content": "```java\n// Anti-pattern: every request opens a brand-new physical connection.\n// Each getConnection() pays the full TCP handshake + authentication.\npublic List<Order> findOrders() throws SQLException {\n    // ~50ms wasted here on EVERY call, before any query runs:\n    try (Connection con = DriverManager.getConnection(url, user, pass);\n         PreparedStatement ps = con.prepareStatement(\"SELECT * FROM orders\")) {\n        // ... map ResultSet ...\n        return orders;\n    }\n    // Connection is physically closed and destroyed when the block exits.\n    // Under load this floods the DB with connect/disconnect churn.\n}\n```"
+          },
+          {
+            "type": "after_code",
+            "title": "With a pool: borrow an already-open connection",
+            "content": "```java\n// Build the pool ONCE at startup (Spring Boot does this for you).\nHikariConfig cfg = new HikariConfig();\ncfg.setJdbcUrl(url);\ncfg.setUsername(user);\ncfg.setPassword(pass);\ncfg.setMaximumPoolSize(10);            // cap total connections\nDataSource pool = new HikariDataSource(cfg);\n\npublic List<Order> findOrders() throws SQLException {\n    // borrow an already-open connection — no handshake, no auth round-trip:\n    try (Connection con = pool.getConnection();\n         PreparedStatement ps = con.prepareStatement(\"SELECT * FROM orders\")) {\n        // ... map ResultSet ...\n        return orders;\n    }\n    // close() RETURNS the connection to the pool — it is reused, not destroyed.\n}\n```\n\n*The pool is created once; each request reuses a warm connection, so the costly handshake happens at startup instead of per request.*"
           },
           {
             "type": "key_points",
@@ -66,56 +71,56 @@
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "Java 17 app connecting to a MySQL database with JDBC to query an orders table",
+        "standard_example": "HikariCP with maximumPoolSize 20 on a 4-core service",
         "familiarity_anchors": [
           "TCP handshake",
-          "HTTP request lifecycle",
-          "thread pool"
+          "HikariCP",
+          "borrow and return"
         ],
-        "hook": "Without pooling, every request pays the full TCP-and-auth tax to open a connection — a pool keeps them warm so you borrow instead of build.",
+        "hook": "Opening a database connection is slow. A pool keeps a few open, so your app borrows one instead of building a fresh one.",
         "beats": [
           {
             "kind": "definition",
             "layout": "paragraph",
-            "text": "Connection pooling maintains a set of pre-created, ready-to-use database connections. When a request needs the database, it borrows a connection from the pool, uses it, then returns it. The pool recycles it for the next request rather than destroying and re-creating it."
+            "text": "A connection pool is a set of database connections that stay open and ready. Your app borrows one, runs a query, then hands it back. Nothing gets thrown away between requests. HikariCP is the modern default, and Spring Boot wires it up for you."
           },
           {
             "kind": "why_exists",
             "layout": "paragraph",
-            "text": "It exists because creating a JDBC connection is expensive — it requires a TCP handshake, TLS negotiation, database authentication, and session setup. That costs 20 to 100 milliseconds per connection. At 100 requests per second, that overhead alone saturates your response budget."
+            "text": "It exists because opening a connection isn't cheap. There's a TCP handshake plus a login round-trip, often tens of milliseconds. Do that on every request and you'll burn time and flood the database. A pool pays that cost once."
           },
           {
             "kind": "parts_or_states",
             "layout": "bullets",
             "items": [
-              "Startup: pool creates N connections (typically 5–20) before the first request arrives",
-              "Borrow: request thread calls getConnection() — pool hands out an idle connection immediately",
-              "Return: after the try-with-resources block closes the connection, it goes back to the pool, not to the database",
-              "Wait: if all connections are in use, the thread waits up to connectionTimeout before throwing an exception"
+              "Startup opens a handful of connections before any request arrives.",
+              "Borrow hands a request an idle connection right away.",
+              "Return puts the connection back in the pool, not back to the database.",
+              "Waiting kicks in when all connections are busy, and it fails if none free up."
             ]
           },
           {
             "kind": "example",
             "layout": "paragraph",
-            "text": "Our orders app starts with 10 HikariCP connections to MySQL. When 10 concurrent requests query the orders table simultaneously, each gets a connection instantly — zero TCP overhead. The 11th request waits milliseconds until one is returned. Without pooling, each of those 10 requests would spend ~50ms just establishing a connection before running the query. [depth: how the pool manages the borrow-return lifecycle internally]"
+            "text": "Picture our orders service on a 4-core box. We run HikariCP with maximumPoolSize 20. Ten requests hit the orders table at once and each grabs a connection instantly. Here's the non-obvious part. The handshake already happened at startup, so the query starts with zero connection cost."
           },
           {
             "kind": "pitfalls",
             "layout": "bullets",
             "items": [
-              "Not closing connections — they don't return to the pool, gradually exhausting it until the app can't reach the database",
-              "Setting pool size too high — the database server has finite CPU; 200 simultaneous connections hurt more than they help",
-              "Using DriverManager.getConnection() directly in production code without a pool — fine for local testing, a performance disaster under real load"
+              "Forgetting to close a connection. It never returns, and the pool slowly drains.",
+              "Making the pool huge to handle load. Too many connections just overload the database.",
+              "Calling DriverManager.getConnection on every request. That's fine for a quick test, but it's a disaster under real traffic."
             ]
           }
         ],
-        "cap": "HikariCP is Spring Boot's default pool — with just spring.datasource.url set, you get a production-ready pool at no extra cost.",
+        "cap": "So a pool turns a costly handshake into a quick borrow. With Spring Boot, HikariCP gives you that for almost no setup.",
         "followup_handoff": [
           "How do you configure HikariCP's pool size and timeout settings in Spring Boot?",
           "What happens when all pooled connections are in use at the same time?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     },
     {
@@ -128,7 +133,7 @@
       "difficulty": "medium",
       "importance": "high",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Whether you know HikariCP is the standard pool and its key settings.",
         "common_mistake": "Over-tuning or setting an unnecessarily huge maximum-pool-size.",
@@ -194,57 +199,59 @@
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "Java 17 app connecting to a MySQL database with JDBC to query an orders table",
+        "standard_example": "HikariCP tuned through spring.datasource.hikari properties",
+        "familiarity_override": true,
+        "familiarity_override_reason": "This question is about tuning HikariCP properties, not the JPA starter chain, so the codex datasource example doesn't fit.",
         "familiarity_anchors": [
           "application.properties",
-          "Spring Boot auto-configuration",
+          "spring.datasource.hikari",
+          "HikariCP",
           "connection pool"
         ],
-        "hook": "HikariCP wins on being small and fast — and its defaults are good enough that the real skill is resisting the urge to crank maximum-pool-size.",
+        "hook": "HikariCP is small and fast, and its defaults are already good. The real skill is resisting the urge to crank the pool size.",
         "beats": [
           {
             "kind": "definition",
             "layout": "paragraph",
-            "text": "HikariCP is Spring Boot's default JDBC connection pool — it's automatically included when you add spring-boot-starter-data-jpa or spring-boot-starter-jdbc. You configure it through application.properties using the spring.datasource.hikari prefix, and Spring Boot's auto-configuration wires it up without any boilerplate bean code."
+            "text": "HikariCP is Spring Boot's default connection pool. Add the JDBC or JPA starter and it's already there. Starters bring in opinionated defaults, so you don't write a DataSource bean. You just set a few properties under spring.datasource.hikari and you're done."
           },
           {
             "kind": "why_exists",
             "layout": "paragraph",
-            "text": "It's the default because it's consistently the fastest Java connection pool in benchmarks, with a minimal footprint and excellent production reliability. Knowing its key properties means you can tune it confidently instead of guessing at defaults."
+            "text": "It's the default because it's fast and tiny, and it wins most pool benchmarks. Knowing its key settings lets you tune it on purpose instead of guessing."
           },
           {
             "kind": "parts_or_states",
             "layout": "bullets",
             "items": [
-              "maximum-pool-size (default 10): the hard ceiling on connections; increase this if threads wait for connections under peak load",
-              "minimum-idle (default = max): how many idle connections to keep warm; lower it to reduce DB server load during quiet periods",
-              "connection-timeout (default 30000ms): how long a thread waits for a connection before throwing an exception",
-              "idle-timeout (default 600000ms): how long an unused connection stays in the pool before being closed",
-              "max-lifetime (default 1800000ms): maximum age of any connection; prevents stale connections when the DB server recycles them server-side"
+              "The maximum-pool-size defaults to 10. It's the hard ceiling on connections.",
+              "The connection-timeout defaults to 30 seconds. That's how long a thread waits for a free connection.",
+              "The idle-timeout defaults to 10 minutes. After that, an unused connection gets retired.",
+              "The max-lifetime defaults to 30 minutes. It's the oldest a connection can get before HikariCP swaps it."
             ]
           },
           {
             "kind": "example",
             "layout": "paragraph",
-            "text": "For our orders app we set maximum-pool-size=20 because load testing showed 10 connections caused thread waits at peak. We set max-lifetime=1740000 (29 minutes) because our MySQL server has wait_timeout=1800 — this ensures HikariCP retires connections just before MySQL closes them server-side, avoiding stale connection errors. [depth: how max-lifetime prevents connections from outliving the database server's own session timeout]"
+            "text": "For the orders service we set maximum-pool-size to 20 after load testing showed 10 wasn't enough. We also set max-lifetime to 29 minutes. Here's the non-obvious part. Our MySQL closes idle sessions at 30 minutes, so we retire connections just before the database does."
           },
           {
             "kind": "pitfalls",
             "layout": "bullets",
             "items": [
-              "Leaving max-lifetime above the database server's wait_timeout causes 'connection was closed by server' errors in production",
-              "Setting maximum-pool-size to the number of web server threads — more connections than the DB can handle efficiently actually slows queries",
-              "Not setting minimum-idle to a lower value than max means the pool keeps 20 connections open even at 3am when load is near zero"
+              "Leaving max-lifetime above the database timeout. You'll get random closed-connection errors.",
+              "Sizing the pool to your web thread count. More connections than the database likes just slows queries.",
+              "Keeping minimum-idle equal to max. The pool holds 20 connections even at 3am when nobody's around."
             ]
           }
         ],
-        "cap": "Start with the defaults, measure wait times and DB CPU under load, then tune maximum-pool-size up and max-lifetime down relative to your database's session timeout.",
+        "cap": "Start with the defaults. Measure wait times and database load, then nudge maximum-pool-size and max-lifetime from there.",
         "followup_handoff": [
           "What's the difference between connection-timeout and idle-timeout — they sound similar but do completely different things?",
           "How do you expose HikariCP metrics through Spring Boot Actuator?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     },
     {
@@ -257,7 +264,7 @@
       "difficulty": "medium",
       "importance": "high",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Whether you know pool exhaustion leads to blocking then timeout, not unlimited growth.",
         "common_mistake": "Believing the pool grows past its max under load.",
@@ -318,56 +325,56 @@
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "Java 17 app connecting to a MySQL database with JDBC to query an orders table",
+        "standard_example": "HikariCP with maximumPoolSize 10 starved by a slow report query",
         "familiarity_anchors": [
           "connection pool",
-          "thread queuing",
-          "timeout exception"
+          "wait queue",
+          "connection-timeout"
         ],
-        "hook": "A full pool applies backpressure, not expansion — callers queue up to 30 seconds, and chronic queuing is a leak or a slow query confessing.",
+        "hook": "When every connection is busy, the pool doesn't grow. The next caller waits in line, then fails if nothing frees up in time.",
         "beats": [
           {
             "kind": "definition",
             "layout": "paragraph",
-            "text": "Pool exhaustion is when every connection in the pool is currently checked out and a new request needs one. The requesting thread doesn't fail immediately — it joins a wait queue. If a connection is returned quickly, the thread continues normally. If not, it times out and throws an exception."
+            "text": "Pool exhaustion means every connection is in use and a new request still needs one. The thread doesn't fail right away. It joins a wait queue. If a connection comes back fast, it carries on. If not, it times out."
           },
           {
             "kind": "why_exists",
             "layout": "paragraph",
-            "text": "It exists as a safety valve. Throwing after a timeout is better than waiting forever and freezing threads indefinitely, or silently returning a null connection. The exception surfaces the problem so you can diagnose and fix the root cause."
+            "text": "It works as a safety valve. Failing after a timeout beats freezing a thread forever or handing back a broken connection. The error makes the real problem visible, so the cause is easy to find."
           },
           {
             "kind": "parts_or_states",
             "layout": "bullets",
             "items": [
-              "All connections checked out — thread enters wait queue immediately",
-              "Connection returned within connectionTimeout (30s default) — thread unblocks and proceeds",
-              "Timeout reached with no free connection — HikariCP throws SQLTransientConnectionException",
-              "Root causes: pool undersized for traffic, slow queries holding connections, or connection leaks never returning connections"
+              "All connections busy means the next thread joins the wait queue.",
+              "A returned connection within connection-timeout, 30 seconds by default, wakes the waiting thread.",
+              "No free connection in time throws SQLTransientConnectionException.",
+              "Common causes are a small pool, slow queries, or leaks that never return connections."
             ]
           },
           {
             "kind": "example",
             "layout": "paragraph",
-            "text": "Our orders app has maximum-pool-size=10. A slow reporting query holds 10 connections for 35 seconds. The 11th order request waits 30 seconds and then gets SQLTransientConnectionException: connection is not available. Setting leak-detection-threshold=5000 in application.properties makes HikariCP log a warning with stack trace for any connection held longer than 5 seconds — which fingers the slow report immediately. [depth: how HikariCP tracks acquisition time per connection to generate leak warnings]"
+            "text": "Our orders app runs maximum-pool-size 10. A slow report grabs all 10 for 35 seconds. The 11th order request waits 30 seconds, then fails. Here's the non-obvious part. Set leak-detection-threshold to 5000 and HikariCP logs the exact slow caller with a stack trace."
           },
           {
             "kind": "pitfalls",
             "layout": "bullets",
             "items": [
-              "Increasing pool size to fix exhaustion without diagnosing the cause — a leak will just exhaust the larger pool more slowly",
-              "Setting connectionTimeout too high — threads pile up for 5 minutes before failing, consuming server memory the whole time",
-              "Not enabling leak-detection-threshold in development — connection leaks that show up in production were silently present all along"
+              "Bumping pool size without finding the cause. A leak just drains the bigger pool too.",
+              "Setting connection-timeout very high. Threads pile up for minutes and eat memory.",
+              "Skipping leak-detection-threshold in dev. The leak stays hidden until it takes down production."
             ]
           }
         ],
-        "cap": "When you see pool exhaustion in logs, check three things in order: connection leaks (HikariCP warnings), slow queries holding connections too long, and then pool size relative to concurrency.",
+        "cap": "When you see exhaustion, check leaks first, then slow queries, then pool size. The fix is usually one of those three.",
         "followup_handoff": [
           "How does try-with-resources prevent connection leaks that lead to exhaustion?",
           "How do you choose the right maximum-pool-size for your application's traffic pattern?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     },
     {
@@ -380,7 +387,7 @@
       "difficulty": "medium",
       "importance": "high",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Whether you can define a connection leak and prevent it with try-with-resources.",
         "common_mistake": "Closing only on the happy path, or relying on GC to return connections.",
@@ -446,56 +453,56 @@
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "Java 17 app connecting to a MySQL database with JDBC to query an orders table",
+        "standard_example": "An orders query that returns early and skips close, leaking a connection",
         "familiarity_anchors": [
           "try-with-resources",
-          "finally block",
-          "AutoCloseable"
+          "connection leak",
+          "leak-detection-threshold"
         ],
-        "hook": "A connection leak is a borrow with no return — invisible in tests, fatal under load, and cured by the same try-with-resources you already know.",
+        "hook": "A connection leak is a borrow with no return. It hides in tests and only bites under real load.",
         "beats": [
           {
             "kind": "definition",
             "layout": "paragraph",
-            "text": "A connection leak happens when code checks out a connection from the pool and never returns it — usually because an exception fires before the close() call is reached. The pool doesn't know the connection is gone; it just sees one fewer available connection. Over time these accumulate and exhaust the pool."
+            "text": "A connection leak happens when your code borrows a connection and never gives it back. Usually an exception fires before the close call runs. The pool doesn't know it's gone. It just sees one fewer connection, and over time the pool runs dry."
           },
           {
             "kind": "why_exists",
             "layout": "paragraph",
-            "text": "It exists because pre-try-with-resources JDBC code required explicit finally blocks, and finally blocks themselves could throw exceptions that swallowed the close() call. It's easy to get wrong under error conditions, and the symptom — gradual pool shrinkage — takes hours to show up."
+            "text": "Leaks exist because old JDBC code leaned on finally blocks to close things. A finally block can throw too, and then the close gets skipped. The symptom is slow drainage, so it shows up hours later, not in a quick test."
           },
           {
             "kind": "parts_or_states",
             "layout": "bullets",
             "items": [
-              "Cause: exception thrown between getConnection() and conn.close(), with no try-with-resources protecting the close",
-              "Symptom: pool size shrinks slowly; connection wait times grow; SQLTransientConnectionException starts appearing hours or days later",
-              "Prevention: always open connections inside try-with-resources — Java guarantees close() runs even on exception or return",
-              "Detection: set spring.datasource.hikari.leak-detection-threshold=5000; HikariCP logs the acquisition stack trace for any connection held longer than 5 seconds"
+              "The cause is an exception between getConnection and close, with no try-with-resources guarding it.",
+              "The symptom is a pool that shrinks slowly while wait times creep up.",
+              "The fix is opening the connection inside try-with-resources so close always runs.",
+              "The detection is leak-detection-threshold, which logs any connection held too long."
             ]
           },
           {
             "kind": "example",
             "layout": "paragraph",
-            "text": "Our orders app had a query method that returned early on a null check before closing the ResultSet and Connection. Every null-order request leaked one connection. After 10 requests the pool was dry. Wrapping the whole block in try (Connection conn = ds.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) fixed it — Java closes both automatically. [depth: how AutoCloseable.close() is guaranteed by the JVM regardless of exception path]"
+            "text": "Our orders query returned early on a null check before it closed the connection. Every empty result leaked one. After 10 of them the pool ran dry. We wrapped it in try-with-resources and the leak vanished. Here's the non-obvious part. The JVM runs close even when the block throws."
           },
           {
             "kind": "pitfalls",
             "layout": "bullets",
             "items": [
-              "Relying on finally instead of try-with-resources — if the finally block itself throws, close() gets skipped",
-              "Not setting leak-detection-threshold in development — leaks that only show up under production load are invisible until the outage",
-              "Using JdbcTemplate handles this entirely — it never leaks because Spring owns the connection lifecycle, so prefer it when writing new code"
+              "Leaning on finally instead of try-with-resources. If finally throws, close gets skipped.",
+              "Skipping leak-detection-threshold in dev. The leak only surfaces during a production outage.",
+              "Trusting garbage collection to return connections. It's non-deterministic, so don't."
             ]
           }
         ],
-        "cap": "Try-with-resources for raw JDBC, or use JdbcTemplate and let Spring manage the lifecycle — either way, your pool stays healthy.",
+        "cap": "Use try-with-resources for raw JDBC, or let JdbcTemplate own the lifecycle. Either way your pool stays healthy.",
         "followup_handoff": [
           "How exactly does try-with-resources call close() even when an exception occurs inside the block?",
           "How does Spring JdbcTemplate manage connection lifecycle to eliminate leaks entirely?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     },
     {
@@ -508,7 +515,7 @@
       "difficulty": "medium",
       "importance": "medium",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Whether you know bigger pools aren't better and how to reason about sizing.",
         "common_mistake": "Setting a huge pool to 'handle load', causing DB contention and worse latency.",
@@ -565,59 +572,60 @@
       },
       "order": 5,
       "speakable_v2": {
-        "archetype": "E",
+        "archetype": "A",
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "Java 17 app connecting to a MySQL database with JDBC to query an orders table",
+        "standard_example": "A 4-core orders database tuned from a pool of 10 up to 15",
         "familiarity_anchors": [
-          "CPU cores",
-          "database concurrency",
-          "thread pool sizing"
+          "pool size",
+          "database CPU",
+          "concurrency"
         ],
-        "hook": "The counterintuitive truth: a pool of 10 often beats a pool of 100 — past a point, extra connections just make the database fight itself.",
+        "hook": "Bigger pools feel safer, but they're not. Past a point, extra connections just make the database fight itself.",
         "beats": [
           {
-            "kind": "optimising_for",
+            "kind": "definition",
             "layout": "paragraph",
-            "text": "The goal is the sweet spot where threads never wait for a connection but the database server isn't drowning in concurrent queries. Too small and your threads queue; too large and the database's CPU is overloaded and all queries slow down together."
+            "text": "Pool sizing is choosing how many connections to keep open. The trick is matching the database, not your app's thread count. A small busy pool usually beats a big idle one, because the database can only do so much work at once."
           },
           {
-            "kind": "options",
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Sizing matters because extra connections aren't free. Each one competes for database CPU, locks, and disk. Beyond a point, throughput stops rising and latency starts climbing instead."
+          },
+          {
+            "kind": "parts_or_states",
             "layout": "bullets",
             "items": [
-              "Start with the default (10) — works well for most single-instance OLTP apps with a reasonably fast database",
-              "Use HikariCP's formula: (CPU cores × 2) + disk spindles — for a 4-core SSD database server, that's about 9",
-              "Match to observed load: if Spring Boot Actuator shows hikaricp.connections.pending > 0 consistently, increase pool size",
-              "Reduce if database CPU is high: too many connections means too many simultaneous query executions competing for DB CPU"
+              "Start near the default of 10, which fits most single-instance apps.",
+              "Rough formula is cores times two, plus a bit for disks. A 4-core box lands around 9.",
+              "Measure under load. If pending connections show up, add a few and retest.",
+              "Watch database CPU. If it's pegged, the pool is too big, not too small."
             ]
           },
           {
-            "kind": "tradeoffs",
+            "kind": "example",
             "layout": "paragraph",
-            "text": "A small pool saves database resources but causes thread wait times under load. A large pool eliminates waits but overloads the database server — all queries compete for CPU and disk I/O simultaneously, making each individual query slower. The database is the bottleneck, not the pool size."
+            "text": "Take that 4-core orders database. We started at 10, load tested, and saw threads waiting at peak. We moved to 15 and the waits cleared. Here's the non-obvious part. Jumping to 100 made it slower, because the database choked on too many parallel queries."
           },
           {
-            "kind": "decision",
-            "layout": "paragraph",
-            "text": "Start at 10. Load test with realistic traffic. If hikaricp.connections.pending appears in metrics, increase by 5 at a time and re-test. If database CPU hits 80%+ under normal load, reduce pool size. For a 4-core MySQL server handling typical OLTP, 10–20 is almost always the right range."
-          },
-          {
-            "kind": "rethink_if",
+            "kind": "pitfalls",
             "layout": "bullets",
             "items": [
-              "You're running multiple app instances pointing to the same database — each has its own pool, so total connections = instances × pool size; multiply accordingly",
-              "Your workload is mostly long-running reports rather than fast OLTP queries — report queries hold connections much longer, so you need a separate DataSource for reporting with its own smaller pool"
+              "Sizing a huge pool to handle load. It adds database contention and slows everything.",
+              "Sizing to app threads. Match the pool to what the database can actually run at once.",
+              "Forgetting other instances. Five apps with pools of 20 mean 100 connections at the database."
             ]
           }
         ],
-        "cap": "The default of 10 is a reasonable starting point. Measure pool wait time and database CPU under your actual load, then tune in small steps — don't guess.",
+        "cap": "Start at 10, measure wait time and database CPU, then tune in small steps. A small busy pool wins.",
         "followup_handoff": [
           "How do you expose HikariCP metrics through Spring Boot Actuator to monitor pool wait time?",
           "Should a batch-processing background job share the same connection pool as the web request handler?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     },
     {
@@ -630,7 +638,7 @@
       "difficulty": "medium",
       "importance": "medium",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Whether you can distinguish borrow-wait timeout from idle-retirement timeout.",
         "common_mistake": "Confusing the two, or thinking idleTimeout affects active connections.",
@@ -701,33 +709,24 @@
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "Java 17 app connecting to a MySQL database with JDBC to query an orders table",
+        "standard_example": "HikariCP at 3am, idleTimeout trimming the pool while connectionTimeout covers the morning surge",
         "familiarity_anchors": [
-          "HikariCP properties",
-          "thread waiting",
-          "idle resources"
+          "connectionTimeout",
+          "idleTimeout",
+          "max-lifetime",
+          "HikariCP"
         ],
-        "hook": "connectionTimeout is how long you wait to GET a connection; idleTimeout is how long an unused one is allowed to LINGER — same word, opposite ends of the lifecycle.",
+        "hook": "Two settings, two very different jobs. One controls how long you wait for a connection. The other controls how long an idle one sticks around.",
         "beats": [
           {
             "kind": "what_each_is",
-            "layout": "grouped_paragraphs",
-            "items": [
-              {
-                "term": "connectionTimeout",
-                "text": "How long your application thread waits when it requests a connection and none are immediately available. It's client-side blocking time. Default is 30 seconds. If the pool is exhausted and no connection is freed in time, HikariCP throws SQLTransientConnectionException."
-              },
-              {
-                "term": "idleTimeout",
-                "text": "How long an unused connection can sit in the pool before HikariCP closes it and removes it. It's pool housekeeping. Default is 10 minutes. Helps shrink the pool during low-traffic periods so you're not holding open database connections the app doesn't need."
-              }
-            ]
+            "layout": "paragraph",
+            "text": "connectionTimeout is about borrowing. It's the longest a thread waits for a free connection, and it defaults to 30 seconds. idleTimeout is about cleanup. It's how long an unused connection sits before HikariCP closes it, and it defaults to 10 minutes."
           },
           {
             "kind": "differences",
             "layout": "mini_table",
             "columns": [
-              "Aspect",
               "connectionTimeout",
               "idleTimeout"
             ],
@@ -735,22 +734,22 @@
               {
                 "axis": "What it measures",
                 "values": [
-                  "Thread wait for a connection to become available",
-                  "How long an unused connection sits idle in the pool"
+                  "Wait time for a free connection.",
+                  "Idle time before HikariCP retires it."
                 ]
               },
               {
-                "axis": "Who it affects",
+                "axis": "Who feels it",
                 "values": [
-                  "Application threads requesting connections",
-                  "Pool cleanup — which connections to close"
+                  "Threads asking for a connection.",
+                  "Pool cleanup picking what to drop."
                 ]
               },
               {
                 "axis": "Default",
                 "values": [
-                  "30,000 ms (30 seconds)",
-                  "600,000 ms (10 minutes)"
+                  "30 seconds.",
+                  "10 minutes."
                 ]
               }
             ]
@@ -758,21 +757,21 @@
           {
             "kind": "when_to_pick",
             "layout": "paragraph",
-            "text": "Also worth knowing: maxLifetime (default 30 minutes) is arguably the most critical — every connection is recycled at this age regardless of use. Set it slightly below your database server's wait_timeout to prevent HikariCP from trying to use connections the database has already closed server-side."
+            "text": "Tune connectionTimeout when you want requests to fail fast under load. Tune idleTimeout with minimum-idle when you want the pool to shrink during quiet hours. And always check max-lifetime, the third setting people forget."
           },
           {
             "kind": "tiny_example",
             "layout": "paragraph",
-            "text": "At 3am our orders app is quiet; 9 of 10 connections are idle. After 10 minutes (idleTimeout) HikariCP closes those 9, keeping only minimumIdle connections alive. At 9am when traffic surges, a request waits a few milliseconds for HikariCP to open new connections — that brief pause is connectionTimeout at work (well under the 30-second limit)."
+            "text": "At 3am our orders app is quiet. idleTimeout trims the pool down to minimum-idle. The gotcha is max-lifetime. Set it above the database timeout and you'll hit closed-connection errors."
           }
         ],
-        "cap": "connectionTimeout = 'how long I wait to get one', idleTimeout = 'how long the pool keeps unused ones'. Both are tunable; maxLifetime is the third you should always check.",
+        "cap": "So connectionTimeout is the wait to get one. idleTimeout is how long an unused one lingers. Don't forget max-lifetime.",
         "followup_handoff": [
           "Why should maxLifetime always be set lower than the database server's wait_timeout?",
           "What is minimumIdle and how does it interact with idleTimeout to control pool shrinkage?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     },
     {
@@ -785,7 +784,7 @@
       "difficulty": "easy",
       "importance": "high",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Whether you know Spring Boot auto-configures HikariCP from properties.",
         "common_mistake": "Manually creating a DataSource bean when auto-config already does it.",
@@ -851,56 +850,59 @@
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "Java 17 app connecting to a MySQL database with JDBC to query an orders table",
+        "standard_example": "Spring Boot auto-configuring a HikariCP DataSource from spring.datasource properties",
+        "familiarity_override": true,
+        "familiarity_override_reason": "This question is about Spring Boot building the pool from properties, not the JPA starter chain, so the codex datasource example doesn't fit.",
         "familiarity_anchors": [
-          "Spring Boot auto-configuration",
-          "application.properties",
-          "DataSource bean"
+          "spring.datasource",
+          "HikariCP",
+          "DataSource",
+          "auto-configuration"
         ],
-        "hook": "In Spring Boot you never new-up a pool — add a starter, set three properties, and a tuned HikariCP DataSource appears, auto-wired and ready.",
+        "hook": "In Spring Boot you never build a pool by hand. Add a starter, set three properties, and a tuned HikariCP pool just appears.",
         "beats": [
           {
             "kind": "definition",
             "layout": "paragraph",
-            "text": "Spring Boot's DataSourceAutoConfiguration detects HikariCP on the classpath and creates a fully configured DataSource bean automatically. You only need to supply the JDBC URL, username, and password. The pool starts, maintains connections, and handles cleanup without any explicit configuration code."
+            "text": "Spring Boot auto-configures a pooled DataSource from your spring.datasource properties. Starters bring in opinionated defaults, and HikariCP comes along for free. You give it the URL, username, and password. Spring builds the pool and injects it. No DataSource bean needed."
           },
           {
             "kind": "why_exists",
             "layout": "paragraph",
-            "text": "Auto-configuration exists because every Spring Boot app connecting to a database needs a DataSource — and the correct defaults (pool size 10, 30-second timeout, 30-minute max lifetime) suit most applications without any customization. Convention over configuration means you only specify what differs from the defaults."
+            "text": "Auto-config exists because every app that talks to a database needs a DataSource. The defaults fit most apps, so you only set what's different. That's convention over configuration in action."
           },
           {
             "kind": "parts_or_states",
             "layout": "bullets",
             "items": [
-              "Classpath detection: adding spring-boot-starter-data-jpa or spring-boot-starter-jdbc pulls HikariCP automatically",
-              "Minimal config: spring.datasource.url, spring.datasource.username, spring.datasource.password — that's it for a working pool",
-              "Tuning: spring.datasource.hikari.maximum-pool-size, connection-timeout, max-lifetime override the defaults",
-              "Override: define your own @Bean DataSource and Spring Boot backs off from auto-configuration entirely"
+              "Detection means the JDBC or JPA starter pulls in HikariCP automatically.",
+              "Minimal config is just url, username, and password for a working pool.",
+              "Tuning happens through spring.datasource.hikari properties that override the defaults.",
+              "Override means you define your own DataSource bean and Spring backs off."
             ]
           },
           {
             "kind": "example",
             "layout": "paragraph",
-            "text": "Our orders app sets spring.datasource.url=jdbc:mysql://localhost:3306/orders_db and credentials — three lines. Spring Boot creates a HikariCP pool with 10 connections. We add spring.datasource.hikari.maximum-pool-size=20 for production because load testing showed 10 connections was the bottleneck. Spring Boot Actuator then exposes pool metrics at /actuator/metrics/hikaricp.connections. [depth: how DataSourceAutoConfiguration checks the classpath and which pool takes priority when multiple are present]"
+            "text": "Our orders app sets the MySQL url plus credentials. Three lines, and Spring gives us a HikariCP pool of 10. We bump maximum-pool-size to 20 for production. Here's the non-obvious part. Actuator then exposes pool metrics, so we watch active and pending connections live."
           },
           {
             "kind": "pitfalls",
             "layout": "bullets",
             "items": [
-              "Manually creating a DataSource bean without @Primary when auto-configuration is also active — Spring finds two candidates and throws NoUniqueBeanDefinitionException",
-              "Forgetting to set max-lifetime below the database's wait_timeout — causes stale connection errors that only appear under production load or after the app idles overnight",
-              "Tuning maximum-pool-size without load testing — an oversized pool doesn't help and wastes database server connections"
+              "Defining a DataSource bean without @Primary while auto-config still runs. Spring finds two and complains.",
+              "Leaving max-lifetime above the database timeout. Stale connections error out after an idle night.",
+              "Bumping maximum-pool-size with no load test. A bigger pool just wastes database connections."
             ]
           }
         ],
-        "cap": "Three lines of application.properties give you a production-ready HikariCP pool. Add spring.datasource.hikari.* properties only when load testing or monitoring tells you to.",
+        "cap": "Three lines of properties give you a production-ready HikariCP pool. Add hikari settings only when load testing says so.",
         "followup_handoff": [
           "How do you configure two separate DataSources in the same Spring Boot app — for example, a primary DB and a read replica?",
           "What Spring Boot Actuator endpoints expose HikariCP pool health and metrics?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     }
   ]
