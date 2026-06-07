@@ -10,7 +10,7 @@
       "difficulty": "easy",
       "importance": "high",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Whether you understand what each ACID property means in practice and can explain why each matters with concrete examples.",
         "common_mistake": "Memorizing the four-letter acronym without understanding scenarios where each property prevents data corruption or loss.",
@@ -40,6 +40,26 @@
             "content": "@Service\npublic class BankTransferService {\n    @Autowired\n    private AccountRepository accountRepo;\n\n    @Transactional  // Spring enforces ACID properties\n    public void transferMoney(Long fromId, Long toId, BigDecimal amount) {\n        var fromAccount = accountRepo.findById(fromId)\n            .orElseThrow(() -> new AccountNotFoundException(fromId));\n        var toAccount = accountRepo.findById(toId)\n            .orElseThrow(() -> new AccountNotFoundException(toId));\n\n        // Atomicity: both operations succeed or both fail\n        fromAccount.debit(amount);  // throws if insufficient funds\n        toAccount.credit(amount);\n\n        accountRepo.save(fromAccount);  // Consistency: balance constraints checked\n        accountRepo.save(toAccount);    // Isolation: other transactions see old or new state, not in-between\n        // Durability: after commit, changes survive crashes\n    }\n}"
           },
           {
+            "type": "code_example",
+            "title": "The Same Transaction in Raw SQL (BEGIN, COMMIT, ROLLBACK, SAVEPOINT)",
+            "content": "```sql\n-- A money transfer as one atomic unit of work.\nBEGIN;                                          -- start the transaction\n\nUPDATE accounts SET balance = balance - 100\n WHERE id = 1;                                  -- debit the sender\n\nSAVEPOINT after_debit;                           -- optional checkpoint\n\nUPDATE accounts SET balance = balance + 100\n WHERE id = 2;                                  -- credit the receiver\n\n-- If the credit looked wrong, undo just that step:\n--   ROLLBACK TO SAVEPOINT after_debit;\n\nCOMMIT;                                          -- make both changes permanent\n\n-- If anything had failed before COMMIT, we would run:\n--   ROLLBACK;   -- the database stays exactly as it was before BEGIN\n```\n\n*Everything between `BEGIN` and `COMMIT` is one all-or-nothing unit. `SAVEPOINT` lets you undo part of the work without abandoning the whole transaction.*"
+          },
+          {
+            "type": "phase",
+            "title": "Why Atomicity Needs an Explicit Boundary",
+            "content": "A single SQL statement is already atomic on its own. The danger appears when **two statements must agree** — a debit and a credit, an order and a stock decrement. Without a transaction boundary, each statement commits the instant it runs. If the process dies between them, the first change is permanent and the second never happens, leaving the data **inconsistent with no error reported**.\n\nA transaction draws a line around the group: every statement inside it commits together, or none of them do. The before-and-after below shows the same two updates without and with that boundary."
+          },
+          {
+            "type": "before_code",
+            "title": "Without a transaction — a crash leaves money missing",
+            "content": "```sql\n-- No BEGIN/COMMIT: each UPDATE commits on its own.\nUPDATE accounts SET balance = balance - 100 WHERE id = 1;  -- committed immediately\n-- *** application crashes / connection drops here ***\nUPDATE accounts SET balance = balance + 100 WHERE id = 2;  -- never runs\n\n-- Result: sender lost 100, receiver gained nothing. Money vanished.\n```"
+          },
+          {
+            "type": "after_code",
+            "title": "Wrapped in one transaction — all or nothing",
+            "content": "```sql\nBEGIN;\nUPDATE accounts SET balance = balance - 100 WHERE id = 1;  -- not yet permanent\nUPDATE accounts SET balance = balance + 100 WHERE id = 2;  -- not yet permanent\nCOMMIT;                                                     -- both land together\n\n-- A crash before COMMIT changes nothing — the database rolls back to its prior state.\n```\n\n*In Spring you rarely type `BEGIN`/`COMMIT` — `@Transactional` on the service method draws this exact boundary for you, committing on success and rolling back on a runtime exception.*"
+          },
+          {
             "type": "when_to_use",
             "title": "When You Need ACID Transaction Guarantees",
             "content": "Use transactions with ACID guarantees when **multiple database operations must succeed or fail together**. Bank transfers between accounts require atomicity so money isn't lost or duplicated. E-commerce order placement needs consistency to prevent selling more inventory than exists. Multi-user applications need isolation so concurrent updates don't overwrite each other. Financial records need durability so committed transactions survive hardware failures. Any operation where partial completion corrupts your data requires ACID properties."
@@ -65,7 +85,7 @@
           {
             "type": "speakable_answer",
             "title": "How to Answer in an Interview",
-            "content": "ACID stands for Atomicity, Consistency, Isolation, and Durability — four properties that make database transactions reliable. Let me explain each with a bank transfer example. Atomicity means all-or-nothing execution. If you're transferring money between accounts, either both the debit and credit happen or neither does. You can't have money disappear because the debit succeeded but the credit failed. Consistency means the database enforces its rules. If there's a constraint that account balances can't go negative, the transaction won't commit if it would violate that rule. Isolation prevents concurrent transactions from interfering with each other. If two people transfer money from the same account simultaneously, isolation ensures they each see a consistent view and don't corrupt the balance. Durability guarantees that once a transaction commits, the changes survive system crashes. Your deposited money is safe even if the server loses power one second later. In Spring Boot applications, the at-Transactional annotation enforces these properties automatically. Without ACID, multi-step operations would leave your data in inconsistent states — money could vanish, inventory counts could be wrong, and user registrations could be half-completed. That's why ACID is fundamental to reliable database applications, especially in scenarios like financial transactions, order processing, or any workflow where partial completion would corrupt your data."
+            "content": "ACID is four properties that make database transactions reliable: Atomicity, Consistency, Isolation, and Durability. The easiest way to explain them is a bank transfer. Atomicity means all or nothing. You debit one account and credit another, and either both happen or neither does, so money can't vanish because the debit succeeded but the credit failed. Consistency means the database keeps its rules. If a balance can't go negative, a transfer that would break that rule won't commit. Isolation means concurrent transactions don't step on each other. Two transfers from the same account each see a consistent view instead of a half-updated balance. Durability means once you commit, the change survives. Even if the server loses power a second later, the committed transfer is still there. In SQL you wrap the steps between BEGIN and COMMIT, and you ROLLBACK if anything fails. In Spring Boot, the @Transactional annotation draws that same boundary for you and rolls back on a runtime exception. The thing freshers miss is that ACID isn't automatic for multi-step work. Without an explicit transaction, each statement commits on its own, so a crash in the middle leaves your data half-written. That's why ACID matters for transfers, order processing, and anything where a partial result would corrupt your data."
           }
         ]
       },
@@ -83,55 +103,56 @@
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "normalized MySQL schema for a blog app with users, posts, and comments",
+        "standard_example": "a bank transfer in SQL with BEGIN, two UPDATE accounts, and COMMIT",
         "familiarity_anchors": [
-          "ACID",
-          "bank transfer",
-          "Spring @Transactional"
+          "Atomic — all or nothing",
+          "BEGIN and COMMIT",
+          "ROLLBACK",
+          "bank transfer"
         ],
-        "hook": "ACID is four letters, but each one prevents a different category of data disaster.",
+        "hook": "ACID is four letters, and each one blocks a different way your data can break.",
         "beats": [
           {
             "kind": "definition",
             "layout": "paragraph",
-            "text": "ACID stands for Atomicity (all or nothing), Consistency (rules stay intact), Isolation (concurrent transactions don't interfere), and Durability (committed data survives crashes). Together they guarantee reliable database transactions."
+            "text": "ACID is the promise a database makes about a transaction. It names four properties. Atomic — all or nothing. Consistency keeps your rules valid. Isolation keeps concurrent transactions apart. Durability means committed data sticks."
           },
           {
             "kind": "why_exists",
             "layout": "paragraph",
-            "text": "Without ACID, a blog comment insertion that also updates the post's comment_count could succeed halfway — comment saved, count not updated — leaving your data inconsistent with no error thrown."
+            "text": "Without these guarantees, half-finished work can wreck your data. Say a transfer debits one account but the credit fails. Money just vanishes. That's the mess ACID exists to stop."
           },
           {
             "kind": "parts_or_states",
             "layout": "bullets",
             "items": [
-              "Atomicity: both the comment insert and the count increment commit together or both roll back",
-              "Consistency: the count can't go negative — constraints enforce valid state",
-              "Isolation: two simultaneous post publishes don't see each other's draft state",
-              "Durability: once the transaction commits, a power cut won't undo it"
+              "Atomicity: every step commits together, or they all roll back.",
+              "Consistency: constraints hold, so a balance can't break its own rules.",
+              "Isolation: two transactions don't see each other's half-done work.",
+              "Durability: once it's committed, a crash won't undo it."
             ]
           },
           {
             "kind": "example",
             "layout": "paragraph",
-            "text": "In Spring Boot: @Transactional on your service method handles all four. It starts a transaction, runs your repository calls, and commits on success or rolls back on RuntimeException. For our blog's createPost() method that inserts a post AND updates the user's post_count, @Transactional ensures either both happen or neither does. candidates miss: @Transactional doesn't roll back on checked exceptions by default — only on RuntimeException. Add rollbackFor = Exception.class if you need checked exception rollback."
+            "text": "Picture a bank transfer in SQL. You start with BEGIN. Then one UPDATE accounts debits the sender. Another UPDATE accounts credits the receiver. Then COMMIT makes it final. If a step fails first, you ROLLBACK and nothing changed. Here's the non-obvious part. The database might crash right after COMMIT. Durability still keeps your change safe."
           },
           {
             "kind": "pitfalls",
             "layout": "bullets",
             "items": [
-              "Expecting checked exceptions to trigger rollback without rollbackFor — they don't by default",
-              "Calling a @Transactional method from within the same class — Spring's proxy is bypassed and transactions won't work"
+              "Thinking every statement is already one transaction. Multi-step work needs an explicit boundary.",
+              "Expecting a checked exception to roll back a Spring transaction. By default it won't, only a runtime exception does."
             ]
           }
         ],
-        "cap": "ACID is what @Transactional delivers — understand all four letters to debug transaction problems confidently.",
+        "cap": "Get all four letters and you'll know exactly what a transaction protects, and what breaks without it.",
         "followup_handoff": [
           "What happens if an exception is thrown inside a @Transactional method?",
           "What is transaction propagation in Spring?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     },
     {
@@ -144,7 +165,7 @@
       "difficulty": "easy",
       "importance": "high",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Practical Spring knowledge — at-Transactional is used in almost every Spring Data application, so you must understand its behavior.",
         "common_mistake": "Thinking at-Transactional works when called from within the same class — Spring's AOP proxy doesn't intercept self-invocation, so the transaction never starts.",
@@ -163,14 +184,24 @@
             "content": "Spring's **at-Transactional annotation** uses AOP (Aspect-Oriented Programming) to automatically wrap methods in database transactions. When you call a transactional method, Spring's **proxy** intercepts the call, starts a database transaction before entering the method, and commits the transaction if the method completes successfully. If an **unchecked exception** (RuntimeException or Error) is thrown, Spring automatically rolls back the transaction. This declarative approach eliminates boilerplate try-catch-commit-rollback code.\n\nThink of it like a bodyguard: the proxy stands between the caller and your method, handling all the transaction lifecycle events (begin, commit, rollback) so your business logic stays clean.\n\nThe key is understanding that this only works through Spring proxies — calling a transactional method from within the same class bypasses the proxy entirely."
           },
           {
-            "type": "concept_map",
-            "title": "How @Transactional Works",
-            "content": "amber|Proxy|~Spring AOP wraps the bean|intercepts the method call|opens a transaction|commits or rolls back\nblue|Rollback|~On RuntimeException by default|checked exceptions do NOT roll back|use rollbackFor to change|common trap\nemerald|Self-invocation|~Internal call bypasses proxy|this.method() = no transaction|call via injected bean|or use AspectJ\nviolet|Scope|~Use on the service layer|not the controller|keep the unit of work clear|one transaction per use case"
+            "type": "flow_diagram",
+            "title": "The @Transactional Commit Lifecycle",
+            "content": "```mermaid\nflowchart TD\n    A[Caller invokes method<br/>through Spring proxy] --> B[Proxy opens<br/>a transaction]\n    B --> C[Your method body runs<br/>repository calls execute]\n    C --> D{Method outcome?}\n    D -->|returns normally| E[Proxy COMMITs<br/>all changes persist]\n    D -->|RuntimeException thrown| F[Proxy ROLLBACKs<br/>all changes undone]\n    D -->|checked Exception thrown| G[Proxy COMMITs by default<br/>use rollbackFor to change]\n    E --> H[Connection returned to pool]\n    F --> H\n    G --> H\n```\n\n*The proxy — not your code — runs begin, commit, and rollback. By default only a RuntimeException triggers a rollback.*"
           },
           {
             "type": "code_example",
             "title": "Using @Transactional in a Spring Service",
             "content": "@Service\npublic class OrderService {\n    @Autowired\n    private OrderRepository orderRepo;\n    @Autowired\n    private InventoryService inventoryService;\n\n    @Transactional  // Spring starts transaction here\n    public Order createOrder(OrderRequest request) {\n        var order = new Order(request.customerId(), request.items());\n        orderRepo.save(order);  // persisted in transaction\n\n        inventoryService.reserveStock(request.items());  // also in same transaction\n\n        return order;  // Spring commits transaction on successful return\n    }\n\n    @Transactional(readOnly = true)  // optimization for read-only operations\n    public Optional<Order> findOrder(Long orderId) {\n        return orderRepo.findById(orderId);  // read-only transaction\n    }\n    // If createOrder throws RuntimeException, Spring rolls back automatically\n}"
+          },
+          {
+            "type": "before_code",
+            "title": "Without @Transactional — the second write can orphan the first",
+            "content": "```java\n@Service\npublic class OrderService {\n    private final OrderRepository orderRepo;\n    private final InventoryRepository inventoryRepo;\n\n    // No @Transactional: each save() is its own transaction.\n    public void placeOrder(Order order) {\n        orderRepo.save(order);                 // committed immediately\n        inventoryRepo.decrementStock(order);   // if THIS throws...\n        // ...the order is already saved, but stock was never reduced.\n        // Result: an order exists for inventory you didn't deduct.\n    }\n}\n```"
+          },
+          {
+            "type": "after_code",
+            "title": "With @Transactional — both writes share one boundary",
+            "content": "```java\n@Service\npublic class OrderService {\n    private final OrderRepository orderRepo;\n    private final InventoryRepository inventoryRepo;\n\n    @Transactional  // one transaction wraps both writes\n    public void placeOrder(Order order) {\n        orderRepo.save(order);                 // not yet committed\n        inventoryRepo.decrementStock(order);   // not yet committed\n    }   // proxy commits here on success, or rolls back if either throws\n}\n```\n\n*If `decrementStock` throws a `RuntimeException`, Spring rolls back the order insert too — there is no orphaned order.*"
           },
           {
             "type": "when_to_use",
@@ -216,54 +247,55 @@
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "normalized MySQL schema for a blog app with users, posts, and comments",
+        "standard_example": "a service method that inserts an order and reserves stock under one @Transactional",
         "familiarity_anchors": [
-          "AOP proxy",
-          "commit",
-          "rollback on exception"
+          "@Transactional",
+          "proxy",
+          "commit and rollback",
+          "self-invocation"
         ],
-        "hook": "@Transactional looks simple but has two non-obvious failure modes that trip up almost every Spring newcomer.",
+        "hook": "@Transactional looks like one line, but two quiet rules decide whether it even runs.",
         "beats": [
           {
             "kind": "definition",
             "layout": "paragraph",
-            "text": "@Transactional is a Spring annotation that wraps a method in a database transaction using AOP. Spring intercepts the call via a proxy, begins a transaction before the method runs, and commits on success or rolls back on RuntimeException."
+            "text": "@Transactional tells Spring to wrap a method in a database transaction. Spring builds a proxy around your bean. The proxy starts the transaction, runs your code, then commits. If a runtime exception escapes, it rolls back instead."
           },
           {
             "kind": "why_exists",
             "layout": "paragraph",
-            "text": "Without @Transactional, each repository save() call in your service runs in its own transaction. If the second save() throws an exception, the first one is already committed — your data is now inconsistent."
+            "text": "Without it, each repository save runs in its own transaction. If the second save fails, the first one's already stored. Now your data's half-written, with no error to warn you."
           },
           {
             "kind": "parts_or_states",
             "layout": "bullets",
             "items": [
-              "Commits: method returns normally — all DB changes are saved",
-              "Rolls back: method throws a RuntimeException — all changes undone",
-              "No rollback: method throws a checked Exception — changes ARE committed by default"
+              "Commit: the method returns normally, so Spring saves every change.",
+              "Rollback: a runtime exception escapes, so Spring undoes every change.",
+              "No rollback: a checked exception escapes, and the changes stay committed by default."
             ]
           },
           {
             "kind": "example",
             "layout": "paragraph",
-            "text": "In our blog's publishPost() service method: insert post, increment user.post_count. @Transactional ensures both happen atomically. If incrementing throws an unchecked exception, both operations roll back. In Spring Boot: place @Transactional on public service methods, not on repository methods (they're already transactional). non-obvious: self-invocation doesn't work — if publishPost() calls another @Transactional method in the same class, Spring's proxy isn't involved and a new transaction won't start. You'd need to inject the service into itself or restructure the code."
+            "text": "Say a service method inserts an order, then reserves stock. One @Transactional ties both into a single unit. If reserving stock throws, the order insert rolls back too. Here's the non-obvious part. If that method calls another @Transactional method in the same class, Spring skips the proxy. So the second annotation does nothing."
           },
           {
             "kind": "pitfalls",
             "layout": "bullets",
             "items": [
-              "Putting @Transactional on private methods — Spring's proxy can't intercept private methods",
-              "Calling @Transactional methods from within the same class (self-invocation) — the proxy is bypassed"
+              "Putting @Transactional on a private method. The proxy can't wrap it, so Spring ignores it.",
+              "Calling it from inside the same class. The call bypasses the proxy, so no new transaction starts."
             ]
           }
         ],
-        "cap": "@Transactional is powerful but only works through Spring's proxy — it won't help on private methods or self-calls.",
+        "cap": "@Transactional is handy, but it only works through the proxy. Private methods and self-calls slip right past it.",
         "followup_handoff": [
           "Why doesn't @Transactional work on private methods?",
           "How do you handle the self-invocation problem with @Transactional?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     },
     {
@@ -276,7 +308,7 @@
       "difficulty": "easy",
       "importance": "high",
       "reading_time_minutes": 2,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Practical judgment — knowing when to use transactions versus when a single operation doesn't need explicit transaction management.",
         "common_mistake": "Wrapping every single database call in at-Transactional even when there's only one operation — unnecessary overhead and code clutter.",
@@ -335,7 +367,7 @@
           {
             "type": "speakable_answer",
             "title": "How to Answer in an Interview",
-            "content": "You need a database transaction whenever multiple operations must succeed or fail together to keep your data consistent. The key question is: would partial completion break something? Let me give you concrete examples. Order creation almost always needs a transaction. You're inserting an order record, updating inventory quantities, and creating order line items. If the order saves but the inventory update fails, you've oversold your stock. That's inconsistent, so you wrap it in at-Transactional. Money transfers definitely need transactions. Debiting one account and crediting another must happen atomically — you can't have money vanish or duplicate. User registration is another common case. You're creating a user record, saving their profile, and maybe inserting an email verification token. If the user saves but the profile creation fails, you have orphaned data. On the flip side, single operations usually don't need explicit transactions. If you're just saving one entity or running one query, Spring Data repositories handle that atomically already. Wrapping every single repository call in at-Transactional is a common mistake freshers make — it adds overhead and clutter without benefit. Here's a practical rule: if you're calling multiple repository methods and all those changes must be visible together or not at all, use a transaction. If you're doing one thing that doesn't depend on anything else, skip it. Also think about concurrency. High-traffic inventory systems need transactions to prevent race conditions where two requests try to buy the last item simultaneously. In summary, use transactions for multi-step operations where consistency matters, like financial workflows, order processing, and user registration flows."
+            "content": "You need a database transaction whenever several operations have to succeed or fail together to keep your data consistent. The question to ask is simple: would a partial result break something? Let me give concrete cases. Placing an order usually needs one. You save the order, decrement stock, and maybe create line items, and if one step fails the others must not stick. A money transfer needs one, because a debit and a credit have to move together. User registration often needs one, since saving a user but failing to create their profile leaves orphaned data. On the other side, single operations usually don't need an explicit transaction. A single insert or a single read is already atomic, and Spring Data repositories handle that for you. Wrapping every single call in @Transactional is a common fresher mistake, because it adds overhead and holds database connections for no reason. A practical rule: if you call several repository methods and all the changes must be visible together or not at all, use a transaction. If you're doing one independent thing, skip it. Also think about concurrency, since high-traffic updates to the same row may need a transaction to avoid race conditions. In short, use transactions for multi-step writes where consistency matters, and leave plain reads and single writes alone."
           }
         ]
       },
@@ -348,86 +380,60 @@
       },
       "order": 5,
       "speakable_v2": {
-        "archetype": "E",
+        "archetype": "A",
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "normalized MySQL schema for a blog app with users, posts, and comments",
+        "standard_example": "placing an order: decrement stock and save the order row as one unit",
         "familiarity_anchors": [
-          "multi-step operation",
-          "partial update",
-          "service layer"
+          "multi-step write",
+          "partial failure",
+          "service method",
+          "@Transactional"
         ],
-        "hook": "One rule for transactions: if partial success is a data integrity problem, you need a transaction.",
+        "hook": "The test for a transaction is simple. Could half-finished work corrupt your data?",
         "beats": [
           {
-            "kind": "optimising_for",
+            "kind": "definition",
             "layout": "paragraph",
-            "text": "You're deciding which service methods need @Transactional. Wrapping everything is wasteful — transactions have overhead. Only operations where partial completion corrupts data need them."
+            "text": "You need a transaction when several operations must succeed or fail as one. The deciding question is whether a partial result breaks your data. If half-done work leaves things inconsistent, wrap it. If not, you don't need one."
           },
           {
-            "kind": "options",
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "A single insert or read is already atomic on its own. The risk shows up the moment one action depends on another. That's when a partial failure quietly corrupts your state."
+          },
+          {
+            "kind": "parts_or_states",
             "layout": "bullets",
             "items": [
-              "Definitely need a transaction: publish post + update post_count (two writes that must succeed together)",
-              "Definitely need a transaction: user registration + default settings insert (partial creates broken accounts)",
-              "Don't need a transaction: single SELECT query, single INSERT with no side effects",
-              "Maybe need a transaction: depends on business rules — inserting a comment might or might not also update a count"
+              "Multiple writes that must agree, like an order plus its stock update.",
+              "Money movement, where a debit and a credit can't drift apart.",
+              "Read-modify-write under load, where two users mustn't lose each other's update.",
+              "Not needed for one simple insert, update, or read."
             ]
           },
           {
-            "kind": "tradeoffs",
-            "layout": "mini_table",
-            "columns": [
-              "Operation",
-              "Needs transaction?",
-              "Why"
-            ],
-            "rows": [
-              {
-                "axis": "Get post by ID",
-                "values": [
-                  "No",
-                  "Read-only, no partial state possible"
-                ]
-              },
-              {
-                "axis": "Create post + update count",
-                "values": [
-                  "Yes",
-                  "Partial failure corrupts data"
-                ]
-              },
-              {
-                "axis": "Log an analytics event",
-                "values": [
-                  "Maybe",
-                  "Depends on tolerance for loss"
-                ]
-              }
-            ]
-          },
-          {
-            "kind": "decision",
+            "kind": "example",
             "layout": "paragraph",
-            "text": "Put @Transactional on service methods that call multiple repository operations. Keep it off single-read methods. Spring Data JPA repositories are already transactional for individual calls — @Transactional on the service spans multiple calls into one unit."
+            "text": "Take placing an order. You decrement stock, then save the order row. One @Transactional makes both land together, or neither does. Here's the non-obvious part. A plain GET endpoint needs none of this. Wrapping every read in a transaction just holds connections for no reason."
           },
           {
-            "kind": "rethink_if",
+            "kind": "pitfalls",
             "layout": "bullets",
             "items": [
-              "You've put @Transactional on every single method including GET endpoints — you're holding DB connections unnecessarily",
-              "You're calling two repository saves without @Transactional — ask yourself what happens if the second one fails"
+              "Wrapping single reads in a transaction. It adds overhead and holds connections.",
+              "Skipping a transaction on two related writes. A mid-way failure leaves a broken record."
             ]
           }
         ],
-        "cap": "Ask: what does partial success look like? If it's a data integrity problem — use a transaction. If not — skip it.",
+        "cap": "Ask what a partial success looks like. If that's a data problem, use a transaction.",
         "followup_handoff": [
           "Should @Transactional go on the service layer or the repository layer?",
           "What is the overhead of a database transaction?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     },
     {
@@ -440,7 +446,7 @@
       "difficulty": "medium",
       "importance": "high",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Whether you understand the trade-off between consistency and performance in concurrent database access and can explain what anomalies each level prevents.",
         "common_mistake": "Thinking SERIALIZABLE is always best — it prevents all anomalies but serializes concurrent transactions, severely hurting throughput.",
@@ -499,7 +505,7 @@
           {
             "type": "speakable_answer",
             "title": "How to Answer in an Interview",
-            "content": "The four isolation levels are READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, and SERIALIZABLE. They control what changes from other concurrent transactions you can see. Each level prevents specific read anomalies. Let me explain the three anomalies first. A dirty read is when you read uncommitted data that might get rolled back — you're seeing changes that never actually happened. A non-repeatable read is when you read the same row twice and get different values because another transaction modified it in between. A phantom read is when you run the same query twice and see different rows because another transaction inserted or deleted matching rows. Now here's what each level prevents. READ UNCOMMITTED prevents nothing — it's rarely used because dirty reads are too risky. READ COMMITTED prevents dirty reads but allows non-repeatable and phantom reads. This is PostgreSQL's default and works well for most applications. REPEATABLE READ prevents dirty and non-repeatable reads, ensuring the same row always returns the same value within your transaction. MySQL uses this as its default. SERIALIZABLE prevents all three anomalies by making transactions execute as if they ran one after another sequentially. Here's the key trade-off freshers miss: higher isolation gives better consistency but hurts performance and concurrency. SERIALIZABLE is the safest but can cause major bottlenecks because transactions have to wait for locks. In practice, READ COMMITTED is usually good enough unless you're doing financial calculations where you need consistent totals across multiple reads. Then you'd use REPEATABLE READ or SERIALIZABLE. Always know your database's default — MySQL's REPEATABLE READ is stricter than PostgreSQL's READ COMMITTED, which can cause confusion if you switch databases."
+            "content": "The four isolation levels are READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, and SERIALIZABLE. They control how much one transaction sees of another's uncommitted changes, and each one blocks more read anomalies. There are three anomalies to know. A dirty read is reading data another transaction hasn't committed yet, data that might get rolled back. A non-repeatable read is reading the same row twice and getting different values because another transaction changed it in between. A phantom read is running the same query twice and seeing new rows appear because another transaction inserted matching data. Now the levels. READ UNCOMMITTED blocks nothing, so it's rarely used. READ COMMITTED stops dirty reads and is PostgreSQL's default. REPEATABLE READ also stops non-repeatable reads and is MySQL's default. SERIALIZABLE stops all three, including phantoms, by making transactions behave as if they ran one at a time. The trade-off freshers miss is that stronger isolation costs throughput, because it holds more locks. So you don't reach for SERIALIZABLE by default. Stick with your database's default for normal work, and only raise the level once you've confirmed a real anomaly, like a phantom row breaking a count. And always know your database's default, since MySQL and PostgreSQL differ."
           }
         ]
       },
@@ -513,93 +519,83 @@
       },
       "order": 3,
       "speakable_v2": {
-        "archetype": "E",
+        "archetype": "B",
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "normalized MySQL schema for a blog app with users, posts, and comments",
+        "standard_example": "a phantom read scenario at REPEATABLE_READ that only SERIALIZABLE prevents",
         "familiarity_anchors": [
           "dirty read",
+          "non-repeatable read",
           "phantom read",
-          "non-repeatable read"
+          "SERIALIZABLE prevents all of those"
         ],
-        "hook": "Isolation levels let you trade consistency for concurrency — pick too weak and readers see garbage, pick too strong and throughput tanks.",
+        "hook": "Isolation levels are a dial. Turn it up for safety, down for speed.",
         "beats": [
           {
-            "kind": "optimising_for",
+            "kind": "what_each_is",
             "layout": "paragraph",
-            "text": "You're balancing data anomaly prevention against concurrent request throughput. Higher isolation prevents more read anomalies but uses more locking, reducing how many transactions can run simultaneously."
+            "text": "An isolation level sets how much one transaction sees of another's uncommitted work. There are four. READ UNCOMMITTED is the loosest. SERIALIZABLE prevents all of those anomalies and is the strictest."
           },
           {
-            "kind": "options",
-            "layout": "bullets",
-            "items": [
-              "READ UNCOMMITTED: see uncommitted changes — allows dirty reads, almost never used",
-              "READ COMMITTED: see only committed data — prevents dirty reads, PostgreSQL default",
-              "REPEATABLE READ: same row read twice gives same value — prevents non-repeatable reads, MySQL InnoDB default",
-              "SERIALIZABLE: transactions run as if serial — prevents all anomalies, lowest throughput"
-            ]
-          },
-          {
-            "kind": "tradeoffs",
+            "kind": "differences",
             "layout": "mini_table",
             "columns": [
-              "Level",
-              "Anomalies prevented",
-              "Throughput impact"
+              "Stops these anomalies",
+              "Throughput"
             ],
             "rows": [
               {
                 "axis": "READ UNCOMMITTED",
                 "values": [
-                  "None",
-                  "None"
+                  "Nothing.",
+                  "Highest."
                 ]
               },
               {
                 "axis": "READ COMMITTED",
                 "values": [
-                  "Dirty reads",
-                  "Low"
+                  "Dirty reads.",
+                  "High."
                 ]
               },
               {
                 "axis": "REPEATABLE READ",
                 "values": [
-                  "Dirty + non-repeatable",
-                  "Medium"
+                  "Dirty and non-repeatable reads.",
+                  "Medium."
                 ]
               },
               {
                 "axis": "SERIALIZABLE",
                 "values": [
-                  "All including phantom",
-                  "High — many locks"
+                  "All anomalies, even phantoms.",
+                  "Lowest."
                 ]
               }
             ]
           },
           {
-            "kind": "decision",
-            "layout": "paragraph",
-            "text": "For our blog, the database defaults (REPEATABLE READ in MySQL, READ COMMITTED in PostgreSQL) are fine. Only move to SERIALIZABLE if a query pattern requires preventing phantom reads — e.g., booking the last available comment slot in a limited series."
-          },
-          {
-            "kind": "rethink_if",
+            "kind": "when_to_pick",
             "layout": "bullets",
             "items": [
-              "You see duplicate entries or wrong counts under load — you may need a higher isolation level or a unique constraint",
-              "Throughput drops and you see lock wait timeouts — you may be at SERIALIZABLE when REPEATABLE READ would suffice"
+              "Stick with your database default for normal work. It's READ COMMITTED in PostgreSQL, REPEATABLE READ in MySQL.",
+              "Move up to SERIALIZABLE only when a phantom row would cause a real bug."
             ]
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Run the same SELECT twice in one transaction. At REPEATABLE_READ each row reads the same. But a phantom read can still slip in when another transaction inserts a matching row. The gotcha: only SERIALIZABLE closes that gap."
           }
         ],
-        "cap": "Know the four levels, their anomalies, and the defaults — then only increase isolation if you've confirmed an anomaly problem.",
+        "cap": "Know the four levels and their anomalies. Then raise isolation only once you've proven you need it.",
         "followup_handoff": [
           "What is a phantom read and which isolation level prevents it?",
           "How do you set isolation level in Spring @Transactional?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     },
     {
@@ -612,7 +608,7 @@
       "difficulty": "medium",
       "importance": "medium",
       "reading_time_minutes": 3,
-      "last_updated": "2026-06-04",
+      "last_updated": "2026-06-08",
       "interviewer_intent": {
         "testing": "Understanding of transaction propagation — shows you know that at-Transactional has behavior beyond just wrapping a method in begin/commit/rollback.",
         "common_mistake": "Not knowing that REQUIRED is the default, or thinking every at-Transactional always creates a new transaction regardless of context.",
@@ -703,7 +699,7 @@
           {
             "type": "speakable_answer",
             "title": "How to Answer in an Interview",
-            "content": "Transaction propagation controls what happens when a transactional method calls another transactional method. The two most important types are REQUIRED and REQUIRES_NEW. REQUIRED is the default propagation. It means if there's already a transaction active, the method joins that transaction. If there's no transaction, it starts a new one. This is what you want most of the time because it creates seamless transaction boundaries. For example, if your orderService creates an order and calls inventoryService to update stock, both operations happen in the same transaction. If either fails, both roll back together. REQUIRES_NEW is different. It always suspends the current transaction and starts a completely independent new transaction. The inner transaction commits or rolls back on its own, regardless of what happens to the outer transaction. Here's a concrete use case: audit logging. Say you want to log every order attempt, even if the order creation fails. You'd mark your audit logging method with REQUIRES_NEW. That way, when the logging method commits, the audit record is saved permanently, even if the outer order transaction rolls back. Another use case is batch processing where you want to process items independently — if item three fails, items one and two should still be committed. The key mistake freshers make is not knowing REQUIRED is the default, or overusing REQUIRES_NEW and breaking atomicity. In most scenarios, you want operations to share a transaction, which is what REQUIRED gives you. Only use REQUIRES_NEW when you genuinely need an operation to commit independently."
+            "content": "Transaction propagation controls what happens when one transactional method calls another. The two you need are REQUIRED and REQUIRES_NEW. REQUIRED is the default. If a transaction is already running, the method joins it. If not, it starts a new one. So everything runs as one unit, and if any part fails, the whole thing rolls back together. That's what you want most of the time. For example, an order service that saves an order and updates inventory should share one transaction, so both succeed or both fail. REQUIRES_NEW is different. It always suspends the current transaction and starts a fresh, independent one. The inner transaction commits or rolls back on its own, no matter what happens to the outer one. The classic use case is audit logging. Say you want to record every order attempt, even the failed ones. You put REQUIRES_NEW on the logging method, so when it commits, the audit record stays even if the outer order transaction rolls back. Another case is batch processing, where one bad item shouldn't undo the good ones. The mistakes freshers make are not knowing REQUIRED is the default, and overusing REQUIRES_NEW, which quietly breaks atomicity. And remember propagation only works through Spring's proxy, so a self-call inside the same class won't start a new transaction at all."
           }
         ]
       },
@@ -720,33 +716,24 @@
         "pillar": "P03",
         "audience_assumption": "beginner",
         "voice": "friendly",
-        "standard_example": "normalized MySQL schema for a blog app with users, posts, and comments",
+        "standard_example": "audit logging with REQUIRES_NEW that commits even when the outer transaction rolls back",
         "familiarity_anchors": [
           "REQUIRED",
           "REQUIRES_NEW",
-          "audit logging"
+          "audit logging",
+          "self-invocation"
         ],
-        "hook": "Transaction propagation decides whether a nested method call joins your existing transaction or starts a fresh one.",
+        "hook": "Propagation decides if a nested call joins your transaction or spins up its own.",
         "beats": [
           {
             "kind": "what_each_is",
-            "layout": "grouped_paragraphs",
-            "groups": [
-              {
-                "heading": "REQUIRED (default)",
-                "text": "If there's already an active transaction, the method joins it. If there's none, a new one starts. All operations share the same unit — if the outer transaction rolls back, the inner one rolls back too."
-              },
-              {
-                "heading": "REQUIRES_NEW",
-                "text": "Always suspends the current transaction and starts a completely new one. The inner method commits or rolls back independently. Even if the outer transaction later rolls back, the inner one's commit stands."
-              }
-            ]
+            "layout": "paragraph",
+            "text": "Propagation is what a transactional method does when it's called inside another transaction. REQUIRED is the default. REQUIRES_NEW is the main alternative. They differ in whether the inner work shares the outer's fate."
           },
           {
             "kind": "differences",
             "layout": "mini_table",
             "columns": [
-              "Aspect",
               "REQUIRED",
               "REQUIRES_NEW"
             ],
@@ -754,15 +741,22 @@
               {
                 "axis": "Transaction",
                 "values": [
-                  "Joins existing, or creates one",
-                  "Always creates a new one"
+                  "Joins the existing one.",
+                  "Always starts a new one."
                 ]
               },
               {
-                "axis": "Outer rollback affects inner?",
+                "axis": "Outer rollback",
                 "values": [
-                  "Yes — same transaction",
-                  "No — independent transaction"
+                  "Rolls the inner back too.",
+                  "Leaves the inner committed."
+                ]
+              },
+              {
+                "axis": "Best for",
+                "values": [
+                  "One shared operation.",
+                  "Independent side effects."
                 ]
               }
             ]
@@ -771,23 +765,23 @@
             "kind": "when_to_pick",
             "layout": "bullets",
             "items": [
-              "Use REQUIRED (default) when: the inner method is part of the same logical operation — publishing a post and updating the author's count",
-              "Use REQUIRES_NEW when: the inner operation must commit even if the outer fails — audit logging a failed post attempt"
+              "Pick REQUIRED for work that belongs together. Publishing a post and bumping the author's count should share one transaction.",
+              "Pick REQUIRES_NEW when the inner work must survive on its own. Audit logging a failed attempt is the classic case."
             ]
           },
           {
             "kind": "tiny_example",
             "layout": "paragraph",
-            "text": "In our blog: when a user publishes a post, we log the audit event. Use REQUIRES_NEW on logAuditEvent() — if the post publish fails and rolls back, the audit record still commits. That way you always have a record of the attempt."
+            "text": "Say publishing a post fails and rolls back. If the audit log used REQUIRES_NEW, that record still commits. So you keep a trail of the attempt. The gotcha: a self-call skips the proxy, so propagation won't even apply."
           }
         ],
-        "cap": "REQUIRED is right for most cases; REQUIRES_NEW is the exception for operations that must commit regardless of the outer result.",
+        "cap": "REQUIRED fits almost everything. Reach for REQUIRES_NEW only when an operation must commit no matter what.",
         "followup_handoff": [
           "What happens to the outer transaction if REQUIRES_NEW inner transaction throws an exception?",
           "What is the NESTED propagation type?"
         ],
         "tts_overrides": {},
-        "speakable_status": "pending_review"
+        "speakable_status": "approved"
       }
     }
   ]
