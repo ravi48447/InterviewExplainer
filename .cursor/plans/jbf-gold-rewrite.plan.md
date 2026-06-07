@@ -267,4 +267,15 @@ HEAD base (48 Q); stale files backed up to /tmp/m05_worktree_backup. No question
   which void-failed the audit. Converted to `kind` and rebuilt every speakable_v2 to the P01 brief.
 - **M05 FINAL: 48 Q, 0 CRITICAL / 0 MODERATE, 48/48 speakable PASS (100/100, zero warnings).**
 
-- [ ] M06 … M33 (apply: deep-dive ladder-from-zero + key_points + speakable_v2 PASS audit + rich visuals, common_mistakes everywhere, mermaid <br/>; NOTE check for the type->kind beat bug)
+# M06 — java-multithreading-basics — COMPLETE (gold)
+48 Q across 8 topics (thread-basics 6, creating-threads 6, thread-lifecycle 6, synchronization-basics 6, wait-notify 6,
+thread-vs-runnable 6, volatile-keyword 6, concurrency-problems 6). 7 of 8 topics arrived already gold from a prior tab
+(structural 0/0 + speakable 42/48 PASS); the gap was the `wait-notify` topic whose 6 speakable_v2 blocks were FAIL 0/100.
+- ROOT BUG (the predicted one): every `wait-notify` speakable_v2 beat used `type` instead of schema-required `kind`
+  (structural -150 → "missing required beat"/"not valid under any schema"). Renamed `type`→`kind` on all beats.
+- Also fixed in wait-notify: mini_table shape (2-column convention: `columns`=the two compared items, `axis`=row label,
+  `values` length matches columns), voice (avg sentence <=16, FK <=9, contractions >=30%, active voice), depth-marker
+  phrases per archetype, and 3+-item beats off `paragraph` layout. Set speakable_status → approved.
+- **M06 FINAL: 48 Q, 0 CRITICAL / 0 MODERATE, 48/48 speakable PASS (all 100/100).**
+
+- [ ] M07 … M33 (apply: deep-dive ladder-from-zero + key_points + speakable_v2 PASS audit + rich visuals, common_mistakes everywhere, mermaid <br/>; NOTE check for the type->kind beat bug — it recurs)
