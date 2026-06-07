@@ -245,4 +245,16 @@ All **86 questions** (M01 30 + M02 30 + M03 26) now PASS `audit_speakable.py` (m
 the P01 brief, with markdown emphasis that renders as bold + code chips. JBF content validator still
 0 CRITICAL / 0 MODERATE for all three modules. Agents stall intermittently — relaunch single-file agents.
 
-- [ ] M04 … M33 (apply: deep-dive ladder-from-zero + key_points + speakable_v2 PASS audit + rich visuals, common_mistakes everywhere, mermaid <br/>)
+# M04 — java-collections-fundamentals — COMPLETE (gold)
+48 Q across 10 topics (collection-hierarchy 6, list-implementations 6, set-implementations 4, map-implementations 4,
+arraylist-vs-linkedlist 6, hashmap-internals 6, hashset-treeset 4, generics-basics 4, iterating-collections 4, comparisons 4).
+Per user (2026-06-07): "keep modifying and improve, don't remove things, keep adding" — so NO questions dropped; the richer
+committed HEAD base (48 Q) was used (stale old-schema working-tree edits that had cut topics to 4 Q each were discarded; backed up to /tmp/m04_worktree_backup).
+Applied the full gold treatment per topic (one agent per topic file, author→lint→fix loop):
+- Re-deepened every `overview` to "ladder from zero" (plain GFG line first, then why→how→nuance→gotcha).
+- Rich visual formatting baked in (bold anchors, inline-code pills, bullet lists, `>` blockquotes).
+- `common_mistakes` present on all 48; >=1 mermaid/concept_map per question; mermaid uses `<br/>`, no backticks in labels (0 issues).
+- Rebuilt every `speakable_v2` to PASS `audit_speakable.py` — **48/48 PASS (all 100/100, zero warnings)**, authored to the P01 brief.
+- **M04 FINAL: 48 Q, 0 CRITICAL / 0 MODERATE, 48/48 speakable PASS.**
+
+- [ ] M05 … M33 (apply: deep-dive ladder-from-zero + key_points + speakable_v2 PASS audit + rich visuals, common_mistakes everywhere, mermaid <br/>)
