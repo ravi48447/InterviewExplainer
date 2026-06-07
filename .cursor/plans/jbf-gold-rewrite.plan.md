@@ -257,4 +257,14 @@ Applied the full gold treatment per topic (one agent per topic file, author→li
 - Rebuilt every `speakable_v2` to PASS `audit_speakable.py` — **48/48 PASS (all 100/100, zero warnings)**, authored to the P01 brief.
 - **M04 FINAL: 48 Q, 0 CRITICAL / 0 MODERATE, 48/48 speakable PASS.**
 
-- [ ] M05 … M33 (apply: deep-dive ladder-from-zero + key_points + speakable_v2 PASS audit + rich visuals, common_mistakes everywhere, mermaid <br/>)
+# M05 — java-exceptions — COMPLETE (gold)
+48 Q across 8 topics (exception-hierarchy 6, checked-vs-unchecked 6, try-catch-finally 6, try-with-resources 6,
+throw-throws 6, custom-exceptions 6, exception-best-practices 6, common-runtime-exceptions 6).
+Same recovery as M04: stale old-schema working-tree edits (had cut topics to 3 Q each) discarded; restored richer committed
+HEAD base (48 Q); stale files backed up to /tmp/m05_worktree_backup. No questions dropped (per user "keep adding, don't remove").
+- Ladder-from-zero overviews, rich visuals, `common_mistakes` on all 48, >=1 mermaid/concept_map per Q (<br/>, no backticks; 0 issues).
+- KEY BUG FIXED ACROSS MODULE: speakable_v2 beats used `type` instead of schema-required `kind` (+ stray `depth_marker` field),
+  which void-failed the audit. Converted to `kind` and rebuilt every speakable_v2 to the P01 brief.
+- **M05 FINAL: 48 Q, 0 CRITICAL / 0 MODERATE, 48/48 speakable PASS (100/100, zero warnings).**
+
+- [ ] M06 … M33 (apply: deep-dive ladder-from-zero + key_points + speakable_v2 PASS audit + rich visuals, common_mistakes everywhere, mermaid <br/>; NOTE check for the type->kind beat bug)
