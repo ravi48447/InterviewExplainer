@@ -6,6 +6,7 @@
  */
 
 import type { BeatGroupedParagraphsPayload } from "@/lib/speakable/schema";
+import { renderSpeakableInline } from "./SpeakableInline";
 
 interface Props {
   data: BeatGroupedParagraphsPayload;
@@ -18,8 +19,8 @@ export function BeatGroupedParagraphs({ data }: Props) {
       <div className="speakable-grouped">
         {data.groups.map((g, i) => (
           <section key={i} className="speakable-grouped-item">
-            <h4 className="speakable-subheading">{g.heading}</h4>
-            <p className="speakable-body">{g.text}</p>
+            <h4 className="speakable-subheading">{renderSpeakableInline(g.heading)}</h4>
+            <p className="speakable-body">{renderSpeakableInline(g.text)}</p>
           </section>
         ))}
       </div>

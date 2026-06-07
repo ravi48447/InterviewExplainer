@@ -9,6 +9,7 @@
  */
 
 import type { BeatOrderedListPayload } from "@/lib/speakable/schema";
+import { renderSpeakableInline } from "./SpeakableInline";
 
 interface Props {
   data: BeatOrderedListPayload;
@@ -25,7 +26,7 @@ export function BeatOrderedList({ data, withRail }: Props) {
         }
       >
         {data.steps.map((s, i) => (
-          <li key={i}>{s}</li>
+          <li key={i}>{renderSpeakableInline(s)}</li>
         ))}
       </ol>
     </div>

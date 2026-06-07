@@ -13,6 +13,7 @@
 
 import type { ReactNode } from "react";
 import type { SpeakableV2 } from "@/lib/speakable/schema";
+import { renderSpeakableInline } from "@/components/speakable/primitives/SpeakableInline";
 
 interface Props {
   data: SpeakableV2;
@@ -22,9 +23,9 @@ interface Props {
 export function SpeakableShell({ data, children }: Props) {
   return (
     <div className="speakable-shell">
-      <p className="speakable-hook">{data.hook}</p>
+      <p className="speakable-hook">{renderSpeakableInline(data.hook)}</p>
       <div className="speakable-beats">{children}</div>
-      <p className="speakable-cap">{data.cap}</p>
+      <p className="speakable-cap">{renderSpeakableInline(data.cap)}</p>
       {data.followup_handoff.length > 0 ? (
         <div className="speakable-followups">
           <p className="speakable-followups-label">Likely follow-ups</p>

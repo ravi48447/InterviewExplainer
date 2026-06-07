@@ -6,6 +6,7 @@
  */
 
 import type { BeatBulletsPayload } from "@/lib/speakable/schema";
+import { renderSpeakableInline } from "./SpeakableInline";
 
 interface Props {
   data: BeatBulletsPayload;
@@ -17,7 +18,7 @@ export function BeatBullets({ data }: Props) {
       {data.label ? <p className="speakable-eyebrow">{data.label}</p> : null}
       <ul className="speakable-bullets">
         {data.items.map((it, i) => (
-          <li key={i}>{it}</li>
+          <li key={i}>{renderSpeakableInline(it)}</li>
         ))}
       </ul>
     </div>

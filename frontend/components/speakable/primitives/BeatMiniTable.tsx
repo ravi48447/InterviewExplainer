@@ -10,6 +10,7 @@
  */
 
 import type { BeatMiniTablePayload } from "@/lib/speakable/schema";
+import { renderSpeakableInline } from "./SpeakableInline";
 
 interface Props {
   data: BeatMiniTablePayload;
@@ -32,9 +33,9 @@ export function BeatMiniTable({ data }: Props) {
           <tbody>
             {data.rows.map((r, i) => (
               <tr key={i}>
-                <td className="speakable-axis-cell">{r.axis}</td>
+                <td className="speakable-axis-cell">{renderSpeakableInline(r.axis)}</td>
                 {r.values.map((v, j) => (
-                  <td key={j}>{v}</td>
+                  <td key={j}>{renderSpeakableInline(v)}</td>
                 ))}
               </tr>
             ))}
@@ -44,13 +45,13 @@ export function BeatMiniTable({ data }: Props) {
       <div className="speakable-table-cards" aria-hidden="false">
         {data.rows.map((r, i) => (
           <div key={i} className="speakable-table-card">
-            <div className="speakable-table-card-axis">{r.axis}</div>
+            <div className="speakable-table-card-axis">{renderSpeakableInline(r.axis)}</div>
             {r.values.map((v, j) => (
               <div key={j} className="speakable-table-card-row">
                 <span className="speakable-table-card-row-key">
                   {data.columns[j] ?? `Column ${j + 1}`}
                 </span>
-                <span>{v}</span>
+                <span>{renderSpeakableInline(v)}</span>
               </div>
             ))}
           </div>
