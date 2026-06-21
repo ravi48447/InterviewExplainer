@@ -1,0 +1,73 @@
+[
+  {
+    "id": "py-fastapi-q050",
+    "slug": "fastapi-rate-limiting-middleware",
+    "question": "How do you implement rate limiting in FastAPI?",
+    "title": "Rate Limiting in FastAPI",
+    "direct_answer": "Use slowapi (built on limits library) for per-endpoint or per-IP rate limiting, or write custom middleware using Redis. Middleware-based rate limiting with Redis uses a sliding window counter: increment a key per IP per minute window, reject with 429 if over limit. For production, rate limit at the API gateway (nginx, AWS API Gateway) before requests reach FastAPI to reduce load. Per-user limits require the authenticated user object from the auth dependency.",
+    "interviewer_intent": "Tests practical API security knowledge — rate limiting is a standard requirement every production API needs.",
+    "company_tags": [
+      "stripe",
+      "amazon"
+    ],
+    "answer": {
+      "sections": [
+        {
+          "type": "overview",
+          "title": "Rate limiting approaches",
+          "content": "Three levels of rate limiting:\n\n1. API Gateway level: nginx rate_limit_zone, AWS API Gateway usage plans, Cloudflare rate limiting. Cheapest — blocks at the edge before Python code runs.\n\n2. Middleware level: custom FastAPI middleware that checks a Redis counter per IP/user. Flexible, handles complex rules.\n\n3. Application level: per-endpoint limits, slowapi library, or decorator-based.\n\nAlgorithms:\n- Fixed window: count requests in a time bucket. Simple but allows bursting at window boundaries.\n- Sliding window log: store timestamps, count requests in the last N seconds. Accurate but memory-intensive.\n- Token bucket: replenish at a rate, consume per request. Allows controlled bursting.\n\nFor most APIs: Redis sliding window counter in middleware. Store key = f'ratelimit:{user_or_ip}:{window}', increment atomically, expire at window end."
+        },
+        {
+          "type": "code",
+          "title": "Rate limiting implementation",
+          "content": "# Option 1: slowapi (simplest)\npip install slowapi\n\nfrom slowapi import Limiter, _rate_limit_exceeded_handler\nfrom slowapi.util import get_remote_address\nfrom slowapi.errors import RateLimitExceeded\n\nlimiter = Limiter(key_func=get_remote_address)\napp = FastAPI()\napp.state.limiter = limiter\napp.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)\n\n@app.get('/api/expensive')\n@limiter.limit('10/minute')  # per IP\nasync def expensive_endpoint(request: Request):\n    return {'data': ...}\n\n# Option 2: Redis middleware (production-grade)\nimport redis.asyncio as aioredis\nimport time\n\nredis_client = aioredis.from_url('redis://localhost')\n\nasync def check_rate_limit(key: str, limit: int, window: int) -> bool:\n    \"\"\"Returns True if request is allowed.\"\"\"\n    now = int(time.time())\n    window_key = f'{key}:{now // window}'\n    pipe = redis_client.pipeline()\n    pipe.incr(window_key)\n    pipe.expire(window_key, window)\n    count, _ = await pipe.execute()\n    return count <= limit\n\nclass RateLimitMiddleware:\n    def __init__(self, app, limit: int = 100, window: int = 60):\n        self.app = app\n        self.limit = limit\n        self.window = window\n\n    async def __call__(self, scope, receive, send):\n        if scope['type'] == 'http':\n            client_ip = scope['client'][0]\n            key = f'ratelimit:{client_ip}'\n            allowed = await check_rate_limit(key, self.limit, self.window)\n            if not allowed:\n                response = Response('Too Many Requests', status_code=429)\n                await response(scope, receive, send)\n                return\n        await self.app(scope, receive, send)\n\n# Per-authenticated-user limiting\nasync def rate_limit_user(\n    current_user: User = Depends(get_current_user)\n) -> None:\n    key = f'ratelimit:user:{current_user.id}'\n    if not await check_rate_limit(key, limit=100, window=60):\n        raise HTTPException(status_code=429, detail='Rate limit exceeded')"
+        },
+        {
+          "type": "key_points",
+          "title": "Rate limiting rules",
+          "items": [
+            "API gateway rate limiting is cheapest — blocks before Python runs",
+            "Redis counter with atomic INCR for distributed rate limiting",
+            "Fixed window: simple but allows bursts at boundary",
+            "Sliding window log: accurate, higher memory cost",
+            "Per-user limiting: key by user.id from auth dependency, not IP"
+          ]
+        }
+      ]
+    },
+    "followup_questions": [
+      "What is the difference between rate limiting and throttling?",
+      "How do you implement a leaky bucket rate limiter in Python?",
+      "How do you handle rate limit headers (X-RateLimit-Remaining) in your API?"
+    ],
+    "seo": {
+      "metaTitle": "FastAPI Rate Limiting — slowapi, Redis Middleware, Per-User Limits",
+      "metaDescription": "Implement rate limiting in FastAPI: slowapi for quick setup, Redis sliding window middleware for production, and per-user authenticated rate limits."
+    },
+    "speakable_v2": {
+      "archetype": "C",
+      "pillar": "P02",
+      "hook": "Rate limiting belongs at the outermost layer — if you're rate limiting inside FastAPI, you're already spending Python CPU on the request you're trying to reject.",
+      "beats": [
+        {
+          "kind": "layers",
+          "layout": "paragraph",
+          "content": "Best practice: rate limit at the API gateway (nginx, Cloudflare, AWS) first. For application-level limits — per-user, per-plan — use Redis atomic counters in middleware or a dependency."
+        },
+        {
+          "kind": "redis_pattern",
+          "layout": "paragraph",
+          "content": "Redis INCR is atomic — increment a key, expire it at window end. If the count exceeds the limit, return 429. Use a pipeline for INCR + EXPIRE in one round trip."
+        },
+        {
+          "kind": "per_user",
+          "layout": "paragraph",
+          "content": "Per-user limits key on user.id from the auth dependency, not IP address. IP-based limits are easily bypassed or unfair with shared IPs. Authenticated limits are more meaningful for API abuse prevention."
+        }
+      ],
+      "cap": "Add rate limit headers to 429 responses: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset. Clients can back off intelligently instead of hammering.",
+      "followup_handoff": "Follow up with the token bucket algorithm for controlled bursting, or API gateway-level rate limiting configurations.",
+      "tts_overrides": {}
+    }
+  }
+]

@@ -1,0 +1,462 @@
+{
+  "topic": "Indexes and Performance",
+  "topicSlug": "indexes-performance",
+  "questions": [
+    {
+      "id": "index-internals",
+      "title": "How Database Indexes Work Internally",
+      "slug": "index-internals",
+      "question": "How does a B-tree index work internally and how does the database use it to answer queries faster?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- B-tree: balanced tree with sorted keys and pointers to heap (table) pages\n- O(log n) lookups vs O(n) sequential scan\n- Leaf nodes linked for efficient range scans\n- Index entry points to physical row location (heap tuple)\n- Write overhead: every INSERT/UPDATE/DELETE must update all indexes\n- Page splits: when a B-tree node is full, it splits \u2014 causes index bloat\n- VACUUM/AUTOVACUUM in PostgreSQL reclaims dead tuple space from the index too"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "A B-tree index is a balanced tree of sorted values where each leaf node holds the indexed column value and a pointer to the actual row in the table. The tree is kept balanced so that every lookup takes the same number of steps, giving O(log n) performance. For a table with a million rows, that's roughly 20 comparisons versus a million for a sequential scan.\n\nLeaf nodes in a B-tree are linked to each other in order. This is what makes range queries efficient \u2014 once the index finds the first matching value, it can walk the leaf nodes sequentially to collect the rest of the range without going back to the root.\n\nThe cost of having an index is write performance. Every INSERT must add an entry to every index on that table. Every DELETE must remove from every index. UPDATE is effectively a delete plus insert in each index. A heavily indexed table can be two to five times slower for writes. This is why you index only what your actual query patterns require."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## B-tree Structure (Conceptual)\n\n```\n                    [50]\n                   /    \\\n              [25]        [75]\n             /    \\      /    \\\n         [10,20] [30,40] [60,70] [80,90]\n          \u2193  \u2193    \u2193  \u2193    \u2193  \u2193    \u2193  \u2193\n        Row Row  Row Row  Row Row  Row Row\n        Ptrs     Ptrs     Ptrs     Ptrs\n```\n\nLeaf nodes are linked: [10,20] \u2192 [30,40] \u2192 [60,70] \u2192 allows range scan without going to root\n\n## Index Scan vs Sequential Scan\n\n```sql\n-- Small result set \u2192 index scan (log n lookups)\nSELECT * FROM employees WHERE id = 12345;  -- single row, index wins\n\n-- Large result set \u2192 seq scan might be cheaper\nSELECT * FROM employees WHERE salary > 1;  -- 99% of rows, skip index overhead\n-- Optimizer picks seq scan here \u2014 reading all pages is faster than jumping around\n```\n\n## Index Bloat and Maintenance\n\n```sql\n-- Check index size vs table size\nSELECT indexname,\n       pg_size_pretty(pg_relation_size(indexrelid)) AS index_size\nFROM pg_stat_user_indexes\nWHERE relname = 'orders'\nORDER BY pg_relation_size(indexrelid) DESC;\n\n-- Rebuild bloated index without locking (PostgreSQL)\nREINDEX INDEX CONCURRENTLY idx_orders_customer_id;\n\n-- Check bloat from dead tuples\nSELECT relname, n_dead_tup, n_live_tup\nFROM pg_stat_user_tables\nWHERE n_dead_tup > 1000;\n```\n\n## Hash Index \u2014 Equality Only\n\n```sql\nCREATE INDEX idx_email_hash ON users USING HASH (email);\n-- Faster equality lookup: WHERE email = 'foo@bar.com'\n-- Cannot do range: WHERE email LIKE 'foo%' \u2192 fails\n-- Cannot sort: ORDER BY email \u2192 cannot use this index\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A B-tree index is a balanced tree of sorted values where each leaf node holds the indexed column value and a pointer to the actual row in the table.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "This is why you index only what your actual query patterns require.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "query-optimization",
+      "title": "Reading and Using EXPLAIN ANALYZE",
+      "slug": "query-optimization",
+      "question": "How do you use EXPLAIN ANALYZE to identify and fix slow queries?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- EXPLAIN shows planned operations; ANALYZE adds actual execution stats\n- BUFFERS shows how many disk pages were read (cache hits vs reads)\n- Seq Scan on large table = likely missing index\n- High filter rows removed = index selectivity problem\n- Nested Loop with large outer table = missing index on inner table\n- Hash Join: good for large tables; Merge Join: good for pre-sorted data\n- Rows estimated vs actual: large discrepancy = stale table statistics (run ANALYZE)"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "EXPLAIN shows you the query plan the database intends to execute \u2014 which tables it will scan, in what order, and what join algorithms it'll use. Adding ANALYZE actually runs the query and collects real execution statistics. Adding BUFFERS shows you how many disk pages were read and how many came from cache.\n\nThe key things to look for are sequential scans on large tables, which almost always indicate a missing index. Look at the cost estimates \u2014 the final node's estimated cost tells you what the planner thinks the query will cost. If actual rows are dramatically different from estimated rows, your table statistics are stale and you should run ANALYZE on the table so the planner makes better decisions.\n\nNested loop joins are efficient for small inner tables but terrible when both sides are large and the inner table isn't indexed. If you see a nested loop with a large outer row count and a seq scan inside, the fix is almost always to add an index on the join column of the inner table."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## EXPLAIN ANALYZE Output\n\n```sql\nEXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)\nSELECT o.*, c.name\nFROM orders o\nJOIN customers c ON o.customer_id = c.id\nWHERE o.status = 'pending';\n\n-- Sample output:\n-- Hash Join  (cost=125.50..3210.75 rows=842 width=312)\n--             (actual time=15.241..102.334 rows=856 loops=1)\n--   Buffers: shared hit=892 read=312\n--   -> Seq Scan on orders  (cost=0..2800 rows=842 width=280)\n--       Filter: (status = 'pending')\n--       Rows Removed by Filter: 52000   \u2190 52k rows scanned, 856 useful\n--   -> Hash  (cost=80..80 rows=3640 width=32)\n--       -> Seq Scan on customers  (cost=0..80 rows=3640 width=32)\n```\n\n**Key observations from this plan:**\n- 52,000 rows scanned to find 856 \u2192 add index on `status`\n- Buffers: `read=312` means 312 pages came from disk, not cache \u2192 I/O intensive\n\n```sql\n-- Fix: add partial index (only pending orders)\nCREATE INDEX idx_orders_pending ON orders (customer_id, created_at)\nWHERE status = 'pending';\n```\n\n## Join Algorithm Guide\n\n| Algorithm | Best For |\n|-----------|-----------|\n| Nested Loop | Small inner table with index |\n| Hash Join | Large tables, no sort order needed |\n| Merge Join | Both sides pre-sorted on join key |\n\n## Update Statistics\n\n```sql\n-- Stale stats = bad estimates = bad plans\nANALYZE orders;          -- update table stats\nANALYZE;                 -- update all tables\nVACUUM ANALYZE orders;   -- reclaim space AND update stats\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "EXPLAIN shows you the query plan the database intends to execute \u2014 which tables it will scan, in what order, and what join algorithms it'll use.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          }
+        ],
+        "cap": "If you see a nested loop with a large outer row count and a seq scan inside, the fix is almost always to add an index on the join column of the inner table.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "composite-vs-single-index",
+      "title": "Composite vs Single Column Indexes",
+      "slug": "composite-vs-single-index",
+      "question": "How do composite indexes differ from single-column indexes, and how do you decide the column order?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Composite index covers queries involving multiple columns in the index\n- Leftmost prefix rule: index on (A,B,C) can satisfy queries on A, A+B, or A+B+C \u2014 not B alone\n- Put the most selective column first? Not always \u2014 put the equality column first, range column last\n- Equality before range: WHERE dept='Eng' AND salary > 80000 \u2192 index on (dept, salary)\n- Covering index: include all query columns to avoid heap lookup (Index-Only Scan)\n- More indexes = more write overhead \u2014 find the right balance"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "A composite index covers multiple columns in a defined order. The leftmost prefix rule determines which queries can use it: an index on department, salary, hire_date can answer queries filtering on department, or on department and salary, but not on salary alone \u2014 because the sorted structure starts with department, not salary.\n\nThe order of columns in a composite index matters based on your query patterns. Put columns used in equality conditions before columns used in range conditions. If you have a query filtering WHERE department = 'Engineering' AND salary > 80000, put department first and salary second. The index can jump directly to all Engineering rows and then scan the salary range within that subset.\n\nA covering index takes this further by including all columns the query needs, eliminating the need to look up the actual table row at all. When EXPLAIN shows an Index Only Scan, the query is being served entirely from the index \u2014 maximum efficiency."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Leftmost Prefix Rule\n\n```sql\nCREATE INDEX idx_emp ON employees (department, salary, hire_date);\n\n-- \u2705 Uses index (starts with 'department')\nWHERE department = 'Engineering';\nWHERE department = 'Engineering' AND salary > 80000;\nWHERE department = 'Engineering' AND salary > 80000 AND hire_date > '2022-01-01';\n\n-- \u274c Cannot use this index (no leading column)\nWHERE salary > 80000;\nWHERE hire_date > '2022-01-01';\n\n-- \u274c Only partially uses index (range breaks prefix chain)\nWHERE department LIKE 'Eng%' AND salary > 80000;  -- range on dept, salary part skipped\n```\n\n## Equality Before Range\n\n```sql\n-- Query: WHERE status = 'active' AND created_at > '2024-01-01'\n\n-- GOOD: equality column first, range column second\nCREATE INDEX idx_good ON orders (status, created_at);\n-- \u2192 Jumps to all 'active' rows, then range scans created_at within that\n\n-- NOT AS GOOD: range first\nCREATE INDEX idx_bad ON orders (created_at, status);\n-- \u2192 Scans from 2024-01-01 forward and filters status separately\n```\n\n## Covering Index \u2014 Index Only Scan\n\n```sql\n-- Query needs: department, name, salary (no other columns)\nSELECT name, salary FROM employees\nWHERE department = 'Engineering'\nORDER BY salary DESC;\n\n-- Covering index: all needed columns included\nCREATE INDEX idx_covering ON employees (department, salary DESC, name);\n-- EXPLAIN now shows: Index Only Scan (no heap access) \u2190 fastest possible\n```\n\n## When NOT to Use Composite Index\n\n```sql\n-- Low cardinality first column \u2014 wastes the index\nCREATE INDEX bad ON orders (status, customer_id);\n-- 'status' has 3 values (pending/active/done) \u2014 not selective enough as first column\n-- Better: (customer_id, status) or separate indexes\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A composite index covers multiple columns in a defined order.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "When EXPLAIN shows an Index Only Scan, the query is being served entirely from the index \u2014 maximum efficiency.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "index-maintenance",
+      "title": "Index Maintenance and Bloat",
+      "slug": "index-maintenance",
+      "question": "How do database indexes get bloated and what should you do to maintain them in production?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Bloat: dead tuples from updates/deletes leave ghost entries in indexes\n- AUTOVACUUM: PostgreSQL's background process that reclaims dead tuple space\n- REINDEX: rebuilds index from scratch \u2014 compact but locks table (use CONCURRENTLY)\n- Unused indexes: tracked in pg_stat_user_indexes \u2014 drop unused to save write overhead\n- Monitor index size and usage regularly\n- Hot table: high update rate \u2192 frequent vacuuming needed; tune autovacuum thresholds"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Indexes accumulate bloat over time because PostgreSQL uses multi-version concurrency control \u2014 when you update or delete a row, the old version isn't immediately removed. It stays in the table and in the index as a dead tuple, taking up space. AUTOVACUUM runs in the background to reclaim this space, but on high-traffic tables it might not keep up.\n\nBloated indexes are larger than necessary, which means more disk reads for every lookup and more memory needed to cache them. If an index grows to several times its necessary size, you'll see degraded query performance even though the index technically exists.\n\nThe other maintenance concern is unused indexes. Every index you have slows down writes. If an index isn't being used by any queries, it's pure overhead. PostgreSQL tracks index usage in system views, so you can identify and drop indexes that haven't been used since the server last restarted."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Check Index Bloat\n\n```sql\n-- Indexes with high dead tuple ratio\nSELECT\n    t.relname AS table_name,\n    ix.indexrelid::regclass AS index_name,\n    pg_size_pretty(pg_relation_size(ix.indexrelid)) AS size,\n    s.idx_scan AS scans_since_restart\nFROM pg_index ix\nJOIN pg_stat_user_indexes s USING (indexrelid)\nJOIN pg_stat_user_tables t ON t.relid = ix.indrelid\nORDER BY pg_relation_size(ix.indexrelid) DESC\nLIMIT 20;\n```\n\n## Identify Unused Indexes\n\n```sql\n-- Indexes with zero scans since last server restart\nSELECT schemaname, tablename, indexname, idx_scan\nFROM pg_stat_user_indexes\nWHERE idx_scan = 0\n  AND NOT EXISTS (\n      SELECT 1 FROM pg_constraint c\n      WHERE c.conindid = indexrelid  -- keep PK and FK indexes\n  )\nORDER BY pg_relation_size(indexrelid) DESC;\n\n-- Drop unused index (always verify first)\nDROP INDEX CONCURRENTLY idx_orders_old_status;\n```\n\n## Rebuild Bloated Index\n\n```sql\n-- Non-concurrent: fast but locks table (avoid in prod during traffic)\nREINDEX INDEX idx_orders_customer_id;\n\n-- Concurrent: no lock, runs in background\nREINDEX INDEX CONCURRENTLY idx_orders_customer_id;\n-- Creates new index alongside old, swaps atomically, drops old\n```\n\n## Tune Autovacuum for Hot Tables\n\n```sql\n-- Orders table updates frequently \u2014 vacuum more aggressively\nALTER TABLE orders SET (\n    autovacuum_vacuum_scale_factor = 0.01,   -- vacuum after 1% dead tuples (default 20%)\n    autovacuum_analyze_scale_factor = 0.005  -- analyze after 0.5% changes\n);\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Indexes accumulate bloat over time because PostgreSQL uses multi-version concurrency control \u2014 when you update or delete a row, the old version isn't immediately removed.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "PostgreSQL tracks index usage in system views, so you can identify and drop indexes that haven't been used since the server last restarted.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "slow-query-diagnosis",
+      "title": "Diagnosing Slow Queries in Production",
+      "slug": "slow-query-diagnosis",
+      "question": "How do you systematically find and diagnose slow queries in a production PostgreSQL database?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Enable pg_stat_statements to track query performance over time\n- slow_query_log / log_min_duration_statement to capture long-running queries\n- EXPLAIN ANALYZE on the captured query to get execution plan\n- Check for lock waits: pg_locks + pg_stat_activity\n- Connection pool exhaustion: max_connections limits, use PgBouncer\n- Look at query_time, total_time, calls in pg_stat_statements to find top offenders\n- Don't EXPLAIN on production under load \u2014 use a replica or staging clone"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "The first step is knowing which queries are slow. Enable pg_stat_statements extension if it isn't already \u2014 it collects execution statistics for every unique query shape across all calls. Then sort by total execution time, not per-call time, because a query that takes one millisecond but runs a million times is a bigger problem than one that takes five seconds but runs once a day.\n\nOnce you have a candidate query, get the plan with EXPLAIN ANALYZE. But be careful \u2014 in production under load, EXPLAIN ANALYZE actually executes the query. Use a read replica or a recent clone of the database instead to avoid adding load during an incident.\n\nBeyond slow queries, also check for lock contention. Long-running transactions that hold locks while other queries pile up waiting look like slow queries from the application's perspective but are actually a blocking problem. pg_stat_activity shows you currently running queries and their wait states."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Enable pg_stat_statements\n\n```sql\n-- In postgresql.conf:\n-- shared_preload_libraries = 'pg_stat_statements'\n\n-- After restart:\nCREATE EXTENSION IF NOT EXISTS pg_stat_statements;\n\n-- Find top 10 slowest queries by total time\nSELECT query,\n       calls,\n       total_exec_time::NUMERIC(12,2)     AS total_ms,\n       mean_exec_time::NUMERIC(12,2)      AS avg_ms,\n       stddev_exec_time::NUMERIC(12,2)    AS stddev_ms,\n       rows\nFROM pg_stat_statements\nORDER BY total_exec_time DESC\nLIMIT 10;\n```\n\n## Log Slow Queries\n\n```sql\n-- Log queries taking over 1 second\nALTER SYSTEM SET log_min_duration_statement = '1000';  -- milliseconds\nSELECT pg_reload_conf();\n```\n\n## Detect Lock Contention\n\n```sql\n-- Queries waiting for locks\nSELECT blocking.pid                AS blocking_pid,\n       blocking.query               AS blocking_query,\n       blocked.pid                  AS blocked_pid,\n       blocked.query                AS blocked_query,\n       blocked.wait_event_type,\n       blocked.wait_event\nFROM pg_stat_activity blocked\nJOIN pg_stat_activity blocking\n     ON blocking.pid = ANY(pg_blocking_pids(blocked.pid))\nWHERE blocked.wait_event_type = 'Lock';\n```\n\n## Quick Diagnosis Checklist\n\n1. `pg_stat_statements` \u2192 top total_exec_time queries\n2. `log_min_duration_statement` \u2192 capture actual slow query text\n3. `EXPLAIN (ANALYZE, BUFFERS)` on replica \u2192 find seq scans, nested loops\n4. Check `pg_stat_activity` \u2192 any Lock wait events?\n5. Check autovacuum: `pg_stat_user_tables` n_dead_tup column\n6. Check connection count: are you hitting max_connections?"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "The first step is knowing which queries are slow.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "pg_stat_activity shows you currently running queries and their wait states.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "query-rewriting",
+      "title": "SQL Query Rewriting for Performance",
+      "slug": "query-rewriting",
+      "question": "What are common query rewriting techniques to improve SQL performance without adding indexes?",
+      "difficulty": "hard",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Replace correlated subquery with JOIN or window function\n- Replace NOT IN with NOT EXISTS (NULL-safe, often faster)\n- Push filters into derived tables / CTEs to reduce rows early\n- Avoid functions on indexed columns in WHERE \u2014 prevents index use\n- Use EXISTS for existence checks instead of COUNT(*) > 0\n- Avoid SELECT * \u2014 fetch only needed columns, especially with wide tables\n- Batch large updates/deletes with LIMIT to avoid long-running locks"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "One of the most impactful query rewrites is eliminating correlated subqueries. A correlated subquery re-executes for every row in the outer result. Rewriting it as a JOIN or window function converts it from an O(n) inner loop to a single pass over the data.\n\nAnother common issue is wrapping indexed columns in function calls inside a WHERE clause. If you write WHERE UPPER(email) = 'TEST@EXAMPLE.COM', the index on the email column cannot be used \u2014 the function transforms every value and the database must scan every row. The fix is to store the data normalized, use a functional index on UPPER(email), or rewrite the query to avoid the function.\n\nFor existence checks, use EXISTS rather than COUNT(*) > 0. EXISTS stops as soon as it finds one matching row. COUNT(*) > 0 counts every single matching row and then checks if that number is greater than zero \u2014 pure wasted work."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Replace Correlated Subquery with JOIN\n\n```sql\n-- SLOW: correlated subquery runs once per employee row\nSELECT name FROM employees e\nWHERE salary > (\n    SELECT AVG(salary) FROM employees WHERE department = e.department\n);\n\n-- FAST: window function \u2014 single pass\nSELECT name FROM (\n    SELECT name, salary, AVG(salary) OVER (PARTITION BY department) AS dept_avg\n    FROM employees\n) t WHERE salary > dept_avg;\n```\n\n## Avoid Functions on Indexed Columns\n\n```sql\n-- SLOW: index on created_at cannot be used \u2014 YEAR() wraps every value\nWHERE YEAR(created_at) = 2024;\n\n-- FAST: range condition \u2014 index can scan from start to end of 2024\nWHERE created_at >= '2024-01-01' AND created_at < '2025-01-01';\n\n-- SLOW: index on email is unused\nWHERE LOWER(email) = 'test@example.com';\n\n-- FAST option 1: functional index\nCREATE INDEX idx_email_lower ON users (LOWER(email));\nWHERE LOWER(email) = 'test@example.com';  -- now uses the functional index\n\n-- FAST option 2: store normalized data\nWHERE email = 'test@example.com';  -- normalize on write, don't transform on read\n```\n\n## EXISTS vs COUNT for Existence Check\n\n```sql\n-- SLOW: counts all matches\nIF (SELECT COUNT(*) FROM orders WHERE customer_id = 123) > 0 THEN ...\n\n-- FAST: stops at first match\nIF EXISTS (SELECT 1 FROM orders WHERE customer_id = 123) THEN ...\n```\n\n## Batch Large Updates\n\n```sql\n-- SLOW: one huge update holds a lock for seconds\nUPDATE orders SET status = 'archived' WHERE created_at < '2022-01-01';\n\n-- BETTER: batch processing \u2014 releases lock between batches\nDO $$\nBEGIN\n    LOOP\n        UPDATE orders SET status = 'archived'\n        WHERE id IN (\n            SELECT id FROM orders\n            WHERE created_at < '2022-01-01' AND status != 'archived'\n            LIMIT 1000\n        );\n        EXIT WHEN NOT FOUND;\n        PERFORM pg_sleep(0.1);  -- brief pause to let other queries in\n    END LOOP;\nEND $$;\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "One of the most impactful query rewrites is eliminating correlated subqueries.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          }
+        ],
+        "cap": "COUNT() > 0 counts every single matching row and then checks if that number is greater than zero \u2014 pure wasted work.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "partitioning",
+      "title": "Table Partitioning for Large Tables",
+      "slug": "partitioning",
+      "question": "What is table partitioning in PostgreSQL and when should you use it for large tables?",
+      "difficulty": "hard",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Partitioning: physically splitting one logical table into smaller physical child tables\n- Partition pruning: queries that filter on partition key only scan relevant partitions\n- Types: RANGE (dates), LIST (categories/statuses), HASH (even distribution)\n- When to use: table above ~50-100GB, queries always filter on partition key, archival/deletion by range\n- Local indexes on each partition, not global index across all partitions\n- Trade-offs: more complex schema, cross-partition queries scan all partitions"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Partitioning splits one logical table into multiple physical child tables called partitions, each storing a subset of the data based on a partition key. The main benefit is partition pruning \u2014 when a query filters on the partition key, the database only reads the partitions that could contain matching data and completely ignores the rest.\n\nThe classic use case is time-series data like orders or events, partitioned by month or year. A query for orders in January 2024 only touches the January 2024 partition, which might be a few gigabytes out of a table that's hundreds of gigabytes total. This is dramatically faster than scanning an unpartitioned table and finding the same rows via an index.\n\nPartitioning also makes data lifecycle management much easier. Dropping old data is as simple as dropping the old partition \u2014 one DDL command that takes milliseconds instead of a DELETE that would have to delete millions of rows one by one and then vacuum the space."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Range Partitioning by Month\n\n```sql\n-- Parent table (no data stored here directly)\nCREATE TABLE orders (\n    id         BIGINT,\n    customer_id INT,\n    amount     NUMERIC(10,2),\n    created_at TIMESTAMPTZ NOT NULL\n) PARTITION BY RANGE (created_at);\n\n-- Monthly partitions\nCREATE TABLE orders_2024_01\n    PARTITION OF orders FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');\n\nCREATE TABLE orders_2024_02\n    PARTITION OF orders FOR VALUES FROM ('2024-02-01') TO ('2024-03-01');\n\n-- Each partition can have its own indexes\nCREATE INDEX ON orders_2024_01 (customer_id);\nCREATE INDEX ON orders_2024_02 (customer_id);\n```\n\n## Partition Pruning in Action\n\n```sql\n-- Query filtered on partition key \u2192 only reads jan 2024 partition\nEXPLAIN SELECT * FROM orders\nWHERE created_at BETWEEN '2024-01-01' AND '2024-01-31';\n-- Plan: Append \u2192 Seq Scan on orders_2024_01 (other partitions excluded)\n\n-- Query without partition key \u2192 scans ALL partitions\nSELECT * FROM orders WHERE customer_id = 123;  -- scans every month\n-- Here a global index on customer_id helps (PostgreSQL 11+)\n```\n\n## Archiving Old Data\n\n```sql\n-- Drop an old partition (fast, no vacuum needed)\nDROP TABLE orders_2022_01;  -- instant, drops the file\n\n-- Detach partition for archival without dropping\nALTER TABLE orders DETACH PARTITION orders_2022_01;\n-- Can now archive / compress this table separately\n```\n\n## Automate Partition Creation\n\nUse pg_partman extension or a scheduled job:\n```sql\n-- Create next month's partition before it's needed\nCREATE TABLE orders_2025_01\n    PARTITION OF orders FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "D",
+        "pillar": "P01",
+        "hook": "Partitioning splits one logical table into multiple physical child tables called partitions, each storing a subset of the data based on a partition key.",
+        "beats": [
+          {
+            "kind": "clarify",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "hypothesis",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "step_by_step",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "tools",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "tradeoff",
+            "layout": "paragraph",
+            "text": ""
+          }
+        ],
+        "cap": "Dropping old data is as simple as dropping the old partition \u2014 one DDL command that takes milliseconds instead of a DELETE that would have to delete millions of rows one by one and then.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

@@ -23,7 +23,7 @@ export function Behavioral({ data }: { data: SpeakableG }) {
   return (
     <SpeakableShell data={data}>
       {data.beats.map((b, i) => {
-        const ribbon = STAR[b.kind];
+        const ribbon = STAR[b.kind] ?? { letter: "•", word: "" };
         const isReflection = b.kind === "reflection";
         return (
           <section

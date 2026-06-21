@@ -1,0 +1,14 @@
+export default function CompareLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 py-12 px-6 animate-pulse">
+      <div className="w-full min-w-0 space-y-6">
+        <div className="h-44 bg-white/60 rounded-2xl border border-slate-200" />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-32 bg-white/60 rounded-xl border border-slate-200" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

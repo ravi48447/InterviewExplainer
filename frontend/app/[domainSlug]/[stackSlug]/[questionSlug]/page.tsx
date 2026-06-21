@@ -152,6 +152,7 @@ export default async function QuestionPage({
         followupQuestions: raw.followup_questions as V2ExtendedFields["followupQuestions"],
         lastUpdated: raw.last_updated as V2ExtendedFields["lastUpdated"],
         layoutType: raw.layout_type as V2ExtendedFields["layoutType"],
+        speakableV2: raw.speakable_v2 as V2ExtendedFields["speakableV2"],
       };
     }
   } else if (parsed) {
@@ -172,6 +173,7 @@ export default async function QuestionPage({
         followupQuestions: rawQuestion.followup_questions,
         lastUpdated: rawQuestion.last_updated,
         layoutType: rawQuestion.layout_type,
+        speakableV2: rawQuestion.speakable_v2,
       };
     }
   }

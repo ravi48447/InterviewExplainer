@@ -1,0 +1,71 @@
+{
+  "topic": "Partitioning and Sharding",
+  "topicSlug": "partitioning-sharding",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "database",
+  "questions": [
+    {
+      "id": "partitioning-vs-sharding",
+      "title": "Database Partitioning vs Sharding",
+      "slug": "partitioning-vs-sharding",
+      "question": "What is the difference between database partitioning and sharding?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Partitioning: split table within one DB (range, list, hash)**\n- **Sharding: split data across multiple DB servers (scale-out)**\n- **Partition pruning: queries only read relevant partitions**\n- **Shard key: determines which server holds the data \u2014 choose carefully**\n- **Sharding complexity: no cross-shard JOINs, distributed transactions are hard**\n- **Most systems never need sharding \u2014 exhausts vertical scaling, caching first**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Partitioning splits a large table into smaller segments within the same database server. Range partitioning by date is the most common example \u2014 January data in one partition, February in another. The database can then skip irrelevant partitions when you query by date, dramatically speeding up time-range queries and making it easy to archive old data by dropping an entire partition.\n\nSharding takes this further by distributing data across completely separate database servers. Each server (shard) holds a subset of the data determined by the shard key \u2014 for example, user IDs 1-1M on shard 1, 1M-2M on shard 2. This provides horizontal scaling beyond what any single server can handle.\n\nSharding comes with serious complexity: you lose cross-shard JOINs, distributed transactions become much harder, and re-sharding as you grow is operationally painful. Most applications should exhaust vertical scaling, read replicas, caching, and partitioning before considering sharding."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Table Partitioning in PostgreSQL\n\n```sql\n-- RANGE PARTITIONING: partition by date\nCREATE TABLE orders (\n    id          BIGSERIAL,\n    user_id     BIGINT NOT NULL,\n    status      VARCHAR(20),\n    total       DECIMAL(12,2),\n    created_at  TIMESTAMP NOT NULL,\n    PRIMARY KEY (id, created_at)  -- Partition key must be in PK\n) PARTITION BY RANGE (created_at);\n\n-- Create partitions per quarter:\nCREATE TABLE orders_2024_q1 PARTITION OF orders\n    FOR VALUES FROM ('2024-01-01') TO ('2024-04-01');\n\nCREATE TABLE orders_2024_q2 PARTITION OF orders\n    FOR VALUES FROM ('2024-04-01') TO ('2024-07-01');\n\nCREATE TABLE orders_2024_q3 PARTITION OF orders\n    FOR VALUES FROM ('2024-07-01') TO ('2024-10-01');\n\nCREATE TABLE orders_2024_q4 PARTITION OF orders\n    FOR VALUES FROM ('2024-10-01') TO ('2025-01-01');\n\n-- Query automatically uses partition pruning:\nSELECT * FROM orders\nWHERE created_at BETWEEN '2024-04-01' AND '2024-06-30';\n-- Only reads orders_2024_q2 \u2014 other partitions skipped\n\n-- Archive old data: just drop the partition (instant, no DELETE cost)\nDROP TABLE orders_2023_q1;\n-- No full table scan, no undo log, just detach and drop\n\n-- HASH PARTITIONING: distribute evenly\nCREATE TABLE users (\n    id      BIGSERIAL,\n    email   VARCHAR(255),\n    PRIMARY KEY (id)\n) PARTITION BY HASH (id);\n\nCREATE TABLE users_0 PARTITION OF users FOR VALUES WITH (MODULUS 4, REMAINDER 0);\nCREATE TABLE users_1 PARTITION OF users FOR VALUES WITH (MODULUS 4, REMAINDER 1);\nCREATE TABLE users_2 PARTITION OF users FOR VALUES WITH (MODULUS 4, REMAINDER 2);\nCREATE TABLE users_3 PARTITION OF users FOR VALUES WITH (MODULUS 4, REMAINDER 3);\n-- Each partition gets ~25% of users based on id hash\n```\n\n## Sharding \u2014 Multi-Server Split\n\n```\nSHARDING ARCHITECTURE:\n\n Application\n     \u2193\n Shard Router (determines which DB to query)\n     \u2193  \u2193  \u2193  \u2193\n DB1  DB2  DB3  DB4  \u2190 each is a full PostgreSQL server\n\nSHARD KEY DECISION (most important choice):\n\n By user_id:\n  - user_id 1-1M   \u2192 DB1\n  - user_id 1M-2M  \u2192 DB2\n  - Good: all user's data on one shard \u2192 no cross-shard queries for user context\n  - Bad: hot users (power users) overwhelm one shard\n\n By geography:\n  - EU users \u2192 DB-EU (physically in EU, GDPR compliance)\n  - US users \u2192 DB-US\n  - APAC     \u2192 DB-APAC\n  - Good: data residency compliance, latency\n  - Bad: cross-region reporting is complex\n\n By hash(user_id):\n  - Distributes evenly, no hotspots\n  - Bad: related data (user + orders) may be on different shards\n\nCROSS-SHARD LIMITATIONS:\n  - No JOIN across shards\n  - No foreign keys across shards\n  - No global ORDER BY with LIMIT (must merge sort in application)\n  - No ACID transactions spanning shards (need Saga)\n  - Re-sharding (splitting shards as you grow) is extremely painful\n```\n\n## Sharding in Spring Boot\n\n```java\n// Simple shard routing based on user_id:\n@Configuration\npublic class ShardingConfig {\n\n    private static final int SHARD_COUNT = 4;\n\n    @Bean\n    @Primary\n    public DataSource routingDataSource(\n            DataSource shard0, DataSource shard1,\n            DataSource shard2, DataSource shard3) {\n        Map<Object, Object> shards = Map.of(\n            0, shard0, 1, shard1, 2, shard2, 3, shard3\n        );\n\n        AbstractRoutingDataSource routing = new AbstractRoutingDataSource() {\n            @Override\n            protected Object determineCurrentLookupKey() {\n                Long userId = ShardContext.getCurrentUserId();\n                return (int) (userId % SHARD_COUNT);\n            }\n        };\n        routing.setTargetDataSources(shards);\n        routing.setDefaultTargetDataSource(shard0);\n        return routing;\n    }\n}\n\n// Thread-local shard context:\npublic class ShardContext {\n    private static final ThreadLocal<Long> USER_ID = new ThreadLocal<>();\n\n    public static void setUserId(Long userId) { USER_ID.set(userId); }\n    public static Long getCurrentUserId() { return USER_ID.get(); }\n    public static void clear() { USER_ID.remove(); }\n}\n\n// Set shard context in request interceptor:\n@Component\npublic class ShardInterceptor implements HandlerInterceptor {\n    @Override\n    public boolean preHandle(HttpServletRequest request,\n                             HttpServletResponse response, Object handler) {\n        Long userId = extractUserIdFromToken(request);\n        ShardContext.setUserId(userId);\n        return true;\n    }\n\n    @Override\n    public void afterCompletion(HttpServletRequest req, HttpServletResponse res,\n                                Object handler, Exception ex) {\n        ShardContext.clear();\n    }\n}\n```\n\n## When to Use Each\n\n```\nSTEP 1: Vertical scaling (bigger server)      \u2014 up to ~128GB RAM, 64 cores\nSTEP 2: Add indexes + query optimization      \u2014 often 10-100\u00d7 improvement\nSTEP 3: Caching (Redis)                       \u2014 reduce DB read load 80-90%\nSTEP 4: Read replicas                         \u2014 scale reads horizontally\nSTEP 5: Partitioning                          \u2014 manage large tables (100M+ rows)\nSTEP 6: Sharding                              \u2014 only when above are exhausted\n                                               (usually 10TB+ of data or\n                                                sustained millions of req/sec)\n\nMost applications NEVER reach step 6.\nInstagram ran on PostgreSQL with 1 billion users for years before sharding.\n```\n\n## Production Reality\n\nBefore recommending sharding in an interview (or at work), articulate why the simpler solutions aren't sufficient. Sharding introduces operational complexity that requires dedicated database expertise. If the question is about scale, a better first answer is often \"we'd add a read replica for read scaling and archive old data to cold storage, partitioned by date\" \u2014 this gets 80% of the benefit with 20% of the complexity."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "Partitioning splits a large table into smaller segments within the same database server.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": ""
+          }
+        ],
+        "cap": "Most applications should exhaust vertical scaling, read replicas, caching, and partitioning before considering sharding.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

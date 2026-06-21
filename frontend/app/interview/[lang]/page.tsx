@@ -1,0 +1,136 @@
+import { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ChevronRight, Server, Globe, Database, Brain } from "lucide-react";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://interviewexplainer.com";
+
+const LANG_META: Record<string, { name: string; tracks: { slug: string; name: string; icon: typeof Server; desc: string; stacks: string }[] }> = {
+  java: {
+    name: "Java",
+    tracks: [
+      { slug: "backend", name: "Java Backend", icon: Server, desc: "Spring Boot, Kafka, Redis, PostgreSQL, AWS, Microservices, JVM", stacks: "32 stacks · 500+ questions" },
+      { slug: "fullstack", name: "Java Full Stack", icon: Globe, desc: "Java BE + React/Angular FE, REST APIs, Docker", stacks: "18 stacks · 200+ questions" },
+    ],
+  },
+  python: {
+    name: "Python",
+    tracks: [
+      { slug: "backend", name: "Python Backend", icon: Server, desc: "Django, FastAPI, Flask, SQLAlchemy, Celery, Redis", stacks: "28 stacks · 400+ questions" },
+      { slug: "fullstack", name: "Python Full Stack", icon: Globe, desc: "Django/FastAPI + React, REST, WebSockets", stacks: "16 stacks · 180+ questions" },
+      { slug: "data-engineering", name: "Data Engineering", icon: Database, desc: "Airflow, Spark, Kafka, dbt, data pipelines, warehouses", stacks: "12 stacks · 150+ questions" },
+      { slug: "ml-ai", name: "ML / AI Engineering", icon: Brain, desc: "MLOps, LLMs, model deployment, feature engineering, vector DBs", stacks: "10 stacks · 120+ questions" },
+    ],
+  },
+  javascript: {
+    name: "JavaScript",
+    tracks: [
+      { slug: "frontend", name: "JS Frontend", icon: Globe, desc: "React, Next.js, TypeScript, Vue, Angular, performance", stacks: "20 stacks · Coming soon" },
+      { slug: "backend", name: "Node.js Backend", icon: Server, desc: "Express, NestJS, GraphQL, REST, tRPC", stacks: "14 stacks · Coming soon" },
+      { slug: "fullstack", name: "JS Full Stack", icon: Globe, desc: "React + Node, Next.js, Prisma, Vercel", stacks: "10 stacks · Coming soon" },
+    ],
+  },
+};
+
+export async function generateMetadata({ params }: { params: Promise<{ lang: string }> }): Promise<Metadata> {
+  const { lang } = await params;
+  const meta = LANG_META[lang];
+  if (!meta) return { title: "Not Found" };
+  const title = `${meta.name} Interview Questions — All Tracks & Levels | InterviewExplainer`;
+  const description = `Complete ${meta.name} interview preparation: ${meta.tracks.map(t => t.name).join(", ")}. Beginner to advanced answers, DSA, system design, company prep.`;
+  return {
+    title,
+    description,
+    alternates: { canonical: `${SITE_URL}/interview/${lang}` },
+    openGraph: { title, description, url: `${SITE_URL}/interview/${lang}` },
+  };
+}
+
+export default async function LangHubPage({ params }: { params: Promise<{ lang: string }> }) {
+  const { lang } = await params;
+  const meta = LANG_META[lang];
+  if (!meta) notFound();
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20">
+      <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-2 text-xs text-slate-500 mb-8">
+          <Link href="/" className="hover:text-slate-700">Home</Link>
+          <ChevronRight className="h-3 w-3" />
+          <Link href="/interview" className="hover:text-slate-700">Interview Questions</Link>
+          <ChevronRight className="h-3 w-3" />
+          <span className="text-slate-700 font-semibold">{meta.name}</span>
+        </nav>
+
+        <header className="mb-10">
+          <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-3">
+            {meta.name} Interview Questions
+          </h1>
+          <p className="text-lg text-slate-600 max-w-3xl leading-relaxed">
+            Everything you need to ace {meta.name} interviews — across every track and experience level.
+            Beginner to advanced, interview-framed answers with production examples.
+          </p>
+        </header>
+
+        <section className="mb-12">
+          <h2 className="text-xl font-black text-slate-800 mb-5">Choose Your Track</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {meta.tracks.map(track => {
+              const Icon = track.icon;
+              return (
+                <Link
+                  key={track.slug}
+                  href={`/interview/${lang}/${track.slug}`}
+                  className="group flex items-start gap-4 p-5 bg-white rounded-2xl border border-slate-200 hover:border-blue-400 hover:shadow-lg transition-all"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
+                    <Icon className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-base font-black text-slate-900 group-hover:text-blue-600 transition-colors mb-0.5">{track.name}</h3>
+                    <p className="text-xs text-slate-400 font-medium mb-2">{track.stacks}</p>
+                    <p className="text-sm text-slate-600 leading-relaxed">{track.desc}</p>
+                    <div className="mt-3 flex gap-2">
+                      {["Beginner", "Intermediate", "Advanced"].map(lvl => (
+                        <Link
+                          key={lvl}
+                          href={`/interview/${lang}/${track.slug}/${lvl.toLowerCase()}`}
+                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          {lvl}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Quick links to levels */}
+        <section className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-6">
+          <h2 className="text-lg font-black text-slate-900 mb-4">Jump Directly to a Level</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { level: "beginner", label: "Beginner", range: "0–2 yrs", color: "border-emerald-300 hover:bg-emerald-50 text-emerald-700" },
+              { level: "intermediate", label: "Intermediate", range: "2–5 yrs", color: "border-amber-300 hover:bg-amber-50 text-amber-700" },
+            ].map(({ level, label, range, color }) => (
+              <Link
+                key={level}
+                href={`/interview/${lang}/backend/${level}`}
+                className={`block p-4 bg-white rounded-xl border-2 ${color} transition-colors`}
+              >
+                <div className="font-black text-sm">{label}</div>
+                <div className="text-xs opacity-75">{range} experience</div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}

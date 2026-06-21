@@ -1,0 +1,73 @@
+{
+  "topic": "Exception Handling in REST APIs",
+  "topicSlug": "exception-handling",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "rest-api-web",
+  "questions": [
+    {
+      "id": "rest-error-responses",
+      "title": "Structured Error Responses",
+      "slug": "rest-error-responses",
+      "question": "How do you design and implement consistent error responses in a REST API?",
+      "difficulty": "easy",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Consistent error response schema across all endpoints**\n- **RFC 7807 Problem Details format \u2014 industry standard**\n- **Include: status, error code, message, field errors for validation**\n- **Never expose: stack traces, SQL errors, internal paths**\n- **Include `requestId`: correlate frontend errors with backend logs**\n- **Red flag:** different error formats per endpoint \u2014 clients can't parse errors uniformly"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Consistent error responses are a fundamental API quality requirement. Every error, regardless of cause, should follow the same JSON structure so clients can parse errors uniformly. RFC 7807 defines a standard format \u2014 Problem Details for HTTP APIs \u2014 that includes `type`, `title`, `status`, `detail`, and optionally custom fields.\n\nFor validation errors, include field-level errors so clients can highlight the specific invalid fields. For business errors, include an `errorCode` that the frontend can map to user-friendly messages without relying on message text (which might change).\n\nNever include internal details in error responses: stack traces, SQL queries, file paths, or exception class names. Log them on the server; return sanitized messages to clients. Always include a `requestId` or `correlationId` \u2014 when a user reports an error, you need to find the corresponding log entry."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Error Response DTOs\n\n```java\n// Standard error response:\npublic class ApiError {\n    private int status;\n    private String errorCode;      // Machine-readable: \"ORDER_NOT_FOUND\"\n    private String message;        // Human-readable: \"Order with ID 42 was not found\"\n    private String path;           // Request URI: \"/api/orders/42\"\n    private Instant timestamp;\n    private String requestId;      // Correlation ID from MDC\n    private List<FieldError> fieldErrors;  // For validation failures\n\n    @Data\n    public static class FieldError {\n        private String field;         // \"items[0].quantity\"\n        private String message;       // \"must be greater than 0\"\n        private Object rejectedValue; // The value that was rejected\n    }\n\n    public static ApiError of(int status, String errorCode, String message,\n                               HttpServletRequest request) {\n        ApiError error = new ApiError();\n        error.status = status;\n        error.errorCode = errorCode;\n        error.message = message;\n        error.path = request.getRequestURI();\n        error.timestamp = Instant.now();\n        error.requestId = MDC.get(\"requestId\");  // From correlation ID filter\n        return error;\n    }\n}\n\n// Spring Boot 3 built-in ProblemDetail (RFC 7807):\nProblemDetail problem = ProblemDetail.forStatusAndDetail(\n    HttpStatus.NOT_FOUND, \"Order not found: \" + id);\nproblem.setType(URI.create(\"https://api.example.com/errors/order-not-found\"));\nproblem.setTitle(\"Order Not Found\");\nproblem.setProperty(\"requestId\", MDC.get(\"requestId\"));\nreturn ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);\n```\n\n## Centralized Exception Handler\n\n```java\n@RestControllerAdvice\npublic class GlobalExceptionHandler {\n\n    // 400 - Validation errors (JSON request body)\n    @ExceptionHandler(MethodArgumentNotValidException.class)\n    public ResponseEntity<ApiError> handleValidation(\n            MethodArgumentNotValidException ex, HttpServletRequest request) {\n\n        List<ApiError.FieldError> fieldErrors = ex.getBindingResult().getFieldErrors()\n            .stream()\n            .map(fe -> {\n                ApiError.FieldError error = new ApiError.FieldError();\n                error.setField(fe.getField());\n                error.setMessage(fe.getDefaultMessage());\n                error.setRejectedValue(fe.getRejectedValue());\n                return error;\n            })\n            .collect(Collectors.toList());\n\n        ApiError apiError = ApiError.of(400, \"VALIDATION_FAILED\",\n            \"Request validation failed\", request);\n        apiError.setFieldErrors(fieldErrors);\n        return ResponseEntity.badRequest().body(apiError);\n    }\n\n    // 400 - Validation errors (path vars, query params)\n    @ExceptionHandler(ConstraintViolationException.class)\n    public ResponseEntity<ApiError> handleConstraintViolation(\n            ConstraintViolationException ex, HttpServletRequest request) {\n        List<ApiError.FieldError> fieldErrors = ex.getConstraintViolations()\n            .stream()\n            .map(cv -> {\n                ApiError.FieldError error = new ApiError.FieldError();\n                error.setField(cv.getPropertyPath().toString());\n                error.setMessage(cv.getMessage());\n                error.setRejectedValue(cv.getInvalidValue());\n                return error;\n            })\n            .collect(Collectors.toList());\n\n        ApiError apiError = ApiError.of(400, \"VALIDATION_FAILED\",\n            \"Invalid request parameters\", request);\n        apiError.setFieldErrors(fieldErrors);\n        return ResponseEntity.badRequest().body(apiError);\n    }\n\n    // 404 - Not Found\n    @ExceptionHandler(EntityNotFoundException.class)\n    public ResponseEntity<ApiError> handleNotFound(\n            EntityNotFoundException ex, HttpServletRequest request) {\n        return ResponseEntity.status(HttpStatus.NOT_FOUND)\n            .body(ApiError.of(404, \"NOT_FOUND\", ex.getMessage(), request));\n    }\n\n    // 409 - Business conflict\n    @ExceptionHandler(BusinessConflictException.class)\n    public ResponseEntity<ApiError> handleConflict(\n            BusinessConflictException ex, HttpServletRequest request) {\n        return ResponseEntity.status(HttpStatus.CONFLICT)\n            .body(ApiError.of(409, ex.getErrorCode(), ex.getMessage(), request));\n    }\n\n    // 415 - Unsupported media type\n    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)\n    public ResponseEntity<ApiError> handleUnsupportedMediaType(\n            HttpMediaTypeNotSupportedException ex, HttpServletRequest request) {\n        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)\n            .body(ApiError.of(415, \"UNSUPPORTED_MEDIA_TYPE\",\n                \"Content-Type '\" + ex.getContentType() + \"' is not supported\", request));\n    }\n\n    // 500 - Unexpected errors\n    @ExceptionHandler(Exception.class)\n    public ResponseEntity<ApiError> handleUnexpected(\n            Exception ex, HttpServletRequest request) {\n        log.error(\"Unexpected error on {} {}: {}\",\n            request.getMethod(), request.getRequestURI(), ex.getMessage(), ex);\n        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)\n            .body(ApiError.of(500, \"INTERNAL_ERROR\",\n                \"An unexpected error occurred. Reference: \" + MDC.get(\"requestId\"),\n                request));\n    }\n}\n```\n\n## Correlation ID Filter\n\n```java\n@Component\npublic class CorrelationIdFilter extends OncePerRequestFilter {\n\n    private static final String REQUEST_ID_HEADER = \"X-Request-ID\";\n    private static final String MDC_KEY = \"requestId\";\n\n    @Override\n    protected void doFilterInternal(HttpServletRequest request,\n                                     HttpServletResponse response,\n                                     FilterChain chain) throws IOException, ServletException {\n        String requestId = Optional.ofNullable(request.getHeader(REQUEST_ID_HEADER))\n            .filter(id -> !id.isBlank())\n            .orElse(UUID.randomUUID().toString());\n\n        MDC.put(MDC_KEY, requestId);\n        response.setHeader(REQUEST_ID_HEADER, requestId);  // Echo back to client\n\n        try {\n            chain.doFilter(request, response);\n        } finally {\n            MDC.remove(MDC_KEY);\n        }\n    }\n}\n\n// Log entries automatically include requestId:\n// {\"timestamp\":\"...\",\"requestId\":\"abc-123\",\"level\":\"ERROR\",\"message\":\"...\"}\n// Client sees X-Request-ID: abc-123 in response\n// Support can look up abc-123 in log aggregator \u2192 full request trace\n```\n\n## Production Reality\n\nUse Spring Boot 3's `application.properties` to enable Problem Details globally:\n```\nspring.mvc.problemdetails.enabled=true\n```\nThis makes Spring's built-in exceptions (`MethodArgumentNotValidException`, `HttpMediaTypeNotSupportedException`, etc.) automatically return RFC 7807 format. You only need to handle your custom business exceptions in `@RestControllerAdvice`. Every API error response must include the request ID \u2014 without it, production debugging is nearly impossible."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Consistent error responses are a fundamental API quality requirement.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Always include a requestId or correlationId \u2014 when a user reports an error, you need to find the corresponding log entry.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

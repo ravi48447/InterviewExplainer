@@ -1,0 +1,19 @@
+"use client";
+import { Sparkles } from "lucide-react";
+
+interface InterviewSignalProps {
+  title?: string;
+  children: React.ReactNode;
+}
+
+export function InterviewSignal({ title = "Interview Signal", children }: InterviewSignalProps) {
+  return (
+    <div className="rounded-lg border border-violet-200 bg-gradient-to-r from-violet-50 to-purple-50 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Sparkles className="h-4 w-4 text-violet-600" />
+        <span className="text-xs font-bold text-violet-800 uppercase tracking-wide">{title}</span>
+      </div>
+      <div className="text-sm text-slate-700">{children}</div>
+    </div>
+  );
+}

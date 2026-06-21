@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import type { QuestionPagePayload } from "@/lib/api";
+import type { AnswerSection, QuestionPagePayload } from "@/lib/api";
+import type { SpeakableV2 } from "@/lib/speakable/schema";
 import {
   ArrowLeft,
   ArrowRight,
+  BookOpen,
   ChevronRight,
   Clock,
   Compass,
   Folder,
+  HelpCircle,
   Home,
+  MessageSquare,
   Moon,
   PlayCircle,
   Sun,
@@ -19,13 +23,79 @@ import { EXPERIENCE_LEVELS, type ExperienceLevelKey } from "@/lib/levels";
 
 import CodeHighlighter from "@/components/CodeHighlighter";
 import CompletionTrigger from "@/components/CompletionTrigger";
+import MarkdownContent from "@/components/MarkdownContent";
+import { MarkCompleteButton } from "@/components/mark-complete-button";
 import ReadingProgressBar from "@/components/ReadingProgressBar";
-import { Speakable } from "@/components/speakable";
 import ViewTracker from "@/components/ViewTracker";
 import { CompanyTagsBadges } from "./CompanyTagsBadges";
-import { DetailedExplanation } from "./DetailedExplanation";
 import { QuickAnswer } from "./QuickAnswer";
 import { ContentThemeProvider, useContentTheme } from "./ThemeContext";
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Deep-dive section → markdown transform
+ *
+ * The whole answer page renders through a single framework — <MarkdownContent>
+ * (the same renderer the "In a nutshell" card uses). To feed Zone 3 through it,
+ * the typed answer sections are flattened into one markdown string. Code stays
+ * fenced (so the shared client highlighter colours it) and the bespoke
+ * `concept_map` pipe format is rewritten as plain markdown.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+function ensureFenced(content: string, lang = "java"): string {
+  if (content.includes("```")) return content;
+  return `\`\`\`${lang}\n${content.trim()}\n\`\`\``;
+}
+
+/** `color|heading|~subtitle|point|point` → bold heading + bullet list. */
+function conceptMapToMarkdown(content: string): string {
+  return content
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split("|").map((p) => p.trim());
+      const heading = parts[1] || "";
+      let subtitle = "";
+      const points: string[] = [];
+      for (const p of parts.slice(2)) {
+        if (p.startsWith("~")) subtitle = p.slice(1).trim();
+        else if (p) points.push(p);
+      }
+      const head = subtitle
+        ? `**${heading}** — _${subtitle}_`
+        : `**${heading}**`;
+      const bullets = points.map((p) => `- ${p}`).join("\n");
+      return bullets ? `${head}\n${bullets}` : head;
+    })
+    .join("\n\n");
+}
+
+function deepDiveToMarkdown(sections: AnswerSection[]): string {
+  const parts: string[] = [];
+  for (const s of sections) {
+    const type = s.sectionType;
+    const title = s.sectionTitle || "";
+    const content = (s.content || "").trim();
+    if (!content) continue;
+
+    if (type === "concept_map") {
+      if (title) parts.push(`## ${title}`);
+      parts.push(conceptMapToMarkdown(content));
+      continue;
+    }
+    if (
+      type === "code_example" ||
+      type === "before_code" ||
+      type === "after_code"
+    ) {
+      parts.push(ensureFenced(content));
+      continue;
+    }
+    if (title) parts.push(`## ${title}`);
+    parts.push(content);
+  }
+  return parts.join("\n\n");
+}
 
 export interface V2ExtendedFields {
   directAnswer?: string;
@@ -38,6 +108,8 @@ export interface V2ExtendedFields {
   followupQuestions?: string[];
   lastUpdated?: string;
   layoutType?: string;
+  /** Structured Speakable v2 — when present, Zone 2 renders the archetype layout. */
+  speakableV2?: SpeakableV2;
 }
 
 interface BreadcrumbItem {
@@ -156,6 +228,11 @@ function QuestionPageLayoutInner({
   const speakableText = speakableAnswerSection?.content
     ? speakableAnswerSection.content.replace(/^#[^\n]*\n+/, "").trim()
     : "";
+
+  // Zone 2 + Zone 3 both render through the single <MarkdownContent> framework.
+  const answerMarkdown = speakableText || v2?.directAnswer || "";
+  const deepDiveMarkdown = deepDiveToMarkdown(deepDiveSections);
+  const followups = v2?.followupQuestions ?? [];
 
   const currentQuickQ =
     currentIdx >= 0 ? (data.quickQuestions ?? [])[currentIdx] : undefined;
@@ -468,32 +545,258 @@ function QuestionPageLayoutInner({
               }
             />
 
+            {/* ── Interviewer Insight card ── */}
+            {v2?.interviewerIntent &&
+              (v2.interviewerIntent.testing ||
+                v2.interviewerIntent.common_mistake ||
+                v2.interviewerIntent.to_stand_out) && (
+                <div
+                  className={`mb-6 rounded-xl border overflow-hidden ${
+                    d
+                      ? "border-slate-700/60 bg-[#1e1e1e]"
+                      : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <div
+                    className={`flex items-center gap-2 px-5 py-3 border-b ${
+                      d
+                        ? "bg-slate-800/80 border-slate-700/60"
+                        : "bg-white border-slate-200"
+                    }`}
+                  >
+                    <Target
+                      className={`h-3.5 w-3.5 ${
+                        d ? "text-indigo-400" : "text-indigo-500"
+                      }`}
+                    />
+                    <span
+                      className={`text-[11px] font-bold uppercase tracking-widest ${
+                        d ? "text-slate-300" : "text-slate-500"
+                      }`}
+                    >
+                      Interviewer Insight
+                    </span>
+                  </div>
+                  <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {v2.interviewerIntent.testing && (
+                      <div
+                        className={`rounded-lg px-3 py-2.5 border ${
+                          d
+                            ? "bg-[#101a2a] border-blue-700/40"
+                            : "bg-blue-50/60 border-blue-200/60"
+                        }`}
+                      >
+                        <div
+                          className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
+                            d ? "text-blue-400" : "text-blue-600"
+                          }`}
+                        >
+                          Testing
+                        </div>
+                        <p
+                          className={`text-[13px] leading-snug ${
+                            d ? "text-slate-300" : "text-slate-700"
+                          }`}
+                        >
+                          {v2.interviewerIntent.testing}
+                        </p>
+                      </div>
+                    )}
+                    {v2.interviewerIntent.common_mistake && (
+                      <div
+                        className={`rounded-lg px-3 py-2.5 border ${
+                          d
+                            ? "bg-[#1a1408] border-amber-700/40"
+                            : "bg-amber-50/60 border-amber-200/60"
+                        }`}
+                      >
+                        <div
+                          className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
+                            d ? "text-amber-400" : "text-amber-600"
+                          }`}
+                        >
+                          Common Mistake
+                        </div>
+                        <p
+                          className={`text-[13px] leading-snug ${
+                            d ? "text-slate-300" : "text-slate-700"
+                          }`}
+                        >
+                          {v2.interviewerIntent.common_mistake}
+                        </p>
+                      </div>
+                    )}
+                    {v2.interviewerIntent.to_stand_out && (
+                      <div
+                        className={`rounded-lg px-3 py-2.5 border ${
+                          d
+                            ? "bg-[#0d1c14] border-emerald-700/40"
+                            : "bg-emerald-50/60 border-emerald-200/60"
+                        }`}
+                      >
+                        <div
+                          className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
+                            d ? "text-emerald-400" : "text-emerald-600"
+                          }`}
+                        >
+                          To Stand Out
+                        </div>
+                        <p
+                          className={`text-[13px] leading-snug ${
+                            d ? "text-slate-300" : "text-slate-700"
+                          }`}
+                        >
+                          {v2.interviewerIntent.to_stand_out}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
             {/* ── Zone 2: Interview Answer ── */}
-            {/*
-              Phase 1.9 — was 75 lines of inline JSX building the green
-              "Interview Answer" card. Now goes through the unified
-              Speakable wrapper so v2-approved questions automatically
-              upgrade once Phase 2/3 lands. The legacy variant of
-              <Legacy> is byte-equivalent to the prior inline render
-              (lede + body + copy + mark-complete).
-            */}
-            {speakableText && (
-              <Speakable
-                source={{
-                  kind: "legacy",
-                  legacy: { type: "speakable_answer", content: speakableText },
-                }}
-                legacyVariant="question"
-                questionId={data.id}
-                readTime={readTime}
-              />
+            {answerMarkdown && (
+              <section className="mb-6">
+                <div
+                  className={`rounded-xl overflow-hidden shadow-lg ${
+                    d
+                      ? "border border-emerald-600/50 bg-[#0d1c15] shadow-black/40"
+                      : "border border-emerald-200/70 bg-emerald-50/40 shadow-emerald-100/60"
+                  }`}
+                >
+                  <div
+                    className={`flex items-center gap-2 px-5 py-2.5 border-b ${
+                      d
+                        ? "border-emerald-700/50 bg-emerald-900/30"
+                        : "border-emerald-200/60 bg-emerald-100/40"
+                    }`}
+                  >
+                    <MessageSquare
+                      className={`h-3.5 w-3.5 ${
+                        d ? "text-emerald-400" : "text-emerald-600"
+                      }`}
+                    />
+                    <span
+                      className={`text-[11px] font-bold uppercase tracking-widest ${
+                        d ? "text-emerald-300" : "text-emerald-700"
+                      }`}
+                    >
+                      Interview Answer
+                    </span>
+                    <span
+                      className={`ml-auto text-[11px] ${
+                        d ? "text-emerald-500" : "text-emerald-600"
+                      }`}
+                    >
+                      {readTime}–{Math.min(readTime + 1, 5)} min
+                    </span>
+                  </div>
+                  <div className="px-6 py-5 sm:px-7 sm:py-6">
+                    <MarkdownContent content={answerMarkdown} />
+                    <div
+                      className={`mt-5 pt-4 border-t ${
+                        d ? "border-emerald-900/50" : "border-emerald-200/50"
+                      }`}
+                    >
+                      <MarkCompleteButton questionId={Number(data.id)} />
+                    </div>
+                  </div>
+                </div>
+              </section>
             )}
 
             {/* ── Zone 3: Deep Dive ── */}
-            <DetailedExplanation
-              sections={deepDiveSections}
-              followupQuestions={v2?.followupQuestions}
-            />
+            {deepDiveMarkdown && (
+              <section className="mb-6">
+                <div
+                  className={`rounded-xl overflow-hidden shadow-md ${
+                    d
+                      ? "border border-slate-700/60 bg-[#1a1a1a] shadow-black/40"
+                      : "border border-slate-200 bg-white shadow-slate-100/60"
+                  }`}
+                >
+                  <div
+                    className={`flex items-center gap-2 px-5 py-2.5 border-b ${
+                      d
+                        ? "border-slate-700/60 bg-slate-800/60"
+                        : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <BookOpen
+                      className={`h-3.5 w-3.5 ${
+                        d ? "text-blue-400" : "text-blue-600"
+                      }`}
+                    />
+                    <span
+                      className={`text-[11px] font-bold uppercase tracking-widest ${
+                        d ? "text-slate-300" : "text-slate-500"
+                      }`}
+                    >
+                      Deep dive
+                    </span>
+                  </div>
+                  <div className="px-6 py-5 sm:px-7 sm:py-6">
+                    <MarkdownContent content={deepDiveMarkdown} />
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ── Follow-up questions ── */}
+            {followups.length > 0 && (
+              <section className="mb-6">
+                <div
+                  className={`rounded-xl overflow-hidden ${
+                    d
+                      ? "border border-indigo-700/40 bg-[#13131f]"
+                      : "border border-indigo-200/70 bg-indigo-50/40"
+                  }`}
+                >
+                  <div
+                    className={`flex items-center gap-2 px-5 py-2.5 border-b ${
+                      d
+                        ? "border-indigo-800/50 bg-indigo-900/20"
+                        : "border-indigo-200/60 bg-indigo-100/40"
+                    }`}
+                  >
+                    <HelpCircle
+                      className={`h-3.5 w-3.5 ${
+                        d ? "text-indigo-400" : "text-indigo-600"
+                      }`}
+                    />
+                    <span
+                      className={`text-[11px] font-bold uppercase tracking-widest ${
+                        d ? "text-indigo-300" : "text-indigo-700"
+                      }`}
+                    >
+                      Follow-up questions
+                    </span>
+                  </div>
+                  <ol className="px-5 py-4 space-y-3">
+                    {followups.map((q, i) => (
+                      <li key={i} className="flex items-start gap-3">
+                        <span
+                          className={`mt-[2px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-black border ${
+                            d
+                              ? "bg-indigo-950/60 text-indigo-300 border-indigo-800/60"
+                              : "bg-indigo-50 text-indigo-600 border-indigo-100"
+                          }`}
+                        >
+                          {i + 1}
+                        </span>
+                        <span
+                          className={`text-[15px] leading-[1.65] ${
+                            d ? "text-slate-200" : "text-slate-700"
+                          }`}
+                        >
+                          {q}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </section>
+            )}
 
             {/* Prev / Next */}
             <div className="mt-10">

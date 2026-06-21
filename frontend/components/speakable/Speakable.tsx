@@ -22,6 +22,7 @@
 
 import "@/components/speakable/speakable.css";
 import type { SpeakableEither, SpeakableV2 } from "@/lib/speakable/schema";
+import { normalizeSpeakableV2 } from "@/lib/speakable/normalize";
 import { Legacy, type LegacyVariant } from "./Legacy";
 import { LayoutFor } from "./layouts";
 
@@ -48,11 +49,13 @@ export function Speakable({
   theme,
 }: SpeakableProps) {
   if (source.kind === "v2") {
-    const approved = source.v2.speakable_status === "approved";
+    const v2 = normalizeSpeakableV2(source.v2);
+    if (!v2) return null;
+    const approved = v2.speakable_status === "approved";
     if (approved || forceV2) {
       return (
         <div className="speakable-prose" data-theme={theme}>
-          <RenderV2 v2={source.v2} />
+          <RenderV2 v2={v2} />
         </div>
       );
     }

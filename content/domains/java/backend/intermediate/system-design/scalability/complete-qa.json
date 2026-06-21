@@ -1,0 +1,71 @@
+{
+  "topic": "Scalability",
+  "topicSlug": "scalability",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "system-design",
+  "questions": [
+    {
+      "id": "horizontal-vs-vertical-scaling",
+      "title": "Horizontal vs Vertical Scaling",
+      "slug": "horizontal-vs-vertical-scaling",
+      "question": "What is the difference between horizontal and vertical scaling and when do you use each?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Vertical: bigger machine \u2014 faster but has limits and single point of failure**\n- **Horizontal: more machines \u2014 requires stateless services + load balancer**\n- **Stateless services: store session in Redis, not in-memory \u2014 enables horizontal scale**\n- **Database scaling: read replicas for reads, vertical/partitioning for writes**\n- **Auto-scaling: trigger on CPU%, RPS, custom metrics (Kubernetes HPA)**\n- **Scalability \u2260 performance: performance is fast for one user, scalability is fast for millions**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Vertical scaling means upgrading to a bigger server \u2014 more CPU, RAM, faster disk. It's simple (no code changes needed) but has physical limits and creates a single point of failure. Horizontal scaling means running more instances of the same service behind a load balancer. It's more complex (services must be stateless) but offers essentially unlimited capacity and natural redundancy.\n\nFor stateless services \u2014 REST APIs that don't hold in-memory state between requests \u2014 horizontal scaling is straightforward: deploy more instances, put them behind a load balancer, and you're done. The load balancer distributes traffic across instances.\n\nThe hard part of horizontal scaling is the database. Reads can scale with read replicas \u2014 replica copies receive writes and serve reads. Writes are harder \u2014 they all go to the primary. For most applications, the write bottleneck is the database, and it's addressed with query optimization, caching, and eventually partitioning \u2014 not more database servers."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Making Services Stateless \u2014 Prerequisite for Horizontal Scaling\n\n```java\n// STATEFUL (BAD for horizontal scaling):\n@RestController\nclass OrderController {\n    private Map<String, User> sessionStore = new HashMap<>();  // In-memory!\n\n    @PostMapping(\"/login\")\n    public String login(@RequestBody LoginRequest req) {\n        User user = authenticate(req);\n        String sessionId = UUID.randomUUID().toString();\n        sessionStore.put(sessionId, user);  // Stored in Instance A's memory\n        return sessionId;\n    }\n\n    @GetMapping(\"/orders\")\n    public List<Order> getOrders(@RequestHeader(\"Session-Id\") String sessionId) {\n        User user = sessionStore.get(sessionId);  // Only works if Instance A!\n        // If load balancer routes this request to Instance B \u2192 user not found\n    }\n}\n\n// STATELESS (GOOD \u2014 any instance can handle any request):\n@RestController\nclass OrderController {\n    private final RedisTemplate<String, User> redis;  // Shared Redis\n\n    @PostMapping(\"/login\")\n    public String login(@RequestBody LoginRequest req) {\n        User user = authenticate(req);\n        String sessionId = UUID.randomUUID().toString();\n        redis.opsForValue().set(\"session:\" + sessionId, user, Duration.ofHours(8));\n        return sessionId;\n        // Session stored in Redis \u2014 any instance can find it\n    }\n\n    @GetMapping(\"/orders\")\n    public List<Order> getOrders(@RequestHeader(\"Session-Id\") String sessionId) {\n        User user = redis.opsForValue().get(\"session:\" + sessionId);\n        // Works on any instance \u2014 all read from same Redis\n    }\n}\n```\n\n## Load Balancing Algorithms\n\n```\nROUND ROBIN (default):\n  Request 1 \u2192 Instance A\n  Request 2 \u2192 Instance B\n  Request 3 \u2192 Instance C\n  Request 4 \u2192 Instance A (repeat)\n\n  Good for: homogeneous requests with similar processing time\n  Bad for: mixed load (some requests take 1ms, others take 5s)\n\nLEAST CONNECTIONS:\n  Route to instance with fewest active connections\n  Good for: varying request duration\n  Nginx: upstream { least_conn; server a; server b; server c; }\n\nIP HASH (sticky sessions):\n  hash(client_ip) % num_instances \u2192 always routes same IP to same server\n  Good for: stateful services (shouldn't exist!), WebSocket connections\n  Bad for: uneven distribution if many clients share an IP (NAT)\n\nWEIGHTED:\n  Instance A: weight=3 (newer, more powerful)\n  Instance B: weight=1 (older)\n  \u2192 3:1 traffic ratio\n  Good for: rolling upgrades, mixed server capacities\n```\n\n## Database Read Scaling with Replicas\n\n```\nARCHITECTURE:\n  All WRITES \u2192 Primary PostgreSQL\n       \u2193 (replication: sync or async)\n  READS \u2192 Replica 1\n          Replica 2\n          Replica 3\n\nJAVA ROUTING (AbstractRoutingDataSource):\n```\n\n```java\n@Configuration\npublic class DataSourceConfig {\n\n    @Bean\n    public DataSource routingDataSource(\n            @Qualifier(\"primaryDataSource\") DataSource primary,\n            @Qualifier(\"replicaDataSource\") DataSource replica) {\n\n        AbstractRoutingDataSource routing = new AbstractRoutingDataSource() {\n            @Override\n            protected Object determineCurrentLookupKey() {\n                return TransactionSynchronizationManager.isCurrentTransactionReadOnly()\n                    ? \"replica\" : \"primary\";\n            }\n        };\n        routing.setTargetDataSources(Map.of(\"primary\", primary, \"replica\", replica));\n        routing.setDefaultTargetDataSource(primary);\n        return routing;\n    }\n}\n\n// Service usage:\n@Transactional(readOnly = true)   // Routes to replica\npublic List<Order> getOrderHistory(Long userId) { ... }\n\n@Transactional                     // Routes to primary (readOnly=false default)\npublic Order createOrder(CreateOrderRequest req) { ... }\n```\n\n## Auto-Scaling with Kubernetes HPA\n\n```yaml\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: order-service-hpa\nspec:\n  scaleTargetRef:\n    apiVersion: apps/v1\n    kind: Deployment\n    name: order-service\n  minReplicas: 3        # Always run at least 3 (for HA)\n  maxReplicas: 20       # Never exceed 20 (cost control)\n  metrics:\n    - type: Resource\n      resource:\n        name: cpu\n        target:\n          type: Utilization\n          averageUtilization: 70  # Scale when avg CPU > 70%\n    - type: Resource\n      resource:\n        name: memory\n        target:\n          type: Utilization\n          averageUtilization: 80\n    - type: Pods\n      pods:\n        metric:\n          name: http_requests_per_second  # Custom metric via Prometheus adapter\n        target:\n          type: AverageValue\n          averageValue: \"1000\"  # Scale when RPS/pod > 1000\n  behavior:\n    scaleUp:\n      stabilizationWindowSeconds: 60   # Don't scale up faster than every 60s\n    scaleDown:\n      stabilizationWindowSeconds: 300  # Don't scale down faster than every 5min\n                                       # Prevents thrashing during traffic spikes\n```\n\n## Scaling Bottleneck Checklist\n\n```\nBOTTLENECK PROGRESSION (common order they hit):\n\n1. Application tier (CPU bound) \u2192 Add more instances (HPA)\n2. Application tier (I/O bound, waiting on DB) \u2192 Increase DB connection pool,\n   add caching, optimize queries\n3. Database reads \u2192 Add read replicas, add Redis cache\n4. Database writes \u2192 Optimize write queries, batch inserts, event sourcing\n5. Network bandwidth \u2192 CDN for large payloads, compression\n6. Database writes (still) \u2192 Partitioning by time/range\n7. Everything \u2192 Multi-region deployment\n8. Database writes (severe) \u2192 Sharding (last resort)\n\nMONITOR TO FIND YOUR BOTTLENECK:\n  - CPU: high \u2192 scale or optimize algorithms\n  - Memory: high \u2192 check for leaks, increase heap\n  - DB connections: at max pool \u2192 slow queries or undersized pool\n  - Cache miss rate: high \u2192 wrong TTL, missing indexes, wrong data cached\n  - Error rate: rising \u2192 downstream dependency failing (add circuit breaker)\n```\n\n## Production Reality\n\nFor most Java backend services at intermediate scale (1M-10M users), the bottleneck is almost never the application tier \u2014 stateless Spring Boot services scale horizontally very easily. The bottleneck is almost always the database. Focus your scaling strategy there: add read replicas for read-heavy workloads, Redis caching for repeated queries, and index tuning for slow query paths. Auto-scaling handles traffic spikes for the app tier automatically with Kubernetes HPA \u2014 it's mostly configuration, not code."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "Vertical scaling means upgrading to a bigger server \u2014 more CPU, RAM, faster disk.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": ""
+          }
+        ],
+        "cap": "For most applications, the write bottleneck is the database, and it's addressed with query optimization, caching, and eventually partitioning \u2014 not more database servers.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

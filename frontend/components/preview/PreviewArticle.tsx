@@ -199,7 +199,7 @@ function isPre(n: HastNode | undefined): boolean {
   return !!n && n.type === "element" && n.tagName === "pre";
 }
 
-function rehypePairCodeBlocks() {
+export function rehypePairCodeBlocks() {
   return (tree: HastNode) => {
     function walk(node: HastNode) {
       if (!Array.isArray(node.children)) return;
@@ -503,7 +503,7 @@ function MarkdownDiv({
  * Markdown component overrides — base
  * ────────────────────────────────────────────────────────────────────────── */
 
-const baseComponents = {
+export const baseComponents = {
   p({ children }: { children?: React.ReactNode }) {
     return (
       <p className="text-[16px] leading-[1.78] text-slate-700 my-4 first:mt-0 last:mb-0">
@@ -643,7 +643,7 @@ const baseComponents = {
   },
 };
 
-function slugify(s: string): string {
+export function slugify(s: string): string {
   return s
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -742,12 +742,12 @@ const quickComponents = {
  * TOC for Deep dive
  * ────────────────────────────────────────────────────────────────────────── */
 
-interface TocItem {
+export interface TocItem {
   id: string;
   text: string;
 }
 
-function extractTocFromBody(body: string): TocItem[] {
+export function extractTocFromBody(body: string): TocItem[] {
   const items: TocItem[] = [];
   const re = /^###\s+(.+)$/gm;
   let m: RegExpExecArray | null;
@@ -758,7 +758,7 @@ function extractTocFromBody(body: string): TocItem[] {
   return items;
 }
 
-function TableOfContents({ items }: { items: TocItem[] }) {
+export function TableOfContents({ items }: { items: TocItem[] }) {
   if (items.length === 0) return null;
   return (
     <nav className="hidden lg:block sticky top-8 self-start w-[240px] xl:w-[260px] 2xl:w-[280px] shrink-0">
@@ -1162,7 +1162,7 @@ export default function PreviewArticle({ article }: Props) {
  * Section header — used between zones
  * ────────────────────────────────────────────────────────────────────────── */
 
-function ZoneHeader({
+export function ZoneHeader({
   kicker,
   title,
   subtitle,

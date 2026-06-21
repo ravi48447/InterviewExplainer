@@ -1,0 +1,73 @@
+{
+  "topic": "Distributed Tracing",
+  "topicSlug": "distributed-tracing",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "microservices",
+  "questions": [
+    {
+      "id": "distributed-tracing-micrometer",
+      "title": "Distributed Tracing with Micrometer and Zipkin",
+      "slug": "distributed-tracing-micrometer",
+      "question": "How do you implement distributed tracing in Spring Boot microservices?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Trace ID: unique per request across all services; Span ID: unit of work within one service**\n- **Micrometer Tracing (Spring Boot 3+): replaces Sleuth**\n- **Zipkin or Jaeger: trace visualization backends**\n- **Propagation: trace context passed via HTTP headers (`traceparent` W3C standard)**\n- **Sampling: don't trace 100% in production \u2014 performance cost**\n- **MDC (Mapped Diagnostic Context): include trace ID in log messages for correlation**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Distributed tracing answers the question: \"For this user request that touched 5 services, where did it spend its time and where did it fail?\" Each request gets a unique trace ID that propagates through all services via HTTP headers. Each service creates spans \u2014 one span per service involvement \u2014 and reports them to a centralized backend like Zipkin or Jaeger, which stitches them into a waterfall timeline.\n\nIn Spring Boot 3, this is done with Micrometer Tracing (which replaced Spring Cloud Sleuth). You add the dependency, configure a sampling rate and exporter, and trace propagation happens automatically \u2014 RestTemplate, WebClient, and Feign clients all propagate the trace context without any code changes.\n\nThe critical operational insight: always include the trace ID in your log output via MDC. When a user reports an issue with a request ID, you can search logs across all services using that single trace ID and reconstruct exactly what happened."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Setup \u2014 Spring Boot 3 + Micrometer Tracing\n\n```xml\n<!-- pom.xml -->\n<dependency>\n    <groupId>io.micrometer</groupId>\n    <artifactId>micrometer-tracing-bridge-brave</artifactId>\n</dependency>\n<dependency>\n    <groupId>io.zipkin.reporter2</groupId>\n    <artifactId>zipkin-reporter-brave</artifactId>\n</dependency>\n<dependency>\n    <groupId>io.github.openfeign</groupId>\n    <artifactId>feign-micrometer</artifactId>  <!-- Feign auto-propagation -->\n</dependency>\n```\n\n```yaml\n# application.yml\nmanagement:\n  tracing:\n    sampling:\n      probability: 0.1   # Trace 10% of requests in production\n                         # Use 1.0 in development for full tracing\n    propagation:\n      type: W3C          # Industry standard: traceparent header\n      # OR: B3 (older Zipkin format)\n\nspring:\n  zipkin:\n    base-url: http://zipkin:9411  # Zipkin server URL\n  sleuth:                         # Still works in older SB versions\n    sampler:\n      probability: 0.1\n\nlogging:\n  pattern:\n    level: \"%5p [${spring.application.name},%X{traceId},%X{spanId}]\"\n    # Example log output:\n    # INFO  [order-service,a1b2c3d4,e5f6a7b8] Order created\n```\n\n## How Trace Context Propagates\n\n```\nUser \u2192 API Gateway \u2192 Order Service \u2192 Inventory Service \u2192 Database\n\nHTTP Request from client:\n  GET /api/orders/42\n  (no trace headers yet)\n\nGateway generates trace:\n  traceparent: 00-a1b2c3d4e5f6g7h8-f1e2d3c4-01\n               ^^  ^^^^^^^^^^^^^^^^  ^^^^^^^^  ^^\n               ver  trace-id (16B)  span-id   flags\n\nGateway \u2192 Order Service:\n  traceparent: 00-a1b2c3d4e5f6g7h8-f1e2d3c4-01  (same trace, new span)\n  [Order Service creates span with parent = f1e2d3c4]\n\nOrder Service \u2192 Inventory Service:\n  traceparent: 00-a1b2c3d4e5f6g7h8-a1b2c3d4-01  (same trace, new span)\n  [Inventory Service creates span with parent = a1b2c3d4]\n\nAll spans reported to Zipkin \u2192 visualized as:\n  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 Gateway (200ms) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    \u2500\u2500\u2500\u2500\u2500 Order Service (150ms) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n      \u2500\u2500 Inventory Service (80ms) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n      \u2500\u2500 DB Query (30ms) \u2500\u2500\u2500\u2500\u2500\u2500\n```\n\n## Logging with Trace ID (MDC)\n\n```java\n@Service\n@Slf4j\npublic class OrderService {\n\n    // Micrometer Tracing automatically adds traceId/spanId to MDC\n    // So every log statement includes them automatically:\n    public Order createOrder(CreateOrderRequest request) {\n        log.info(\"Creating order for userId={}\", request.getUserId());\n        // Logs: INFO [order-service,a1b2c3d4,e5f6a7b8] Creating order for userId=42\n\n        Order order = orderRepository.save(buildOrder(request));\n        log.info(\"Order created orderId={}\", order.getId());\n        // Logs: INFO [order-service,a1b2c3d4,e5f6a7b8] Order created orderId=1001\n\n        return order;\n    }\n}\n\n// Manual span creation for custom operations:\n@Service\npublic class PaymentService {\n\n    private final Tracer tracer;  // Micrometer Tracer\n\n    public PaymentResult processPayment(PaymentRequest request) {\n        // Create custom span for a significant sub-operation:\n        Span span = tracer.nextSpan().name(\"fraud-check\").start();\n        try (Tracer.SpanInScope ignored = tracer.withSpan(span)) {\n            span.tag(\"paymentAmount\", request.getAmount().toString());\n            span.tag(\"currency\", request.getCurrency());\n\n            FraudCheckResult result = fraudService.check(request);\n\n            span.tag(\"fraudScore\", String.valueOf(result.getScore()));\n            return processIfSafe(request, result);\n        } catch (Exception e) {\n            span.error(e);\n            throw e;\n        } finally {\n            span.end();  // Always end the span!\n        }\n    }\n}\n```\n\n## Zipkin vs Jaeger\n\n```\nFeature          | Zipkin                  | Jaeger\n-----------------|-------------------------|---------------------------\nOrigin           | Twitter                 | Uber\nStorage          | In-memory, MySQL, ES    | Cassandra, Elasticsearch\nUI               | Simple timeline view    | Rich dependency graphs\nProtocol         | Zipkin B3 / W3C         | Jaeger / OpenTelemetry\nSpring support   | Native (brave reporter) | Via OpenTelemetry bridge\nRecommendation   | Simple setups           | Production at scale\n\n# Both integrate similarly with Spring Boot 3 + Micrometer\n# Use OpenTelemetry SDK if you want vendor-neutral tracing\n```\n\n## Production Reality\n\nNever trace 100% in production \u2014 a 1% sampling rate is often enough to understand p99 latencies and find bottlenecks. Only raise sampling for active debugging. The single biggest value-add: ensure trace ID is in every log line (MDC pattern). When a user reports issue at 2:47pm, you grep logs by trace ID and immediately have the full picture across services \u2014 no more \"let me check service A... now service B... now correlate timestamps manually.\""
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Distributed tracing answers the question: \"For this user request that touched 5 services, where did it spend its time and where did it fail?\" Each request gets a unique trace ID that propagates through all.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "When a user reports an issue with a request ID, you can search logs across all services using that single trace ID and reconstruct exactly what happened.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}
