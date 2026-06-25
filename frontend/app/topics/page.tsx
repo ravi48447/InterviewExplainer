@@ -182,8 +182,8 @@ const CATEGORIES = [
         slug: "observability",
         name: "Observability",
         icon: Eye,
-        color: "text-slate-600",
-        bg: "bg-slate-100",
+        color: "text-secondary",
+        bg: "bg-surface",
         desc: "Metrics, logs, traces, alerting, OpenTelemetry, dashboards",
         subtopics: ["Three pillars", "Distributed tracing", "SLI/SLO/SLA", "Alerting strategies"],
         frequency: "Medium",
@@ -198,7 +198,7 @@ const CATEGORIES = [
         slug: "devops",
         name: "DevOps",
         icon: Terminal,
-        color: "text-slate-600",
+        color: "text-secondary",
         bg: "bg-slate-200",
         desc: "CI/CD, infrastructure as code, monitoring, SRE, on-call practices",
         subtopics: ["CI/CD pipelines", "GitOps", "Blue-green deploys", "Canary releases"],
@@ -241,22 +241,22 @@ const totalTopics = CATEGORIES.reduce(
 
 export default function TopicsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/20 to-indigo-50/20 font-sans text-slate-800 selection:bg-violet-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-violet-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
           <Link
             href="/"
-            className="hover:text-slate-600 flex items-center gap-1"
+            className="hover:text-secondary flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-600 font-medium">Topics & Concepts</span>
+          <span className="text-secondary font-medium">Topics & Concepts</span>
         </nav>
 
         {/* Hero */}
-        <header className="mb-12 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+        <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
           <div className="relative px-8 py-8 bg-gradient-to-br from-violet-50 via-purple-50 to-indigo-50">
             <div className="flex items-center gap-2 mb-3">
               <BookOpen className="h-5 w-5 text-violet-600" />
@@ -264,10 +264,10 @@ export default function TopicsPage() {
                 Cross-Language Concepts
               </span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 mb-3">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               Topics & Technical Concepts
             </h1>
-            <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
               Core technical concepts that come up in every interview, across
               all languages and tracks. Each topic aggregates questions from
               every relevant domain — so whether you&apos;re a Java backend
@@ -275,17 +275,17 @@ export default function TopicsPage() {
               that transfers everywhere.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
                   <Layers className="h-5 w-5 text-violet-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Topics
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {totalTopics}
                   </div>
                 </div>
@@ -296,10 +296,10 @@ export default function TopicsPage() {
                   <BookOpen className="h-5 w-5 text-purple-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Categories
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {CATEGORIES.length}
                   </div>
                 </div>
@@ -310,10 +310,10 @@ export default function TopicsPage() {
                   <Globe className="h-5 w-5 text-indigo-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Language-Agnostic
                   </div>
-                  <div className="text-lg font-bold text-slate-900">Yes</div>
+                  <div className="text-lg font-bold text-foreground">Yes</div>
                 </div>
               </div>
             </div>
@@ -324,18 +324,18 @@ export default function TopicsPage() {
         {CATEGORIES.map((category) => (
           <section key={category.title} className="mb-10">
             <div className="flex items-center gap-2 mb-1.5">
-              <h2 className="text-xl font-black text-slate-900">
+              <h2 className="text-xl font-black text-foreground">
                 {category.title}
               </h2>
             </div>
-            <p className="text-sm text-slate-500 mb-5">{category.desc}</p>
+            <p className="text-sm text-muted-foreground mb-5">{category.desc}</p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {category.topics.map((topic) => (
                 <Link
                   key={topic.slug}
                   href={`/topics/${topic.slug}`}
-                  className="group rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-violet-300 transition-all p-5"
+                  className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-violet-300 transition-all p-5"
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div
@@ -353,10 +353,10 @@ export default function TopicsPage() {
                     </div>
                   </div>
 
-                  <h3 className="text-[15px] font-bold text-slate-900 group-hover:text-violet-600 transition-colors mb-1.5">
+                  <h3 className="text-[15px] font-bold text-foreground group-hover:text-violet-600 transition-colors mb-1.5">
                     {topic.name}
                   </h3>
-                  <p className="text-xs text-slate-500 leading-relaxed mb-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed mb-3">
                     {topic.desc}
                   </p>
 
@@ -364,7 +364,7 @@ export default function TopicsPage() {
                     {topic.subtopics.map((sub) => (
                       <span
                         key={sub}
-                        className="text-[10px] font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md"
+                        className="text-[10px] font-medium text-muted-foreground bg-surface px-2 py-0.5 rounded-md"
                       >
                         {sub}
                       </span>
@@ -378,10 +378,10 @@ export default function TopicsPage() {
 
         {/* Cross-reference CTA */}
         <section className="rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-purple-50 p-8 text-center mb-12">
-          <h2 className="text-2xl font-black text-slate-900 mb-3">
+          <h2 className="text-2xl font-black text-foreground mb-3">
             Learn Concepts in Context
           </h2>
-          <p className="text-sm text-slate-600 mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
             Every topic appears in your domain prep dashboard. Select your tech
             stack and get these concepts mapped to your interview path — with
             progress tracking and related Q&A.
@@ -389,14 +389,14 @@ export default function TopicsPage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
               href="/domains"
-              className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+              className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
             >
               Select Your Domain
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
               href="/system-design"
-              className="inline-flex items-center gap-2 px-8 py-3 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:shadow-md hover:border-violet-300 transition-all"
+              className="inline-flex items-center gap-2 px-8 py-3 bg-background border border-border text-foreground font-bold rounded-xl hover:shadow-md hover:border-violet-300 transition-all"
             >
               System Design Problems
               <ArrowRight className="h-4 w-4" />

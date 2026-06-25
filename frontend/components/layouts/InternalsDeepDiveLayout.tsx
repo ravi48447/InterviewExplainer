@@ -33,16 +33,16 @@ export function InternalsDeepDiveLayout({
       {/* Quick Answer */}
       {directAnswer && (
         <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
-          <p className="text-sm font-semibold text-slate-800">{directAnswer}</p>
+          <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
 
       {/* Overview */}
       {overview && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 border-b border-slate-200">
-            <Cpu className="h-4 w-4 text-slate-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">How It Works</span>
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
+            <Cpu className="h-4 w-4 text-secondary" />
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">How It Works</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={overview.content} stripTopHeading />
@@ -52,10 +52,10 @@ export function InternalsDeepDiveLayout({
 
       {/* Step-by-Step Internal Walkthrough */}
       {stepByStep && (
-        <div className="rounded-xl border border-indigo-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-indigo-200 bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-200">
             <ArrowRight className="h-4 w-4 text-indigo-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Step-by-Step Internals</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Step-by-Step Internals</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={stepByStep.content} stripTopHeading />
@@ -65,8 +65,8 @@ export function InternalsDeepDiveLayout({
 
       {/* Code Example */}
       {codeExample && (
-        <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-700">
+        <div className="rounded-xl border border-border dark:bg-surface overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-border">
             <Code className="h-4 w-4 text-slate-400" />
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Code Reference</span>
           </div>
@@ -78,8 +78,8 @@ export function InternalsDeepDiveLayout({
 
       {/* Source Reference */}
       {sourceRef && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-4">
-          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">Source Code Reference</div>
+        <div className="rounded-xl border border-border bg-surface px-5 py-4">
+          <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Source Code Reference</div>
           <MarkdownContent content={sourceRef.content} stripTopHeading />
         </div>
       )}
@@ -108,7 +108,7 @@ export function InternalsDeepDiveLayout({
       {speakable && (
         <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
           <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Interview Answer</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={speakable.content.replace(/^#[^\n]*\n+/, '').trim()} />

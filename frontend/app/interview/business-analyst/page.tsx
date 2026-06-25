@@ -23,22 +23,22 @@ export default function BusinessAnalystPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50/20 to-yellow-50/20">
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
-        <nav className="flex items-center gap-2 text-xs text-slate-500 mb-8">
-          <Link href="/" className="hover:text-slate-700">Home</Link>
+        <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
+          <Link href="/" className="hover:text-foreground">Home</Link>
           <ChevronRight className="h-3 w-3" />
-          <Link href="/interview" className="hover:text-slate-700">Interview Questions</Link>
+          <Link href="/interview" className="hover:text-foreground">Interview Questions</Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-700 font-semibold">Business Analyst</span>
+          <span className="text-foreground font-semibold">Business Analyst</span>
         </nav>
 
         <header className="mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-100 text-amber-700 rounded-full text-xs font-bold mb-4 uppercase tracking-wider">
             <Briefcase className="h-3.5 w-3.5" /> Business Analyst Interview Prep
           </div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-3">
+          <h1 className="text-4xl font-black tracking-tight text-foreground mb-3">
             Business Analyst Interview Questions
           </h1>
-          <p className="text-lg text-slate-600 max-w-3xl leading-relaxed">
+          <p className="text-lg text-secondary max-w-3xl leading-relaxed">
             Requirements gathering, stakeholder management, Agile, SQL basics, process mapping,
             and STAR behavioral questions — the complete BA prep guide. Coming soon.
           </p>
@@ -46,16 +46,16 @@ export default function BusinessAnalystPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {TOPICS.map(topic => (
-            <div key={topic.name} className="rounded-xl border border-amber-200 bg-white p-5 opacity-70">
+            <div key={topic.name} className="rounded-xl border border-amber-200 bg-background p-5 opacity-70">
               <div className="text-2xl mb-3">{topic.emoji}</div>
-              <h3 className="font-black text-slate-900 mb-2">{topic.name}</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">{topic.desc}</p>
-              <div className="mt-3 text-[10px] font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded-full inline-block">Coming Soon</div>
+              <h3 className="font-black text-foreground mb-2">{topic.name}</h3>
+              <p className="text-xs text-secondary leading-relaxed">{topic.desc}</p>
+              <div className="mt-3 text-[10px] font-bold px-2 py-1 bg-surface text-muted-foreground rounded-full inline-block">Coming Soon</div>
             </div>
           ))}
         </div>
 
-        <Link href="/interview" className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors">
+        <Link href="/interview" className="px-4 py-2 dark:bg-surface text-primary-foreground dark:text-foreground rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors">
           ← Browse All Roles
         </Link>
       </div>

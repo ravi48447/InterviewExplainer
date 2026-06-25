@@ -219,7 +219,7 @@ export default async function DSACompanyPage({
               <Link
                 key={slug}
                 href={`/dsa/pattern/${slug}`}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-violet-300 hover:text-violet-700 transition-colors"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:border-violet-300 hover:text-violet-700 transition-colors"
               >
                 {slug
                   .split("-")
@@ -237,7 +237,7 @@ export default async function DSACompanyPage({
         <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 mb-1">
           Grouped by curriculum module
         </p>
-        <h2 className="text-xl font-black text-slate-900 tracking-tight mb-5">
+        <h2 className="text-xl font-black text-foreground tracking-tight mb-5">
           {name} problems by module
         </h2>
         <div className="space-y-5">
@@ -248,13 +248,13 @@ export default async function DSACompanyPage({
               return (
                 <div
                   key={m.moduleSlug}
-                  className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                  className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
                 >
                   <Link
                     href={`/dsa/module/${m.moduleSlug}`}
-                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 bg-slate-50/70 hover:bg-violet-50/40 transition-colors"
+                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 bg-surface/70 hover:bg-violet-50/40 transition-colors"
                   >
-                    <span className="text-sm font-bold text-slate-900 group-hover:text-violet-700 inline-flex items-center gap-1.5 transition-colors">
+                    <span className="text-sm font-bold text-foreground group-hover:text-violet-700 inline-flex items-center gap-1.5 transition-colors">
                       {m.title}
                       <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-violet-500" />
                     </span>
@@ -269,8 +269,8 @@ export default async function DSACompanyPage({
               );
             })}
           {(byModule.get("unknown") ?? []).length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/70 text-sm font-bold text-slate-900">
+            <div className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-100 bg-surface/70 text-sm font-bold text-foreground">
                 Uncategorised
               </div>
               <div className="p-4">
@@ -303,7 +303,7 @@ export default async function DSACompanyPage({
               <Link
                 key={c.slug}
                 href={`/dsa/company/${c.slug}`}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-violet-300 hover:text-violet-700 transition-colors"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:border-violet-300 hover:text-violet-700 transition-colors"
               >
                 {toDisplayName(c.slug)}
                 <span className="text-[10px] text-slate-400">{c.count}</span>

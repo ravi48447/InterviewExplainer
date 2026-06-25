@@ -222,7 +222,7 @@ function CompanyCard({
   return (
     <Link
       href={`/companies/${company.slug}`}
-      className="group rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-orange-300 transition-all overflow-hidden"
+      className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-orange-300 transition-all overflow-hidden"
     >
       {showGradient && (
         <div
@@ -231,24 +231,24 @@ function CompanyCard({
       )}
       <div className="p-5">
         <div className="flex items-start justify-between mb-3">
-          <h3 className="text-lg font-black text-slate-900 group-hover:text-orange-600 transition-colors">
+          <h3 className="text-lg font-black text-foreground group-hover:text-orange-600 transition-colors">
             {company.name}
           </h3>
           <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-orange-500 group-hover:translate-x-1 transition-all mt-1" />
         </div>
 
-        <p className="text-xs text-slate-500 leading-relaxed mb-4">
+        <p className="text-xs text-muted-foreground leading-relaxed mb-4">
           {company.desc}
         </p>
 
         <div className="flex items-center gap-2 flex-wrap mb-3">
           <span
-            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${DSA_LEVEL_COLORS[company.dsaFocus] ?? "bg-slate-100 text-slate-600"}`}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${DSA_LEVEL_COLORS[company.dsaFocus] ?? "bg-surface text-secondary"}`}
           >
             DSA: {company.dsaFocus}
           </span>
           <span
-            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${SD_LEVEL_COLORS[company.sdFocus] ?? "bg-slate-100 text-slate-600"}`}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${SD_LEVEL_COLORS[company.sdFocus] ?? "bg-surface text-secondary"}`}
           >
             System Design: {company.sdFocus}
           </span>
@@ -259,7 +259,7 @@ function CompanyCard({
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 mb-3 text-[10px] text-slate-500">
+        <div className="flex items-center gap-1.5 mb-3 text-[10px] text-muted-foreground">
           <Clock className="h-3 w-3" />
           <span className="font-medium">{company.rounds}</span>
         </div>
@@ -268,7 +268,7 @@ function CompanyCard({
           {company.topPatterns.map((p) => (
             <span
               key={p}
-              className="text-[10px] font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md"
+              className="text-[10px] font-medium text-muted-foreground bg-surface px-2 py-0.5 rounded-md"
             >
               {p}
             </span>
@@ -289,22 +289,22 @@ const totalCompanies =
 
 export default function CompaniesPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/20 to-amber-50/20 font-sans text-slate-800 selection:bg-orange-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/20 to-amber-50/20 font-sans text-foreground selection:bg-orange-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
           <Link
             href="/"
-            className="hover:text-slate-600 flex items-center gap-1"
+            className="hover:text-secondary flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-600 font-medium">Company Prep</span>
+          <span className="text-secondary font-medium">Company Prep</span>
         </nav>
 
         {/* Hero */}
-        <header className="mb-12 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+        <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
           <div className="relative px-8 py-8 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
             <div className="flex items-center gap-2 mb-3">
               <Building2 className="h-5 w-5 text-orange-600" />
@@ -312,10 +312,10 @@ export default function CompaniesPage() {
                 Company-Specific Preparation
               </span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 mb-3">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               Company Interview Prep
             </h1>
-            <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
               Every company interviews differently. Amazon is 50% behavioral.
               Google has the hardest DSA bar. Stripe has a bug-squash round.
               We break down the process, focus areas, key patterns, and
@@ -323,17 +323,17 @@ export default function CompaniesPage() {
               exactly what to prepare.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
                   <Building2 className="h-5 w-5 text-orange-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Companies
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {totalCompanies}+
                   </div>
                 </div>
@@ -344,10 +344,10 @@ export default function CompaniesPage() {
                   <Layers className="h-5 w-5 text-amber-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Tiers Covered
                   </div>
-                  <div className="text-lg font-bold text-slate-900">4</div>
+                  <div className="text-lg font-bold text-foreground">4</div>
                 </div>
               </div>
               <div className="h-10 w-px bg-slate-200" />
@@ -356,10 +356,10 @@ export default function CompaniesPage() {
                   <Target className="h-5 w-5 text-yellow-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Process Breakdowns
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     Detailed
                   </div>
                 </div>
@@ -369,8 +369,8 @@ export default function CompaniesPage() {
         </header>
 
         {/* What Each Guide Covers */}
-        <section className="mb-10 rounded-xl border border-slate-200 bg-white p-6">
-          <h2 className="text-sm font-black text-slate-900 mb-4">
+        <section className="mb-10 rounded-xl border border-border bg-background p-6">
+          <h2 className="text-sm font-black text-foreground mb-4">
             What Each Company Guide Includes
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -388,7 +388,7 @@ export default function CompaniesPage() {
                 >
                   <item.icon className={`h-5 w-5 ${item.color}`} />
                 </div>
-                <span className="text-[11px] font-bold text-slate-700">
+                <span className="text-[11px] font-bold text-foreground">
                   {item.label}
                 </span>
               </div>
@@ -400,11 +400,11 @@ export default function CompaniesPage() {
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-1.5">
             <Star className="h-5 w-5 text-orange-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               FAANG / Big Tech
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5">
+          <p className="text-sm text-muted-foreground mb-5">
             The most sought-after companies with the most structured (and
             demanding) interview processes.
           </p>
@@ -419,11 +419,11 @@ export default function CompaniesPage() {
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-1.5">
             <TrendingUp className="h-5 w-5 text-violet-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               Top Unicorns & Growth Companies
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5">
+          <p className="text-sm text-muted-foreground mb-5">
             High-growth companies with competitive comp and interesting
             technical challenges.
           </p>
@@ -441,11 +441,11 @@ export default function CompaniesPage() {
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-1.5">
             <Users className="h-5 w-5 text-emerald-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               India Tier-1 Tech
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5">
+          <p className="text-sm text-muted-foreground mb-5">
             Top Indian tech companies known for machine coding rounds and
             strong system design focus.
           </p>
@@ -463,11 +463,11 @@ export default function CompaniesPage() {
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-1.5">
             <DollarSign className="h-5 w-5 text-blue-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               Finance & Banking
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5">
+          <p className="text-sm text-muted-foreground mb-5">
             Top financial institutions with strong enterprise engineering and
             quantitative focus.
           </p>
@@ -483,17 +483,17 @@ export default function CompaniesPage() {
 
         {/* CTA */}
         <section className="rounded-xl border border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 p-8 text-center mb-12">
-          <h2 className="text-2xl font-black text-slate-900 mb-3">
+          <h2 className="text-2xl font-black text-foreground mb-3">
             Company Prep Is Part of Your Domain Dashboard
           </h2>
-          <p className="text-sm text-slate-600 mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
             Select your domain and get company-specific prep mapped to your
             tech stack, alongside Q&A, system design, DSA, behavioral,
             roadmap, and progress tracking.
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

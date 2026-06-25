@@ -36,16 +36,16 @@ export function LifecycleTimelineLayout({
     <div className="space-y-8">
       {directAnswer && (
         <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
-          <p className="text-sm font-semibold text-slate-800">{directAnswer}</p>
+          <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
 
       {/* Overview */}
       {overview && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 border-b border-slate-200">
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
             <Clock className="h-4 w-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Overview</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Overview</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={overview.content} stripTopHeading />
@@ -55,12 +55,12 @@ export function LifecycleTimelineLayout({
 
       {/* Interactive Timeline */}
       {hasPhases && (
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-slate-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Lifecycle Phases</span>
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Lifecycle Phases</span>
           </div>
           {/* Phase selector */}
-          <div className="flex overflow-x-auto border-b border-slate-100 bg-white">
+          <div className="flex overflow-x-auto border-b border-slate-100 bg-background">
             {phases.map((phase, i) => (
               <button
                 key={i}
@@ -68,11 +68,11 @@ export function LifecycleTimelineLayout({
                 className={`flex items-center gap-2 px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors border-r border-slate-100 ${
                   activePhase === i
                     ? "bg-blue-50 text-blue-700 border-b-2 border-b-blue-500"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                    : "text-muted-foreground hover:bg-surface hover:text-foreground"
                 }`}
               >
                 <span className={`w-5 h-5 rounded-full text-[11px] font-bold flex items-center justify-center ${
-                  activePhase === i ? "bg-blue-600 text-white" : "bg-slate-200 text-slate-600"
+                  activePhase === i ? "bg-blue-600 text-primary-foreground dark:text-foreground" : "bg-slate-200 text-secondary"
                 }`}>{i + 1}</span>
                 {phase.sectionTitle || `Phase ${i + 1}`}
                 {i < phases.length - 1 && <ChevronRight className="h-3 w-3 text-slate-300 ml-1" />}
@@ -81,7 +81,7 @@ export function LifecycleTimelineLayout({
           </div>
           {/* Active phase content */}
           {activePhase !== null && phases[activePhase] && (
-            <div className="px-5 py-5 bg-white">
+            <div className="px-5 py-5 bg-background">
               <MarkdownContent content={phases[activePhase].content} stripTopHeading />
             </div>
           )}
@@ -90,9 +90,9 @@ export function LifecycleTimelineLayout({
 
       {/* Deep explanation (fallback when no structured phases) */}
       {!hasPhases && deepExplain && (
-        <div className="rounded-xl border border-blue-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-blue-50 border-b border-blue-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Lifecycle Explained</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Lifecycle Explained</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={deepExplain.content} stripTopHeading />
@@ -102,8 +102,8 @@ export function LifecycleTimelineLayout({
 
       {/* Code Example */}
       {codeExample && (
-        <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-700">
+        <div className="rounded-xl border border-border dark:bg-surface overflow-hidden">
+          <div className="px-5 py-3 border-b border-border">
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Code Reference</span>
           </div>
           <div className="px-5 py-4">
@@ -114,9 +114,9 @@ export function LifecycleTimelineLayout({
 
       {/* Scope Comparison */}
       {scopeCompare && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Comparison</span>
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-surface border-b border-border">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Comparison</span>
           </div>
           <div className="px-5 py-4 overflow-x-auto">
             <MarkdownContent content={scopeCompare.content} stripTopHeading />
@@ -128,7 +128,7 @@ export function LifecycleTimelineLayout({
       {speakable && (
         <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
           <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Interview Answer</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={speakable.content.replace(/^#[^\n]*\n+/, '').trim()} />

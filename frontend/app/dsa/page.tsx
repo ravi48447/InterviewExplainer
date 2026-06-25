@@ -94,12 +94,12 @@ const TOPIC_META: Record<string, { icon: React.ElementType; accent: string; bg: 
   backtracking:          { icon: RotateCcw,    accent: "text-rose-600",    bg: "bg-rose-50 border-rose-200" },
   intervals:             { icon: Calendar,     accent: "text-lime-600",    bg: "bg-lime-50 border-lime-200" },
   tries:                 { icon: GitMerge,     accent: "text-fuchsia-600", bg: "bg-fuchsia-50 border-fuchsia-200" },
-  "bit-manipulation":    { icon: Binary,       accent: "text-slate-600",   bg: "bg-slate-100 border-slate-300" },
+  "bit-manipulation":    { icon: Binary,       accent: "text-secondary",   bg: "bg-surface border-border" },
   math:                  { icon: Calculator,   accent: "text-yellow-600",  bg: "bg-yellow-50 border-yellow-200" },
   "two-pointers":        { icon: ScanSearch,   accent: "text-sky-600",     bg: "bg-sky-50 border-sky-200" },
   greedy:                { icon: Cpu,          accent: "text-green-600",   bg: "bg-green-50 border-green-200" },
 };
-const FALLBACK_TOPIC = { icon: List, accent: "text-slate-600", bg: "bg-slate-50 border-slate-200" };
+const FALLBACK_TOPIC = { icon: List, accent: "text-secondary", bg: "bg-surface border-border" };
 
 // ─── Difficulty ───────────────────────────────────────────────────────────────
 const DIFF: Record<string, { badge: string }> = {
@@ -222,7 +222,7 @@ const PHASE_META: Record<Phase, {
     label: "Foundations",
     description: "Big-O analysis & recursion — mental models every pattern builds on",
     icon: GraduationCap,
-    nodeBg: "bg-blue-600", nodeText: "text-white",
+    nodeBg: "bg-blue-600", nodeText: "text-primary-foreground dark:text-foreground",
     lineBg: "bg-blue-200",
     cardAccent: "bg-blue-500", cardNumBg: "bg-blue-50", cardNumText: "text-blue-700",
     hoverBorder: "hover:border-blue-300",
@@ -232,7 +232,7 @@ const PHASE_META: Record<Phase, {
     label: "Core Patterns",
     description: "6 patterns that unlock ~60% of all interview problems — start here",
     icon: Target,
-    nodeBg: "bg-violet-600", nodeText: "text-white",
+    nodeBg: "bg-violet-600", nodeText: "text-primary-foreground dark:text-foreground",
     lineBg: "bg-violet-200",
     cardAccent: "bg-violet-500", cardNumBg: "bg-violet-50", cardNumText: "text-violet-700",
     hoverBorder: "hover:border-violet-300",
@@ -242,7 +242,7 @@ const PHASE_META: Record<Phase, {
     label: "Advanced",
     description: "Trees, Graphs, DP, Backtracking — hard-medium tier that separates candidates",
     icon: Flame,
-    nodeBg: "bg-orange-500", nodeText: "text-white",
+    nodeBg: "bg-orange-500", nodeText: "text-primary-foreground dark:text-foreground",
     lineBg: "bg-orange-200",
     cardAccent: "bg-orange-500", cardNumBg: "bg-orange-50", cardNumText: "text-orange-700",
     hoverBorder: "hover:border-orange-300",
@@ -252,11 +252,11 @@ const PHASE_META: Record<Phase, {
     label: "Specialised",
     description: "Intervals, Bit tricks, Math, Tries — round out coverage before the loop",
     icon: Star,
-    nodeBg: "bg-slate-600", nodeText: "text-white",
+    nodeBg: "bg-slate-600", nodeText: "text-primary-foreground dark:text-foreground",
     lineBg: "bg-slate-300",
-    cardAccent: "bg-slate-500", cardNumBg: "bg-slate-100", cardNumText: "text-slate-600",
-    hoverBorder: "hover:border-slate-300",
-    headerBg: "bg-gradient-to-br from-slate-100 to-slate-50/40", cardBorder: "border-slate-200",
+    cardAccent: "bg-slate-500", cardNumBg: "bg-surface", cardNumText: "text-secondary",
+    hoverBorder: "hover:border-border",
+    headerBg: "bg-gradient-to-br from-slate-100 to-slate-50/40", cardBorder: "border-border",
   },
 };
 
@@ -388,7 +388,7 @@ export default function DSAIndexPage() {
       {/* ══════════════════════════════════════════════
           HERO — study-plan forward
       ══════════════════════════════════════════════ */}
-      <header className="relative overflow-hidden bg-[#0f1014] text-white">
+      <header className="relative overflow-hidden bg-[#0f1014] text-primary-foreground dark:text-foreground">
         <div className="pointer-events-none absolute inset-0" style={BG_HERO_GRID} aria-hidden />
         <div
           className="pointer-events-none absolute inset-0"
@@ -416,7 +416,7 @@ export default function DSAIndexPage() {
                 <span className="text-xs font-bold uppercase tracking-widest text-violet-300">DSA Interview Prep</span>
               </div>
 
-              <h1 className="text-3xl sm:text-[2.75rem] font-black tracking-tight text-white leading-[1.05] mb-4">
+              <h1 className="text-3xl sm:text-[2.75rem] font-black tracking-tight text-primary-foreground dark:text-foreground leading-[1.05] mb-4">
                 Crack the coding round with a{" "}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-purple-300 to-indigo-400">
                   proven study plan
@@ -434,19 +434,19 @@ export default function DSAIndexPage() {
               <div className="flex flex-wrap gap-2.5 mb-6">
                 <a
                   href="#plans"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-xl transition-colors text-sm shadow-lg shadow-violet-900/40"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-primary-foreground dark:text-foreground font-bold rounded-xl transition-colors text-sm shadow-lg shadow-violet-900/40"
                 >
                   <Trophy className="h-4 w-4" /> Choose a study plan
                 </a>
                 <Link
                   href={primaryCtaHref}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-zinc-300 hover:text-white font-medium rounded-xl transition-colors text-sm"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-zinc-300 hover:text-primary-foreground dark:text-foreground font-medium rounded-xl transition-colors text-sm"
                 >
                   <Play className="h-4 w-4" /> Start learning
                 </Link>
                 <a
                   href="#problems"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-zinc-300 hover:text-white font-medium rounded-xl transition-colors text-sm"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-zinc-300 hover:text-primary-foreground dark:text-foreground font-medium rounded-xl transition-colors text-sm"
                 >
                   Browse {problems.length}+ problems <ChevronRight className="h-4 w-4" />
                 </a>
@@ -462,7 +462,7 @@ export default function DSAIndexPage() {
                 ].map((s) => (
                   <div key={s.label} className="flex items-center gap-2">
                     <s.icon className="h-4 w-4 text-violet-400 shrink-0" />
-                    <span className="text-sm font-black text-white leading-none">{s.value}</span>
+                    <span className="text-sm font-black text-primary-foreground dark:text-foreground leading-none">{s.value}</span>
                     <span className="text-[11px] text-zinc-500">{s.label}</span>
                   </div>
                 ))}
@@ -517,10 +517,10 @@ export default function DSAIndexPage() {
             <p className="text-xs font-bold uppercase tracking-widest text-violet-600 mb-1 flex items-center gap-1.5">
               <Compass className="h-3.5 w-3.5" /> New here? Start in 10 seconds
             </p>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+            <h2 className="text-2xl font-black text-foreground tracking-tight">
               Three ways to prep — pick the one that fits you
             </h2>
-            <p className="text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">
+            <p className="text-sm text-muted-foreground mt-1 max-w-3xl leading-relaxed">
               Everything below is the same content, organised three ways. Choose how you want to
               work and jump straight to the right section — you can always switch later.
             </p>
@@ -571,7 +571,7 @@ export default function DSAIndexPage() {
               <a
                 key={p.href}
                 href={p.href}
-                className={`group relative flex flex-col rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 ${p.glow} p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg ${p.ring}`}
+                className={`group relative flex flex-col rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 ${p.glow} p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg ${p.ring}`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className={`w-11 h-11 rounded-xl border flex items-center justify-center ${p.chip}`}>
@@ -581,11 +581,11 @@ export default function DSAIndexPage() {
                     {p.step}
                   </span>
                 </div>
-                <h3 className="text-base font-bold text-slate-900 mb-1.5">{p.title}</h3>
+                <h3 className="text-base font-bold text-foreground mb-1.5">{p.title}</h3>
                 <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold mb-2.5 ${p.accent}`}>
                   <CheckCircle2 className="h-3.5 w-3.5" /> Best if: {p.bestIf}
                 </div>
-                <p className="text-[13px] text-slate-500 leading-relaxed flex-1">{p.body}</p>
+                <p className="text-[13px] text-muted-foreground leading-relaxed flex-1">{p.body}</p>
                 <span className={`mt-4 inline-flex items-center gap-1.5 text-xs font-bold ${p.accent}`}>
                   {p.cta}
                   <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -599,7 +599,7 @@ export default function DSAIndexPage() {
         <section aria-label="Basic 100 for freshers">
           <Link
             href="/dsa/basic-100"
-            className="group relative block overflow-hidden rounded-2xl bg-[#0f1014] text-white shadow-lg transition-all hover:-translate-y-0.5"
+            className="group relative block overflow-hidden rounded-2xl bg-[#0f1014] text-primary-foreground dark:text-foreground shadow-lg transition-all hover:-translate-y-0.5"
           >
             <div
               aria-hidden
@@ -625,7 +625,7 @@ export default function DSAIndexPage() {
                   </p>
                 </div>
               </div>
-              <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/40 transition-colors group-hover:bg-emerald-500 sm:self-center">
+              <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-primary-foreground dark:text-foreground shadow-lg shadow-emerald-900/40 transition-colors group-hover:bg-emerald-500 sm:self-center">
                 <Play className="h-4 w-4" /> Start the Basic 100
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </span>
@@ -652,13 +652,13 @@ export default function DSAIndexPage() {
                     </div>
                     {s.authored
                       ? <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">Available</span>
-                      : <span className="text-xs font-bold text-slate-400 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">Soon</span>
+                      : <span className="text-xs font-bold text-slate-400 bg-surface border border-border px-2 py-0.5 rounded-md">Soon</span>
                     }
                   </div>
-                  <div className="text-base font-bold text-slate-900 mb-1">{s.name}</div>
-                  <div className="text-sm text-slate-500 mb-3 leading-snug line-clamp-2">{s.tagline}</div>
+                  <div className="text-base font-bold text-foreground mb-1">{s.name}</div>
+                  <div className="text-sm text-muted-foreground mb-3 leading-snug line-clamp-2">{s.tagline}</div>
                   <div className="flex items-center gap-3 text-xs text-slate-400 mt-auto">
-                    <span className="font-semibold text-slate-600">{s.count} problems</span>
+                    <span className="font-semibold text-secondary">{s.count} problems</span>
                     <span>·</span>
                     <span>{s.duration}</span>
                   </div>
@@ -668,7 +668,7 @@ export default function DSAIndexPage() {
                 <Link
                   key={s.slug}
                   href={`/dsa/sheet/${s.slug}`}
-                  className="group rounded-2xl border border-slate-200 bg-white hover:border-violet-300 hover:shadow-lg hover:shadow-violet-100/60 hover:-translate-y-0.5 transition-all flex flex-col overflow-hidden"
+                  className="group rounded-2xl border border-border bg-background hover:border-violet-300 hover:shadow-lg hover:shadow-violet-100/60 hover:-translate-y-0.5 transition-all flex flex-col overflow-hidden"
                 >
                   <div className={`h-1.5 bg-gradient-to-r ${s.color}`} />
                   {inner}
@@ -677,7 +677,7 @@ export default function DSAIndexPage() {
                   </div>
                 </Link>
               ) : (
-                <div key={s.slug} className="rounded-2xl border border-slate-200 bg-white opacity-60 cursor-not-allowed flex flex-col overflow-hidden">
+                <div key={s.slug} className="rounded-2xl border border-border bg-background opacity-60 cursor-not-allowed flex flex-col overflow-hidden">
                   <div className={`h-1.5 bg-gradient-to-r ${s.color} opacity-50`} />
                   {inner}
                 </div>
@@ -703,13 +703,13 @@ export default function DSAIndexPage() {
               { n: "2", title: "Read theory, then solve", body: "Each module opens with a Learn page: patterns, templates, when-to-use signals." },
               { n: "3", title: "Work the phases in order", body: "Foundations → Core (≈60% of interviews) → Advanced → Specialised." },
             ].map((step) => (
-              <div key={step.n} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+              <div key={step.n} className="flex items-start gap-3 rounded-xl border border-border bg-background p-4">
                 <span className="shrink-0 w-7 h-7 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center text-sm font-black">
                   {step.n}
                 </span>
                 <div>
-                  <div className="text-sm font-bold text-slate-900 mb-0.5">{step.title}</div>
-                  <div className="text-xs text-slate-500 leading-relaxed">{step.body}</div>
+                  <div className="text-sm font-bold text-foreground mb-0.5">{step.title}</div>
+                  <div className="text-xs text-muted-foreground leading-relaxed">{step.body}</div>
                 </div>
               </div>
             ))}
@@ -727,7 +727,7 @@ export default function DSAIndexPage() {
               return (
                 <div
                   key={phase}
-                  className={`rounded-2xl border bg-white overflow-hidden flex flex-col shadow-sm ${meta.cardBorder}`}
+                  className={`rounded-2xl border bg-background overflow-hidden flex flex-col shadow-sm ${meta.cardBorder}`}
                 >
                   {/* Phase header */}
                   <div className={`flex items-start gap-3 px-5 pt-5 pb-4 border-b ${meta.cardBorder} ${meta.headerBg}`}>
@@ -743,8 +743,8 @@ export default function DSAIndexPage() {
                           {phaseMods.length} modules · <Clock className="h-3 w-3" /> ~{hours}h
                         </span>
                       </div>
-                      <h3 className="text-base font-bold text-slate-900 leading-tight mt-0.5">{meta.label}</h3>
-                      <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{meta.description}</p>
+                      <h3 className="text-base font-bold text-foreground leading-tight mt-0.5">{meta.label}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{meta.description}</p>
                     </div>
                   </div>
 
@@ -759,14 +759,14 @@ export default function DSAIndexPage() {
                         <Link
                           key={m.moduleSlug}
                           href={`/dsa/module/${m.moduleSlug}`}
-                          className={`group flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2.5 hover:bg-white hover:shadow-sm transition-all ${meta.hoverBorder}`}
+                          className={`group flex items-center gap-3 rounded-xl border border-slate-100 bg-surface/60 px-3 py-2.5 hover:bg-background hover:shadow-sm transition-all ${meta.hoverBorder}`}
                         >
                           <div className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black ${meta.cardNumBg} ${meta.cardNumText}`}>
                             {moduleNum}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-slate-900 group-hover:text-violet-700 transition-colors truncate">
+                              <span className="text-sm font-semibold text-foreground group-hover:text-violet-700 transition-colors truncate">
                                 {m.title}
                               </span>
                               {hasTheory && (
@@ -804,7 +804,7 @@ export default function DSAIndexPage() {
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
               <Flame className="h-4 w-4 text-amber-500" />
-              <h3 className="text-sm font-bold text-slate-900">Most-asked in FAANG interviews</h3>
+              <h3 className="text-sm font-bold text-foreground">Most-asked in FAANG interviews</h3>
               <span className="text-xs text-slate-400">— start with these</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
@@ -814,13 +814,13 @@ export default function DSAIndexPage() {
                   <Link
                     key={q.slug}
                     href={`/dsa/problem/${q.slug}`}
-                    className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-slate-200 bg-white hover:border-violet-300 hover:shadow-sm transition-all"
+                    className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-border bg-background hover:border-violet-300 hover:shadow-sm transition-all"
                   >
-                    <span className="shrink-0 w-6 h-6 rounded-full bg-slate-50 border border-slate-200 group-hover:border-violet-200 flex items-center justify-center text-[11px] font-bold text-slate-400 group-hover:text-violet-500 transition-colors">
+                    <span className="shrink-0 w-6 h-6 rounded-full bg-surface border border-border group-hover:border-violet-200 flex items-center justify-center text-[11px] font-bold text-slate-400 group-hover:text-violet-500 transition-colors">
                       {i + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold text-slate-900 group-hover:text-violet-700 transition-colors truncate">
+                      <div className="text-[13px] font-semibold text-foreground group-hover:text-violet-700 transition-colors truncate">
                         {q.title}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
@@ -837,10 +837,10 @@ export default function DSAIndexPage() {
           </div>
 
           {/* Full explorer */}
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 sm:p-6">
+          <div className="rounded-2xl border border-border bg-background shadow-sm p-5 sm:p-6">
             <div className="flex items-center gap-2 mb-4 text-xs text-slate-400">
               <Filter className="h-3.5 w-3.5" />
-              <span className="font-semibold text-slate-600">Full problem explorer</span>
+              <span className="font-semibold text-secondary">Full problem explorer</span>
             </div>
             <DSAProblemExplorer problems={problemRows} moduleMap={moduleMap} />
           </div>
@@ -863,13 +863,13 @@ export default function DSAIndexPage() {
                 <Link
                   key={cat.slug}
                   href={`/dsa/${cat.slug}`}
-                  className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white hover:border-violet-300 hover:shadow-sm px-3.5 py-3 transition-all"
+                  className="group flex items-center gap-3 rounded-xl border border-border bg-background hover:border-violet-300 hover:shadow-sm px-3.5 py-3 transition-all"
                 >
                   <div className={`shrink-0 w-9 h-9 rounded-lg border flex items-center justify-center ${meta.bg}`}>
                     <Icon className={`h-4 w-4 ${meta.accent}`} />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-900 group-hover:text-violet-700 truncate transition-colors">{cat.name}</div>
+                    <div className="text-sm font-semibold text-foreground group-hover:text-violet-700 truncate transition-colors">{cat.name}</div>
                     <div className="text-xs text-slate-400 mt-0.5">{cat.count} problems</div>
                   </div>
                 </Link>
@@ -879,10 +879,10 @@ export default function DSAIndexPage() {
         </section>
 
         {/* ── 5 · PAIRS WELL WITH (slim band) ─────────── */}
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5 sm:p-6">
+        <section className="rounded-2xl border border-border bg-background shadow-sm p-5 sm:p-6">
           <div className="flex items-center gap-2 mb-4">
             <Award className="h-4 w-4 text-emerald-600" />
-            <h2 className="text-base font-bold text-slate-900">Pairs well with</h2>
+            <h2 className="text-base font-bold text-foreground">Pairs well with</h2>
             <span className="text-xs text-slate-400">— complete your prep</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -891,10 +891,10 @@ export default function DSAIndexPage() {
               { href: "/java-fullstack-intermediate",  title: "Java Fullstack — Intermediate", desc: "Spring Boot + React · TypeScript · Web fundamentals" },
               { href: "/go-intermediate",              title: "Go — Intermediate",             desc: "Goroutines · gRPC · Gin · System Design · Cloud" },
             ].map((item) => (
-              <Link key={item.href} href={item.href} className="group flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:border-emerald-300 hover:shadow-sm p-4 transition-all">
+              <Link key={item.href} href={item.href} className="group flex items-start gap-3 rounded-xl border border-border bg-surface/60 hover:bg-background hover:border-emerald-300 hover:shadow-sm p-4 transition-all">
                 <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 mt-1.5" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-slate-900 group-hover:text-emerald-700 transition-colors">{item.title}</div>
+                  <div className="text-sm font-semibold text-foreground group-hover:text-emerald-700 transition-colors">{item.title}</div>
                   <div className="text-xs text-slate-400 mt-0.5">{item.desc}</div>
                 </div>
                 <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-emerald-500 shrink-0 transition-colors mt-0.5" />
@@ -912,14 +912,14 @@ export default function DSAIndexPage() {
           />
           <div className="space-y-2">
             {FAQS.map((f, i) => (
-              <details key={i} className="group rounded-xl border border-slate-200 bg-white hover:border-violet-200 transition-colors">
+              <details key={i} className="group rounded-xl border border-border bg-background hover:border-violet-200 transition-colors">
                 <summary className="flex items-center justify-between gap-4 px-5 py-3.5 cursor-pointer list-none">
-                  <span className="text-sm font-semibold text-slate-900 group-hover:text-violet-700 transition-colors leading-snug">
+                  <span className="text-sm font-semibold text-foreground group-hover:text-violet-700 transition-colors leading-snug">
                     {f.q}
                   </span>
                   <ChevronRight className="h-4 w-4 text-slate-400 shrink-0 group-open:rotate-90 transition-transform" />
                 </summary>
-                <div className="px-5 pb-4 text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
+                <div className="px-5 pb-4 text-sm text-secondary leading-relaxed border-t border-slate-100 pt-3">
                   {f.a}
                 </div>
               </details>
@@ -954,11 +954,11 @@ function SectionHeading({
     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <p className={`text-xs font-bold uppercase tracking-widest mb-1 ${kickerColor}`}>{kicker}</p>
-        <h2 className="text-2xl font-black text-slate-900 tracking-tight">{title}</h2>
-        {subtitle && <p className="text-sm text-slate-500 mt-1 max-w-3xl leading-relaxed">{subtitle}</p>}
+        <h2 className="text-2xl font-black text-foreground tracking-tight">{title}</h2>
+        {subtitle && <p className="text-sm text-muted-foreground mt-1 max-w-3xl leading-relaxed">{subtitle}</p>}
       </div>
       {purpose && (
-        <span className="shrink-0 inline-flex items-center gap-1.5 self-start rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-500 shadow-sm">
+        <span className="shrink-0 inline-flex items-center gap-1.5 self-start rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-muted-foreground shadow-sm">
           <Compass className="h-3.5 w-3.5 text-violet-500" />
           {purpose}
         </span>
@@ -988,7 +988,7 @@ function FeaturedPlanCard({
   href: string;
 }) {
   const card = (
-    <div className="rounded-2xl border border-white/[0.1] bg-white/[0.04] p-5 backdrop-blur-sm transition-colors group-hover:border-violet-500/40 group-hover:bg-white/[0.07]">
+    <div className="rounded-2xl border border-white/[0.1] bg-background/[0.04] p-5 backdrop-blur-sm transition-colors group-hover:border-violet-500/40 group-hover:bg-background/[0.07]">
       <div className="flex items-center justify-between mb-4">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest text-amber-300">
           <Star className="h-3 w-3" /> Recommended start
@@ -1004,7 +1004,7 @@ function FeaturedPlanCard({
         <Trophy className={`h-6 w-6 ${sheet.iconColor}`} />
       </div>
 
-      <div className="text-xl font-black text-white mb-1">{sheet.name}</div>
+      <div className="text-xl font-black text-primary-foreground dark:text-foreground mb-1">{sheet.name}</div>
       <p className="text-sm text-zinc-400 leading-relaxed mb-4">{sheet.tagline}</p>
 
       <div className="flex items-center gap-4 text-xs text-zinc-500 mb-4 pb-4 border-b border-white/[0.08]">

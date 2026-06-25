@@ -71,14 +71,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center px-4 py-12 bg-slate-50/50 dark:bg-slate-950/50">
+    <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center px-4 py-12 bg-surface/50 dark:bg-slate-950/50">
       <div className="w-full max-w-md animate-fade-in-up">
-        <Card className="border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <Card className="border-border dark:border-border shadow-xl shadow-slate-200/50 dark:shadow-none">
           <CardHeader className="space-y-1 text-center">
             <CardTitle className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
               Welcome Back
             </CardTitle>
-            <CardDescription className="text-slate-500 dark:text-slate-400">
+            <CardDescription className="text-muted-foreground dark:text-slate-400">
               Enter your credentials to access your personalized mastery roadmap
             </CardDescription>
             <div className="flex items-center justify-center gap-1.5 pt-1 text-xs font-medium text-emerald-600">
@@ -98,8 +98,8 @@ export default function LoginPage() {
               <>
                 <SocialButtons />
                 <div className="relative my-4">
-                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-200 dark:border-slate-800" /></div>
-                  <div className="relative flex justify-center text-[11px] uppercase"><span className="bg-white dark:bg-slate-900 px-2 text-slate-400">or with email</span></div>
+                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border dark:border-border" /></div>
+                  <div className="relative flex justify-center text-[11px] uppercase"><span className="bg-background dark:dark:bg-surface px-2 text-slate-400">or with email</span></div>
                 </div>
               </>
             )}
@@ -150,7 +150,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((s) => !s)}
-                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                    className="absolute right-3 top-3 text-slate-400 hover:text-secondary transition-colors"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                     tabIndex={-1}
                   >
@@ -165,7 +165,7 @@ export default function LoginPage() {
               </div>
               <Button 
                 type="submit" 
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-6 transition-all duration-200 shadow-lg shadow-blue-500/20"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-primary-foreground dark:text-foreground font-semibold py-6 transition-all duration-200 shadow-lg shadow-blue-500/20"
                 disabled={!canSubmit}
               >
                 {isSubmitting ? (
@@ -185,7 +185,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={sendMagicLink}
                 disabled={magicBusy}
-                className="flex w-full items-center justify-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors"
+                className="flex w-full items-center justify-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-blue-600 transition-colors"
               >
                 {magicBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
                 Prefer no password? Email me a sign-in link
@@ -195,16 +195,16 @@ export default function LoginPage() {
           <CardFooter className="flex flex-col space-y-4">
             <div className="relative w-full">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-slate-200 dark:border-slate-800" />
+                <span className="w-full border-t border-border dark:border-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white dark:bg-slate-900 px-2 text-slate-500">
+                <span className="bg-background dark:dark:bg-surface px-2 text-muted-foreground">
                   New to InterviewExplainer?
                 </span>
               </div>
             </div>
             <Link href="/signup" className="w-full">
-              <Button variant="outline" className="w-full py-6 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
+              <Button variant="outline" className="w-full py-6 border-border dark:border-border hover:bg-surface dark:hover:dark:bg-surface">
                 Create an Account
               </Button>
             </Link>
@@ -212,7 +212,7 @@ export default function LoginPage() {
             {/* Friction-free path: content is readable without an account. */}
             <Link
               href="/domains"
-              className="group flex w-full items-center justify-center gap-2 text-sm font-semibold text-slate-500 hover:text-blue-600 transition-colors"
+              className="group flex w-full items-center justify-center gap-2 text-sm font-semibold text-muted-foreground hover:text-blue-600 transition-colors"
             >
               <Compass className="h-4 w-4" />
               Just browsing? Explore content without an account
@@ -220,9 +220,9 @@ export default function LoginPage() {
             </Link>
 
             {/* What logging in unlocks */}
-            <div className="w-full rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-3">
+            <div className="w-full rounded-xl border border-slate-100 dark:border-border bg-surface/60 dark:dark:bg-surface/40 p-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">A free account unlocks</p>
-              <ul className="grid grid-cols-1 gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+              <ul className="grid grid-cols-1 gap-1.5 text-xs text-secondary dark:text-slate-300">
                 <li className="flex items-center gap-2"><Bookmark className="h-3.5 w-3.5 text-blue-500 shrink-0" /> Bookmark questions for later</li>
                 <li className="flex items-center gap-2"><BarChart3 className="h-3.5 w-3.5 text-indigo-500 shrink-0" /> Track progress, streaks & readiness</li>
                 <li className="flex items-center gap-2"><Compass className="h-3.5 w-3.5 text-violet-500 shrink-0" /> A personalized, switchable dashboard</li>

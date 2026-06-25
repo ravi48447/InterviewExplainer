@@ -187,12 +187,12 @@ export default function CodeLanguageTabs({
   // for a per-block tab strip duplicating the same Java | Python choice.
   if (useDSA) {
     return (
-      <div className="rounded-lg border border-slate-700/70 overflow-hidden my-3 bg-[#1f2330]">
-        <div className="flex items-center justify-between gap-3 px-4 py-1.5 bg-slate-800 border-b border-slate-700">
+      <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-[#1f2330]">
+        <div className="flex items-center justify-between gap-3 px-4 py-1.5 dark:bg-surface border-b border-border">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
             {displayName(active)}
             {(activeLabel || title) && (
-              <span className="text-slate-500 font-medium normal-case tracking-normal ml-2">
+              <span className="text-muted-foreground font-medium normal-case tracking-normal ml-2">
                 · {activeLabel ?? title}
               </span>
             )}
@@ -207,8 +207,8 @@ export default function CodeLanguageTabs({
   if (languages.length === 1) {
     const lang = languages[0];
     return (
-      <div className="rounded-lg border border-slate-700/70 overflow-hidden my-3 bg-[#1f2330]">
-        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-slate-800 text-xs border-b border-slate-700">
+      <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-[#1f2330]">
+        <div className="flex items-center justify-between gap-3 px-4 py-2 dark:bg-surface text-xs border-b border-border">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-slate-200 font-bold uppercase tracking-wider text-[11px] shrink-0">
               {displayName(lang)}
@@ -227,8 +227,8 @@ export default function CodeLanguageTabs({
   }
 
   return (
-    <div className="rounded-lg border border-slate-700/70 overflow-hidden my-3 bg-[#1f2330]">
-      <div className="flex items-stretch bg-slate-800 border-b border-slate-700">
+    <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-[#1f2330]">
+      <div className="flex items-stretch dark:bg-surface border-b border-border">
         <div className="flex items-center gap-0 flex-1 overflow-x-auto">
           {languages.map((lang) => (
             <button
@@ -237,8 +237,8 @@ export default function CodeLanguageTabs({
               className={cn(
                 "px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider transition-colors whitespace-nowrap border-b-2",
                 active === lang
-                  ? "text-white border-blue-400 bg-slate-700/80"
-                  : "text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-800/50",
+                  ? "text-primary-foreground dark:text-foreground border-blue-400 bg-slate-700/80"
+                  : "text-slate-400 border-transparent hover:text-slate-200 hover:dark:bg-surface/50",
               )}
               aria-pressed={active === lang}
               aria-label={`Show ${displayName(lang)} code`}

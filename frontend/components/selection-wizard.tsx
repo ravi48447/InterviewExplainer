@@ -224,7 +224,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.95, opacity: 0, y: 30 }}
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="relative w-full max-w-4xl glass-strong border-white/10 rounded-[3rem] p-8 md:p-14 shadow-[0_50px_100px_rgba(0,0,0,0.6)] overflow-hidden"
+                className="relative w-full max-w-4xl glass-strong border-white/10 rounded-[2rem] sm:rounded-[3rem] p-5 sm:p-8 md:p-14 shadow-[0_50px_100px_rgba(0,0,0,0.6)] overflow-hidden"
             >
                 <div className="bg-blob bg-primary/10 top-[-30%] left-[-30%] scale-[2] blur-[120px]" />
                 <div className="bg-blob bg-purple-500/10 bottom-[-30%] right-[-30%] scale-[2] blur-[120px]" />
@@ -232,27 +232,27 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                 {onClose && (
                     <button
                         onClick={onClose}
-                        className="absolute top-10 right-10 p-4 rounded-2xl glass hover:bg-white/10 transition-all z-20 group"
+                        className="absolute top-4 right-4 sm:top-10 sm:right-10 p-2 sm:p-4 rounded-2xl glass hover:bg-background/10 transition-all z-20 group"
                     >
-                        <X className="h-6 w-6 text-muted-foreground group-hover:text-white transition-colors" />
+                        <X className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground group-hover:text-primary-foreground dark:text-foreground transition-colors" />
                     </button>
                 )}
 
                 <div className="relative z-10">
                     {/* Compact Progress Indicator */}
-                    <div className="flex justify-center mb-12 space-x-4">
+                    <div className="flex justify-center mb-6 sm:mb-12 space-x-2 sm:space-x-4">
                         {[0, 1, 2, 3].map((i) => (
                             <div key={i} className="flex items-center">
                                 <div
                                     className={cn(
-                                        "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-700 font-bold text-sm",
-                                        step === i ? "bg-primary text-black scale-110 shadow-[0_0_30px_rgba(0,242,254,0.4)]" :
-                                            step > i ? "bg-white/20 text-white" : "bg-white/5 text-muted-foreground border border-white/5"
+                                        "w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all duration-700 font-bold text-xs sm:text-sm",
+                                        step === i ? "bg-primary text-foreground scale-110 shadow-[0_0_30px_rgba(0,242,254,0.4)]" :
+                                            step > i ? "bg-background/20 text-primary-foreground dark:text-foreground" : "bg-background/5 text-muted-foreground border border-white/5"
                                     )}
                                 >
-                                    {step > i ? <Check className="h-5 w-5" /> : i + 1}
+                                    {step > i ? <Check className="h-4 w-4 sm:h-5 sm:w-5" /> : i + 1}
                                 </div>
-                                {i < 3 && <div className={cn("w-8 h-[2px] mx-2 rounded-full transition-colors duration-700", step > i ? "bg-primary" : "bg-white/10")} />}
+                                {i < 3 && <div className={cn("w-4 sm:w-8 h-[2px] mx-1 sm:mx-2 rounded-full transition-colors duration-700", step > i ? "bg-primary" : "bg-background/10")} />}
                             </div>
                         ))}
                     </div>
@@ -266,21 +266,21 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                             transition={{ duration: 0.5, ease: "circOut" }}
                             className="text-center"
                         >
-                            <h2 className="text-3xl md:text-5xl font-black tracking-tighter mb-4 leading-tight bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">{title}</h2>
-                            <p className="text-base text-muted-foreground mb-12 max-w-lg mx-auto font-medium">{subtitle}</p>
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-black tracking-tighter mb-2 sm:mb-4 leading-tight bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">{title}</h2>
+                            <p className="text-xs sm:text-sm md:text-base text-muted-foreground mb-6 sm:mb-12 max-w-lg mx-auto font-medium">{subtitle}</p>
 
                             <div className={cn(
                                 "grid gap-3 lg:gap-4",
                                 step === 0 ? "grid-cols-1 md:grid-cols-2 max-w-2xl mx-auto" :
-                                    (step === 1 && discoveryMode === "role") || (step === 2 && discoveryMode === "tech") ? "grid-cols-2 lg:grid-cols-4" :
-                                        (step === 1 && discoveryMode === "tech") || (step === 2 && discoveryMode === "role") ? "grid-cols-3 md:grid-cols-5 lg:grid-cols-6" :
-                                            "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
+                                    (step === 1 && discoveryMode === "role") || (step === 2 && discoveryMode === "tech") ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" :
+                                        (step === 1 && discoveryMode === "tech") || (step === 2 && discoveryMode === "role") ? "grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6" :
+                                            "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
                             )}>
                                 {step === 0 && options.map((opt: any) => (
                                     <button
                                         key={opt.slug}
                                         onClick={() => handleSelection("mode", opt.slug)}
-                                        className="group relative p-8 rounded-[2rem] border border-white/5 bg-white/5 hover:bg-white/10 hover:border-primary/30 transition-all flex flex-col items-center gap-4 text-center"
+                                        className="group relative p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] border border-white/5 bg-background/5 hover:bg-background/10 hover:border-primary/30 transition-all flex flex-col items-center gap-3 sm:gap-4 text-center"
                                     >
                                         <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
                                             <opt.icon className="h-8 w-8" />
@@ -300,12 +300,12 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                             "group relative p-4 rounded-2xl border transition-all duration-300 flex flex-col items-center justify-center text-center gap-3",
                                             selections.track === track.slug
                                                 ? "bg-primary/10 border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,242,254,0.15)] scale-105"
-                                                : "bg-white/5 border-white/5 hover:border-white/10 hover:bg-white/10"
+                                                : "bg-background/5 border-white/5 hover:border-white/10 hover:bg-background/10"
                                         )}
                                     >
                                         <div className={cn(
                                             "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300",
-                                            selections.track === track.slug ? "bg-primary text-black scale-110" : "bg-white/5 text-muted-foreground group-hover:scale-110"
+                                            selections.track === track.slug ? "bg-primary text-foreground scale-110" : "bg-background/5 text-muted-foreground group-hover:scale-110"
                                         )}>
                                             {track.icon ? <track.icon className="h-5 w-5" /> : <Layout className="h-5 w-5" />}
                                         </div>
@@ -329,10 +329,10 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                                     "group relative py-4 px-2 rounded-xl border transition-all duration-300 flex flex-col items-center justify-center gap-2",
                                                     selections.languageSlug === opt.slug
                                                         ? "bg-primary/10 border-primary ring-1 ring-primary/50 shadow-[0_0_15px_rgba(0,242,254,0.1)] scale-105"
-                                                        : "bg-white/5 border-white/5 hover:border-white/10"
+                                                        : "bg-background/5 border-white/5 hover:border-white/10"
                                                 )}
                                             >
-                                                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center group-hover:bg-white/10 transition-colors">
+                                                <div className="w-10 h-10 rounded-xl bg-background/5 flex items-center justify-center group-hover:bg-background/10 transition-colors">
                                                     <TechIcon name={opt.iconUrl || opt.slug} className={cn(
                                                         "h-5 w-5 transition-transform duration-300",
                                                         selections.languageSlug === opt.slug ? "scale-110 opacity-100" : "opacity-40 grayscale group-hover:opacity-100 group-hover:grayscale-0 group-hover:scale-110"
@@ -340,7 +340,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                                 </div>
                                                 <span className={cn(
                                                     "text-[10px] font-bold tracking-tight uppercase transition-colors",
-                                                    selections.languageSlug === opt.slug ? "text-primary" : "text-muted-foreground group-hover:text-white"
+                                                    selections.languageSlug === opt.slug ? "text-primary" : "text-muted-foreground group-hover:text-primary-foreground dark:text-foreground"
                                                 )}>
                                                     {opt.name}
                                                 </span>
@@ -357,11 +357,11 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                             "relative group p-6 rounded-3xl glass-strong text-center transition-all duration-500 border border-white/5 flex flex-col items-center",
                                             selections.experienceKey === opt.key
                                                 ? "border-primary/50 bg-primary/10 scale-105 shadow-[0_0_30px_rgba(0,242,254,0.1)]"
-                                                : "hover:border-white/20 hover:bg-white/5"
+                                                : "hover:border-white/20 hover:bg-background/5"
                                         )}
                                     >
                                         <div className={cn("inline-flex items-center justify-center p-3 rounded-2xl bg-gradient-to-br mb-4 shadow-xl group-hover:scale-110 transition-transform", opt.color || "from-blue-500 to-cyan-400")}>
-                                            {opt.icon ? <opt.icon className="h-6 w-6 text-black" /> : <Sparkles className="h-6 w-6 text-black" />}
+                                            {opt.icon ? <opt.icon className="h-6 w-6 text-foreground" /> : <Sparkles className="h-6 w-6 text-foreground" />}
                                         </div>
                                         <span className="text-2xl font-black bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent mb-1">{opt.label}</span>
                                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">{opt.range}</span>
@@ -380,7 +380,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                 {step === 3 && selections.experienceKey && (
                                     <Button
                                         size="lg"
-                                        className="rounded-2xl h-14 px-10 bg-primary text-black font-black uppercase tracking-[0.15em] hover:scale-105 transition-all shadow-[0_20px_50px_rgba(0,242,254,0.4)] relative overflow-hidden group"
+                                        className="rounded-2xl h-14 px-10 bg-primary text-foreground font-black uppercase tracking-[0.15em] hover:scale-105 transition-all shadow-[0_20px_50px_rgba(0,242,254,0.4)] relative overflow-hidden group"
                                         onClick={() => {
                                             const slug = `${selections.languageSlug}-${selections.track}-${selections.experienceKey}`;
                                             router.push(`/${slug}`);
@@ -390,7 +390,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                         <span className="relative z-10 flex items-center">
                                             Initialize Path <Zap className="ml-2 h-5 w-5 fill-current" />
                                         </span>
-                                        <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                                        <div className="absolute inset-0 bg-background/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
                                     </Button>
                                 )}
                             </div>

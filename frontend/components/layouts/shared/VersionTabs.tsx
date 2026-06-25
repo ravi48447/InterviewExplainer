@@ -25,16 +25,16 @@ export function VersionTabs({ versions }: VersionTabsProps) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex border-b border-slate-200 bg-slate-50">
+    <div className="rounded-xl border border-border overflow-hidden">
+      <div className="flex border-b border-border bg-surface">
         {available.map(v => (
           <button
             key={v}
             onClick={() => setActive(v)}
             className={`px-4 py-2 text-xs font-semibold transition-colors ${
               active === v
-                ? "bg-white text-blue-700 border-b-2 border-blue-600"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-background text-blue-700 border-b-2 border-blue-600"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {VERSION_LABELS[v]}

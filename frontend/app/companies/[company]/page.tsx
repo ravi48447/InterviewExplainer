@@ -109,12 +109,12 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
-        <nav className="flex items-center gap-2 text-xs text-slate-500 mb-8">
-          <Link href="/" className="hover:text-slate-700">Home</Link>
+        <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
+          <Link href="/" className="hover:text-foreground">Home</Link>
           <ChevronRight className="h-3 w-3" />
-          <Link href="/companies" className="hover:text-slate-700">Company Prep</Link>
+          <Link href="/companies" className="hover:text-foreground">Company Prep</Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-700 font-semibold">{name}</span>
+          <span className="text-foreground font-semibold">{name}</span>
         </nav>
 
         <header className="mb-10">
@@ -122,26 +122,26 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
             <Users className="h-3.5 w-3.5" />
             Company Prep
           </div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-4">
+          <h1 className="text-4xl font-black tracking-tight text-foreground mb-4">
             {name} Interview Guide
           </h1>
-          {meta?.desc && <p className="text-lg text-slate-600 max-w-3xl leading-relaxed">{meta.desc}</p>}
+          {meta?.desc && <p className="text-lg text-secondary max-w-3xl leading-relaxed">{meta.desc}</p>}
         </header>
 
         {meta ? (
           <>
             {/* Interview Rounds */}
             <section className="mb-10">
-              <h2 className="text-xl font-black text-slate-900 mb-5">Interview Process</h2>
+              <h2 className="text-xl font-black text-foreground mb-5">Interview Process</h2>
               <div className="space-y-3">
                 {meta.rounds.map((round, i) => (
-                  <div key={round.name} className="flex gap-4 p-4 bg-white rounded-xl border border-slate-200">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-white flex items-center justify-center text-xs font-black shrink-0">
+                  <div key={round.name} className="flex gap-4 p-4 bg-background rounded-xl border border-border">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-primary-foreground dark:text-foreground flex items-center justify-center text-xs font-black shrink-0">
                       {i + 1}
                     </div>
                     <div>
-                      <div className="font-black text-slate-900 mb-1">{round.name}</div>
-                      <p className="text-sm text-slate-600 leading-relaxed">{round.desc}</p>
+                      <div className="font-black text-foreground mb-1">{round.name}</div>
+                      <p className="text-sm text-secondary leading-relaxed">{round.desc}</p>
                     </div>
                   </div>
                 ))}
@@ -151,15 +151,15 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-10">
               {/* DSA Patterns */}
               <section>
-                <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+                <h2 className="text-lg font-black text-foreground mb-4 flex items-center gap-2">
                   <Code2 className="h-5 w-5 text-purple-600" />
                   Key DSA Patterns
                 </h2>
                 <div className="space-y-2">
                   {meta.dsaPatterns.map(p => (
                     <Link key={p} href={`/dsa/pattern/${p}`}
-                      className="flex items-center justify-between p-3 bg-white rounded-lg border border-purple-200 hover:border-purple-400 hover:shadow-sm transition-all group">
-                      <span className="text-sm font-semibold text-slate-700 group-hover:text-purple-600 capitalize">{p.replace(/-/g, " ")}</span>
+                      className="flex items-center justify-between p-3 bg-background rounded-lg border border-purple-200 hover:border-purple-400 hover:shadow-sm transition-all group">
+                      <span className="text-sm font-semibold text-foreground group-hover:text-purple-600 capitalize">{p.replace(/-/g, " ")}</span>
                       <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-purple-400" />
                     </Link>
                   ))}
@@ -168,15 +168,15 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
 
               {/* Key Topics */}
               <section>
-                <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+                <h2 className="text-lg font-black text-foreground mb-4 flex items-center gap-2">
                   <BookOpen className="h-5 w-5 text-teal-600" />
                   Key Technical Topics
                 </h2>
                 <div className="space-y-2">
                   {meta.keyTopics.map(t => (
                     <Link key={t} href={`/topics/${t}`}
-                      className="flex items-center justify-between p-3 bg-white rounded-lg border border-teal-200 hover:border-teal-400 hover:shadow-sm transition-all group">
-                      <span className="text-sm font-semibold text-slate-700 group-hover:text-teal-600 capitalize">{t.replace(/-/g, " ")}</span>
+                      className="flex items-center justify-between p-3 bg-background rounded-lg border border-teal-200 hover:border-teal-400 hover:shadow-sm transition-all group">
+                      <span className="text-sm font-semibold text-foreground group-hover:text-teal-600 capitalize">{t.replace(/-/g, " ")}</span>
                       <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-teal-400" />
                     </Link>
                   ))}
@@ -186,11 +186,11 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
 
             {/* Language focus */}
             <section className="mb-10 rounded-xl border border-blue-200 bg-blue-50 p-5">
-              <h2 className="text-base font-black text-slate-900 mb-3">Preferred Languages at {name}</h2>
+              <h2 className="text-base font-black text-foreground mb-3">Preferred Languages at {name}</h2>
               <div className="flex flex-wrap gap-2">
                 {meta.langFocus.map(lang => (
                   <Link key={lang} href={`/interview/${lang}`}
-                    className="px-4 py-2 bg-white border border-blue-300 rounded-lg text-sm font-bold text-blue-700 hover:bg-blue-100 transition-colors capitalize">
+                    className="px-4 py-2 bg-background border border-blue-300 rounded-lg text-sm font-bold text-blue-700 hover:bg-blue-100 transition-colors capitalize">
                     {lang === "csharp" ? "C#" : lang.charAt(0).toUpperCase() + lang.slice(1)}
                   </Link>
                 ))}
@@ -198,10 +198,10 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
             </section>
           </>
         ) : (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+          <div className="rounded-2xl border border-border bg-background p-8 text-center">
             <div className="text-4xl mb-4">🚧</div>
-            <h2 className="text-xl font-black text-slate-900 mb-2">Coming Soon</h2>
-            <p className="text-slate-600 text-sm">{name} prep guide is being built. <Link href="/companies" className="text-orange-600 font-bold hover:underline">Browse all companies →</Link></p>
+            <h2 className="text-xl font-black text-foreground mb-2">Coming Soon</h2>
+            <p className="text-secondary text-sm">{name} prep guide is being built. <Link href="/companies" className="text-orange-600 font-bold hover:underline">Browse all companies →</Link></p>
           </div>
         )}
       </div>

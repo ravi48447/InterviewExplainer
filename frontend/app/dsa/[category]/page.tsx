@@ -64,8 +64,8 @@ function CategorySidebar({
   current: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-200">
+    <div className="rounded-xl border border-border bg-background overflow-hidden">
+      <div className="px-4 py-3 border-b border-border">
         <Link
           href="/dsa"
           className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-violet-600 hover:text-violet-800"
@@ -82,7 +82,7 @@ function CategorySidebar({
             className={`block px-3 py-1.5 text-xs rounded-md transition-colors ${
               cat === current
                 ? "bg-violet-50 text-violet-700 font-bold"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium"
+                : "text-secondary hover:text-foreground hover:bg-surface font-medium"
             }`}
           >
             {toDisplayName(cat)}
@@ -181,7 +181,7 @@ export default async function DSACategoryPage({
         <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 mb-1">
           Grouped by curriculum module
         </p>
-        <h2 className="text-xl font-black text-slate-900 tracking-tight mb-5">
+        <h2 className="text-xl font-black text-foreground tracking-tight mb-5">
           {name} problems by module
         </h2>
         <div className="space-y-5">
@@ -192,13 +192,13 @@ export default async function DSACategoryPage({
               return (
                 <div
                   key={m.moduleSlug}
-                  className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                  className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
                 >
                   <Link
                     href={`/dsa/module/${m.moduleSlug}`}
-                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 bg-slate-50/70 hover:bg-violet-50/40 transition-colors"
+                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 bg-surface/70 hover:bg-violet-50/40 transition-colors"
                   >
-                    <span className="text-sm font-bold text-slate-900 group-hover:text-violet-700 inline-flex items-center gap-1.5 transition-colors">
+                    <span className="text-sm font-bold text-foreground group-hover:text-violet-700 inline-flex items-center gap-1.5 transition-colors">
                       {m.title}
                       <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-violet-500" />
                     </span>
@@ -213,8 +213,8 @@ export default async function DSACategoryPage({
               );
             })}
           {(byModule.get("unknown") ?? []).length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/70 text-sm font-bold text-slate-900">
+            <div className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-100 bg-surface/70 text-sm font-bold text-foreground">
                 Uncategorised
               </div>
               <div className="p-4">

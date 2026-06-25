@@ -24,7 +24,7 @@ export function HeroDashboardVisual() {
                     <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-5 overflow-hidden relative">
 
                         {/* Mac Window Header */}
-                        <div className="h-8 bg-slate-800/50 backdrop-blur-sm rounded-t-lg flex items-center px-3 mb-3 gap-3 border-b border-slate-700/50">
+                        <div className="h-8 dark:bg-surface/50 backdrop-blur-sm rounded-t-lg flex items-center px-3 mb-3 gap-3 border-b border-border/50">
                             <div className="flex gap-1.5">
                                 <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
                                 <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
@@ -33,9 +33,9 @@ export function HeroDashboardVisual() {
                             <div className="flex-1 max-w-sm mx-auto h-6 bg-slate-700/50 rounded-md flex items-center px-3 gap-2 text-xs text-slate-400">
                                 <Lock className="w-3 h-3 text-emerald-400" />
                                 <span className="font-medium text-slate-300">interviewexplainer.com</span>
-                                <span className="text-slate-500">/dashboard</span>
+                                <span className="text-muted-foreground">/dashboard</span>
                             </div>
-                            <MoreHorizontal className="w-4 h-4 text-slate-500" />
+                            <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
                         </div>
 
                         {/* Dashboard Content */}
@@ -44,9 +44,9 @@ export function HeroDashboardVisual() {
                             {/* Left Sidebar - User Info */}
                             <div className="col-span-3 space-y-3">
                                 {/* Welcome Card */}
-                                <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-lg p-3">
+                                <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-border/50 rounded-lg p-3">
                                     <div className="text-[9px] text-slate-400 uppercase tracking-wide mb-1">Welcome Back,</div>
-                                    <div className="text-lg font-bold text-white mb-2">Dear User</div>
+                                    <div className="text-lg font-bold text-primary-foreground dark:text-foreground mb-2">Dear User</div>
                                     <div className="flex items-center gap-2 text-[9px] text-slate-400">
                                         <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded border border-indigo-500/30 font-semibold">Java Backend</span>
                                         <span>1-3 Yrs</span>
@@ -65,12 +65,12 @@ export function HeroDashboardVisual() {
                                         initial={{ opacity: 0, x: -10 }}
                                         animate={{ opacity: 1, x: 0 }}
                                         transition={{ delay: 0.3 + i * 0.05 }}
-                                        className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-2.5 hover:bg-slate-800 transition-colors"
+                                        className="dark:bg-surface/50 border border-border/50 rounded-lg p-2.5 hover:dark:bg-surface transition-colors"
                                     >
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-0.5">{stat.label}</div>
-                                                <div className="text-xl font-bold text-white">{stat.value}</div>
+                                                <div className="text-xl font-bold text-primary-foreground dark:text-foreground">{stat.value}</div>
                                             </div>
                                             <stat.icon className={`w-7 h-7 ${stat.iconClass} opacity-60`} />
                                         </div>
@@ -84,7 +84,7 @@ export function HeroDashboardVisual() {
                                 {/* Top Row - Activity & Performance */}
                                 <div className="grid grid-cols-2 gap-3 h-[45%]">
                                     {/* Weekly Activity */}
-                                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
+                                    <div className="dark:bg-surface/50 border border-border/50 rounded-lg p-3">
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wide">Weekly Activity</div>
                                             <div className="flex items-center gap-1 text-[9px] text-emerald-400 font-semibold">
@@ -103,14 +103,14 @@ export function HeroDashboardVisual() {
                                                 />
                                             ))}
                                         </div>
-                                        <div className="flex justify-between text-[8px] text-slate-500">
+                                        <div className="flex justify-between text-[8px] text-muted-foreground">
                                             <span>14 days ago</span>
                                             <span>Today</span>
                                         </div>
                                     </div>
 
                                     {/* Difficulty Breakdown */}
-                                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
+                                    <div className="dark:bg-surface/50 border border-border/50 rounded-lg p-3">
                                         <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wide mb-3">Performance by Difficulty</div>
                                         <div className="space-y-2.5">
                                             {[
@@ -145,7 +145,7 @@ export function HeroDashboardVisual() {
                                 {/* Bottom Row - Skills & Recent */}
                                 <div className="grid grid-cols-2 gap-3 h-[52%]">
                                     {/* Top Skills */}
-                                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
+                                    <div className="dark:bg-surface/50 border border-border/50 rounded-lg p-3">
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wide">Technology Stack</div>
                                             <Code2 className="w-4 h-4 text-indigo-400" />
@@ -162,7 +162,7 @@ export function HeroDashboardVisual() {
                                                     <div className="flex justify-between text-[9px] mb-0.5">
                                                         <div>
                                                             <span className="text-slate-200 font-semibold">{skill.name}</span>
-                                                            <span className="text-slate-500 ml-1.5">• {skill.domain}</span>
+                                                            <span className="text-muted-foreground ml-1.5">• {skill.domain}</span>
                                                         </div>
                                                         <span className="text-slate-300 font-bold">{skill.score}%</span>
                                                     </div>
@@ -180,7 +180,7 @@ export function HeroDashboardVisual() {
                                     </div>
 
                                     {/* Recent Activity */}
-                                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
+                                    <div className="dark:bg-surface/50 border border-border/50 rounded-lg p-3">
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wide">Recent Activity</div>
                                             <Activity className="w-4 h-4 text-indigo-400" />
@@ -204,7 +204,7 @@ export function HeroDashboardVisual() {
                                                     <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${activity.status === 'completed' ? 'bg-emerald-400' : 'bg-amber-400'}`}></div>
                                                     <div className="flex-1 min-w-0">
                                                         <div className="text-[9px] font-medium text-slate-200 truncate">{activity.title}</div>
-                                                        <div className="flex items-center gap-1.5 text-[8px] text-slate-500">
+                                                        <div className="flex items-center gap-1.5 text-[8px] text-muted-foreground">
                                                             <span className="text-slate-400">{activity.domain}</span>
                                                             <span>•</span>
                                                             <span>{activity.time}</span>

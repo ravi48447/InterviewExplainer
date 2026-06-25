@@ -97,7 +97,7 @@ export function QuickAnswer({
                 />
                 <span
                   className={`text-[15.5px] leading-[1.7] ${
-                    d ? "text-slate-200" : "text-slate-700"
+                    d ? "text-slate-200" : "text-foreground"
                   }`}
                 >
                   <MarkdownContent content={point} inline />
@@ -114,7 +114,7 @@ export function QuickAnswer({
       <NutshellCard>
         <div
           className={`text-[15.5px] leading-[1.7] ${
-            d ? "text-slate-200" : "text-slate-700"
+            d ? "text-slate-200" : "text-foreground"
           }`}
         >
           <MarkdownContent content={body} />
@@ -142,7 +142,7 @@ export function QuickAnswer({
                 />
                 <span
                   className={`text-[15.5px] leading-[1.7] ${
-                    d ? "text-slate-200" : "text-slate-700"
+                    d ? "text-slate-200" : "text-foreground"
                   }`}
                 >
                   {point.trim()}

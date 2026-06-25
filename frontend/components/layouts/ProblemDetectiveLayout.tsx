@@ -45,7 +45,7 @@ export function ProblemDetectiveLayout({
           <div className="px-5 py-4">
             {problemStatement
               ? <MarkdownContent content={problemStatement.content} stripTopHeading />
-              : <p className="text-base text-slate-800">{directAnswer}</p>
+              : <p className="text-base text-foreground">{directAnswer}</p>
             }
           </div>
         </div>
@@ -66,9 +66,9 @@ export function ProblemDetectiveLayout({
 
       {/* Explanation / context */}
       {explanation && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Background & Context</span>
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-surface border-b border-border">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Background & Context</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={explanation.content} stripTopHeading />
@@ -78,10 +78,10 @@ export function ProblemDetectiveLayout({
 
       {/* Root Cause */}
       {rootCause && (
-        <div className="rounded-xl border border-blue-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-blue-50 border-b border-blue-200">
             <Microscope className="h-4 w-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Root Cause</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Root Cause</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={rootCause.content} stripTopHeading />
@@ -92,8 +92,8 @@ export function ProblemDetectiveLayout({
       {/* Before/After Diff */}
       {beforeCode && afterCode && (
         <div>
-          <div className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3 flex items-center gap-2">
-            <Wrench className="h-4 w-4 text-slate-500" />
+          <div className="text-xs font-bold text-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-muted-foreground" />
             The Fix
           </div>
           <DiffViewer
@@ -107,15 +107,15 @@ export function ProblemDetectiveLayout({
 
       {/* Solution Tabs */}
       {solutionSections.length > 1 && (
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-1 px-4 py-2 bg-slate-50 border-b border-slate-200">
-            <Wrench className="h-4 w-4 text-slate-500 mr-1" />
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center gap-1 px-4 py-2 bg-surface border-b border-border">
+            <Wrench className="h-4 w-4 text-muted-foreground mr-1" />
             {solutionSections.map((sol, i) => (
               <button
                 key={i}
                 onClick={() => setActiveSolution(i)}
                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                  activeSolution === i ? "bg-white shadow-sm text-blue-700" : "text-slate-500 hover:text-slate-700"
+                  activeSolution === i ? "bg-background shadow-sm text-blue-700" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {sol.sectionTitle || `Solution ${i + 1}`}
@@ -130,10 +130,10 @@ export function ProblemDetectiveLayout({
 
       {/* Single solution (no before/after) */}
       {solutionSections.length === 1 && !beforeCode && (
-        <div className="rounded-xl border border-emerald-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-emerald-200 bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-emerald-50 border-b border-emerald-200">
             <Wrench className="h-4 w-4 text-emerald-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Solution</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Solution</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={solutionSections[0].content} stripTopHeading />
@@ -159,7 +159,7 @@ export function ProblemDetectiveLayout({
         <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
             <Mic className="h-4 w-4 text-emerald-700" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">3-Sentence Interview Answer</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">3-Sentence Interview Answer</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={speakable.content.replace(/^#[^\n]*\n+/, '').trim()} />

@@ -32,7 +32,7 @@ export function InterviewerIntentCard({
                 <p className="text-[11px] font-bold text-blue-500 uppercase tracking-wide mb-1">
                   What they&apos;re testing
                 </p>
-                <p className="text-[14px] text-slate-700 leading-[1.75]">
+                <p className="text-[14px] text-foreground leading-[1.75]">
                   {testing}
                 </p>
               </div>
@@ -47,7 +47,7 @@ export function InterviewerIntentCard({
                 <p className="text-[11px] font-bold text-amber-500 uppercase tracking-wide mb-1">
                   Common mistake
                 </p>
-                <p className="text-[14px] text-slate-700 leading-[1.75]">
+                <p className="text-[14px] text-foreground leading-[1.75]">
                   {commonMistake}
                 </p>
               </div>
@@ -62,7 +62,7 @@ export function InterviewerIntentCard({
                 <p className="text-[11px] font-bold text-emerald-500 uppercase tracking-wide mb-1">
                   How to stand out
                 </p>
-                <p className="text-[14px] text-slate-700 leading-[1.75]">
+                <p className="text-[14px] text-foreground leading-[1.75]">
                   {toStandOut}
                 </p>
               </div>

@@ -66,7 +66,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
   const count = content?.questions?.length ?? 0;
 
   const title = `${stackName} Interview Questions - ${toDisplayName(lang)} ${toDisplayName(track)} ${toDisplayName(level)}`;
-  const description = content?.meta.description ?? `${count} curated ${stackName} interview questions for ${toDisplayName(level)} developers.`;
+  const description = content?.meta?.description ?? `${count} curated ${stackName} interview questions for ${toDisplayName(level)} developers.`;
   const canonicalUrl = `${SITE_URL}/interview/${lang}/${track}/${level}/${stack}`;
 
   return {
@@ -114,7 +114,7 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-slate-800 selection:bg-blue-200">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-blue-200">
         <div className="w-full min-w-0 min-h-screen flex gap-6 px-6 py-6">
 
           {/* ─── LEFT SIDEBAR ─── */}
@@ -128,7 +128,7 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
           {/* ─── MAIN COLUMN ─── */}
           <main className="flex-1 min-w-0">
             {/* Hero */}
-            <header className="mb-6 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+            <header className="mb-6 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
               <div className="relative px-6 py-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
                 <div className="flex flex-wrap gap-2 mb-3">
                   <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
@@ -141,20 +141,20 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
                     {lvlMeta.label} · {lvlMeta.range}
                   </span>
                 </div>
-                <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-2">{stackName}</h1>
-                {content.meta.description && (
-                  <p className="text-sm text-slate-700 leading-relaxed max-w-3xl">{content.meta.description}</p>
+                <h1 className="text-3xl font-black tracking-tight text-foreground mb-2">{stackName}</h1>
+                {content.meta?.description && (
+                  <p className="text-sm text-foreground leading-relaxed max-w-3xl">{content.meta.description}</p>
                 )}
               </div>
-              <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+              <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
                     <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                       <BookOpen className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 font-medium">Questions</div>
-                      <div className="text-lg font-bold text-slate-900">{questions.length}</div>
+                      <div className="text-xs text-muted-foreground font-medium">Questions</div>
+                      <div className="text-lg font-bold text-foreground">{questions.length}</div>
                     </div>
                   </div>
                   <div className="h-10 w-px bg-slate-200" />
@@ -163,8 +163,8 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
                       <Layers className="h-5 w-5 text-emerald-600" />
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 font-medium">Stack</div>
-                      <div className="text-sm font-bold text-slate-900">{stackName}</div>
+                      <div className="text-xs text-muted-foreground font-medium">Stack</div>
+                      <div className="text-sm font-bold text-foreground">{stackName}</div>
                     </div>
                   </div>
                   <div className="h-10 w-px bg-slate-200" />
@@ -173,8 +173,8 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
                       <GraduationCap className="h-5 w-5" style={{ color: lvlMeta.color }} />
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 font-medium">Level</div>
-                      <div className="text-sm font-bold text-slate-900">{lvlMeta.label}</div>
+                      <div className="text-xs text-muted-foreground font-medium">Level</div>
+                      <div className="text-sm font-bold text-foreground">{lvlMeta.label}</div>
                     </div>
                   </div>
                 </div>
@@ -184,29 +184,29 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
             {/* Question List */}
             <div className="space-y-1.5 pb-10">
               <div className="relative">
-                <div className="absolute left-[34px] top-6 bottom-6 w-px bg-slate-100 hidden sm:block" />
+                <div className="absolute left-[34px] top-6 bottom-6 w-px bg-surface hidden sm:block" />
                 <div className="flex flex-col gap-1.5 relative z-10">
                   {questions.map((q, idx) => (
                     <Link
                       key={`${idx}-${q.slug}`}
                       href={`${basePath}/${q.slug}`}
-                      className="group/link flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:pr-5 rounded-[12px] border border-slate-200 bg-white shadow-sm hover:border-[#2e64e5]/30 hover:shadow-md transition-all duration-200"
+                      className="group/link flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:pr-5 rounded-[12px] border border-border bg-background shadow-sm hover:border-[#2e64e5]/30 hover:shadow-md transition-all duration-200"
                     >
                       <div className="flex items-start sm:items-center gap-3 mb-2 sm:mb-0 max-w-full overflow-hidden">
-                        <div className="shrink-0 w-6 h-6 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-400 group-hover/link:border-[#2e64e5] group-hover/link:text-[#2e64e5] shadow-sm transition-all sm:ml-2">
+                        <div className="shrink-0 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center text-[10px] font-bold text-slate-400 group-hover/link:border-[#2e64e5] group-hover/link:text-[#2e64e5] shadow-sm transition-all sm:ml-2">
                           {idx + 1}
                         </div>
-                        <h4 className="text-[14px] font-medium text-slate-700 group-hover/link:text-slate-900 transition-colors leading-snug">
+                        <h4 className="text-[14px] font-medium text-foreground group-hover/link:text-foreground transition-colors leading-snug">
                           {q.title}
                         </h4>
                       </div>
                       <div className="flex items-center gap-3 pl-9 sm:pl-0 shrink-0 opacity-80 group-hover/link:opacity-100 transition-opacity">
-                        <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded text-white shadow-sm"
+                        <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded text-primary-foreground dark:text-foreground shadow-sm"
                           style={{ backgroundColor: difficultyColor(q.difficulty) }}
                         >
                           {difficultyLabel(q.difficulty)}
                         </span>
-                        <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1 min-w-[45px]">
+                        <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1 min-w-[45px]">
                           <Clock className="w-3 h-3 text-slate-400" />
                           {q.estimatedReadTime ?? 5}m
                         </span>
@@ -225,32 +225,32 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
               <div className="px-4 py-3 bg-gradient-to-r from-purple-100 to-pink-100 border-b border-purple-200">
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-purple-600" />
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">At a Glance</h3>
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">At a Glance</h3>
                 </div>
               </div>
               <div className="p-4">
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="bg-white rounded-lg p-3 border border-purple-200 shadow-sm">
+                  <div className="bg-background rounded-lg p-3 border border-purple-200 shadow-sm">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-purple-600 mb-1">Questions</div>
-                    <div className="text-2xl font-black text-slate-900 leading-none">{questions.length}</div>
+                    <div className="text-2xl font-black text-foreground leading-none">{questions.length}</div>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border border-purple-200 shadow-sm">
+                  <div className="bg-background rounded-lg p-3 border border-purple-200 shadow-sm">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-purple-600 mb-1">Level</div>
                     <div className="text-sm font-black leading-none" style={{ color: lvlMeta.color }}>{lvlMeta.label}</div>
                   </div>
                 </div>
                 <div className="space-y-2 pt-3 border-t border-purple-200">
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-600 font-medium">Language</span>
-                    <span className="font-bold text-slate-900">{toDisplayName(lang)}</span>
+                    <span className="text-secondary font-medium">Language</span>
+                    <span className="font-bold text-foreground">{toDisplayName(lang)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-600 font-medium">Track</span>
-                    <span className="font-bold text-slate-900">{toDisplayName(track)}</span>
+                    <span className="text-secondary font-medium">Track</span>
+                    <span className="font-bold text-foreground">{toDisplayName(track)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-600 font-medium">Stack</span>
-                    <span className="font-bold text-slate-900">{stackName}</span>
+                    <span className="text-secondary font-medium">Stack</span>
+                    <span className="font-bold text-foreground">{stackName}</span>
                   </div>
                 </div>
               </div>
@@ -259,7 +259,7 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
             <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-50 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Target className="h-4 w-4 text-teal-600" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">What You'll Learn</h3>
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">What You'll Learn</h3>
               </div>
               <div className="space-y-2">
                 {[
@@ -268,7 +268,7 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
                   "Common mistakes to avoid",
                   "Practice explaining out loud",
                 ].map((b, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs text-slate-700">
+                  <div key={i} className="flex items-start gap-2 text-xs text-foreground">
                     <CheckCircle2 className="h-3.5 w-3.5 text-teal-600 mt-0.5 shrink-0" />
                     <span>{b}</span>
                   </div>
@@ -276,16 +276,16 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm overflow-hidden">
-              <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Quick Actions</h3>
+            <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-border">
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Quick Actions</h3>
               </div>
               <div className="p-3 space-y-2">
-                <Link href={`/interview/${lang}/${track}/${level}`} className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
+                <Link href={`/interview/${lang}/${track}/${level}`} className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
                   <span>All {toDisplayName(lang)} Stacks</span>
                   <ArrowUpRight className="h-3 w-3" />
                 </Link>
-                <Link href="/interview" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
+                <Link href="/interview" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
                   <span>All Languages</span>
                   <ArrowUpRight className="h-3 w-3" />
                 </Link>

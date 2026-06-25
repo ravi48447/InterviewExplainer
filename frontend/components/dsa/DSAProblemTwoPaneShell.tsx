@@ -35,7 +35,7 @@ export function DSAProblemTwoPaneShell({
     // render the light palette instead of the provider's "dark" default — which
     // otherwise painted near-white text on these white panes.
     <ContentThemeProvider forcedTheme="light">
-    <div className="min-h-screen bg-[#f4f5f7] font-sans text-slate-800">
+    <div className="min-h-screen bg-[#f4f5f7] font-sans text-foreground">
       {jsonLd && (
         <script
           type="application/ld+json"
@@ -50,9 +50,9 @@ export function DSAProblemTwoPaneShell({
           className={[
             // Desktop: fixed-width, scrollable independently
             "lg:w-[42%] lg:max-w-[580px] lg:shrink-0",
-            "lg:overflow-y-auto lg:border-r lg:border-slate-200",
+            "lg:overflow-y-auto lg:border-r lg:border-border",
             // Light background to distinguish from the right pane
-            "bg-white",
+            "bg-background",
             // Mobile: just a normal block
             "px-5 py-6 lg:px-7 lg:py-7",
           ].join(" ")}

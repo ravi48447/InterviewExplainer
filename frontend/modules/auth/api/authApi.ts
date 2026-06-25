@@ -3,7 +3,7 @@
  * Handles authentication, signup, login
  */
 
-import { axiosClient } from '@/shared/lib/api-client';
+import axiosClient from '@/lib/api-client';
 
 export interface SignupRequest {
   name: string;

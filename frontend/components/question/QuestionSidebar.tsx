@@ -53,7 +53,7 @@ export function QuestionSidebar({ topics, activeQuestionId }: QuestionSidebarPro
                         <span className="text-muted-foreground">Progress</span>
                         <span className="text-primary">{completedCount}/{totalQuestions} Done</span>
                     </div>
-                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-1.5 w-full bg-background/5 rounded-full overflow-hidden">
                         <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${progressPercentage}%` }}
@@ -105,7 +105,7 @@ export function QuestionSidebar({ topics, activeQuestionId }: QuestionSidebarPro
                                                         "group flex items-center gap-3 p-2.5 rounded-lg text-[11px] font-medium transition-all duration-200",
                                                         q.id === activeQuestionId
                                                             ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                                                            : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                                                            : "text-muted-foreground hover:bg-background/5 hover:text-foreground"
                                                     )}
                                                 >
                                                     {/* Status Icon */}

@@ -55,26 +55,26 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20">
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-xs text-slate-500 mb-8">
-          <Link href="/" className="hover:text-slate-700">Home</Link>
+        <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
+          <Link href="/" className="hover:text-foreground">Home</Link>
           <ChevronRight className="h-3 w-3" />
-          <Link href="/interview" className="hover:text-slate-700">Interview Questions</Link>
+          <Link href="/interview" className="hover:text-foreground">Interview Questions</Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-700 font-semibold">{meta.name}</span>
+          <span className="text-foreground font-semibold">{meta.name}</span>
         </nav>
 
         <header className="mb-10">
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-3">
+          <h1 className="text-4xl font-black tracking-tight text-foreground mb-3">
             {meta.name} Interview Questions
           </h1>
-          <p className="text-lg text-slate-600 max-w-3xl leading-relaxed">
+          <p className="text-lg text-secondary max-w-3xl leading-relaxed">
             Everything you need to ace {meta.name} interviews — across every track and experience level.
             Beginner to advanced, interview-framed answers with production examples.
           </p>
         </header>
 
         <section className="mb-12">
-          <h2 className="text-xl font-black text-slate-800 mb-5">Choose Your Track</h2>
+          <h2 className="text-xl font-black text-foreground mb-5">Choose Your Track</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {meta.tracks.map(track => {
               const Icon = track.icon;
@@ -82,21 +82,21 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
                 <Link
                   key={track.slug}
                   href={`/interview/${lang}/${track.slug}`}
-                  className="group flex items-start gap-4 p-5 bg-white rounded-2xl border border-slate-200 hover:border-blue-400 hover:shadow-lg transition-all"
+                  className="group flex items-start gap-4 p-5 bg-background rounded-2xl border border-border hover:border-blue-400 hover:shadow-lg transition-all"
                 >
                   <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
-                    <Icon className="h-5 w-5 text-white" />
+                    <Icon className="h-5 w-5 text-primary-foreground dark:text-foreground" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-base font-black text-slate-900 group-hover:text-blue-600 transition-colors mb-0.5">{track.name}</h3>
+                    <h3 className="text-base font-black text-foreground group-hover:text-blue-600 transition-colors mb-0.5">{track.name}</h3>
                     <p className="text-xs text-slate-400 font-medium mb-2">{track.stacks}</p>
-                    <p className="text-sm text-slate-600 leading-relaxed">{track.desc}</p>
+                    <p className="text-sm text-secondary leading-relaxed">{track.desc}</p>
                     <div className="mt-3 flex gap-2">
                       {["Beginner", "Intermediate", "Advanced"].map(lvl => (
                         <Link
                           key={lvl}
                           href={`/interview/${lang}/${track.slug}/${lvl.toLowerCase()}`}
-                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-surface text-secondary hover:bg-blue-100 hover:text-blue-700 transition-colors"
                           onClick={e => e.stopPropagation()}
                         >
                           {lvl}
@@ -113,7 +113,7 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
 
         {/* Quick links to levels */}
         <section className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-6">
-          <h2 className="text-lg font-black text-slate-900 mb-4">Jump Directly to a Level</h2>
+          <h2 className="text-lg font-black text-foreground mb-4">Jump Directly to a Level</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
               { level: "beginner", label: "Beginner", range: "0–2 yrs", color: "border-emerald-300 hover:bg-emerald-50 text-emerald-700" },
@@ -122,7 +122,7 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
               <Link
                 key={level}
                 href={`/interview/${lang}/backend/${level}`}
-                className={`block p-4 bg-white rounded-xl border-2 ${color} transition-colors`}
+                className={`block p-4 bg-background rounded-xl border-2 ${color} transition-colors`}
               >
                 <div className="font-black text-sm">{label}</div>
                 <div className="text-xs opacity-75">{range} experience</div>

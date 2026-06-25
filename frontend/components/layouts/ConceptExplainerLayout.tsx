@@ -63,7 +63,7 @@ export function ConceptExplainerLayout({
             <Lightbulb className="h-4 w-4 text-blue-600" />
             <span className="text-[11px] font-bold text-blue-800 uppercase tracking-widest">In One Line</span>
           </div>
-          <p className="text-[15px] font-semibold text-slate-800 leading-relaxed">{directAnswer}</p>
+          <p className="text-[15px] font-semibold text-foreground leading-relaxed">{directAnswer}</p>
         </div>
       )}
 
@@ -73,7 +73,7 @@ export function ConceptExplainerLayout({
           <div className="flex items-center gap-2 mb-3">
             <span className="text-[11px] font-bold text-amber-800 uppercase tracking-widest">Real-World Analogy</span>
           </div>
-          <div className="italic text-slate-700 text-[15px] leading-relaxed">
+          <div className="italic text-foreground text-[15px] leading-relaxed">
             <MarkdownContent content={analogy} stripTopHeading />
           </div>
         </div>
@@ -81,10 +81,10 @@ export function ConceptExplainerLayout({
 
       {/* Main Concept Explanation */}
       {explanation && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-slate-200">
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border">
             <BookOpen className="h-4 w-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">How It Works</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">How It Works</span>
           </div>
           <div className="px-5 py-5 text-[15px] leading-relaxed">
             <MarkdownContent content={explanation} stripTopHeading />
@@ -94,24 +94,24 @@ export function ConceptExplainerLayout({
 
       {/* Phase / Lifecycle / Stage sections (numbered timeline) */}
       {phases.length > 0 && (
-        <div className="rounded-xl border border-indigo-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-indigo-200 bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-200">
             <Hash className="h-4 w-4 text-indigo-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">
               Step-by-Step Breakdown
             </span>
           </div>
           <div className="divide-y divide-slate-100">
             {phases.map((phase, i) => (
               <div key={phase.id} className="flex gap-4 px-5 py-4">
-                <div className="flex-none w-7 h-7 rounded-full bg-indigo-600 text-white text-sm font-bold flex items-center justify-center mt-0.5">
+                <div className="flex-none w-7 h-7 rounded-full bg-indigo-600 text-primary-foreground dark:text-foreground text-sm font-bold flex items-center justify-center mt-0.5">
                   {i + 1}
                 </div>
                 <div className="flex-1 min-w-0">
                   {phase.sectionTitle && (
-                    <p className="text-sm font-bold text-slate-800 mb-1.5">{phase.sectionTitle}</p>
+                    <p className="text-sm font-bold text-foreground mb-1.5">{phase.sectionTitle}</p>
                   )}
-                  <div className="text-[14px] leading-relaxed text-slate-700">
+                  <div className="text-[14px] leading-relaxed text-foreground">
                     <MarkdownContent content={phase.content} stripTopHeading />
                   </div>
                 </div>
@@ -136,8 +136,8 @@ export function ConceptExplainerLayout({
             </div>
           )}
           {codeExample && (
-            <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
+            <div className="rounded-xl border border-border dark:bg-surface overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wide">Code Example</span>
                 <CopyButton text={codeExample.replace(/^#[^\n]*\n+/, '').trim()} />
               </div>
@@ -162,7 +162,7 @@ export function ConceptExplainerLayout({
           <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-emerald-100 to-teal-100 border-b-2 border-emerald-200">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-emerald-600" />
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Say This In Interview</span>
+              <span className="text-xs font-bold text-foreground uppercase tracking-wide">Say This In Interview</span>
             </div>
             <CopyButton text={interviewScript.replace(/^#[^\n]*\n+/, '').trim()} />
           </div>

@@ -84,13 +84,13 @@ function Story({
 }) {
   return (
     <article className="mb-10">
-      <h2 className="text-[18px] font-semibold tracking-tight text-slate-900 dark:text-slate-100 mb-1">
+      <h2 className="text-[18px] font-semibold tracking-tight text-foreground dark:text-slate-100 mb-1">
         {title}
       </h2>
-      <p className="text-[13.5px] text-slate-500 dark:text-slate-400 mb-4 max-w-prose">
+      <p className="text-[13.5px] text-muted-foreground dark:text-slate-400 mb-4 max-w-prose">
         {description}
       </p>
-      <div className="border border-slate-200/70 dark:border-slate-800 rounded-lg overflow-hidden">
+      <div className="border border-border/70 dark:border-border rounded-lg overflow-hidden">
         {children}
       </div>
     </article>
@@ -190,15 +190,15 @@ export default function SpeakablePrimitivesPage() {
   const [mobile, setMobile] = useState(false);
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 px-4 sm:px-8 py-8">
+    <main className="min-h-screen bg-surface dark:bg-slate-950 text-foreground dark:text-slate-100 px-4 sm:px-8 py-8">
       <header className="max-w-4xl mx-auto mb-10">
-        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-2">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
           /dev/speakable-primitives
         </p>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
           Speakable visual story page
         </h1>
-        <p className="text-[14px] text-slate-600 dark:text-slate-400 max-w-prose">
+        <p className="text-[14px] text-secondary dark:text-slate-400 max-w-prose">
           Phase 1 visual exit gate for the 7 layout primitives. Toggle theme +
           mobile breakpoint to verify each primitive in all rendering modes per
           docs/speakable/visual-style-guide.md §6 + §7. Phase 1.3 will extend
@@ -208,14 +208,14 @@ export default function SpeakablePrimitivesPage() {
           <button
             type="button"
             onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
-            className="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="px-3 py-1.5 rounded-md border border-border dark:border-border bg-background dark:dark:bg-surface hover:bg-surface dark:hover:dark:bg-surface"
           >
             Theme: <strong>{theme}</strong>
           </button>
           <button
             type="button"
             onClick={() => setMobile((m) => !m)}
-            className="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="px-3 py-1.5 rounded-md border border-border dark:border-border bg-background dark:dark:bg-surface hover:bg-surface dark:hover:dark:bg-surface"
           >
             Width: <strong>{mobile ? "mobile (~360px)" : "desktop (~720px)"}</strong>
           </button>
@@ -292,7 +292,7 @@ export default function SpeakablePrimitivesPage() {
         <h2 className="text-[20px] font-semibold tracking-tight mt-12 mb-4">
           Archetype layouts
         </h2>
-        <p className="text-[13.5px] text-slate-500 dark:text-slate-400 mb-6 max-w-prose">
+        <p className="text-[13.5px] text-muted-foreground dark:text-slate-400 mb-6 max-w-prose">
           Each layout composes the primitives with the per-archetype tweaks
           described in Phase 1 prompt §11.3 (D's left rail, E's options grid,
           F's phase blocks, G's STAR ribbons).
@@ -364,7 +364,7 @@ export default function SpeakablePrimitivesPage() {
         <h2 className="text-[20px] font-semibold tracking-tight mt-12 mb-4">
           Phase 2 — golden references
         </h2>
-        <p className="text-[13.5px] text-slate-500 dark:text-slate-400 mb-6 max-w-prose">
+        <p className="text-[13.5px] text-muted-foreground dark:text-slate-400 mb-6 max-w-prose">
           The 7 hand-crafted Speakable v2s that Phase 3 agents imitate.
           Each scores 100/100 on the lint and is the only{" "}
           <code>speakable_status: approved</code> content in the corpus

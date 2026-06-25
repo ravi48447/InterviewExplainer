@@ -138,6 +138,21 @@ export interface QuestionSummary {
   subcategoryName?: string | null;
 }
 
+export interface AnswerContent {
+  deepExplanation: string;
+  interviewTips: string;
+  codeSnippet?: string;
+  speakableAnswer: string;
+  timeToAnswer: string;
+}
+
+export interface Topic {
+  id: number;
+  name: string;
+  slug: string;
+  questions?: QuestionSummary[];
+}
+
 export interface AnswerSection {
   id: number;
   sectionType: AnswerSectionType;

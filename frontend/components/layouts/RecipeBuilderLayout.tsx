@@ -46,15 +46,15 @@ export function RecipeBuilderLayout({
     <div className="space-y-8">
       {directAnswer && (
         <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
-          <p className="text-sm font-semibold text-slate-800">{directAnswer}</p>
+          <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
 
       {/* Overview */}
       {overview && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">What You're Building</span>
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-surface border-b border-border">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">What You're Building</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={overview.content} stripTopHeading />
@@ -64,12 +64,12 @@ export function RecipeBuilderLayout({
 
       {/* Step-by-Step */}
       {hasSteps && (
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
+        <div className="rounded-xl border border-border overflow-hidden">
           {/* Progress Bar */}
-          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-slate-200">
+          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Implementation Steps</span>
-              <span className="text-xs text-slate-500 font-medium">
+              <span className="text-xs font-bold text-foreground uppercase tracking-wide">Implementation Steps</span>
+              <span className="text-xs text-muted-foreground font-medium">
                 Step {activeStep + 1} of {steps.length}
               </span>
             </div>
@@ -90,13 +90,13 @@ export function RecipeBuilderLayout({
           </div>
 
           {/* Step content */}
-          <div className="bg-white">
+          <div className="bg-background">
             <div className="px-5 py-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
-                <span className="w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-blue-600 text-primary-foreground dark:text-foreground text-sm font-bold flex items-center justify-center shrink-0">
                   {activeStep + 1}
                 </span>
-                <h3 className="text-base font-bold text-slate-800">
+                <h3 className="text-base font-bold text-foreground">
                   {steps[activeStep]?.sectionTitle || `Step ${activeStep + 1}`}
                 </h3>
               </div>
@@ -107,18 +107,18 @@ export function RecipeBuilderLayout({
           </div>
 
           {/* Prev / Next */}
-          <div className="flex justify-between px-5 py-3 bg-slate-50 border-t border-slate-200">
+          <div className="flex justify-between px-5 py-3 bg-surface border-t border-border">
             <button
               onClick={() => setActiveStep(v => Math.max(0, v - 1))}
               disabled={activeStep === 0}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-secondary hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="h-3 w-3" /> Previous
             </button>
             {activeStep < steps.length - 1 ? (
               <button
                 onClick={() => setActiveStep(v => Math.min(steps.length - 1, v + 1))}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-primary-foreground dark:text-foreground hover:bg-blue-700 transition-colors"
               >
                 Next <ChevronRight className="h-3 w-3" />
               </button>
@@ -133,9 +133,9 @@ export function RecipeBuilderLayout({
 
       {/* Deep explanation fallback */}
       {!hasSteps && deepExplain && (
-        <div className="rounded-xl border border-blue-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-blue-50 border-b border-blue-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Implementation Guide</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Implementation Guide</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={deepExplain.content} stripTopHeading />
@@ -156,11 +156,11 @@ export function RecipeBuilderLayout({
 
       {/* Full Code Toggle */}
       {fullCode && (
-        <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700">
+        <div className="rounded-xl border border-border dark:bg-surface overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border">
             <button
               onClick={() => setShowFullCode(v => !v)}
-              className="text-xs font-bold text-slate-300 uppercase tracking-wide hover:text-white transition-colors"
+              className="text-xs font-bold text-slate-300 uppercase tracking-wide hover:text-primary-foreground dark:text-foreground transition-colors"
             >
               {showFullCode ? "Hide" : "Show"} Complete Implementation
             </button>
@@ -184,7 +184,7 @@ export function RecipeBuilderLayout({
       {interviewSummary && (
         <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
           <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">
               What the Interviewer Sees You Know
             </span>
           </div>

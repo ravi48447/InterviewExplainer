@@ -54,14 +54,14 @@ export function DSAContentSections({
           <Compass className="h-3.5 w-3.5" />
           {kicker}
         </p>
-        <h2 className="text-2xl font-black text-slate-900 tracking-tight">{heading}</h2>
+        <h2 className="text-2xl font-black text-foreground tracking-tight">{heading}</h2>
       </div>
 
       {/* Overview + Study playbook side by side on wide screens */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6 items-start">
         {/* Overview prose */}
         {content.overview.length > 0 && (
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
             <div className="px-6 pt-5 pb-3 border-b border-slate-100 bg-gradient-to-br from-blue-50 to-blue-50/30">
               <p className="text-xs font-bold uppercase tracking-widest text-blue-700 flex items-center gap-1.5">
                 <BookOpen className="h-3.5 w-3.5" />
@@ -70,7 +70,7 @@ export function DSAContentSections({
             </div>
             <div className="px-6 py-5 space-y-3.5">
               {content.overview.map((p, i) => (
-                <p key={i} className="text-[15px] leading-[1.75] text-slate-700">
+                <p key={i} className="text-[15px] leading-[1.75] text-foreground">
                   {p}
                 </p>
               ))}
@@ -80,7 +80,7 @@ export function DSAContentSections({
 
         {/* Study playbook */}
         {content.studyTips.length > 0 && (
-          <div className="rounded-2xl border border-violet-100 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-violet-100 bg-background shadow-sm overflow-hidden">
             <div className="px-6 pt-5 pb-3 border-b border-violet-100 bg-gradient-to-br from-violet-50 to-violet-50/30">
               <p className="text-xs font-bold uppercase tracking-widest text-violet-700 flex items-center gap-1.5">
                 <Compass className="h-3.5 w-3.5" />
@@ -91,14 +91,14 @@ export function DSAContentSections({
               {content.studyTips.map((tip, i) => (
                 <li
                   key={i}
-                  className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3.5"
+                  className="flex items-start gap-3 rounded-xl border border-slate-100 bg-surface/60 p-3.5"
                 >
-                  <span className="shrink-0 w-6 h-6 rounded-lg bg-violet-600 text-white flex items-center justify-center text-xs font-black">
+                  <span className="shrink-0 w-6 h-6 rounded-lg bg-violet-600 text-primary-foreground dark:text-foreground flex items-center justify-center text-xs font-black">
                     {i + 1}
                   </span>
                   <div>
-                    <div className="text-sm font-bold text-slate-900 mb-0.5">{tip.title}</div>
-                    <div className="text-[13px] text-slate-600 leading-relaxed">{tip.body}</div>
+                    <div className="text-sm font-bold text-foreground mb-0.5">{tip.title}</div>
+                    <div className="text-[13px] text-secondary leading-relaxed">{tip.body}</div>
                   </div>
                 </li>
               ))}
@@ -109,7 +109,7 @@ export function DSAContentSections({
 
       {/* Pitfalls */}
       {content.pitfalls.length > 0 && (
-        <div className="rounded-2xl border border-rose-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-rose-200 bg-background shadow-sm overflow-hidden">
           <div className="px-6 pt-5 pb-3 border-b border-rose-100 bg-gradient-to-br from-rose-50 to-rose-50/30">
             <p className="text-xs font-bold uppercase tracking-widest text-rose-700 flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5" />
@@ -118,7 +118,7 @@ export function DSAContentSections({
           </div>
           <ul className="px-6 py-5 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2.5">
             {content.pitfalls.map((p, i) => (
-              <li key={i} className="flex items-start gap-2.5 text-[14px] text-slate-700 leading-relaxed">
+              <li key={i} className="flex items-start gap-2.5 text-[14px] text-foreground leading-relaxed">
                 <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
                 <span>{p}</span>
               </li>
@@ -138,16 +138,16 @@ export function DSAContentSections({
             {content.faqs.map((f, i) => (
               <details
                 key={i}
-                className="group rounded-xl border border-slate-200 bg-white hover:border-violet-200 transition-colors"
+                className="group rounded-xl border border-border bg-background hover:border-violet-200 transition-colors"
               >
                 <summary className="flex items-center justify-between gap-4 px-5 py-3.5 cursor-pointer list-none">
-                  <span className="text-sm font-semibold text-slate-900 group-hover:text-violet-700 transition-colors leading-snug flex items-start gap-2">
+                  <span className="text-sm font-semibold text-foreground group-hover:text-violet-700 transition-colors leading-snug flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-violet-400 shrink-0 mt-0.5" />
                     {f.q}
                   </span>
                   <ChevronRight className="h-4 w-4 text-slate-400 shrink-0 group-open:rotate-90 transition-transform" />
                 </summary>
-                <div className="px-5 pb-4 pl-12 text-sm text-slate-600 leading-relaxed">
+                <div className="px-5 pb-4 pl-12 text-sm text-secondary leading-relaxed">
                   {f.a}
                 </div>
               </details>

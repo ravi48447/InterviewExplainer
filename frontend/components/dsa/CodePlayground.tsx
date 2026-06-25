@@ -136,7 +136,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
   const meta = result?.statusId ? statusMeta(result.statusId) : null;
 
   return (
-    <div className="rounded-xl overflow-hidden shadow-xl ring-1 ring-slate-950/5 border border-slate-700">
+    <div className="rounded-xl overflow-hidden shadow-xl ring-1 ring-slate-950/5 border border-border">
       {/* Header bar */}
       <div className="flex items-center justify-between bg-[#21252b] border-b border-[#181a1f] px-4 py-2">
         <div className="flex items-center gap-2">
@@ -144,7 +144,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
           <span className="text-[11px] font-bold uppercase tracking-widest text-slate-300">
             Try it — {LANG_DISPLAY[activeLang] ?? activeLang}
           </span>
-          <span className="text-[10px] text-slate-500 italic hidden sm:inline">
+          <span className="text-[10px] text-muted-foreground italic hidden sm:inline">
             · your code, your experiment
           </span>
         </div>
@@ -204,7 +204,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
             value={stdin}
             onChange={(e) => setStdin(e.target.value)}
             rows={3}
-            className="w-full bg-[#1e1e1e] text-slate-200 font-mono text-[13px] rounded border border-slate-600 px-3 py-2 resize-y focus:outline-none focus:border-slate-400 placeholder:text-slate-600"
+            className="w-full bg-[#1e1e1e] text-slate-200 font-mono text-[13px] rounded border border-slate-600 px-3 py-2 resize-y focus:outline-none focus:border-slate-400 placeholder:text-secondary"
             placeholder="Enter input for your program here..."
             spellCheck={false}
           />
@@ -217,7 +217,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
           <button
             onClick={handleRun}
             disabled={running}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold text-[13px] transition-colors"
+            className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-primary-foreground dark:text-foreground font-bold text-[13px] transition-colors"
           >
             {running ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -254,7 +254,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
         {/* Output panel */}
         {(result || running) && (
           <div className="border-t border-[#181a1f] px-4 py-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
               Output
             </p>
             {running ? (
@@ -265,7 +265,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
             ) : (
               <pre className="text-[13px] font-mono text-slate-200 whitespace-pre-wrap break-words leading-[1.6] max-h-48 overflow-y-auto">
                 {outputText || (
-                  <span className="text-slate-500 italic">No output.</span>
+                  <span className="text-muted-foreground italic">No output.</span>
                 )}
               </pre>
             )}

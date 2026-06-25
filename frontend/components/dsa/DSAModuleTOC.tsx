@@ -72,48 +72,48 @@ export function DSAModuleTOC({ items, meta }: DSAModuleTOCProps) {
   return (
     <div className="space-y-4">
       {meta && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-slate-200">
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-border">
             <Zap className="h-3.5 w-3.5 text-blue-600" />
-            <span className="text-[11px] font-black uppercase tracking-widest text-slate-700">
+            <span className="text-[11px] font-black uppercase tracking-widest text-foreground">
               Overview
             </span>
           </div>
           <dl className="px-4 py-3 space-y-1.5 text-[12px]">
             {meta.level && (
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500 font-medium">Level</dt>
-                <dd className="font-bold text-slate-800 capitalize">
+                <dt className="text-muted-foreground font-medium">Level</dt>
+                <dd className="font-bold text-foreground capitalize">
                   {meta.level}
                 </dd>
               </div>
             )}
             {meta.focus && (
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500 font-medium">Focus</dt>
-                <dd className="font-bold text-slate-800 capitalize">
+                <dt className="text-muted-foreground font-medium">Focus</dt>
+                <dd className="font-bold text-foreground capitalize">
                   {meta.focus}
                 </dd>
               </div>
             )}
             {typeof meta.theoryCount === "number" && (
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500 font-medium flex items-center gap-1.5">
+                <dt className="text-muted-foreground font-medium flex items-center gap-1.5">
                   <BookOpen className="h-3 w-3 text-blue-400" />
                   Theory sections
                 </dt>
-                <dd className="font-bold text-slate-800 tabular-nums">
+                <dd className="font-bold text-foreground tabular-nums">
                   {meta.theoryCount}
                 </dd>
               </div>
             )}
             {typeof meta.problemCount === "number" && (
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-slate-500 font-medium flex items-center gap-1.5">
+                <dt className="text-muted-foreground font-medium flex items-center gap-1.5">
                   <Target className="h-3 w-3 text-violet-400" />
                   Practice problems
                 </dt>
-                <dd className="font-bold text-slate-800 tabular-nums">
+                <dd className="font-bold text-foreground tabular-nums">
                   {meta.problemCount}
                 </dd>
               </div>
@@ -124,11 +124,11 @@ export function DSAModuleTOC({ items, meta }: DSAModuleTOCProps) {
 
       <nav
         aria-label="On this page"
-        className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+        className="rounded-xl border border-border bg-background shadow-sm overflow-hidden"
       >
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-          <List className="h-3.5 w-3.5 text-slate-500" />
-          <span className="text-[11px] font-black uppercase tracking-widest text-slate-600">
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-surface border-b border-border">
+          <List className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-[11px] font-black uppercase tracking-widest text-secondary">
             On this page
           </span>
         </div>
@@ -141,7 +141,7 @@ export function DSAModuleTOC({ items, meta }: DSAModuleTOCProps) {
                   "block pl-4 pr-3 py-1.5 text-[12.5px] leading-snug border-l-2 transition-colors",
                   active === it.id
                     ? "border-violet-500 bg-violet-50/60 text-violet-900 font-bold"
-                    : "border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-50",
+                    : "border-transparent text-secondary hover:text-foreground hover:border-border hover:bg-surface",
                 )}
               >
                 {it.label}
@@ -149,7 +149,7 @@ export function DSAModuleTOC({ items, meta }: DSAModuleTOCProps) {
             </li>
           ))}
         </ul>
-        <div className="flex items-center gap-1.5 px-4 py-2 border-t border-slate-200 bg-slate-50/70 text-[10px] text-slate-500">
+        <div className="flex items-center gap-1.5 px-4 py-2 border-t border-border bg-surface/70 text-[10px] text-muted-foreground">
           <Clock className="h-2.5 w-2.5" />
           Scroll to jump to a section
         </div>

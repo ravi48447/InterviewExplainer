@@ -153,14 +153,14 @@ function MockInterviewResultsContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
       {/* Hero Section */}
-      <div className={cn("bg-gradient-to-r", getScoreGradient(mockData.overallScore), "text-white")}>
+      <div className={cn("bg-gradient-to-r", getScoreGradient(mockData.overallScore), "text-primary-foreground dark:text-foreground")}>
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-background/20 backdrop-blur-sm mb-6">
               {mockData.passStatus === 'pass' ? (
                 <>
                   <Trophy className="h-4 w-4" />
@@ -191,7 +191,7 @@ function MockInterviewResultsContent() {
                       animate={{ scale: 1, rotate: 0 }}
                       transition={{ delay: 0.4, type: 'spring' }}
                     >
-                      <CheckCircle2 className="h-12 w-12 text-white" />
+                      <CheckCircle2 className="h-12 w-12 text-primary-foreground dark:text-foreground" />
                     </motion.div>
                   )}
                 </div>
@@ -232,11 +232,11 @@ function MockInterviewResultsContent() {
           transition={{ delay: 0.3 }}
           className="flex items-center justify-center gap-4 mb-12"
         >
-          <Button variant="outline" size="lg" className="font-semibold bg-white shadow-lg">
+          <Button variant="outline" size="lg" className="font-semibold bg-background shadow-lg">
             <Download className="h-4 w-4 mr-2" />
             Download Report
           </Button>
-          <Button variant="outline" size="lg" className="font-semibold bg-white shadow-lg">
+          <Button variant="outline" size="lg" className="font-semibold bg-background shadow-lg">
             <Share2 className="h-4 w-4 mr-2" />
             Share Results
           </Button>
@@ -256,9 +256,9 @@ function MockInterviewResultsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-8"
+              className="bg-background rounded-2xl border-2 border-border shadow-lg p-8"
             >
-              <h2 className="text-2xl font-black text-slate-900 mb-6">Skills Assessment</h2>
+              <h2 className="text-2xl font-black text-foreground mb-6">Skills Assessment</h2>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <RadarChart data={mockData.skillsRadar}>
@@ -279,13 +279,13 @@ function MockInterviewResultsContent() {
             </motion.div>
 
             {/* Question-by-Question Breakdown */}
-            {mockData.questionDetails.map((q, idx) => (
+            {mockData.questionDetails.map((q: any, idx: number) => (
               <motion.div
                 key={idx}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 + idx * 0.1 }}
-                className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-8"
+                className="bg-background rounded-2xl border-2 border-border shadow-lg p-8"
               >
                 <div className="flex items-start justify-between mb-6">
                   <div className="flex items-start gap-4 flex-1">
@@ -295,16 +295,16 @@ function MockInterviewResultsContent() {
                       q.type === 'system-design' && "bg-gradient-to-br from-purple-500 to-indigo-600",
                       q.type === 'behavioral' && "bg-gradient-to-br from-orange-500 to-amber-600"
                     )}>
-                      {q.type === 'coding' && <Code2 className="h-6 w-6 text-white" />}
-                      {q.type === 'system-design' && <GitBranch className="h-6 w-6 text-white" />}
-                      {q.type === 'behavioral' && <MessageSquare className="h-6 w-6 text-white" />}
+                      {q.type === 'coding' && <Code2 className="h-6 w-6 text-primary-foreground dark:text-foreground" />}
+                      {q.type === 'system-design' && <GitBranch className="h-6 w-6 text-primary-foreground dark:text-foreground" />}
+                      {q.type === 'behavioral' && <MessageSquare className="h-6 w-6 text-primary-foreground dark:text-foreground" />}
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
                         Question {idx + 1} • {q.type?.replace('-', ' ') || 'technical'}
                       </p>
-                      <h3 className="text-xl font-black text-slate-900 mb-2">{q.question || q.title}</h3>
-                      <p className="text-sm text-slate-600">Time spent: {q.timeSpent || 'N/A'}</p>
+                      <h3 className="text-xl font-black text-foreground mb-2">{q.question || q.title}</h3>
+                      <p className="text-sm text-secondary">Time spent: {q.timeSpent || 'N/A'}</p>
 
                       {/* Link to review full answer if available */}
                       {q.reviewUrl && q.score < 80 && (
@@ -323,7 +323,7 @@ function MockInterviewResultsContent() {
                     <div className={cn("text-4xl font-black mb-1", getScoreColor(q.score))}>
                       {q.score}
                     </div>
-                    <p className="text-xs font-bold text-slate-500">SCORE</p>
+                    <p className="text-xs font-bold text-muted-foreground">SCORE</p>
                   </div>
                 </div>
 
@@ -335,7 +335,7 @@ function MockInterviewResultsContent() {
                       <h4 className="text-sm font-black text-emerald-900">What Went Well</h4>
                     </div>
                     <ul className="space-y-2">
-                      {q.strengths.map((strength, i) => (
+                      {q.strengths.map((strength: string, i: number) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-emerald-800">
                           <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
                           <span>{strength}</span>
@@ -351,7 +351,7 @@ function MockInterviewResultsContent() {
                       <h4 className="text-sm font-black text-orange-900">Areas to Improve</h4>
                     </div>
                     <ul className="space-y-2">
-                      {q.improvements.map((improvement, i) => (
+                      {q.improvements.map((improvement: string, i: number) => (
                         <li key={i} className="flex items-start gap-2 text-sm text-orange-800">
                           <AlertCircle className="h-4 w-4 text-orange-600 shrink-0 mt-0.5" />
                           <span>{improvement}</span>
@@ -371,18 +371,18 @@ function MockInterviewResultsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
-              className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-6 sticky top-6"
+              className="bg-background rounded-2xl border-2 border-border shadow-lg p-6 sticky top-6"
             >
-              <h3 className="text-lg font-black text-slate-900 mb-4">Category Scores</h3>
+              <h3 className="text-lg font-black text-foreground mb-4">Category Scores</h3>
               <div className="space-y-4">
-                {Object.entries(mockData.breakdown).map(([category, data]) => (
+                {Object.entries(mockData.breakdown).map(([category, data]: [string, any]) => (
                   <div key={category}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         {category === 'coding' && <Code2 className="h-4 w-4 text-blue-600" />}
                         {category === 'systemDesign' && <GitBranch className="h-4 w-4 text-purple-600" />}
                         {category === 'behavioral' && <MessageSquare className="h-4 w-4 text-orange-600" />}
-                        <span className="text-sm font-bold text-slate-700 capitalize">
+                        <span className="text-sm font-bold text-foreground capitalize">
                           {category.replace(/([A-Z])/g, ' $1')}
                         </span>
                       </div>
@@ -390,7 +390,7 @@ function MockInterviewResultsContent() {
                         {data.score}
                       </span>
                     </div>
-                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
+                    <div className="w-full h-2 bg-surface rounded-full overflow-hidden mb-2">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${data.score}%` }}
@@ -398,7 +398,7 @@ function MockInterviewResultsContent() {
                         className={cn("h-full bg-gradient-to-r", getScoreGradient(data.score))}
                       />
                     </div>
-                    <p className="text-xs text-slate-600">{data.feedback}</p>
+                    <p className="text-xs text-secondary">{data.feedback}</p>
                   </div>
                 ))}
               </div>
@@ -409,11 +409,11 @@ function MockInterviewResultsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.7 }}
-              className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-6"
+              className="bg-background rounded-2xl border-2 border-border shadow-lg p-6"
             >
-              <h3 className="text-lg font-black text-slate-900 mb-4">Recommended Practice</h3>
+              <h3 className="text-lg font-black text-foreground mb-4">Recommended Practice</h3>
               <div className="space-y-3">
-                {mockData.recommendations.map((rec, idx) => (
+                {mockData.recommendations.map((rec: any, idx: number) => (
                   <Link
                     key={idx}
                     href="/domains"
@@ -431,14 +431,14 @@ function MockInterviewResultsContent() {
                         rec.priority === 'medium' && "bg-gradient-to-br from-orange-500 to-amber-600",
                         rec.priority === 'low' && "bg-gradient-to-br from-blue-500 to-cyan-600"
                       )}>
-                        <rec.icon className="h-5 w-5 text-white" />
+                        <rec.icon className="h-5 w-5 text-primary-foreground dark:text-foreground" />
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-slate-900">{rec.title}</p>
-                        <p className="text-xs text-slate-600 capitalize">{rec.priority} priority</p>
+                        <p className="text-sm font-bold text-foreground">{rec.title}</p>
+                        <p className="text-xs text-secondary capitalize">{rec.priority} priority</p>
                       </div>
                     </div>
-                    <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-slate-700 group-hover:translate-x-1 transition-all" />
+                    <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-foreground group-hover:translate-x-1 transition-all" />
                   </Link>
                 ))}
               </div>
@@ -453,11 +453,11 @@ function MockInterviewResultsContent() {
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
-                  <Award className="h-5 w-5 text-white" />
+                  <Award className="h-5 w-5 text-primary-foreground dark:text-foreground" />
                 </div>
-                <h3 className="text-lg font-black text-slate-900">Keep Going!</h3>
+                <h3 className="text-lg font-black text-foreground">Keep Going!</h3>
               </div>
-              <p className="text-sm text-slate-700 mb-4">
+              <p className="text-sm text-foreground mb-4">
                 Consistent practice is key to interview success. Take another mock to track your improvement.
               </p>
               <Button asChild className="w-full font-bold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">

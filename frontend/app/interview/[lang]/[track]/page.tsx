@@ -63,21 +63,21 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
 
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-xs text-slate-500 mb-8">
-          <Link href="/" className="hover:text-slate-700">Home</Link>
+        <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
+          <Link href="/" className="hover:text-foreground">Home</Link>
           <ChevronRight className="h-3 w-3" />
-          <Link href="/interview" className="hover:text-slate-700">Interview Questions</Link>
+          <Link href="/interview" className="hover:text-foreground">Interview Questions</Link>
           <ChevronRight className="h-3 w-3" />
-          <Link href={`/interview/${lang}`} className="hover:text-slate-700">{langTitle}</Link>
+          <Link href={`/interview/${lang}`} className="hover:text-foreground">{langTitle}</Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-700 font-semibold">{trackTitle}</span>
+          <span className="text-foreground font-semibold">{trackTitle}</span>
         </nav>
 
         <header className="mb-10">
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-3">
+          <h1 className="text-4xl font-black tracking-tight text-foreground mb-3">
             {langTitle} {trackTitle} Interview Questions
           </h1>
-          <p className="text-lg text-slate-600 max-w-3xl leading-relaxed">
+          <p className="text-lg text-secondary max-w-3xl leading-relaxed">
             Complete interview preparation for {langTitle} {trackTitle} engineers — three experience levels,
             each with genuinely different answers, production examples, and what interviewers actually want to hear.
           </p>
@@ -89,7 +89,7 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
             <Link
               key={key}
               href={`/interview/${lang}/${track}/${key}`}
-              className="group relative rounded-2xl border-2 bg-white p-6 hover:shadow-xl transition-all hover:scale-[1.02]"
+              className="group relative rounded-2xl border-2 bg-background p-6 hover:shadow-xl transition-all hover:scale-[1.02]"
               style={{ borderColor: meta.color + "80" }}
             >
               <div className="flex items-center justify-between mb-4">
@@ -100,19 +100,19 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
               </div>
 
               <div className="mb-4">
-                <div className="text-3xl font-black text-slate-900">{stacks.length}</div>
-                <div className="text-sm text-slate-500">tech stacks</div>
+                <div className="text-3xl font-black text-foreground">{stacks.length}</div>
+                <div className="text-sm text-muted-foreground">tech stacks</div>
               </div>
 
               {stacks.length > 0 && (
                 <div className="flex flex-wrap gap-1 mb-4">
                   {stacks.slice(0, 5).map(s => (
-                    <span key={s} className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-medium">
+                    <span key={s} className="text-[10px] px-2 py-0.5 bg-surface text-secondary rounded-md font-medium">
                       {toTitle(s)}
                     </span>
                   ))}
                   {stacks.length > 5 && (
-                    <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-400 rounded-md">
+                    <span className="text-[10px] px-2 py-0.5 bg-surface text-slate-400 rounded-md">
                       +{stacks.length - 5} more
                     </span>
                   )}
@@ -128,13 +128,13 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
         </section>
 
         {/* What's different per level */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-8 mb-12">
-          <h2 className="text-xl font-black text-slate-900 mb-6">What Changes Between Levels</h2>
+        <section className="rounded-2xl border border-border bg-background p-8 mb-12">
+          <h2 className="text-xl font-black text-foreground mb-6">What Changes Between Levels</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200">
-                  <th className="text-left py-3 pr-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Aspect</th>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 pr-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Aspect</th>
                   <th className="text-left py-3 px-4 text-xs font-bold text-emerald-600 uppercase tracking-wider">Beginner</th>
                   <th className="text-left py-3 px-4 text-xs font-bold text-amber-600 uppercase tracking-wider">Intermediate</th>
                   <th className="text-left py-3 px-4 text-xs font-bold text-red-600 uppercase tracking-wider">Advanced</th>
@@ -148,10 +148,10 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
                   ["Answer length", "~250 words", "~300–350 words", "~350–400 words"],
                 ].map(([aspect, beg, inter, adv]) => (
                   <tr key={aspect}>
-                    <td className="py-3 pr-4 text-xs font-bold text-slate-600">{aspect}</td>
-                    <td className="py-3 px-4 text-xs text-slate-600">{beg}</td>
-                    <td className="py-3 px-4 text-xs text-slate-600">{inter}</td>
-                    <td className="py-3 px-4 text-xs text-slate-600">{adv}</td>
+                    <td className="py-3 pr-4 text-xs font-bold text-secondary">{aspect}</td>
+                    <td className="py-3 px-4 text-xs text-secondary">{beg}</td>
+                    <td className="py-3 px-4 text-xs text-secondary">{inter}</td>
+                    <td className="py-3 px-4 text-xs text-secondary">{adv}</td>
                   </tr>
                 ))}
               </tbody>
@@ -166,8 +166,8 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
               <BookOpen className="h-5 w-5 text-purple-600" />
             </div>
             <div>
-              <div className="font-black text-slate-900 group-hover:text-purple-600 transition-colors">DSA Problems</div>
-              <div className="text-xs text-slate-500">Line-by-line explanations — beats LeetCode</div>
+              <div className="font-black text-foreground group-hover:text-purple-600 transition-colors">DSA Problems</div>
+              <div className="text-xs text-muted-foreground">Line-by-line explanations — beats LeetCode</div>
             </div>
             <ChevronRight className="h-5 w-5 text-slate-300 ml-auto group-hover:translate-x-0.5 transition-transform" />
           </Link>
@@ -176,8 +176,8 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
               <Users className="h-5 w-5 text-orange-600" />
             </div>
             <div>
-              <div className="font-black text-slate-900 group-hover:text-orange-600 transition-colors">Company Prep</div>
-              <div className="text-xs text-slate-500">Amazon, Google, Microsoft, Meta</div>
+              <div className="font-black text-foreground group-hover:text-orange-600 transition-colors">Company Prep</div>
+              <div className="text-xs text-muted-foreground">Amazon, Google, Microsoft, Meta</div>
             </div>
             <ChevronRight className="h-5 w-5 text-slate-300 ml-auto group-hover:translate-x-0.5 transition-transform" />
           </Link>

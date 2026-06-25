@@ -80,7 +80,7 @@ export default function QuestionSidebar({
     <nav
       ref={navRef}
       onScroll={handleScroll}
-      className="flex flex-col space-y-2 bg-white/90 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm p-3 max-h-[calc(100vh-250px)] overflow-y-auto"
+      className="flex flex-col space-y-2 bg-background/90 backdrop-blur-sm rounded-xl border border-border shadow-sm p-3 max-h-[calc(100vh-250px)] overflow-y-auto"
     >
       {stackDataWithQuestions.map(stack => {
         const isActive = stack.slug === stackSlug;
@@ -93,7 +93,7 @@ export default function QuestionSidebar({
               className={`flex items-center justify-between px-3 py-2 rounded-md cursor-pointer transition-colors list-none select-none mb-1 shadow-sm ${
                 isActive
                   ? 'bg-primary text-primary-foreground hover:bg-primary/90 font-medium'
-                  : 'text-slate-600 hover:bg-slate-50 font-semibold'
+                  : 'text-secondary hover:bg-surface font-semibold'
               }`}
             >
               <span className="text-[13px] truncate pr-2">{stack.name}</span>
@@ -157,9 +157,9 @@ function SubcategoryGroup({
 
   return (
     <details open={hasCurrentQuestion} className="mb-1">
-      <summary className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer list-none select-none hover:bg-slate-50 transition-colors group/sub">
+      <summary className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer list-none select-none hover:bg-surface transition-colors group/sub">
         <FolderOpen className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-        <span className="flex-1 text-[11px] font-bold text-slate-600 group-open/sub:text-blue-700 truncate">
+        <span className="flex-1 text-[11px] font-bold text-secondary group-open/sub:text-blue-700 truncate">
           {group.name}
         </span>
         <span className="text-[11px] text-slate-400 font-medium shrink-0">
@@ -204,13 +204,13 @@ function QuestionLink({
       scroll={false}
       className={`flex items-start gap-2.5 py-1.5 pl-3 pr-3 text-[12px] leading-snug rounded-lg transition-all ${
         isCurrent
-          ? 'text-slate-900 font-bold bg-blue-50 border-l-4 border-blue-600'
-          : 'text-slate-700 hover:text-slate-900 hover:bg-slate-50 outline-none focus:ring-2 focus:ring-blue-200'
+          ? 'text-foreground font-bold bg-blue-50 border-l-4 border-blue-600'
+          : 'text-foreground hover:text-foreground hover:bg-surface outline-none focus:ring-2 focus:ring-blue-200'
       }`}
     >
       <span
         className={`text-[11px] font-bold min-w-[24px] h-[17px] rounded px-1.5 flex items-center justify-center shrink-0 mt-[2px] ${
-          isCurrent ? 'bg-blue-600 text-white' : 'bg-slate-300 text-slate-700'
+          isCurrent ? 'bg-blue-600 text-primary-foreground dark:text-foreground' : 'bg-slate-300 text-foreground'
         }`}
       >
         Q{number}

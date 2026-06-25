@@ -38,16 +38,16 @@ export function SqlPlaygroundLayout({
     <div className="space-y-8">
       {directAnswer && (
         <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
-          <p className="text-sm font-semibold text-slate-800">{directAnswer}</p>
+          <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
 
       {/* Overview */}
       {overview && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 border-b border-slate-200">
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
             <Database className="h-4 w-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Concept Overview</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Concept Overview</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={overview.content} stripTopHeading />
@@ -57,10 +57,10 @@ export function SqlPlaygroundLayout({
 
       {/* Sample Data Table */}
       {sampleData && (
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 border-b border-slate-200">
-            <Table className="h-4 w-4 text-slate-500" />
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Sample Data</span>
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
+            <Table className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Sample Data</span>
           </div>
           <div className="px-5 py-4 overflow-x-auto">
             <MarkdownContent content={sampleData.content} stripTopHeading />
@@ -70,15 +70,15 @@ export function SqlPlaygroundLayout({
 
       {/* Query Examples (tabbed) */}
       {queryExamples.length > 0 && (
-        <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
-          <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-700">
+        <div className="rounded-xl border border-border dark:bg-surface overflow-hidden">
+          <div className="flex items-center gap-1 px-4 py-2 border-b border-border">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mr-2">Query</span>
             {queryExamples.map((q, i) => (
               <button
                 key={i}
                 onClick={() => setActiveQuery(i)}
                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                  activeQuery === i ? "bg-slate-700 text-slate-100" : "text-slate-500 hover:text-slate-300"
+                  activeQuery === i ? "bg-slate-700 text-slate-100" : "text-muted-foreground hover:text-slate-300"
                 }`}
               >
                 {q.sectionTitle || `Example ${i + 1}`}
@@ -118,9 +118,9 @@ export function SqlPlaygroundLayout({
 
       {/* Deep Explanation */}
       {deepExplain && (
-        <div className="rounded-xl border border-blue-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-blue-50 border-b border-blue-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Deep Dive</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Deep Dive</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={deepExplain.content} stripTopHeading />
@@ -142,10 +142,10 @@ export function SqlPlaygroundLayout({
 
       {/* Optimization Checklist */}
       {optimizationList && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 border-b border-slate-200">
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
             <CheckSquare className="h-4 w-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Optimization Checklist</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Optimization Checklist</span>
           </div>
           <div className="px-5 py-4">
             <MarkdownContent content={optimizationList.content} stripTopHeading />
@@ -169,7 +169,7 @@ export function SqlPlaygroundLayout({
       {speakable && (
         <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
           <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Interview Answer</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={speakable.content.replace(/^#[^\n]*\n+/, '').trim()} />

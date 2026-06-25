@@ -65,11 +65,11 @@ export function DSAProblemExplorer({
               onClick={() => setDiff(d)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
                 diff === d
-                  ? d === "all"    ? "bg-slate-900 text-white border-slate-900"
-                  : d === "easy"   ? "bg-emerald-600 text-white border-emerald-600"
-                  : d === "medium" ? "bg-amber-500 text-white border-amber-500"
-                  :                  "bg-red-600 text-white border-red-600"
-                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                  ? d === "all"    ? "dark:bg-surface text-primary-foreground dark:text-foreground border-slate-900"
+                  : d === "easy"   ? "bg-emerald-600 text-primary-foreground dark:text-foreground border-emerald-600"
+                  : d === "medium" ? "bg-amber-500 text-primary-foreground dark:text-foreground border-amber-500"
+                  :                  "bg-red-600 text-primary-foreground dark:text-foreground border-red-600"
+                  : "bg-background text-secondary border-border hover:border-border hover:bg-surface"
               }`}
             >
               {d === "all"
@@ -83,7 +83,7 @@ export function DSAProblemExplorer({
         <select
           value={module}
           onChange={(e) => setModule(e.target.value)}
-          className="ml-1 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-600 bg-white focus:outline-none focus:border-violet-400 hover:border-slate-300 transition-colors"
+          className="ml-1 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-secondary bg-background focus:outline-none focus:border-violet-400 hover:border-border transition-colors"
         >
           <option value="all">All Modules</option>
           {moduleMap.map((m) => (
@@ -99,10 +99,10 @@ export function DSAProblemExplorer({
             placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 pr-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:border-violet-400 w-40 transition-colors"
+            className="pl-8 pr-3 py-1.5 rounded-lg border border-border text-xs text-foreground bg-background focus:outline-none focus:border-violet-400 w-40 transition-colors"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-secondary">
               <X className="h-3 w-3" />
             </button>
           )}
@@ -143,10 +143,10 @@ export function DSAProblemExplorer({
                 className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 items-center px-3 py-2.5 opacity-40 cursor-not-allowed"
               >
                 <span className="text-[11px] text-slate-300 font-mono tabular-nums">{i + 1}</span>
-                <span className="text-sm text-slate-500 truncate">{p.title}</span>
+                <span className="text-sm text-muted-foreground truncate">{p.title}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border w-fit ${d.badge}`}>{d.label}</span>
                 <span className="text-xs text-slate-400 hidden sm:block truncate">{p.moduleTitle}</span>
-                <span className="text-[10px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded">Soon</span>
+                <span className="text-[10px] font-bold text-slate-400 border border-border px-1.5 py-0.5 rounded">Soon</span>
               </div>
             );
           }
@@ -157,7 +157,7 @@ export function DSAProblemExplorer({
               className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 items-center px-3 py-2.5 hover:bg-violet-50 group transition-colors"
             >
               <span className="text-[11px] text-slate-300 font-mono tabular-nums">{i + 1}</span>
-              <span className="text-sm font-medium text-slate-800 group-hover:text-violet-700 transition-colors truncate">{p.title}</span>
+              <span className="text-sm font-medium text-foreground group-hover:text-violet-700 transition-colors truncate">{p.title}</span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border w-fit ${d.badge}`}>{d.label}</span>
               <span className="text-xs text-slate-400 hidden sm:block truncate">{p.moduleTitle}</span>
               <ArrowRight className="h-3.5 w-3.5 text-slate-200 group-hover:text-violet-400 transition-colors" />

@@ -3,7 +3,7 @@
  * Handles dashboard, insights, activity logs
  */
 
-import { axiosClient } from '@/shared/lib/api-client';
+import axiosClient from '@/lib/api-client';
 
 export const analyticsApi = {
   // Dashboard

@@ -61,7 +61,7 @@ export function SmartCrosslinks({
   return (
     <section
       aria-labelledby="smart-crosslinks-heading"
-      className="mb-8 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+      className="mb-8 rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
     >
       {/* Header */}
       <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-blue-50 to-white">
@@ -69,12 +69,12 @@ export function SmartCrosslinks({
           <Sparkles className="h-4 w-4 text-indigo-600" />
           <h2
             id="smart-crosslinks-heading"
-            className="text-[13px] font-black uppercase tracking-widest text-slate-700"
+            className="text-[13px] font-black uppercase tracking-widest text-foreground"
           >
             Continue your prep
           </h2>
         </div>
-        <p className="text-[12px] text-slate-600 leading-snug">
+        <p className="text-[12px] text-secondary leading-snug">
           Interviewers rarely ask {moduleTitle} in isolation. These are the
           modules that most often come up in the same loop.
         </p>
@@ -86,11 +86,11 @@ export function SmartCrosslinks({
           {/* Primary next-up card */}
           <Link
             href={`/${primary.seoSlug}`}
-            className="group block rounded-xl border-2 border-slate-200 bg-gradient-to-br from-white to-indigo-50/30 p-4 hover:border-indigo-400 hover:shadow-md transition-all"
+            className="group block rounded-xl border-2 border-border bg-gradient-to-br from-white to-indigo-50/30 p-4 hover:border-indigo-400 hover:shadow-md transition-all"
           >
             <div className="flex items-start gap-4">
               <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
-                <GitBranch className="h-5 w-5 text-white" />
+                <GitBranch className="h-5 w-5 text-primary-foreground dark:text-foreground" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
@@ -98,16 +98,16 @@ export function SmartCrosslinks({
                     Most relevant next step
                   </span>
                   {primary.questionCount > 0 && (
-                    <span className="text-[10px] font-bold text-slate-500">
+                    <span className="text-[10px] font-bold text-muted-foreground">
                       {primary.questionCount}+ Q&amp;A
                     </span>
                   )}
                 </div>
-                <div className="text-base font-black text-slate-900 group-hover:text-indigo-700 transition-colors leading-tight">
+                <div className="text-base font-black text-foreground group-hover:text-indigo-700 transition-colors leading-tight">
                   {primary.title} Interview Questions
                 </div>
                 {primary.intro && (
-                  <div className="mt-1 text-[12px] text-slate-600 leading-snug line-clamp-2">
+                  <div className="mt-1 text-[12px] text-secondary leading-snug line-clamp-2">
                     {primary.intro}
                   </div>
                 )}
@@ -126,19 +126,19 @@ export function SmartCrosslinks({
                 <Link
                   key={m.seoSlug}
                   href={`/${m.seoSlug}`}
-                  className="group block rounded-lg border border-slate-200 bg-white px-3.5 py-3 hover:border-blue-300 hover:bg-blue-50/40 transition-colors"
+                  className="group block rounded-lg border border-border bg-background px-3.5 py-3 hover:border-blue-300 hover:bg-blue-50/40 transition-colors"
                 >
                   <div className="flex items-baseline justify-between gap-2 mb-1">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                       Also useful
                     </span>
                     {m.questionCount > 0 && (
-                      <span className="text-[10px] font-bold text-slate-500">
+                      <span className="text-[10px] font-bold text-muted-foreground">
                         {m.questionCount}
                       </span>
                     )}
                   </div>
-                  <div className="text-[13px] font-black text-slate-900 group-hover:text-blue-700 transition-colors leading-snug line-clamp-2">
+                  <div className="text-[13px] font-black text-foreground group-hover:text-blue-700 transition-colors leading-snug line-clamp-2">
                     {m.title}
                   </div>
                 </Link>
@@ -149,18 +149,18 @@ export function SmartCrosslinks({
       )}
 
       {/* Pillar link + complete track — unified footer tree */}
-      <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/60 space-y-2.5">
+      <div className="px-5 py-4 border-t border-slate-100 bg-surface/60 space-y-2.5">
         {pillar && (
           <Link
             href={`/${pillar.pillarSlug}`}
-            className="group flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm transition-all"
+            className="group flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border border-border hover:border-indigo-300 hover:shadow-sm transition-all"
           >
             <Library className="h-4 w-4 text-indigo-500 shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 leading-none mb-0.5">
                 Browse the pillar
               </div>
-              <div className="text-[13px] font-bold text-slate-800 group-hover:text-indigo-700 leading-snug truncate">
+              <div className="text-[13px] font-bold text-foreground group-hover:text-indigo-700 leading-snug truncate">
                 Every {pillarTitle} module
               </div>
             </div>
@@ -170,14 +170,14 @@ export function SmartCrosslinks({
 
         <Link
           href={completeTrack.href}
-          className="group flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 transition-colors"
+          className="group flex items-center gap-3 px-3 py-2.5 rounded-lg dark:bg-surface hover:dark:bg-surface transition-colors"
         >
           <Compass className="h-4 w-4 text-indigo-300 shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-[11px] font-black uppercase tracking-widest text-indigo-300 leading-none mb-0.5">
               Full roadmap
             </div>
-            <div className="text-[13px] font-bold text-white leading-snug truncate">
+            <div className="text-[13px] font-bold text-primary-foreground dark:text-foreground leading-snug truncate">
               {completeTrack.title}
             </div>
           </div>
@@ -187,7 +187,7 @@ export function SmartCrosslinks({
         <div className="flex justify-end">
           <Link
             href={completeTrack.secondaryHref}
-            className="inline-flex items-center gap-1 text-[12px] font-bold text-slate-500 hover:text-slate-900 transition-colors"
+            className="inline-flex items-center gap-1 text-[12px] font-bold text-muted-foreground hover:text-foreground transition-colors"
           >
             {completeTrack.secondaryLabel}
             <ArrowRight className="h-3 w-3" />

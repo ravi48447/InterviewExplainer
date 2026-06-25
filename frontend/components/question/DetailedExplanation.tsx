@@ -84,7 +84,7 @@ function CodeBlockGroup({
       {(before || after) && (
         <p
           className={`text-[11px] font-bold uppercase tracking-widest mb-3 ${
-            d ? "text-slate-500" : "text-slate-400"
+            d ? "text-muted-foreground" : "text-slate-400"
           }`}
         >
           In code — see the difference:
@@ -100,12 +100,12 @@ function CodeBlockGroup({
             <>
               <div
                 className={`rounded-lg overflow-hidden border ${
-                  d ? "border-slate-700/50" : "border-slate-200"
+                  d ? "border-border/50" : "border-border"
                 }`}
               >
                 <div
                   className={`flex items-center gap-2 px-4 py-2 ${
-                    d ? "bg-slate-800" : "bg-slate-100"
+                    d ? "dark:bg-surface" : "bg-surface"
                   }`}
                 >
                   <span className="h-2 w-2 rounded-full bg-red-400 shrink-0" />
@@ -115,7 +115,7 @@ function CodeBlockGroup({
                   {before.sectionTitle && (
                     <span
                       className={`text-[11px] ml-1 ${
-                        d ? "text-slate-400" : "text-slate-500"
+                        d ? "text-slate-400" : "text-muted-foreground"
                       }`}
                     >
                       — {before.sectionTitle}
@@ -129,7 +129,7 @@ function CodeBlockGroup({
               {beforeNote && (
                 <div
                   className={`text-[13px] italic leading-relaxed mt-2 ${
-                    d ? "text-slate-400" : "text-slate-500"
+                    d ? "text-slate-400" : "text-muted-foreground"
                   }`}
                 >
                   <MarkdownContent content={beforeNote} />
@@ -146,7 +146,7 @@ function CodeBlockGroup({
           />
           <span
             className={`text-[10px] font-bold uppercase tracking-widest ${
-              d ? "text-slate-500" : "text-slate-400"
+              d ? "text-muted-foreground" : "text-slate-400"
             }`}
           >
             vs
@@ -166,12 +166,12 @@ function CodeBlockGroup({
             <>
               <div
                 className={`rounded-lg overflow-hidden border ${
-                  d ? "border-slate-700/50" : "border-slate-200"
+                  d ? "border-border/50" : "border-border"
                 }`}
               >
                 <div
                   className={`flex items-center gap-2 px-4 py-2 ${
-                    d ? "bg-slate-800" : "bg-slate-100"
+                    d ? "dark:bg-surface" : "bg-surface"
                   }`}
                 >
                   <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
@@ -181,7 +181,7 @@ function CodeBlockGroup({
                   {after.sectionTitle && (
                     <span
                       className={`text-[11px] ml-1 ${
-                        d ? "text-slate-400" : "text-slate-500"
+                        d ? "text-slate-400" : "text-muted-foreground"
                       }`}
                     >
                       — {after.sectionTitle}
@@ -195,7 +195,7 @@ function CodeBlockGroup({
               {afterNote && (
                 <div
                   className={`text-[13px] leading-relaxed mt-2 ${
-                    d ? "text-slate-400" : "text-slate-500"
+                    d ? "text-slate-400" : "text-muted-foreground"
                   }`}
                 >
                   <MarkdownContent content={afterNote} />
@@ -236,24 +236,24 @@ export function DetailedExplanation({
     <section
       className={`mb-8 rounded-xl overflow-hidden shadow-lg ${
         d
-          ? "border border-slate-700/60 bg-[#202020] shadow-black/40"
-          : "border border-slate-200/80 bg-white shadow-slate-100/80"
+          ? "border border-border/60 bg-[#202020] shadow-black/40"
+          : "border border-border/80 bg-background shadow-slate-100/80"
       }`}
     >
       {/* Card header */}
       <div
         className={`flex items-center gap-2 px-5 py-3 border-b ${
           d
-            ? "bg-slate-800 border-slate-700/60"
-            : "bg-slate-50 border-slate-200/80"
+            ? "dark:bg-surface border-border/60"
+            : "bg-surface border-border/80"
         }`}
       >
         <BookOpen
-          className={`h-3.5 w-3.5 ${d ? "text-slate-300" : "text-slate-500"}`}
+          className={`h-3.5 w-3.5 ${d ? "text-slate-300" : "text-muted-foreground"}`}
         />
         <span
           className={`text-[11px] font-bold uppercase tracking-widest ${
-            d ? "text-slate-300" : "text-slate-500"
+            d ? "text-slate-300" : "text-muted-foreground"
           }`}
         >
           Under the Hood
@@ -267,8 +267,8 @@ export function DetailedExplanation({
             key={main.id ?? idx}
             className={`rounded-xl px-5 py-5 sm:px-6 sm:py-6 border ${
               d
-                ? "bg-[#282828] border-slate-700/40"
-                : "bg-white border-slate-200/70"
+                ? "bg-[#282828] border-border/40"
+                : "bg-background border-border/70"
             }`}
           >
             <SectionRenderer
@@ -287,14 +287,14 @@ export function DetailedExplanation({
       {followupQuestions && followupQuestions.length > 0 && (
         <div
           className={`border-t px-4 py-4 ${
-            d ? "border-slate-700/60" : "border-slate-200/80"
+            d ? "border-border/60" : "border-border/80"
           }`}
         >
           <div className="flex items-center gap-2 mb-4">
             <MessageCircle className="h-3.5 w-3.5 text-indigo-400" />
             <span
               className={`text-[11px] font-bold uppercase tracking-widest ${
-                d ? "text-slate-300" : "text-slate-500"
+                d ? "text-slate-300" : "text-muted-foreground"
               }`}
             >
               Follow-up Questions
@@ -314,7 +314,7 @@ export function DetailedExplanation({
                 </span>
                 <span
                   className={`text-[15px] leading-relaxed ${
-                    d ? "text-slate-100" : "text-slate-700"
+                    d ? "text-slate-100" : "text-foreground"
                   }`}
                 >
                   {q}
@@ -344,10 +344,10 @@ function SectionRenderer({
 
   const bodyText = d
     ? "text-[15.5px] leading-[1.78] text-slate-100"
-    : "text-[15.5px] leading-[1.78] text-slate-700";
+    : "text-[15.5px] leading-[1.78] text-foreground";
   const headingText = d
     ? "text-[18px] font-bold text-slate-100 tracking-tight"
-    : "text-[18px] font-bold text-slate-900 tracking-tight";
+    : "text-[18px] font-bold text-foreground tracking-tight";
 
   /* ── Overview / plain explanation ── */
   if (
@@ -374,7 +374,7 @@ function SectionRenderer({
           <h3 className={`flex items-center gap-2.5 ${headingText} mb-4 leading-snug`}>
             {phaseIndex !== undefined && (
               <span
-                className={`flex h-6 w-6 items-center justify-center rounded-md text-white text-[11px] font-bold shrink-0 ${
+                className={`flex h-6 w-6 items-center justify-center rounded-md text-primary-foreground dark:text-foreground text-[11px] font-bold shrink-0 ${
                   d ? "bg-slate-600" : "bg-slate-700"
                 }`}
               >
@@ -427,7 +427,7 @@ function SectionRenderer({
             <Layers className="h-3.5 w-3.5 text-blue-400" />
             <h3
               className={`text-[13px] font-bold ${
-                d ? "text-slate-200" : "text-slate-700"
+                d ? "text-slate-200" : "text-foreground"
               }`}
             >
               {title}
@@ -448,7 +448,7 @@ function SectionRenderer({
             <Layers className="h-3.5 w-3.5 text-indigo-400" />
             <h3
               className={`text-[13px] font-bold ${
-                d ? "text-slate-300" : "text-slate-600"
+                d ? "text-slate-300" : "text-secondary"
               }`}
             >
               {title}
@@ -458,8 +458,8 @@ function SectionRenderer({
         <div
           className={`rounded-xl px-5 py-5 overflow-x-auto border ${
             d
-              ? "bg-slate-950 text-slate-200 border-slate-700/50"
-              : "bg-slate-900 text-slate-200 border-slate-700/50"
+              ? "bg-slate-950 text-slate-200 border-border/50"
+              : "dark:bg-surface text-slate-200 border-border/50"
           }`}
         >
           <pre className="text-[12.5px] leading-relaxed font-mono whitespace-pre max-w-full">
@@ -583,7 +583,7 @@ function SectionRenderer({
             </h3>
           </div>
         )}
-        <div className={`overflow-x-auto rounded-lg border ${d ? "border-slate-700/50" : "border-slate-200"}`}>
+        <div className={`overflow-x-auto rounded-lg border ${d ? "border-border/50" : "border-border"}`}>
           <MarkdownContent content={content} stripTopHeading />
         </div>
       </div>
@@ -626,16 +626,16 @@ function SectionRenderer({
         className={`rounded-lg px-4 py-3 border ${
           d
             ? "bg-[#272727] border-slate-600/60"
-            : "bg-slate-50 border-slate-200/70"
+            : "bg-surface border-border/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
           <ClipboardList
-            className={`h-3.5 w-3.5 ${d ? "text-slate-400" : "text-slate-500"}`}
+            className={`h-3.5 w-3.5 ${d ? "text-slate-400" : "text-muted-foreground"}`}
           />
           <span
             className={`text-[11px] font-bold uppercase tracking-wide ${
-              d ? "text-slate-400" : "text-slate-500"
+              d ? "text-slate-400" : "text-muted-foreground"
             }`}
           >
             {title || "Requirements"}
@@ -724,13 +724,13 @@ function SectionRenderer({
         className={`rounded-lg px-4 py-3 border ${
           d
             ? "bg-[#272727] border-slate-600/60"
-            : "bg-slate-50 border-slate-200/70"
+            : "bg-surface border-border/70"
         }`}
       >
         {title && (
           <h3
             className={`text-[13px] font-bold mb-1.5 ${
-              d ? "text-slate-300" : "text-slate-600"
+              d ? "text-slate-300" : "text-secondary"
             }`}
           >
             {title}
@@ -750,16 +750,16 @@ function SectionRenderer({
         className={`rounded-lg px-4 py-3 border ${
           d
             ? "bg-[#272727] border-slate-600/60"
-            : "bg-slate-50 border-slate-200/70"
+            : "bg-surface border-border/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
           <List
-            className={`h-3.5 w-3.5 ${d ? "text-slate-400" : "text-slate-500"}`}
+            className={`h-3.5 w-3.5 ${d ? "text-slate-400" : "text-muted-foreground"}`}
           />
           <span
             className={`text-[11px] font-bold uppercase tracking-wide ${
-              d ? "text-slate-400" : "text-slate-500"
+              d ? "text-slate-400" : "text-muted-foreground"
             }`}
           >
             {title || "Reference"}
@@ -827,7 +827,7 @@ function SectionRenderer({
           <MessageCircle className="h-3.5 w-3.5 text-indigo-400" />
           <span
             className={`text-[11px] font-bold uppercase tracking-wide ${
-              d ? "text-slate-400" : "text-slate-500"
+              d ? "text-slate-400" : "text-muted-foreground"
             }`}
           >
             Follow-up Questions

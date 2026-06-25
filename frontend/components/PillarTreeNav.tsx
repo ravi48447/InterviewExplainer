@@ -226,19 +226,19 @@ export default function PillarTreeNav({
   const tree = (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header — crumbs-style so "you are here" is explicit: Pillar ▸ Module. */}
-      <div className="px-4 pt-3 pb-2.5 border-b border-slate-200 shrink-0 bg-white">
+      <div className="px-4 pt-3 pb-2.5 border-b border-border shrink-0 bg-background">
         <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
           You are here
         </div>
         <Link
           href={`/${pillarSlug}`}
-          className="flex items-center gap-1.5 text-[13px] font-bold text-slate-700 hover:text-blue-600 transition-colors truncate"
+          className="flex items-center gap-1.5 text-[13px] font-bold text-foreground hover:text-blue-600 transition-colors truncate"
         >
           <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{cleanPillar}</span>
         </Link>
         {activeModuleTitle && (
-          <div className="mt-1 flex items-center gap-1 text-[12px] text-slate-500 pl-5">
+          <div className="mt-1 flex items-center gap-1 text-[12px] text-muted-foreground pl-5">
             <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
             <span className="font-bold text-blue-700 truncate">
               {activeModuleTitle}
@@ -275,7 +275,7 @@ export default function PillarTreeNav({
                     "flex items-center rounded-lg border-l-2 transition-all",
                     isActiveModule
                       ? "border-blue-500 bg-blue-50/60"
-                      : "border-transparent hover:border-slate-200 hover:bg-slate-50",
+                      : "border-transparent hover:border-border hover:bg-surface",
                   )}
                 >
                   <Link
@@ -294,7 +294,7 @@ export default function PillarTreeNav({
                         "flex-1 text-[13px] leading-tight truncate",
                         isActiveModule
                           ? "font-bold text-blue-700"
-                          : "font-semibold text-slate-700",
+                          : "font-semibold text-foreground",
                       )}
                     >
                       {m.title}
@@ -302,7 +302,7 @@ export default function PillarTreeNav({
                   </Link>
                   <button
                     onClick={() => toggleModule(m)}
-                    className="shrink-0 p-1.5 mr-1 rounded hover:bg-slate-100 transition-colors"
+                    className="shrink-0 p-1.5 mr-1 rounded hover:bg-surface transition-colors"
                     aria-label={isExpanded ? "Collapse module" : "Expand module"}
                   >
                     {totalQ > 0 && (
@@ -325,7 +325,7 @@ export default function PillarTreeNav({
 
                 {/* Subcategories */}
                 {isExpanded && subs.length > 0 && (
-                  <div className="ml-4 border-l border-slate-200 pl-1 mt-0.5 mb-1 space-y-0.5">
+                  <div className="ml-4 border-l border-border pl-1 mt-0.5 mb-1 space-y-0.5">
                     {subs.map((sc) => {
                       const subKey = `${m.seoSlug}:${sc.slug}`;
                       const isExpSub = expandedSubcats.has(subKey);
@@ -348,8 +348,8 @@ export default function PillarTreeNav({
                                   className={cn(
                                     "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs leading-snug transition-all",
                                     isActiveQ
-                                      ? "bg-blue-600 text-white font-bold shadow-sm"
-                                      : "text-slate-600 hover:bg-blue-50 hover:text-blue-700",
+                                      ? "bg-blue-600 text-primary-foreground dark:text-foreground font-bold shadow-sm"
+                                      : "text-secondary hover:bg-blue-50 hover:text-blue-700",
                                   )}
                                 >
                                   <span
@@ -384,7 +384,7 @@ export default function PillarTreeNav({
                               "w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs transition-colors",
                               hasActiveQ
                                 ? "bg-indigo-50 text-indigo-700 font-bold"
-                                : "text-slate-600 hover:bg-slate-50 font-semibold",
+                                : "text-secondary hover:bg-surface font-semibold",
                             )}
                           >
                             {isExpSub ? (
@@ -407,7 +407,7 @@ export default function PillarTreeNav({
                           </button>
 
                           {isExpSub && (
-                            <div className="ml-3 border-l border-slate-200 pl-1 space-y-0.5 mt-0.5 mb-1">
+                            <div className="ml-3 border-l border-border pl-1 space-y-0.5 mt-0.5 mb-1">
                               {sc.questions.map((q) => {
                                 const isActiveQ = q.slug === activeQuestionSlug;
                                 return (
@@ -419,8 +419,8 @@ export default function PillarTreeNav({
                                     className={cn(
                                       "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs leading-snug transition-all",
                                       isActiveQ
-                                        ? "bg-blue-600 text-white font-bold shadow-sm"
-                                        : "text-slate-600 hover:bg-blue-50 hover:text-blue-700",
+                                        ? "bg-blue-600 text-primary-foreground dark:text-foreground font-bold shadow-sm"
+                                        : "text-secondary hover:bg-blue-50 hover:text-blue-700",
                                     )}
                                   >
                                     <span
@@ -456,7 +456,7 @@ export default function PillarTreeNav({
                     {[80, 65, 72].map((w) => (
                       <div
                         key={w}
-                        className="h-2.5 bg-slate-100 rounded animate-pulse"
+                        className="h-2.5 bg-surface rounded animate-pulse"
                         style={{ width: `${w}%` }}
                       />
                     ))}
@@ -471,14 +471,14 @@ export default function PillarTreeNav({
             standalone page (pillar hub / module landing / question) can hop
             into the structured Java backend roadmap or browse other
             interview-prep categories without scrolling the article body. */}
-        <div className="shrink-0 border-t border-slate-200 bg-slate-50/80 px-3 py-3 space-y-1.5">
+        <div className="shrink-0 border-t border-border bg-surface/80 px-3 py-3 space-y-1.5">
           <Link
             href={structuredTrackHref}
             onClick={() => setMobileOpen(false)}
-            className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white hover:shadow-sm transition-all"
+            className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-background hover:shadow-sm transition-all"
           >
             <Compass className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
-            <span className="flex-1 text-[12px] font-bold text-slate-700 group-hover:text-indigo-700 leading-tight">
+            <span className="flex-1 text-[12px] font-bold text-foreground group-hover:text-indigo-700 leading-tight">
               {structuredTrackCtaLabel}
             </span>
             <ArrowRight className="h-3 w-3 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
@@ -486,10 +486,10 @@ export default function PillarTreeNav({
           <Link
             href="/prep"
             onClick={() => setMobileOpen(false)}
-            className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white hover:shadow-sm transition-all"
+            className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-background hover:shadow-sm transition-all"
           >
             <Grid3x3 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-            <span className="flex-1 text-[12px] font-bold text-slate-700 group-hover:text-blue-700 leading-tight">
+            <span className="flex-1 text-[12px] font-bold text-foreground group-hover:text-blue-700 leading-tight">
               Browse all categories
             </span>
             <ArrowRight className="h-3 w-3 text-slate-300 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
@@ -511,7 +511,7 @@ export default function PillarTreeNav({
       {/* Mobile FAB */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed bottom-6 left-4 z-40 w-12 h-12 rounded-full bg-blue-600 text-white shadow-xl flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-all"
+        className="lg:hidden fixed bottom-6 left-4 z-40 w-12 h-12 rounded-full bg-blue-600 text-primary-foreground dark:text-foreground shadow-xl flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-all"
         aria-label="Open navigation"
       >
         <Menu className="h-5 w-5" />
@@ -521,19 +521,19 @@ export default function PillarTreeNav({
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-foreground dark:bg-background/40 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative z-10 w-[300px] bg-white shadow-2xl flex flex-col h-full overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0">
-              <span className="text-sm font-bold text-slate-800">
+          <aside className="relative z-10 w-[300px] bg-background shadow-2xl flex flex-col h-full overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+              <span className="text-sm font-bold text-foreground">
                 Navigation
               </span>
               <button
                 onClick={() => setMobileOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                className="p-1.5 rounded-lg hover:bg-surface transition-colors"
               >
-                <X className="h-4 w-4 text-slate-500" />
+                <X className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto">{tree}</div>

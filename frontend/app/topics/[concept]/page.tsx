@@ -70,33 +70,33 @@ export default async function TopicHubPage({ params }: { params: Promise<{ conce
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/20 to-indigo-50/20">
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
-        <nav className="flex items-center gap-2 text-xs text-slate-500 mb-8">
-          <Link href="/" className="hover:text-slate-700">Home</Link>
+        <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
+          <Link href="/" className="hover:text-foreground">Home</Link>
           <ChevronRight className="h-3 w-3" />
-          <Link href="/topics" className="hover:text-slate-700">Topics</Link>
+          <Link href="/topics" className="hover:text-foreground">Topics</Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-700 font-semibold">{name}</span>
+          <span className="text-foreground font-semibold">{name}</span>
         </nav>
 
         <header className="mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-violet-100 text-violet-700 rounded-full text-xs font-bold mb-4 uppercase tracking-wider">
             Concept Hub · Cross-Language
           </div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 mb-4">{name}</h1>
-          {meta?.desc && <p className="text-lg text-slate-600 max-w-3xl leading-relaxed">{meta.desc}</p>}
+          <h1 className="text-4xl font-black tracking-tight text-foreground mb-4">{name}</h1>
+          {meta?.desc && <p className="text-lg text-secondary max-w-3xl leading-relaxed">{meta.desc}</p>}
         </header>
 
         {meta?.tracks && meta.tracks.length > 0 && (
           <section className="mb-10">
-            <h2 className="text-xl font-black text-slate-900 mb-5">Interview Questions by Track</h2>
+            <h2 className="text-xl font-black text-foreground mb-5">Interview Questions by Track</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {meta.tracks.map(t => (
                 <Link key={`${t.lang}-${t.track}-${t.level}-${t.stack}`}
                   href={`/interview/${t.lang}/${t.track}/${t.level}/${t.stack}`}
-                  className="group flex items-center gap-4 p-4 bg-white rounded-xl border border-slate-200 hover:border-violet-400 hover:shadow-md transition-all">
+                  className="group flex items-center gap-4 p-4 bg-background rounded-xl border border-border hover:border-violet-400 hover:shadow-md transition-all">
                   <div className="flex-1">
-                    <div className="text-sm font-black text-slate-900 group-hover:text-violet-600 transition-colors">{t.label}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{toTitle(t.lang)} · {toTitle(t.level)}</div>
+                    <div className="text-sm font-black text-foreground group-hover:text-violet-600 transition-colors">{t.label}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{toTitle(t.lang)} · {toTitle(t.level)}</div>
                   </div>
                   <ArrowUpRight className="h-4 w-4 text-slate-300 group-hover:text-violet-400 shrink-0" />
                 </Link>
@@ -107,7 +107,7 @@ export default async function TopicHubPage({ params }: { params: Promise<{ conce
 
         {meta?.tools && meta.tools.length > 0 && (
           <section className="mb-8">
-            <h2 className="text-lg font-black text-slate-900 mb-4">Relevant Tools</h2>
+            <h2 className="text-lg font-black text-foreground mb-4">Relevant Tools</h2>
             <div className="flex flex-wrap gap-2">
               {meta.tools.map(t => (
                 <Link key={t} href={`/tools/${t}`}
@@ -121,11 +121,11 @@ export default async function TopicHubPage({ params }: { params: Promise<{ conce
 
         {meta?.comparisons && meta.comparisons.length > 0 && (
           <section className="mb-8">
-            <h2 className="text-lg font-black text-slate-900 mb-4">Common Comparisons</h2>
+            <h2 className="text-lg font-black text-foreground mb-4">Common Comparisons</h2>
             <div className="flex flex-wrap gap-2">
               {meta.comparisons.map(c => (
                 <Link key={c} href={`/compare/${c}`}
-                  className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:border-blue-400 hover:text-blue-600 transition-all">
+                  className="flex items-center gap-2 px-4 py-2 bg-background border border-border rounded-lg text-sm font-semibold text-foreground hover:border-blue-400 hover:text-blue-600 transition-all">
                   {c.replace(/-vs-/g, " vs ").replace(/-/g, " ")} <ArrowUpRight className="h-3.5 w-3.5" />
                 </Link>
               ))}
@@ -134,10 +134,10 @@ export default async function TopicHubPage({ params }: { params: Promise<{ conce
         )}
 
         {!meta && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+          <div className="rounded-2xl border border-border bg-background p-8 text-center">
             <div className="text-4xl mb-4">🚧</div>
-            <h2 className="text-xl font-black text-slate-900 mb-2">Coming Soon</h2>
-            <p className="text-slate-600 text-sm">{name} questions are being added. <Link href="/interview" className="text-violet-600 font-bold hover:underline">Browse all questions →</Link></p>
+            <h2 className="text-xl font-black text-foreground mb-2">Coming Soon</h2>
+            <p className="text-secondary text-sm">{name} questions are being added. <Link href="/interview" className="text-violet-600 font-bold hover:underline">Browse all questions →</Link></p>
           </div>
         )}
       </div>

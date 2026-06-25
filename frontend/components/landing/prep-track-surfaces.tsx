@@ -7,12 +7,12 @@ function TrackIcon({ icon }: { icon: (typeof STANDALONE_PREP_TRACKS)[number]["ic
   if (icon === "network") {
     return (
       <div className="shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
-        <Network className="h-5 w-5 text-white" aria-hidden />
+        <Network className="h-5 w-5 text-primary-foreground dark:text-foreground" aria-hidden />
       </div>
     );
   }
   return (
-    <div className="shrink-0 w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center border border-slate-200">
+    <div className="shrink-0 w-11 h-11 rounded-xl bg-surface flex items-center justify-center border border-border">
       <TechIcon name={icon} className="h-7 w-7" />
     </div>
   );
@@ -35,19 +35,19 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
       aria-labelledby={`prep-tracks-${variant}`}
       className={
         isPrep
-          ? "mb-10 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm"
-          : "py-12 sm:py-14 bg-white border-y border-slate-100"
+          ? "mb-10 rounded-2xl border border-border bg-background p-5 sm:p-6 shadow-sm"
+          : "py-12 sm:py-14 bg-background border-y border-slate-100"
       }
     >
       <div className={isPrep ? "" : "w-full px-6 sm:px-12 lg:px-20"}>
         <div className={isPrep ? "" : "w-full min-w-0"}>
           <div className={`text-center ${isPrep ? "mb-6" : "mb-8 sm:mb-10"}`}>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
               {isPrep ? "Start from a track" : "Choose a prep surface"}
             </p>
             <h2
               id={`prep-tracks-${variant}`}
-              className={`font-bold text-slate-900 tracking-tight ${
+              className={`font-bold text-foreground tracking-tight ${
                 isPrep ? "text-xl sm:text-2xl" : "text-2xl sm:text-3xl"
               }`}
             >
@@ -56,7 +56,7 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
                 : "Independent tracks — not one Java-only funnel"}
             </h2>
             <p
-              className={`mt-2 text-slate-600 max-w-2xl mx-auto ${
+              className={`mt-2 text-secondary max-w-2xl mx-auto ${
                 isPrep ? "text-sm" : "text-sm sm:text-base"
               }`}
             >
@@ -70,13 +70,13 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
             {STANDALONE_PREP_TRACKS.map((t) => (
               <div
                 key={t.id}
-                className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5 hover:border-indigo-200 hover:bg-white transition-colors text-left"
+                className="flex flex-col gap-2 rounded-xl border border-border bg-surface/60 p-4 sm:p-5 hover:border-indigo-200 hover:bg-background transition-colors text-left"
               >
                 <div className="flex gap-4">
                   <TrackIcon icon={t.icon} />
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-base font-bold text-slate-900">{t.title}</h3>
-                    <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-snug">
+                    <h3 className="text-base font-bold text-foreground">{t.title}</h3>
+                    <p className="mt-1 text-xs sm:text-sm text-secondary leading-snug">
                       {t.description}
                     </p>
                   </div>
@@ -84,7 +84,7 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 mt-1">
                   <Link
                     href={t.href}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-lg dark:bg-surface px-3 py-1.5 text-xs font-semibold text-primary-foreground dark:text-foreground hover:dark:bg-surface transition-colors"
                   >
                     Open track
                     <ArrowRight className="h-3.5 w-3.5" />
@@ -103,9 +103,9 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
           </div>
 
           {!isPrep && (
-            <p className="mt-6 text-center text-xs text-slate-500">
+            <p className="mt-6 text-center text-xs text-muted-foreground">
               Full topic index:{" "}
-              <Link href="/prep" className="font-semibold text-slate-700 hover:underline">
+              <Link href="/prep" className="font-semibold text-foreground hover:underline">
                 Interview prep hub
               </Link>
             </p>

@@ -214,7 +214,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
   const estHours = Math.round(estMinutes / 60);
 
   return (
-    <div className="relative min-h-screen overflow-x-clip text-zinc-100 selection:bg-white/20">
+    <div className="relative min-h-screen overflow-x-clip text-zinc-100 selection:bg-background/20">
       {/* ── FIXED PAGE BACKGROUND ── */}
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden>
         <div className="absolute inset-0 bg-[#f4f5f7]" />
@@ -223,7 +223,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
       {/* ════════════════════════════════════════════════
           HERO — dark with grid
       ════════════════════════════════════════════════ */}
-      <header className="relative overflow-hidden bg-[#0f1014] border-b border-white/[0.08] text-white">
+      <header className="relative overflow-hidden bg-[#0f1014] border-b border-white/[0.08] text-primary-foreground dark:text-foreground">
         {/* fine square grid */}
         <div className="pointer-events-none absolute inset-0" style={BG_DARK_HERO_GRID} aria-hidden />
         {/* soft radial centre-glow so grid fades to dark at edges */}
@@ -259,7 +259,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
               <Award className="h-3 w-3" />
               Free to browse
             </span>
-            <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-zinc-500">
+            <span className="rounded-full border border-white/[0.08] bg-background/[0.04] px-3 py-1 text-zinc-500">
               Progress tracked with account
             </span>
           </div>
@@ -279,14 +279,14 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
               {/* Language icon + headline row */}
               <div className="flex items-start gap-4">
                 <div className="relative hidden shrink-0 sm:block">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.1] bg-white/[0.06] p-2.5 ring-1 ring-inset ring-white/[0.06]">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.1] bg-background/[0.06] p-2.5 ring-1 ring-inset ring-white/[0.06]">
                     <TechIcon name={langIcon} className="h-10 w-10" />
                   </div>
                   <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-[#0f1014] bg-emerald-400" />
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <h1 className="text-[2.15rem] font-black leading-[1.06] tracking-tight text-white sm:text-[2.6rem] lg:text-[3rem]">
+                  <h1 className="text-[2.15rem] font-black leading-[1.06] tracking-tight text-primary-foreground dark:text-foreground sm:text-[2.6rem] lg:text-[3rem]">
                     {displayTitle}
                   </h1>
 
@@ -322,16 +322,16 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
               {/* Tag pills */}
               <div className="mt-4 flex flex-wrap gap-2">
                 {domain.language && (
-                  <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-zinc-300">
+                  <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-background/[0.06] px-2.5 py-1 text-[11px] font-semibold text-zinc-300">
                     {domain.language}
                   </span>
                 )}
                 {domain.track && (
-                  <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-zinc-300">
+                  <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-background/[0.06] px-2.5 py-1 text-[11px] font-semibold text-zinc-300">
                     {domain.track}
                   </span>
                 )}
-                <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-zinc-300">
+                <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-background/[0.06] px-2.5 py-1 text-[11px] font-semibold text-zinc-300">
                   {levelMeta.label} · {levelMeta.range}
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
@@ -354,7 +354,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                 )}
                 <a
                   href="#interview-road"
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/[0.14] bg-white/[0.06] px-5 py-3.5 text-[14px] font-semibold text-white transition-all hover:border-white/[0.24] hover:bg-white/[0.1]"
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/[0.14] bg-background/[0.06] px-5 py-3.5 text-[14px] font-semibold text-primary-foreground dark:text-foreground transition-all hover:border-white/[0.24] hover:bg-background/[0.1]"
                 >
                   <Route className="h-4 w-4 text-amber-300/80" />
                   View the road
@@ -363,7 +363,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
             </div>
 
             {/* ── RIGHT: course snapshot card ── */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-white/[0.05] lg:mt-6 lg:self-start">
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-background/[0.05] lg:mt-6 lg:self-start">
               {/* amber top bar */}
               <div className="h-[3px] w-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500" />
 
@@ -433,14 +433,14 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
         {/* ── WHAT YOU'LL LEARN — inside road section ── */}
         <div className="relative w-full min-w-0 px-4 pb-8 pt-12 sm:px-8 lg:px-12">
           <div className="mb-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/[0.08]" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">What you&apos;ll learn</span>
-            <div className="h-px flex-1 bg-white/[0.08]" />
+            <div className="h-px flex-1 bg-background/[0.08]" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground">What you&apos;ll learn</span>
+            <div className="h-px flex-1 bg-background/[0.08]" />
           </div>
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {copy.outcomes.map((line, i) => (
-              <li key={line} className="flex gap-3 rounded-xl border border-white/[0.08] bg-white/[0.05] p-4 text-[13px] leading-relaxed text-slate-300">
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-400 text-[10px] font-black text-white shadow-sm">
+              <li key={line} className="flex gap-3 rounded-xl border border-white/[0.08] bg-background/[0.05] p-4 text-[13px] leading-relaxed text-slate-300">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-400 text-[10px] font-black text-primary-foreground dark:text-foreground shadow-sm">
                   {i + 1}
                 </span>
                 {line}
@@ -451,11 +451,11 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
 
         {/* ── CURRICULUM HEADER ── */}
         <div id="interview-road" className="scroll-mt-20 relative w-full min-w-0 border-t border-white/[0.06] px-4 pb-8 pt-10 sm:px-8 lg:px-12">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-slate-500">Curriculum</p>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.28em] text-muted-foreground">Curriculum</p>
 
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h2 className="flex items-center gap-3 text-2xl font-black tracking-tight text-white sm:text-[1.85rem] lg:text-[2.1rem]">
+              <h2 className="flex items-center gap-3 text-2xl font-black tracking-tight text-primary-foreground dark:text-foreground sm:text-[1.85rem] lg:text-[2.1rem]">
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-400">
                   <Route className="h-5 w-5" strokeWidth={2} />
                 </span>
@@ -473,14 +473,14 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                   { value: String(journeyModuleCount), label: "Modules", dot: "bg-sky-400" },
                   { value: `${journeyQuestionCount}+`, label: "Questions", dot: "bg-emerald-400" },
                 ].map(({ value, label, dot }) => (
-                  <div key={label} className="flex items-center gap-2 rounded-lg border border-white/[0.09] bg-white/[0.05] px-4 py-2.5">
+                  <div key={label} className="flex items-center gap-2 rounded-lg border border-white/[0.09] bg-background/[0.05] px-4 py-2.5">
                     <span className={`h-2 w-2 rounded-full ${dot}`} />
-                    <span className="text-[1.1rem] font-black tabular-nums text-white">{value}</span>
+                    <span className="text-[1.1rem] font-black tabular-nums text-primary-foreground dark:text-foreground">{value}</span>
                     <span className="text-[11px] font-medium text-slate-400">{label}</span>
                   </div>
                 ))}
                 {expandedPillarIds.size > 0 && (
-                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-[11px] font-medium text-slate-500">
+                  <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-background/[0.04] px-4 py-2.5 text-[11px] font-medium text-muted-foreground">
                     <span className="h-2 w-2 rounded-full bg-slate-500" />
                     {expandedPillarIds.size} open
                   </div>
@@ -490,13 +490,13 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
 
             {/* search */}
             <div className="relative w-full shrink-0 lg:max-w-72">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search modules…"
-                className="w-full rounded-2xl border border-white/10 bg-white/[0.06] py-3 pl-11 pr-4 text-sm text-slate-200 shadow-md placeholder:text-slate-600 focus:border-slate-500/50 focus:outline-none focus:ring-2 focus:ring-slate-500/20 backdrop-blur-sm"
+                className="w-full rounded-2xl border border-white/10 bg-background/[0.06] py-3 pl-11 pr-4 text-sm text-slate-200 shadow-md placeholder:text-secondary focus:border-slate-500/50 focus:outline-none focus:ring-2 focus:ring-slate-500/20 backdrop-blur-sm"
               />
             </div>
           </div>
@@ -519,7 +519,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
       </div>
 
       {firstStackHref ? (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200/80 bg-white/92 p-3 backdrop-blur-xl lg:hidden">
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/80 bg-background/92 p-3 backdrop-blur-xl lg:hidden">
           <Link
             href={firstStackHref}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-600 py-3.5 text-sm font-bold text-zinc-950 shadow-lg shadow-amber-900/20"

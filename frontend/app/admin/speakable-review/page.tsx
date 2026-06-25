@@ -174,16 +174,16 @@ export default function SpeakableReviewPage() {
 
   if (!key) {
     return (
-      <main className="min-h-screen bg-slate-50 p-10">
-        <div className="max-w-xl mx-auto bg-white rounded-xl border border-slate-200 p-8 shadow">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-2">
+      <main className="min-h-screen bg-surface p-10">
+        <div className="max-w-xl mx-auto bg-background rounded-xl border border-border p-8 shadow">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
             /admin/speakable-review
           </p>
           <h1 className="text-2xl font-bold mb-3">Admin key required</h1>
-          <p className="text-slate-600 text-sm leading-relaxed">
-            Append <code className="bg-slate-100 px-1 rounded">?key=YOUR_KEY</code> to the URL where{" "}
-            <code className="bg-slate-100 px-1 rounded">YOUR_KEY</code> matches the
-            server-side env var <code className="bg-slate-100 px-1 rounded">SPEAKABLE_ADMIN_KEY</code>.
+          <p className="text-secondary text-sm leading-relaxed">
+            Append <code className="bg-surface px-1 rounded">?key=YOUR_KEY</code> to the URL where{" "}
+            <code className="bg-surface px-1 rounded">YOUR_KEY</code> matches the
+            server-side env var <code className="bg-surface px-1 rounded">SPEAKABLE_ADMIN_KEY</code>.
           </p>
           <p className="mt-4 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
             <strong>Dev-only:</strong> this gate is not production-grade. See HUMAN-REVIEW-QUEUE.md AUTH-1.
@@ -194,19 +194,19 @@ export default function SpeakableReviewPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 sm:px-8 py-8">
+    <main className="min-h-screen bg-surface px-4 sm:px-8 py-8">
       <header className="max-w-7xl mx-auto mb-8">
-        <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-2">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
           /admin/speakable-review
         </p>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
           Speakable v2 — review queue
         </h1>
-        <p className="text-slate-600 text-sm">
-          Approve <code className="bg-slate-100 px-1 rounded">pending_review</code> to flip{" "}
-          <code className="bg-slate-100 px-1 rounded">speakable_status</code> to{" "}
-          <code className="bg-slate-100 px-1 rounded">approved</code>. Mutations write to{" "}
-          <code className="bg-slate-100 px-1 rounded">complete-qa.json</code> on disk.
+        <p className="text-secondary text-sm">
+          Approve <code className="bg-surface px-1 rounded">pending_review</code> to flip{" "}
+          <code className="bg-surface px-1 rounded">speakable_status</code> to{" "}
+          <code className="bg-surface px-1 rounded">approved</code>. Mutations write to{" "}
+          <code className="bg-surface px-1 rounded">complete-qa.json</code> on disk.
         </p>
         {listError && (
           <p className="mt-3 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
@@ -224,7 +224,7 @@ export default function SpeakableReviewPage() {
                     ? "border-amber-300 bg-amber-50 text-amber-800"
                     : k === "approved"
                       ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                      : "border-slate-200 bg-white text-slate-700")
+                      : "border-border bg-background text-foreground")
                 }
               >
                 {k}: {v}
@@ -235,12 +235,12 @@ export default function SpeakableReviewPage() {
       </header>
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-6">
-        <aside className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm h-fit">
-          <h2 className="text-sm font-bold text-slate-900 mb-3">
+        <aside className="bg-background rounded-xl border border-border p-4 shadow-sm h-fit">
+          <h2 className="text-sm font-bold text-foreground mb-3">
             Queue ({list?.total ?? 0})
           </h2>
           {list && list.total === 0 ? (
-            <div className="text-[13px] text-slate-500 italic">
+            <div className="text-[13px] text-muted-foreground italic">
               All clear — no <code>pending_review</code> items.
             </div>
           ) : (
@@ -249,7 +249,7 @@ export default function SpeakableReviewPage() {
                 .filter(([, items]) => items.length > 0)
                 .map(([pillar, items]) => (
                   <li key={pillar}>
-                    <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500 font-semibold mb-1.5">
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-semibold mb-1.5">
                       {pillar} — {items.length}
                     </p>
                     <ul className="space-y-1">
@@ -261,15 +261,15 @@ export default function SpeakableReviewPage() {
                             className={
                               "w-full text-left px-2 py-1.5 rounded text-[13px] " +
                               (activeSlug === q.slug
-                                ? "bg-slate-900 text-white"
-                                : "hover:bg-slate-100 text-slate-800")
+                                ? "dark:bg-surface text-primary-foreground dark:text-foreground"
+                                : "hover:bg-surface text-foreground")
                             }
                           >
                             <span className="block truncate">{q.title}</span>
                             <span
                               className={
                                 "block text-[10.5px] " +
-                                (activeSlug === q.slug ? "text-slate-300" : "text-slate-500")
+                                (activeSlug === q.slug ? "text-slate-300" : "text-muted-foreground")
                               }
                             >
                               {q.archetype ?? "?"} · {q.slug}
@@ -286,24 +286,24 @@ export default function SpeakableReviewPage() {
 
         <section className="min-h-[400px]">
           {!activeSlug && (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm text-slate-500 italic text-sm">
+            <div className="bg-background rounded-xl border border-border p-8 shadow-sm text-muted-foreground italic text-sm">
               Pick a question from the queue to review it side-by-side.
             </div>
           )}
           {activeSlug && detailError && (
-            <div className="bg-white rounded-xl border border-red-200 p-6 shadow-sm">
+            <div className="bg-background rounded-xl border border-red-200 p-6 shadow-sm">
               <p className="text-red-700 text-sm">Failed to load detail: {detailError}</p>
             </div>
           )}
           {activeSlug && detail && (
             <div className="space-y-4">
-              <header className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                <p className="text-[11px] uppercase tracking-[0.15em] text-slate-500 mb-1">
+              <header className="bg-background rounded-xl border border-border p-5 shadow-sm">
+                <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">
                   {detail.file}
                 </p>
-                <h2 className="text-xl font-bold text-slate-900 mb-2">{detail.title}</h2>
-                <div className="flex flex-wrap items-center gap-3 text-[12px] text-slate-600 mb-3">
-                  <span className="px-2 py-0.5 rounded bg-slate-100 font-mono">{detail.slug}</span>
+                <h2 className="text-xl font-bold text-foreground mb-2">{detail.title}</h2>
+                <div className="flex flex-wrap items-center gap-3 text-[12px] text-secondary mb-3">
+                  <span className="px-2 py-0.5 rounded bg-surface font-mono">{detail.slug}</span>
                   {lint?.result && (
                     <span
                       className={
@@ -328,7 +328,7 @@ export default function SpeakableReviewPage() {
                 </div>
                 {lint?.result?.violations && lint.result.violations.length > 0 && (
                   <details className="text-[12px] mt-2">
-                    <summary className="cursor-pointer text-slate-700 font-semibold">
+                    <summary className="cursor-pointer text-foreground font-semibold">
                       {lint.result.violations.length} lint violation
                       {lint.result.violations.length === 1 ? "" : "s"}
                     </summary>
@@ -352,8 +352,8 @@ export default function SpeakableReviewPage() {
               </header>
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-[0.15em] text-slate-500 mb-3 font-semibold">
+                <div className="bg-background rounded-xl border border-border p-5 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-3 font-semibold">
                     Legacy
                   </p>
                   <Speakable
@@ -361,7 +361,7 @@ export default function SpeakableReviewPage() {
                     legacyVariant="preview"
                   />
                 </div>
-                <div className="bg-white rounded-xl border border-emerald-200 p-5 shadow-sm">
+                <div className="bg-background rounded-xl border border-emerald-200 p-5 shadow-sm">
                   <p className="text-[11px] uppercase tracking-[0.15em] text-emerald-700 mb-3 font-semibold">
                     v2 (forced render)
                   </p>
@@ -371,22 +371,22 @@ export default function SpeakableReviewPage() {
                       forceV2
                     />
                   ) : (
-                    <p className="text-[13px] text-slate-500 italic">
+                    <p className="text-[13px] text-muted-foreground italic">
                       No speakable_v2 on this question.
                     </p>
                   )}
                 </div>
               </div>
 
-              <footer className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                <label className="block text-[12px] font-semibold text-slate-700 mb-2">
+              <footer className="bg-background rounded-xl border border-border p-5 shadow-sm">
+                <label className="block text-[12px] font-semibold text-foreground mb-2">
                   Notes (required for reject + send back)
                 </label>
                 <textarea
                   rows={3}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full text-[13px] border border-slate-300 rounded px-3 py-2 mb-3"
+                  className="w-full text-[13px] border border-border rounded px-3 py-2 mb-3"
                   placeholder="What needs to change?"
                 />
                 <div className="flex flex-wrap gap-2">
@@ -394,7 +394,7 @@ export default function SpeakableReviewPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => submitDecision("approve")}
-                    className="px-4 py-2 rounded-md bg-emerald-600 text-white font-semibold text-[13px] hover:bg-emerald-700 disabled:opacity-50"
+                    className="px-4 py-2 rounded-md bg-emerald-600 text-primary-foreground dark:text-foreground font-semibold text-[13px] hover:bg-emerald-700 disabled:opacity-50"
                   >
                     Approve
                   </button>
@@ -402,7 +402,7 @@ export default function SpeakableReviewPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => submitDecision("reject")}
-                    className="px-4 py-2 rounded-md bg-red-600 text-white font-semibold text-[13px] hover:bg-red-700 disabled:opacity-50"
+                    className="px-4 py-2 rounded-md bg-red-600 text-primary-foreground dark:text-foreground font-semibold text-[13px] hover:bg-red-700 disabled:opacity-50"
                   >
                     Reject
                   </button>
@@ -410,7 +410,7 @@ export default function SpeakableReviewPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => submitDecision("send_back")}
-                    className="px-4 py-2 rounded-md bg-slate-700 text-white font-semibold text-[13px] hover:bg-slate-800 disabled:opacity-50"
+                    className="px-4 py-2 rounded-md bg-slate-700 text-primary-foreground dark:text-foreground font-semibold text-[13px] hover:dark:bg-surface disabled:opacity-50"
                   >
                     Send back to agent
                   </button>

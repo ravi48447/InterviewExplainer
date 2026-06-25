@@ -203,7 +203,7 @@ const CM_COLORS: Record<string, { bar: string; chip: string }> = {
   violet: { bar: "bg-violet-400", chip: "text-violet-700 bg-violet-50" },
   indigo: { bar: "bg-indigo-400", chip: "text-indigo-700 bg-indigo-50" },
   rose: { bar: "bg-rose-400", chip: "text-rose-700 bg-rose-50" },
-  slate: { bar: "bg-slate-400", chip: "text-slate-700 bg-slate-100" },
+  slate: { bar: "bg-slate-400", chip: "text-foreground bg-surface" },
 };
 
 function ConceptMapLight({
@@ -237,7 +237,7 @@ function ConceptMapLight({
       {title && (
         <h3
           id={slugify(title)}
-          className="preview-display text-[20px] font-bold text-slate-900 tracking-[-0.005em] mb-4 scroll-mt-24"
+          className="preview-display text-[20px] font-bold text-foreground tracking-[-0.005em] mb-4 scroll-mt-24"
         >
           {title}
         </h3>
@@ -248,13 +248,13 @@ function ConceptMapLight({
           return (
             <div
               key={i}
-              className="relative rounded-xl border border-slate-200/80 bg-white pl-4 pr-4 py-3.5 overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+              className="relative rounded-xl border border-border/80 bg-background pl-4 pr-4 py-3.5 overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
             >
               <span
                 className={`absolute left-0 top-0 bottom-0 w-[3px] ${theme.bar}`}
               />
               <div className="flex items-baseline justify-between gap-2 mb-2">
-                <span className="text-[14.5px] font-bold text-slate-900 leading-snug">
+                <span className="text-[14.5px] font-bold text-foreground leading-snug">
                   {c.heading}
                 </span>
                 {c.subtitle && (
@@ -269,7 +269,7 @@ function ConceptMapLight({
                 {c.points.map((p, j) => (
                   <li
                     key={j}
-                    className="flex items-start gap-2 text-[13px] leading-[1.55] text-slate-600"
+                    className="flex items-start gap-2 text-[13px] leading-[1.55] text-secondary"
                   >
                     <span
                       className={`mt-[7px] h-1 w-1 rounded-full shrink-0 ${theme.bar}`}
@@ -292,7 +292,7 @@ function ConceptMapLight({
 
 function TopToc({ items }: { items: TocItem[] }) {
   return (
-    <nav className="mb-8 rounded-xl border border-slate-200/70 bg-slate-50/60 px-5 py-4">
+    <nav className="mb-8 rounded-xl border border-border/70 bg-surface/60 px-5 py-4">
       <div className="text-[10.5px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2.5">
         On this page
       </div>
@@ -301,7 +301,7 @@ function TopToc({ items }: { items: TocItem[] }) {
           <li key={item.id}>
             <a
               href={`#${item.id}`}
-              className="text-[13px] leading-snug text-slate-600 hover:text-slate-900 transition-colors"
+              className="text-[13px] leading-snug text-secondary hover:text-foreground transition-colors"
             >
               {item.text}
             </a>
@@ -353,7 +353,7 @@ export function DeepDiveArticle({ sections, followupQuestions }: Props) {
       />
 
       {sections.length > 0 && (
-        <div className="rounded-2xl border border-slate-200/80 bg-white px-5 sm:px-8 lg:px-10 py-8 sm:py-10 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <div className="rounded-2xl border border-border/80 bg-background px-5 sm:px-8 lg:px-10 py-8 sm:py-10 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           {tocItems.length > 1 && <TopToc items={tocItems} />}
           {blocks.map((b, i) =>
             b.kind === "md" ? (
@@ -384,13 +384,13 @@ export function DeepDiveArticle({ sections, followupQuestions }: Props) {
             icon={MessageCircle}
             accent="indigo"
           />
-          <ol className="rounded-2xl border border-slate-200/80 bg-white px-6 py-6 sm:px-8 sm:py-7 space-y-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          <ol className="rounded-2xl border border-border/80 bg-background px-6 py-6 sm:px-8 sm:py-7 space-y-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
             {followupQuestions!.map((q, i) => (
               <li key={i} className="flex items-start gap-3.5">
                 <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 text-[11px] font-black border border-indigo-100">
                   {i + 1}
                 </span>
-                <span className="text-[15.5px] leading-[1.65] text-slate-700 pt-[1px]">
+                <span className="text-[15.5px] leading-[1.65] text-foreground pt-[1px]">
                   {q}
                 </span>
               </li>

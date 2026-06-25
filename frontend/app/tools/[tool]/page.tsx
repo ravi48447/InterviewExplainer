@@ -57,19 +57,19 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-slate-800 selection:bg-blue-200">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-blue-200">
         <div className="w-full min-w-0 px-6 py-8">
           {/* Breadcrumb */}
           <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
-            <Link href="/" className="hover:text-slate-600 flex items-center gap-1"><Home className="h-3 w-3" /> Home</Link>
+            <Link href="/" className="hover:text-secondary flex items-center gap-1"><Home className="h-3 w-3" /> Home</Link>
             <ChevronRight className="h-3 w-3" />
-            <Link href="/tools" className="hover:text-slate-600">Tools</Link>
+            <Link href="/tools" className="hover:text-secondary">Tools</Link>
             <ChevronRight className="h-3 w-3" />
-            <span className="text-slate-600 font-medium">{toolName}</span>
+            <span className="text-secondary font-medium">{toolName}</span>
           </nav>
 
           {/* Hero */}
-          <header className="mb-10 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+          <header className="mb-10 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
             <div className="relative px-8 py-6 bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50">
               <div className="flex flex-wrap gap-2 mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-teal-100 text-teal-700 border border-teal-200 shadow-sm">
@@ -79,22 +79,22 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
                   Universal
                 </span>
               </div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-2">
+              <h1 className="text-3xl font-black tracking-tight text-foreground mb-2">
                 {toolName}
               </h1>
-              <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
+              <p className="text-sm text-secondary leading-relaxed max-w-2xl">
                 Universal interview questions — applies across Java, Python, Go, and every track that uses {toolName}.
               </p>
             </div>
-            <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+            <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
                   <div className="w-9 h-9 rounded-lg bg-teal-100 flex items-center justify-center">
                     <BookOpen className="h-4 w-4 text-teal-600" />
                   </div>
                   <div>
-                    <div className="text-[10px] text-slate-500 font-medium">Questions</div>
-                    <div className="text-lg font-bold text-slate-900">{totalQs}</div>
+                    <div className="text-[10px] text-muted-foreground font-medium">Questions</div>
+                    <div className="text-lg font-bold text-foreground">{totalQs}</div>
                   </div>
                 </div>
                 <div className="h-9 w-px bg-slate-200" />
@@ -103,8 +103,8 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
                     <GraduationCap className="h-4 w-4 text-purple-600" />
                   </div>
                   <div>
-                    <div className="text-[10px] text-slate-500 font-medium">Levels</div>
-                    <div className="text-lg font-bold text-slate-900">{levels.length}</div>
+                    <div className="text-[10px] text-muted-foreground font-medium">Levels</div>
+                    <div className="text-lg font-bold text-foreground">{levels.length}</div>
                   </div>
                 </div>
               </div>
@@ -116,11 +116,11 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
             {levels.map(({ level, questions }) => {
               const lm = LEVEL_META[level];
               return (
-                <section key={level} className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                  <div className={`px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white`}>
+                <section key={level} className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+                  <div className={`px-6 py-4 border-b border-border bg-gradient-to-r from-slate-50 to-white`}>
                     <div className="flex items-center gap-3">
                       <span className="text-lg">{lm.icon}</span>
-                      <h2 className="text-sm font-bold text-slate-900">{lm.label}</h2>
+                      <h2 className="text-sm font-bold text-foreground">{lm.label}</h2>
                       <span className={`text-[9px] font-bold px-2 py-0.5 rounded border ${lm.colorClass}`}>{lm.range}</span>
                       <div className="flex-1" />
                       <span className="text-xs text-slate-400 font-medium">{questions.length} Qs</span>
@@ -131,12 +131,12 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
                     {questions.map((q, idx) => {
                       const db = difficultyBadge(q.difficulty);
                       return (
-                        <div key={`${idx}-${q.slug}`} className="flex items-center gap-4 px-6 py-3.5 hover:bg-slate-50/50 transition-colors">
+                        <div key={`${idx}-${q.slug}`} className="flex items-center gap-4 px-6 py-3.5 hover:bg-surface/50 transition-colors">
                           <div className="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-teal-100 to-cyan-100 flex items-center justify-center text-[10px] font-bold text-teal-700">
                             {idx + 1}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-medium text-slate-700 leading-snug">{q.title || q.question}</h3>
+                            <h3 className="text-sm font-medium text-foreground leading-snug">{q.title || q.question}</h3>
                           </div>
                           <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-1 rounded-md ${db.bg} ${db.text} shrink-0`}>
                             {db.label}
@@ -154,14 +154,14 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
           </div>
 
           {/* Cross-links */}
-          <section className="rounded-xl border border-slate-200 bg-white shadow-sm p-6 mb-12">
-            <h2 className="text-sm font-bold text-slate-900 mb-3">See {toolName} in context</h2>
+          <section className="rounded-xl border border-border bg-background shadow-sm p-6 mb-12">
+            <h2 className="text-sm font-bold text-foreground mb-3">See {toolName} in context</h2>
             <div className="flex flex-wrap gap-2">
               {["java/backend", "python/backend"].map(path => (
                 <Link
                   key={path}
                   href={`/interview/${path}/intermediate/${tool}`}
-                  className="group flex items-center gap-1.5 text-xs text-slate-600 hover:text-blue-600 px-3 py-2 rounded-lg border border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all"
+                  className="group flex items-center gap-1.5 text-xs text-secondary hover:text-blue-600 px-3 py-2 rounded-lg border border-border hover:border-blue-300 hover:shadow-sm transition-all"
                 >
                   {toDisplayName(path.replace("/", " "))}
                   <ArrowRight className="h-3 w-3 text-slate-300 group-hover:text-blue-400 transition-colors" />

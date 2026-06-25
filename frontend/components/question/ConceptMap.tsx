@@ -74,13 +74,13 @@ const colorMap: Record<
     number: "bg-rose-100 text-rose-700",
   },
   slate: {
-    border: "border-slate-200",
-    bg: "bg-slate-50/30",
-    headerBg: "bg-slate-50",
-    headerBorder: "border-slate-200",
-    headerText: "text-slate-700",
+    border: "border-border",
+    bg: "bg-surface/30",
+    headerBg: "bg-surface",
+    headerBorder: "border-border",
+    headerText: "text-foreground",
     dot: "bg-slate-400",
-    number: "bg-slate-100 text-slate-600",
+    number: "bg-surface text-secondary",
   },
 };
 
@@ -141,7 +141,7 @@ export function ConceptMap({
           <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
             {title}
           </span>
-          <div className="flex-1 h-px bg-slate-100" />
+          <div className="flex-1 h-px bg-surface" />
         </div>
       )}
       <div className={`grid ${colClass} gap-3`}>
@@ -171,7 +171,7 @@ export function ConceptMap({
                     <span
                       className={`mt-[6px] h-1.5 w-1.5 rounded-full ${c.dot} shrink-0`}
                     />
-                    <span className="text-[13px] leading-[1.6] text-slate-700 font-medium">
+                    <span className="text-[13px] leading-[1.6] text-foreground font-medium">
                       {point}
                     </span>
                   </li>

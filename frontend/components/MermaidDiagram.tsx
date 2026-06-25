@@ -130,7 +130,7 @@ export default function MermaidDiagram({ chart, className = "" }: MermaidDiagram
         <pre className="text-[12px] whitespace-pre-wrap font-mono">{error}</pre>
         <details className="mt-2">
           <summary className="cursor-pointer text-[12px] font-semibold">show source</summary>
-          <pre className="text-[12px] whitespace-pre-wrap font-mono mt-2 text-slate-700">{chart}</pre>
+          <pre className="text-[12px] whitespace-pre-wrap font-mono mt-2 text-foreground">{chart}</pre>
         </details>
       </div>
     );
@@ -146,7 +146,7 @@ export default function MermaidDiagram({ chart, className = "" }: MermaidDiagram
     return (
       <div
         ref={ref}
-        className={`my-4 h-40 rounded-lg border border-slate-200 bg-slate-50 ${className}`}
+        className={`my-4 h-40 rounded-lg border border-border bg-surface ${className}`}
         aria-hidden="true"
       />
     );
@@ -155,7 +155,7 @@ export default function MermaidDiagram({ chart, className = "" }: MermaidDiagram
   return (
     <div
       ref={ref}
-      className={`my-4 flex justify-center overflow-x-auto rounded-lg border border-slate-200 bg-white px-4 py-6 ${className}`}
+      className={`my-4 flex justify-center overflow-x-auto rounded-lg border border-border bg-background px-4 py-6 ${className}`}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

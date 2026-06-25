@@ -154,7 +154,7 @@ export default function ModuleQuestionsAccordion({
   const topicToolbar =
     groups.length > 1 ? (
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
-        <span className="text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1.5">
+        <span className="text-[11px] font-semibold text-muted-foreground inline-flex items-center gap-1.5">
           <List className="h-3.5 w-3.5" aria-hidden />
           {allTopicsExpanded ? "All topics expanded" : "Some topics collapsed"}
         </span>
@@ -162,7 +162,7 @@ export default function ModuleQuestionsAccordion({
           <button
             type="button"
             onClick={expandAllTopics}
-            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 transition-colors"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-bold text-foreground hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800 transition-colors"
           >
             <ChevronsDown className="h-3.5 w-3.5" aria-hidden />
             Expand all
@@ -170,7 +170,7 @@ export default function ModuleQuestionsAccordion({
           <button
             type="button"
             onClick={collapseAllTopics}
-            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-bold text-foreground hover:border-border hover:bg-surface transition-colors"
           >
             <ChevronsUp className="h-3.5 w-3.5" aria-hidden />
             Collapse all
@@ -194,7 +194,7 @@ export default function ModuleQuestionsAccordion({
           <div
             key={REVISION_GROUP_SLUG}
             id={REVISION_GROUP_SLUG}
-            className="rounded-xl border border-blue-200/90 bg-white overflow-hidden shadow-sm ring-1 ring-blue-900/[0.04]"
+            className="rounded-xl border border-blue-200/90 bg-background overflow-hidden shadow-sm ring-1 ring-blue-900/[0.04]"
           >
             <button
               type="button"
@@ -202,7 +202,7 @@ export default function ModuleQuestionsAccordion({
               className="w-full flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50/80 via-indigo-50/40 to-white hover:from-blue-100/80 transition-colors text-left"
             >
               <span className="text-[11px] font-black text-blue-500 shrink-0 tabular-nums">00</span>
-              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm font-bold text-slate-800">
+              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm font-bold text-foreground">
                 <BookOpen className="h-3.5 w-3.5 text-blue-600 shrink-0" />
                 <span className="truncate">Revision</span>
                 <span className="truncate rounded border border-blue-200 bg-blue-50 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-blue-800">
@@ -236,17 +236,17 @@ export default function ModuleQuestionsAccordion({
           <div
             key={g.slug}
             id={g.slug}
-            className="rounded-xl border border-slate-200/90 bg-white overflow-hidden shadow-sm scroll-mt-24 ring-1 ring-slate-900/[0.02]"
+            className="rounded-xl border border-border/90 bg-background overflow-hidden shadow-sm scroll-mt-24 ring-1 ring-slate-900/[0.02]"
           >
             <button
               type="button"
               onClick={() => toggleGroup(g.slug)}
-              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors text-left"
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-surface transition-colors text-left"
             >
               <span className="text-[11px] font-black text-slate-400 shrink-0">
                 {String(gIdx + 1).padStart(2, "0")}
               </span>
-              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm font-bold text-slate-800">
+              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm font-bold text-foreground">
                 <span className="truncate">{g.name}</span>
               </span>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 shrink-0">
@@ -276,16 +276,16 @@ export default function ModuleQuestionsAccordion({
                       className="group flex items-center gap-3 px-4 py-2.5 hover:bg-gradient-to-r hover:from-blue-50/90 hover:to-transparent transition-colors"
                     >
                       {anchorsOn ? (
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-[11px] font-bold text-white tabular-nums shadow-sm group-hover:bg-blue-600 transition-colors">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg dark:bg-surface text-[11px] font-bold text-primary-foreground dark:text-foreground tabular-nums shadow-sm group-hover:bg-blue-600 transition-colors">
                           {globalN}
                         </span>
                       ) : (
-                        <span className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500 shrink-0 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                        <span className="w-6 h-6 rounded-md bg-surface flex items-center justify-center text-[10px] font-black text-muted-foreground shrink-0 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
                           {String(qIdx + 1).padStart(2, "0")}
                         </span>
                       )}
                       <span className="flex-1 min-w-0">
-                        <span className="block text-[13.5px] font-semibold text-slate-800 group-hover:text-blue-700 transition-colors leading-snug">
+                        <span className="block text-[13.5px] font-semibold text-foreground group-hover:text-blue-700 transition-colors leading-snug">
                           {q.title}
                         </span>
                         {anchorsOn && g.questionCount > 1 && (
@@ -296,7 +296,7 @@ export default function ModuleQuestionsAccordion({
                       </span>
                       {q.difficulty && (
                         <span
-                          className="hidden sm:inline-flex text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded text-white shadow-sm shrink-0"
+                          className="hidden sm:inline-flex text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded text-primary-foreground dark:text-foreground shadow-sm shrink-0"
                           style={{
                             backgroundColor: difficultyColor(q.difficulty),
                           }}
@@ -305,7 +305,7 @@ export default function ModuleQuestionsAccordion({
                         </span>
                       )}
                       {q.estimatedReadTime != null && (
-                        <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 min-w-[40px] shrink-0">
+                        <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground min-w-[40px] shrink-0">
                           <Clock className="w-3 h-3 text-slate-400" />
                           {q.estimatedReadTime || 5}m
                         </span>
@@ -325,31 +325,31 @@ export default function ModuleQuestionsAccordion({
 
   if (isInline) {
     return (
-      <div className="rounded-2xl border border-slate-200/90 bg-white shadow-md shadow-slate-200/40 overflow-hidden ring-1 ring-slate-900/[0.03]">
+      <div className="rounded-2xl border border-border/90 bg-background shadow-md shadow-slate-200/40 overflow-hidden ring-1 ring-slate-900/[0.03]">
         <div className="px-4 sm:px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-white via-slate-50/60 to-blue-50/20 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-600 mb-0.5">
               Full catalog · reading order
             </div>
-            <div className="text-base font-bold tracking-tight text-slate-900">
+            <div className="text-base font-bold tracking-tight text-foreground">
               {moduleTitle}
             </div>
-            <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-slate-600">
-              Numbers <span className="font-semibold text-slate-800">1–{totalQuestions}</span>{" "}
+            <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-secondary">
+              Numbers <span className="font-semibold text-foreground">1–{totalQuestions}</span>{" "}
               follow the order we recommend — click any row to open the full answer,
-              or use the sticky <span className="font-semibold text-slate-800">Next</span>{" "}
+              or use the sticky <span className="font-semibold text-foreground">Next</span>{" "}
               link at the bottom of each page to go Q1 → Q{totalQuestions}.
             </p>
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-slate-500">
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <BookOpen className="h-3.5 w-3.5 text-indigo-500" />
-                <span className="font-bold text-slate-800">{totalQuestions}</span>{" "}
+                <span className="font-bold text-foreground">{totalQuestions}</span>{" "}
                 questions
               </span>
               <span className="text-slate-300">·</span>
               <span className="inline-flex items-center gap-1">
                 <Layers className="h-3.5 w-3.5 text-indigo-500" />
-                <span className="font-bold text-slate-800">{groups.length}</span> topics
+                <span className="font-bold text-foreground">{groups.length}</span> topics
               </span>
             </div>
           </div>
@@ -362,10 +362,10 @@ export default function ModuleQuestionsAccordion({
   return (
     <div
       className={cn(
-        "rounded-xl border bg-white shadow-sm overflow-hidden transition-shadow",
+        "rounded-xl border bg-background shadow-sm overflow-hidden transition-shadow",
         moduleOpen
-          ? "border-slate-300 shadow-md"
-          : "border-slate-200 hover:shadow-md",
+          ? "border-border shadow-md"
+          : "border-border hover:shadow-md",
       )}
     >
       <button
@@ -381,25 +381,25 @@ export default function ModuleQuestionsAccordion({
                 {pillarLabel}
               </div>
             )}
-            <h3 className="text-base md:text-lg font-black text-slate-900 group-hover:text-blue-700 transition-colors leading-snug">
+            <h3 className="text-base md:text-lg font-black text-foreground group-hover:text-blue-700 transition-colors leading-snug">
               {moduleTitle}
             </h3>
-            <div className="mt-1 flex items-center gap-3 text-[12px] text-slate-500">
+            <div className="mt-1 flex items-center gap-3 text-[12px] text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <BookOpen className="h-3 w-3" />
-                <span className="font-bold text-slate-700">{totalQuestions}</span>{" "}
+                <span className="font-bold text-foreground">{totalQuestions}</span>{" "}
                 questions
               </span>
               <span className="inline-flex items-center gap-1">
                 <Layers className="h-3 w-3" />
-                <span className="font-bold text-slate-700">{groups.length}</span> topics
+                <span className="font-bold text-foreground">{groups.length}</span> topics
               </span>
             </div>
           </div>
           <Link
             href={`/${seoSlug}`}
             onClick={(e) => e.stopPropagation()}
-            className="hidden sm:inline-flex shrink-0 items-center gap-1 px-3 py-1.5 rounded-md bg-white border border-slate-200 text-blue-600 text-[11px] font-bold uppercase tracking-wider hover:border-blue-400 hover:bg-blue-50 transition-colors"
+            className="hidden sm:inline-flex shrink-0 items-center gap-1 px-3 py-1.5 rounded-md bg-background border border-border text-blue-600 text-[11px] font-bold uppercase tracking-wider hover:border-blue-400 hover:bg-blue-50 transition-colors"
           >
             Open module
             <ChevronRight className="h-3.5 w-3.5" />
@@ -409,7 +409,7 @@ export default function ModuleQuestionsAccordion({
               "w-8 h-8 rounded-full border flex items-center justify-center transition-all shrink-0",
               moduleOpen
                 ? "border-blue-400 bg-blue-50 text-blue-600"
-                : "border-slate-200 bg-white text-slate-400 group-hover:border-blue-300 group-hover:text-blue-500",
+                : "border-border bg-background text-slate-400 group-hover:border-blue-300 group-hover:text-blue-500",
             )}
           >
             <ChevronDown

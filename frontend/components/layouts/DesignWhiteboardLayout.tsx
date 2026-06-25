@@ -37,8 +37,8 @@ export function DesignWhiteboardLayout({
     <div className="space-y-8">
       {/* Context */}
       {directAnswer && (
-        <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <p className="text-sm text-slate-700">{directAnswer}</p>
+        <div className="rounded-xl border border-border bg-background px-5 py-4 shadow-sm">
+          <p className="text-sm text-foreground">{directAnswer}</p>
         </div>
       )}
 
@@ -57,9 +57,9 @@ export function DesignWhiteboardLayout({
 
       {/* Overview */}
       {overview && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Design Overview</span>
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-surface border-b border-border">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Design Overview</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={overview.content} stripTopHeading />
@@ -69,23 +69,23 @@ export function DesignWhiteboardLayout({
 
       {/* Algorithm/Approach Options (tabbed) */}
       {approaches.length > 0 && (
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-1 px-4 py-2 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-slate-200">
-            <Layers className="h-4 w-4 text-slate-500 mr-1" />
-            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide mr-2">Approaches:</span>
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center gap-1 px-4 py-2 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border">
+            <Layers className="h-4 w-4 text-muted-foreground mr-1" />
+            <span className="text-[11px] font-bold text-secondary uppercase tracking-wide mr-2">Approaches:</span>
             {approaches.map((a, i) => (
               <button
                 key={i}
                 onClick={() => setActiveApproach(i)}
                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                  activeApproach === i ? "bg-white shadow-sm text-blue-700 border border-blue-200" : "text-slate-500 hover:text-slate-700"
+                  activeApproach === i ? "bg-background shadow-sm text-blue-700 border border-blue-200" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {a.sectionTitle || `Approach ${i + 1}`}
               </button>
             ))}
           </div>
-          <div className="px-5 py-5 bg-white">
+          <div className="px-5 py-5 bg-background">
             <MarkdownContent content={approaches[activeApproach]?.content ?? ''} stripTopHeading />
           </div>
         </div>
@@ -93,8 +93,8 @@ export function DesignWhiteboardLayout({
 
       {/* Design Diagram */}
       {diagram && (
-        <div className="rounded-xl border-2 border-slate-200 bg-slate-950 overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-700">
+        <div className="rounded-xl border-2 border-border bg-slate-950 overflow-hidden">
+          <div className="px-5 py-3 border-b border-border">
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">System Diagram</span>
           </div>
           <div className="px-5 py-5 font-mono text-sm">
@@ -105,9 +105,9 @@ export function DesignWhiteboardLayout({
 
       {/* Deep Explanation */}
       {deepExplain && (
-        <div className="rounded-xl border border-blue-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-blue-50 border-b border-blue-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Deep Dive</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Deep Dive</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={deepExplain.content} stripTopHeading />
@@ -142,8 +142,8 @@ export function DesignWhiteboardLayout({
 
       {/* Implementation */}
       {implementation && (
-        <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-700">
+        <div className="rounded-xl border border-border dark:bg-surface overflow-hidden">
+          <div className="px-5 py-3 border-b border-border">
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Java Implementation</span>
           </div>
           <div className="px-5 py-4">
@@ -169,7 +169,7 @@ export function DesignWhiteboardLayout({
       {speakable && (
         <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
           <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Interview Answer Framework</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer Framework</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={speakable.content.replace(/^#[^\n]*\n+/, '').trim()} />

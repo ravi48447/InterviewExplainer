@@ -339,10 +339,10 @@ export default async function PillarHubPage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="min-h-screen bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgb(224_231_255/0.45),transparent_50%),rgb(248_250_252))] font-sans text-slate-800">
+      <div className="min-h-screen bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgb(224_231_255/0.45),transparent_50%),rgb(248_250_252))] font-sans text-foreground">
         <div className="flex w-full min-h-screen">
           {/* ── LEFT SIDEBAR ── pillar-scoped tree (no JBI overlap) */}
-          <aside className="hidden lg:flex flex-col w-[280px] shrink-0 self-start sticky top-0 h-screen bg-white border-r border-slate-200">
+          <aside className="hidden lg:flex flex-col w-[280px] shrink-0 self-start sticky top-0 h-screen bg-background border-r border-border">
             <PillarTreeNav
               pillarTitle={pillar.title}
               pillarSlug={pillar.pillarSlug}
@@ -363,26 +363,26 @@ export default async function PillarHubPage({
               {/* Breadcrumbs */}
               <nav
                 aria-label="Breadcrumb"
-                className="flex items-center gap-1.5 text-xs text-slate-500 mb-4"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground mb-4"
               >
                 <Link
                   href="/"
-                  className="hover:text-slate-700 flex items-center gap-1"
+                  className="hover:text-foreground flex items-center gap-1"
                 >
                   <Home className="h-3 w-3" /> Home
                 </Link>
                 <ChevronRight className="h-3 w-3" />
-                <Link href="/prep" className="hover:text-slate-700">
+                <Link href="/prep" className="hover:text-foreground">
                   Interview Prep
                 </Link>
                 <ChevronRight className="h-3 w-3" />
-                <span className="text-slate-700 font-semibold">
+                <span className="text-foreground font-semibold">
                   {pillar.title}
                 </span>
               </nav>
 
               {/* Hero */}
-              <header className="relative mb-8 rounded-2xl border border-slate-200/90 bg-white shadow-[0_20px_50px_-24px_rgba(15,23,42,0.18)] overflow-hidden ring-1 ring-slate-900/[0.04]">
+              <header className="relative mb-8 rounded-2xl border border-border/90 bg-background shadow-[0_20px_50px_-24px_rgba(15,23,42,0.18)] overflow-hidden ring-1 ring-slate-900/[0.04]">
                 <div
                   className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-600 via-indigo-600 to-violet-600"
                   aria-hidden
@@ -392,38 +392,38 @@ export default async function PillarHubPage({
                   <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600 mb-2">
                     {hubEyebrow}
                   </div>
-                  <h1 className="text-3xl sm:text-4xl lg:text-[2.35rem] font-bold tracking-tight text-slate-900 mb-3 leading-[1.15]">
+                  <h1 className="text-3xl sm:text-4xl lg:text-[2.35rem] font-bold tracking-tight text-foreground mb-3 leading-[1.15]">
                     {pillar.title}
                   </h1>
-                  <p className="text-base md:text-lg font-semibold text-slate-700 mb-4 leading-snug">
+                  <p className="text-base md:text-lg font-semibold text-foreground mb-4 leading-snug">
                     {pillar.tagline}
                   </p>
-                  <p className="text-[15px] md:text-base text-slate-600 leading-relaxed max-w-3xl">
+                  <p className="text-[15px] md:text-base text-secondary leading-relaxed max-w-3xl">
                     {pillar.heroBlurb}
                   </p>
                 </div>
 
-                <div className="px-4 sm:px-6 py-4 bg-white/90 border-t border-slate-100 flex items-center gap-5 flex-wrap">
+                <div className="px-4 sm:px-6 py-4 bg-background/90 border-t border-slate-100 flex items-center gap-5 flex-wrap">
                   <div className="flex items-center gap-2 text-sm">
                     <BookOpen className="h-4 w-4 text-blue-600" />
-                    <span className="font-bold text-slate-900">{totalQ}+</span>
-                    <span className="text-slate-500">curated questions</span>
+                    <span className="font-bold text-foreground">{totalQ}+</span>
+                    <span className="text-muted-foreground">curated questions</span>
                   </div>
                   <div className="h-5 w-px bg-slate-200" />
                   <div className="flex items-center gap-2 text-sm">
                     <Layers className="h-4 w-4 text-indigo-600" />
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-foreground">
                       {modules.length}
                     </span>
-                    <span className="text-slate-500">modules</span>
+                    <span className="text-muted-foreground">modules</span>
                   </div>
                   <div className="h-5 w-px bg-slate-200" />
                   <div className="flex items-center gap-2 text-sm">
                     <Target className="h-4 w-4 text-amber-600" />
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-foreground">
                       {totalTopics}
                     </span>
-                    <span className="text-slate-500">topics</span>
+                    <span className="text-muted-foreground">topics</span>
                   </div>
                   <div className="h-5 w-px bg-slate-200" />
                   <div
@@ -442,7 +442,7 @@ export default async function PillarHubPage({
                       <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                       {diffMix.hard}
                     </span>
-                    <span className="text-slate-500 ml-1 hidden sm:inline text-[11px]">
+                    <span className="text-muted-foreground ml-1 hidden sm:inline text-[11px]">
                       difficulty mix
                     </span>
                   </div>
@@ -460,7 +460,7 @@ export default async function PillarHubPage({
               )}
 
               {/* Trust row — tiny, keeps page feeling credible without screaming */}
-              <div className="mb-6 flex items-center gap-3 flex-wrap text-[12px] text-slate-500">
+              <div className="mb-6 flex items-center gap-3 flex-wrap text-[12px] text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
                   <span>Reviewed by senior engineers</span>
@@ -482,13 +482,13 @@ export default async function PillarHubPage({
               {startHere.length > 0 && (
                 <section
                   aria-labelledby="start-here-heading"
-                  className="mb-6 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                  className="mb-6 rounded-xl border border-border bg-background shadow-sm overflow-hidden"
                 >
-                  <div className="px-5 py-3 bg-gradient-to-r from-amber-50 via-orange-50 to-white border-b border-slate-200 flex items-center gap-2">
+                  <div className="px-5 py-3 bg-gradient-to-r from-amber-50 via-orange-50 to-white border-b border-border flex items-center gap-2">
                     <Flame className="h-4 w-4 text-amber-500" />
                     <h2
                       id="start-here-heading"
-                      className="text-sm font-black text-slate-900 tracking-tight"
+                      className="text-sm font-black text-foreground tracking-tight"
                     >
                       Start here — kick-off questions
                     </h2>
@@ -501,17 +501,17 @@ export default async function PillarHubPage({
                       <Link
                         key={s.question.slug}
                         href={`/${s.seoSlug}/${s.question.slug}`}
-                        className="group flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/40 p-4 hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm transition-all"
+                        className="group flex flex-col gap-2 rounded-lg border border-border bg-surface/40 p-4 hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm transition-all"
                       >
                         <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-md bg-blue-600 text-white font-black text-[11px] flex items-center justify-center">
+                          <span className="w-6 h-6 rounded-md bg-blue-600 text-primary-foreground dark:text-foreground font-black text-[11px] flex items-center justify-center">
                             {idx + 1}
                           </span>
                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">
                             {s.moduleTitle}
                           </span>
                         </div>
-                        <span className="text-[14px] font-bold text-slate-900 group-hover:text-blue-700 transition-colors leading-snug line-clamp-3">
+                        <span className="text-[14px] font-bold text-foreground group-hover:text-blue-700 transition-colors leading-snug line-clamp-3">
                           {s.question.title}
                         </span>
                         <span className="mt-auto inline-flex items-center gap-1 text-[11px] font-bold text-blue-600">
@@ -530,13 +530,13 @@ export default async function PillarHubPage({
               {popularTopics.length > 0 && (
                 <section
                   aria-labelledby="topics-heading"
-                  className="mb-6 rounded-xl border border-slate-200 bg-white p-4"
+                  className="mb-6 rounded-xl border border-border bg-background p-4"
                 >
                   <div className="flex items-center gap-2 mb-3">
                     <Sparkles className="h-4 w-4 text-indigo-500" />
                     <h2
                       id="topics-heading"
-                      className="text-sm font-black text-slate-900 tracking-tight"
+                      className="text-sm font-black text-foreground tracking-tight"
                     >
                       Popular topics in this category
                     </h2>
@@ -546,10 +546,10 @@ export default async function PillarHubPage({
                       <a
                         key={`${t.seoSlug}::${t.name}`}
                         href={`#${t.anchor}`}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-[12px] font-bold hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface text-foreground text-[12px] font-bold hover:bg-blue-100 hover:text-blue-700 transition-colors"
                       >
                         {t.name}
-                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-white text-blue-600">
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-background text-blue-600">
                           {t.count}
                         </span>
                       </a>
@@ -562,7 +562,7 @@ export default async function PillarHubPage({
               {data.length > 1 && (
                 <nav
                   aria-label="Modules"
-                  className="mb-6 rounded-xl border border-slate-200 bg-white p-3 flex flex-wrap gap-2"
+                  className="mb-6 rounded-xl border border-border bg-background p-3 flex flex-wrap gap-2"
                 >
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 self-center mr-1">
                     Jump to
@@ -571,13 +571,13 @@ export default async function PillarHubPage({
                     <a
                       key={m.entry.seoSlug}
                       href={`#mod-${m.entry.seoSlug}`}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200 bg-slate-50 text-[12px] font-bold text-slate-700 hover:border-blue-300 hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-surface text-[12px] font-bold text-foreground hover:border-blue-300 hover:text-blue-700 hover:bg-blue-50 transition-colors"
                     >
                       <Hash className="h-3 w-3 text-slate-400" />
                       <span>
                         {String(idx + 1).padStart(2, "0")} · {m.entry.title}
                       </span>
-                      <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-blue-700 border border-blue-100">
+                      <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-background text-blue-700 border border-blue-100">
                         {m.totalQuestions}
                       </span>
                     </a>
@@ -595,11 +595,11 @@ export default async function PillarHubPage({
                 <div className="flex items-baseline justify-between">
                   <h2
                     id="modules-heading"
-                    className="text-xl font-black text-slate-900"
+                    className="text-xl font-black text-foreground"
                   >
                     Modules &amp; questions in this category
                   </h2>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-muted-foreground">
                     Click any topic header to collapse it
                   </span>
                 </div>
@@ -624,7 +624,7 @@ export default async function PillarHubPage({
                 ))}
 
                 {data.length === 0 && (
-                  <div className="text-center py-12 text-slate-500 bg-white rounded-xl border border-slate-200">
+                  <div className="text-center py-12 text-muted-foreground bg-background rounded-xl border border-border">
                     <p className="text-sm">
                       No questions are wired up to this pillar yet.
                     </p>
@@ -636,13 +636,13 @@ export default async function PillarHubPage({
               {relatedHubs.length > 0 && (
                 <section
                   aria-labelledby="related-heading"
-                  className="mb-8 rounded-xl border border-slate-200 bg-white p-5"
+                  className="mb-8 rounded-xl border border-border bg-background p-5"
                 >
                   <div className="flex items-center gap-2 mb-4">
-                    <Library className="h-4 w-4 text-slate-500" />
+                    <Library className="h-4 w-4 text-muted-foreground" />
                     <h2
                       id="related-heading"
-                      className="text-base font-black text-slate-900"
+                      className="text-base font-black text-foreground"
                     >
                       Related interview prep categories
                     </h2>
@@ -652,15 +652,15 @@ export default async function PillarHubPage({
                       <Link
                         key={rp.pillarSlug}
                         href={`/${rp.pillarSlug}`}
-                        className="group block rounded-lg border border-slate-200 bg-slate-50/40 px-4 py-3 hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm transition-all"
+                        className="group block rounded-lg border border-border bg-surface/40 px-4 py-3 hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm transition-all"
                       >
                         <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
                           Prep category
                         </div>
-                        <div className="text-sm font-black text-slate-900 group-hover:text-blue-700 transition-colors leading-snug">
+                        <div className="text-sm font-black text-foreground group-hover:text-blue-700 transition-colors leading-snug">
                           {rp.title.replace(/\s+Interview Prep.*$/, "")}
                         </div>
-                        <div className="mt-1 text-xs text-slate-500 leading-snug line-clamp-2">
+                        <div className="mt-1 text-xs text-muted-foreground leading-snug line-clamp-2">
                           {rp.tagline}
                         </div>
                       </Link>
@@ -672,13 +672,13 @@ export default async function PillarHubPage({
               {/* FAQ — evergreen, reads well and fuels FAQPage JSON-LD */}
               <section
                 aria-labelledby="faq-heading"
-                className="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                className="mb-8 rounded-xl border border-border bg-background shadow-sm overflow-hidden"
               >
-                <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex items-center gap-2">
+                <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-border flex items-center gap-2">
                   <HelpCircle className="h-4 w-4 text-blue-500" />
                   <h2
                     id="faq-heading"
-                    className="text-sm font-black text-slate-900 tracking-tight"
+                    className="text-sm font-black text-foreground tracking-tight"
                   >
                     FAQs about this prep category
                   </h2>
@@ -691,15 +691,15 @@ export default async function PillarHubPage({
                       open={idx === 0}
                     >
                       <summary className="flex items-start gap-3 cursor-pointer list-none">
-                        <span className="mt-0.5 shrink-0 w-5 h-5 rounded bg-blue-50 text-blue-600 font-black text-[10px] flex items-center justify-center group-open:bg-blue-600 group-open:text-white transition-colors">
+                        <span className="mt-0.5 shrink-0 w-5 h-5 rounded bg-blue-50 text-blue-600 font-black text-[10px] flex items-center justify-center group-open:bg-blue-600 group-open:text-primary-foreground dark:text-foreground transition-colors">
                           Q
                         </span>
-                        <span className="flex-1 text-[13px] font-bold text-slate-900 leading-snug">
+                        <span className="flex-1 text-[13px] font-bold text-foreground leading-snug">
                           {f.q}
                         </span>
                         <ChevronRight className="h-4 w-4 text-slate-400 mt-0.5 group-open:rotate-90 transition-transform" />
                       </summary>
-                      <div className="mt-2 ml-8 text-[13px] text-slate-600 leading-relaxed">
+                      <div className="mt-2 ml-8 text-[13px] text-secondary leading-relaxed">
                         {f.a}
                       </div>
                     </details>
@@ -708,28 +708,28 @@ export default async function PillarHubPage({
               </section>
 
               {/* Footer cross-link to the structured roadmap (kept low-key) */}
-              <footer className="mt-10 rounded-xl border border-slate-200 bg-white p-5">
+              <footer className="mt-10 rounded-xl border border-border bg-background p-5">
                 <div className="flex items-start gap-4 flex-wrap">
                   <Compass className="h-5 w-5 text-indigo-500 shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-[220px]">
-                    <div className="text-sm font-black text-slate-900 mb-1">
+                    <div className="text-sm font-black text-foreground mb-1">
                       {trackCta.title}
                     </div>
-                    <p className="text-xs text-slate-500 leading-relaxed">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
                       {trackCta.tagline}
                     </p>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                     <Link
                       href={trackCta.href}
-                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors"
+                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md dark:bg-surface text-primary-foreground dark:text-foreground font-bold text-xs hover:dark:bg-surface transition-colors"
                     >
                       {trackCta.ctaLabel}
                       <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
                     <Link
                       href={trackCta.secondaryHref}
-                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md bg-white border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors"
+                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md bg-background border border-border text-foreground font-bold text-xs hover:bg-surface transition-colors"
                     >
                       {trackCta.secondaryLabel}
                     </Link>
@@ -746,37 +746,37 @@ export default async function PillarHubPage({
           {/* ── RIGHT RAIL ── (xl+) — quick stats + pillar contents */}
           <aside className="hidden xl:flex w-[280px] shrink-0 flex-col gap-4 self-start sticky top-6 px-4 py-6">
             {/* At-a-glance */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-border bg-surface">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                   At a glance
                 </h3>
               </div>
               <div className="p-4 space-y-2.5">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Modules</span>
-                  <span className="font-bold text-slate-900">
+                  <span className="text-muted-foreground">Modules</span>
+                  <span className="font-bold text-foreground">
                     {modules.length}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Topics</span>
-                  <span className="font-bold text-slate-900">
+                  <span className="text-muted-foreground">Topics</span>
+                  <span className="font-bold text-foreground">
                     {totalTopics}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Questions</span>
-                  <span className="font-bold text-slate-900">{totalQ}+</span>
+                  <span className="text-muted-foreground">Questions</span>
+                  <span className="font-bold text-foreground">{totalQ}+</span>
                 </div>
               </div>
             </div>
 
             {/* On this page */}
             {data.length > 1 && (
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border bg-surface">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     On this page
                   </h3>
                 </div>
@@ -785,7 +785,7 @@ export default async function PillarHubPage({
                     <li key={m.entry.seoSlug}>
                       <a
                         href={`#mod-${m.entry.seoSlug}`}
-                        className="flex items-center gap-2 px-4 py-1.5 text-xs text-slate-600 hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                        className="flex items-center gap-2 px-4 py-1.5 text-xs text-secondary hover:text-blue-700 hover:bg-blue-50 transition-colors"
                       >
                         <span className="text-[10px] font-black text-slate-400 w-5 shrink-0">
                           {String(idx + 1).padStart(2, "0")}
@@ -804,13 +804,13 @@ export default async function PillarHubPage({
             )}
 
             {/* How to use */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-border bg-surface">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                   How to use
                 </h3>
               </div>
-              <ol className="px-4 py-3 space-y-2 text-xs text-slate-600 leading-relaxed list-decimal list-inside">
+              <ol className="px-4 py-3 space-y-2 text-xs text-secondary leading-relaxed list-decimal list-inside">
                 <li>Pick a module that matches your weakest area.</li>
                 <li>
                   Skim the topic headers — each one is a self-contained

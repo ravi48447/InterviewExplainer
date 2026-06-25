@@ -111,25 +111,25 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center px-4 py-12 bg-slate-50/50 dark:bg-slate-950/50">
+    <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center px-4 py-12 bg-surface/50 dark:bg-slate-950/50">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
         className="w-full max-w-lg"
       >
-        <Card className="border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <Card className="border-border dark:border-border shadow-xl shadow-slate-200/50 dark:shadow-none">
           <CardHeader className="space-y-1 text-center">
             <div className="flex justify-center mb-4">
               <div className="flex space-x-2">
-                <div className={`h-2 w-8 rounded-full ${step === 1 ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-800'}`} />
-                <div className={`h-2 w-8 rounded-full ${step === 2 ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-800'}`} />
+                <div className={`h-2 w-8 rounded-full ${step === 1 ? 'bg-blue-600' : 'bg-slate-200 dark:dark:bg-surface'}`} />
+                <div className={`h-2 w-8 rounded-full ${step === 2 ? 'bg-blue-600' : 'bg-slate-200 dark:dark:bg-surface'}`} />
               </div>
             </div>
             <CardTitle className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
               {step === 1 ? 'Join the Community' : 'Personalize Your Path'}
             </CardTitle>
-            <CardDescription className="text-slate-500 dark:text-slate-400">
+            <CardDescription className="text-muted-foreground dark:text-slate-400">
               {step === 1 
                 ? 'Create an account to start tracking your interview readiness' 
                 : 'Help us tailor the interview preparation to your specific goals'}
@@ -156,18 +156,18 @@ export default function SignupPage() {
                       <>
                         <SocialButtons />
                         <div className="relative">
-                          <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-200 dark:border-slate-800" /></div>
-                          <div className="relative flex justify-center text-[11px] uppercase"><span className="bg-white dark:bg-slate-900 px-2 text-slate-400">or with email</span></div>
+                          <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border dark:border-border" /></div>
+                          <div className="relative flex justify-center text-[11px] uppercase"><span className="bg-background dark:dark:bg-surface px-2 text-slate-400">or with email</span></div>
                         </div>
                       </>
                     )}
 
                     {/* Purpose / what this product is */}
                     <div className="rounded-xl border border-blue-100 bg-blue-50/60 dark:border-blue-900/40 dark:bg-blue-950/20 p-3.5">
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">
+                      <p className="text-sm font-semibold text-foreground dark:text-slate-100 mb-2">
                         Ace your next tech interview — with answers tuned to <em>you</em>.
                       </p>
-                      <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                      <ul className="space-y-1.5 text-xs text-secondary dark:text-slate-300">
                         <li className="flex items-center gap-2"><BookOpen className="h-3.5 w-3.5 text-blue-500 shrink-0" /> Expert answers across languages, roles & levels — free to read</li>
                         <li className="flex items-center gap-2"><Bookmark className="h-3.5 w-3.5 text-indigo-500 shrink-0" /> Save bookmarks & resume where you left off</li>
                         <li className="flex items-center gap-2"><BarChart3 className="h-3.5 w-3.5 text-violet-500 shrink-0" /> A personalized dashboard that tracks your readiness</li>
@@ -226,7 +226,7 @@ export default function SignupPage() {
                         <button
                           type="button"
                           onClick={() => setShowPassword((s) => !s)}
-                          className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                          className="absolute right-3 top-3 text-slate-400 hover:text-secondary transition-colors"
                           aria-label={showPassword ? 'Hide password' : 'Show password'}
                           tabIndex={-1}
                         >
@@ -253,19 +253,19 @@ export default function SignupPage() {
                         <Compass className="h-4 w-4 text-blue-600" />
                         <Label>Choose your focus path(s)</Label>
                       </div>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted-foreground">
                         A focus path tailors every answer and your whole dashboard to the exact
                         interview you&apos;re preparing for. Build one from three choices:
                       </p>
                     </div>
 
                     {/* How to choose — explains each dimension */}
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-3.5 space-y-3">
+                    <div className="rounded-xl border border-border dark:border-border bg-surface/70 dark:dark:bg-surface/40 p-3.5 space-y-3">
                       <div className="flex items-start gap-2.5">
                         <Target className="h-4 w-4 text-indigo-500 shrink-0 mt-0.5" aria-hidden="true" />
                         <div>
-                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100">1 · Language / Role</p>
-                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                          <p className="text-xs font-bold text-foreground dark:text-slate-100">1 · Language / Role</p>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
                             The tech you&apos;ll be interviewed on — e.g. Java, Python, Go or Frontend.
                           </p>
                         </div>
@@ -273,8 +273,8 @@ export default function SignupPage() {
                       <div className="flex items-start gap-2.5">
                         <Layers className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" aria-hidden="true" />
                         <div>
-                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100">2 · Track</p>
-                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                          <p className="text-xs font-bold text-foreground dark:text-slate-100">2 · Track</p>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
                             Your specialization — e.g. Backend, Full-Stack or Frontend.
                           </p>
                         </div>
@@ -282,16 +282,16 @@ export default function SignupPage() {
                       <div className="flex items-start gap-2.5">
                         <GraduationCap className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" aria-hidden="true" />
                         <div>
-                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100">3 · Experience Level</p>
-                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                          <p className="text-xs font-bold text-foreground dark:text-slate-100">3 · Experience Level</p>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed">
                             <strong>Fresher (0–2 yrs)</strong> for fundamentals, or <strong>Intermediate (2–5 yrs)</strong>
                             {' '}for deeper, system-level answers. Pick the depth that matches the role.
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-start gap-2.5 border-t border-slate-200/70 dark:border-slate-800 pt-2.5">
+                      <div className="flex items-start gap-2.5 border-t border-border/70 dark:border-border pt-2.5">
                         <Lightbulb className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" aria-hidden="true" />
-                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
                           <strong>Add one or more</strong> — each path becomes its own switchable dashboard
                           (e.g. prepping for both Java Backend and Frontend). The first one is your
                           primary. You can change or add paths anytime from your dashboard.
@@ -336,13 +336,13 @@ export default function SignupPage() {
                     )}
 
                     {/* Goal-driven onboarding (optional) */}
-                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3.5 space-y-3">
+                    <div className="rounded-xl border border-border dark:border-border p-3.5 space-y-3">
                       <div className="flex items-center gap-2">
                         <GraduationCap className="h-4 w-4 text-indigo-500" />
                         <Label className="text-sm">Set a goal (optional)</Label>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="targetRole" className="text-xs text-slate-500">Target role</Label>
+                        <Label htmlFor="targetRole" className="text-xs text-muted-foreground">Target role</Label>
                         <Input
                           id="targetRole"
                           placeholder="e.g. Senior Backend Engineer at a product company"
@@ -351,7 +351,7 @@ export default function SignupPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="interviewDate" className="text-xs text-slate-500">Interview date</Label>
+                        <Label htmlFor="interviewDate" className="text-xs text-muted-foreground">Interview date</Label>
                         <Input
                           id="interviewDate"
                           type="date"
@@ -380,7 +380,7 @@ export default function SignupPage() {
                 )}
                 <Button 
                   type="submit" 
-                  className={`flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-6 transition-all duration-200 shadow-lg shadow-blue-500/20`}
+                  className={`flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-primary-foreground dark:text-foreground font-semibold py-6 transition-all duration-200 shadow-lg shadow-blue-500/20`}
                   disabled={isSubmitting || (step === 1 && !step1Valid)}
                 >
                   {isSubmitting ? (
@@ -401,16 +401,16 @@ export default function SignupPage() {
           <CardFooter className="flex flex-col space-y-4">
             <div className="relative w-full">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-slate-200 dark:border-slate-800" />
+                <span className="w-full border-t border-border dark:border-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white dark:bg-slate-900 px-2 text-slate-500">
+                <span className="bg-background dark:dark:bg-surface px-2 text-muted-foreground">
                   Already have an account?
                 </span>
               </div>
             </div>
             <Link href="/login" className="w-full">
-              <Button variant="outline" className="w-full py-6 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
+              <Button variant="outline" className="w-full py-6 border-border dark:border-border hover:bg-surface dark:hover:dark:bg-surface">
                 Sign In Instead
               </Button>
             </Link>

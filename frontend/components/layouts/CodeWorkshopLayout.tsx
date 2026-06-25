@@ -41,16 +41,16 @@ export function CodeWorkshopLayout({
       {/* Quick intro */}
       {directAnswer && (
         <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
-          <p className="text-sm font-semibold text-slate-800">{directAnswer}</p>
+          <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
 
       {/* Overview / Core Concepts */}
       {overview && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 border-b border-slate-200">
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
             <BookOpen className="h-4 w-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Core Concepts</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Core Concepts</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={overview.content} stripTopHeading />
@@ -60,10 +60,10 @@ export function CodeWorkshopLayout({
 
       {/* Deep Explanation */}
       {explanation && (
-        <div className="rounded-xl border border-blue-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-blue-50 border-b border-blue-200">
             <Sparkles className="h-4 w-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">How It Works</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">How It Works</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={explanation.content} stripTopHeading />
@@ -73,15 +73,15 @@ export function CodeWorkshopLayout({
 
       {/* Recipe Cards */}
       {recipeSections.length > 0 && (
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center gap-1 px-4 py-2 bg-slate-50 border-b border-slate-200">
-            <Code2 className="h-4 w-4 text-slate-500 mr-1" />
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="flex items-center gap-1 px-4 py-2 bg-surface border-b border-border">
+            <Code2 className="h-4 w-4 text-muted-foreground mr-1" />
             {recipeSections.map((r, i) => (
               <button
                 key={i}
                 onClick={() => setActiveRecipe(i)}
                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                  activeRecipe === i ? "bg-white shadow-sm text-blue-700" : "text-slate-500 hover:text-slate-700"
+                  activeRecipe === i ? "bg-background shadow-sm text-blue-700" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {r.sectionTitle || `Pattern ${i + 1}`}
@@ -132,7 +132,7 @@ export function CodeWorkshopLayout({
       {speakable && (
         <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
           <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Interview Answer</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={speakable.content.replace(/^#[^\n]*\n+/, '').trim()} />

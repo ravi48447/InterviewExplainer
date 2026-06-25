@@ -128,14 +128,14 @@ export function DSADifficultyPage({
               className={`rounded-2xl border px-4 py-3.5 transition-all ${
                 active
                   ? activeClasses[d]
-                  : "bg-white border-slate-200 hover:border-violet-300 hover:shadow-sm hover:-translate-y-0.5"
+                  : "bg-background border-border hover:border-violet-300 hover:shadow-sm hover:-translate-y-0.5"
               }`}
             >
-              <div className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest ${active ? "opacity-80" : "text-slate-500"}`}>
+              <div className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest ${active ? "opacity-80" : "text-muted-foreground"}`}>
                 <span className={`h-2 w-2 rounded-full ${dot[d]}`} />
                 {d}
               </div>
-              <div className={`text-lg font-black mt-1 ${active ? "" : "text-slate-900"}`}>
+              <div className={`text-lg font-black mt-1 ${active ? "" : "text-foreground"}`}>
                 {count}
                 <span className="text-xs font-semibold text-slate-400 ml-1">problems</span>
               </div>
@@ -149,11 +149,11 @@ export function DSADifficultyPage({
         <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 mb-1">
           Grouped by curriculum module
         </p>
-        <h2 className="text-xl font-black text-slate-900 tracking-tight mb-5">
+        <h2 className="text-xl font-black text-foreground tracking-tight mb-5">
           {title.split(" ").slice(0, 2).join(" ")} by module
         </h2>
         {problems.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500 text-center">
+          <div className="rounded-2xl border border-dashed border-border bg-background p-6 text-sm text-muted-foreground text-center">
             No problems indexed at this difficulty yet.
           </div>
         ) : (
@@ -165,13 +165,13 @@ export function DSADifficultyPage({
                 return (
                   <div
                     key={m.moduleSlug}
-                    className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                    className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
                   >
                     <Link
                       href={`/dsa/module/${m.moduleSlug}`}
-                      className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 bg-slate-50/70 hover:bg-violet-50/40 transition-colors"
+                      className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 bg-surface/70 hover:bg-violet-50/40 transition-colors"
                     >
-                      <span className="text-sm font-bold text-slate-900 group-hover:text-violet-700 inline-flex items-center gap-1.5 transition-colors">
+                      <span className="text-sm font-bold text-foreground group-hover:text-violet-700 inline-flex items-center gap-1.5 transition-colors">
                         {m.title}
                         <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-violet-500" />
                       </span>

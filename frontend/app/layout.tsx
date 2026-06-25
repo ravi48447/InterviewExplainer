@@ -23,6 +23,9 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://interviewexplainer
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
+  alternates: {
+    canonical: "./",
+  },
   title: {
     default: "InterviewExplainer — Structured Interview Preparation for Developers",
     template: "%s | InterviewExplainer",
@@ -85,6 +88,24 @@ export default function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              "name": "InterviewExplainer",
+              "url": SITE_URL,
+              "potentialAction": {
+                "@type": "SearchAction",
+                "target": `${SITE_URL}/search?q={search_term_string}`,
+                "query-input": "required name=search_term_string"
+              }
+            })
+          }}
+        />
+      </head>
       {plausibleDomain && (
         <Script
           defer
@@ -99,14 +120,20 @@ export default function RootLayout({
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme="light"
+          defaultTheme="dark"
           disableTransitionOnChange
         >
           <AuthProvider>
+            <a
+              href="#main-content"
+              className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-primary-foreground px-4 py-2 rounded-md z-50 font-medium transition-all"
+            >
+              Skip to content
+            </a>
             <SiteHeader />
-            <div className="min-w-0 flex-1">
+            <main id="main-content" className="min-w-0 flex-1">
               {children}
-            </div>
+            </main>
           </AuthProvider>
           <SiteFooter />
         </ThemeProvider>

@@ -122,14 +122,14 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-slate-800 selection:bg-blue-200">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-blue-200">
         <div className="w-full min-w-0 min-h-screen flex gap-6 px-6 py-6">
 
           {/* ─── LEFT SIDEBAR ─── */}
           <aside className="hidden lg:flex w-[280px] shrink-0 flex-col gap-4 self-start sticky top-6">
-            <div className="rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm overflow-hidden">
-              <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
-                <Link href="/interview" className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-[#2e64e5] transition-colors">
+            <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-border">
+                <Link href="/interview" className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-secondary hover:text-[#2e64e5] transition-colors">
                   <ArrowLeft className="h-3 w-3" />
                   All Languages
                 </Link>
@@ -137,9 +137,9 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
               <div className="p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <GraduationCap className="h-4 w-4 text-blue-600" />
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Study Path</h3>
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Study Path</h3>
                 </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
+                <p className="text-xs text-secondary leading-relaxed">
                   {toDisplayName(lang)} {toDisplayName(track)} · {meta.label}
                 </p>
               </div>
@@ -151,7 +151,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
                 <div className="px-4 py-3 bg-gradient-to-r from-blue-100 to-blue-50 border-b border-blue-200">
                   <div className="flex items-center gap-2">
                     <Filter className="h-3.5 w-3.5 text-blue-600" />
-                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Experience Level</h3>
+                    <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Experience Level</h3>
                   </div>
                 </div>
                 <div className="p-3 space-y-1">
@@ -164,8 +164,8 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
                         href={`/interview/${lang}/${track}/${lvl}`}
                         className={`flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-lg transition-all ${
                           isActive
-                            ? "bg-white text-slate-900 border border-blue-200 shadow-sm"
-                            : "text-slate-600 hover:text-slate-800 hover:bg-white/50 border border-transparent"
+                            ? "bg-background text-foreground border border-blue-200 shadow-sm"
+                            : "text-secondary hover:text-foreground hover:bg-background/50 border border-transparent"
                         }`}
                       >
                         <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: lvlMeta.color }} />
@@ -182,12 +182,12 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
             <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Award className="h-4 w-4 text-emerald-600" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Your Progress</h3>
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Your Progress</h3>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-600">Stacks Completed</span>
-                  <span className="font-bold text-slate-800">0/{stacks.length}</span>
+                  <span className="text-secondary">Stacks Completed</span>
+                  <span className="font-bold text-foreground">0/{stacks.length}</span>
                 </div>
                 <div className="w-full bg-emerald-100 rounded-full h-2 overflow-hidden">
                   <div className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full" style={{ width: '0%' }} />
@@ -198,9 +198,9 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
             <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="h-4 w-4 text-amber-600" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Quick Tip</h3>
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Quick Tip</h3>
               </div>
-              <p className="text-xs text-slate-700 leading-relaxed">
+              <p className="text-xs text-foreground leading-relaxed">
                 Focus on understanding concepts deeply rather than memorizing answers. Practice explaining them out loud.
               </p>
             </div>
@@ -209,7 +209,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
           {/* ─── MAIN COLUMN ─── */}
           <main className="flex-1 min-w-0">
             {/* Hero Header */}
-            <header className="mb-6 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+            <header className="mb-6 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
               <div className="relative px-6 py-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
                 <div className="flex flex-wrap gap-2 mb-3">
                   <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
@@ -222,22 +222,22 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
                     {meta.label} · {meta.range}
                   </span>
                 </div>
-                <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-3">
+                <h1 className="text-3xl font-black tracking-tight text-foreground mb-3">
                   {toDisplayName(lang)} {toDisplayName(track)}
                 </h1>
-                <p className="text-sm text-slate-700 leading-relaxed max-w-3xl">
+                <p className="text-sm text-foreground leading-relaxed max-w-3xl">
                   {meta.label} ({meta.range}) interview preparation. Master the core concepts and advanced topics required to excel.
                 </p>
               </div>
-              <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+              <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
                     <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                       <Layers className="h-5 w-5 text-blue-600" />
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 font-medium">Tech Stacks</div>
-                      <div className="text-lg font-bold text-slate-900">{stacks.length}</div>
+                      <div className="text-xs text-muted-foreground font-medium">Tech Stacks</div>
+                      <div className="text-lg font-bold text-foreground">{stacks.length}</div>
                     </div>
                   </div>
                   <div className="h-10 w-px bg-slate-200" />
@@ -246,8 +246,8 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
                       <BookOpen className="h-5 w-5 text-emerald-600" />
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 font-medium">Total Questions</div>
-                      <div className="text-lg font-bold text-slate-900">{totalQuestions}</div>
+                      <div className="text-xs text-muted-foreground font-medium">Total Questions</div>
+                      <div className="text-lg font-bold text-foreground">{totalQuestions}</div>
                     </div>
                   </div>
                   <div className="h-10 w-px bg-slate-200" />
@@ -256,8 +256,8 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
                       <TrendingUp className="h-5 w-5" style={{ color: meta.color }} />
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 font-medium">Level</div>
-                      <div className="text-sm font-bold text-slate-900">{meta.label} <span className="text-slate-500 font-normal">({meta.range})</span></div>
+                      <div className="text-xs text-muted-foreground font-medium">Level</div>
+                      <div className="text-sm font-bold text-foreground">{meta.label} <span className="text-muted-foreground font-normal">({meta.range})</span></div>
                     </div>
                   </div>
                 </div>
@@ -267,25 +267,25 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
             {/* Stacks with preview questions */}
             <div className="space-y-3 pb-10">
               {stackData.map((stack, sIdx) => (
-                <div key={stack.slug} className="border rounded-[12px] border-slate-200 shadow-sm bg-[#f8f9fa] overflow-hidden hover:border-slate-300 hover:shadow-md transition-all">
+                <div key={stack.slug} className="border rounded-[12px] border-border shadow-sm bg-[#f8f9fa] overflow-hidden hover:border-border hover:shadow-md transition-all">
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center">
                     <div className="flex-1 flex gap-3 items-start sm:items-center p-4 sm:px-5">
-                      <div className="shrink-0 w-8 h-8 rounded-full bg-white border border-slate-200 text-slate-400 flex items-center justify-center">
+                      <div className="shrink-0 w-8 h-8 rounded-full bg-background border border-border text-slate-400 flex items-center justify-center">
                         <Layers className="h-3.5 w-3.5" />
                       </div>
                       <div>
-                        <h3 className="text-[15px] font-bold text-slate-800 tracking-tight leading-tight mb-0.5">{stack.name}</h3>
-                        {stack.description && <p className="text-[13px] text-slate-500 leading-snug line-clamp-1">{stack.description}</p>}
+                        <h3 className="text-[15px] font-bold text-foreground tracking-tight leading-tight mb-0.5">{stack.name}</h3>
+                        {stack.description && <p className="text-[13px] text-muted-foreground leading-snug line-clamp-1">{stack.description}</p>}
                       </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 px-4 pb-3 sm:pb-0 sm:pr-5">
                       <div className="hidden sm:flex flex-col items-end gap-0.5">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total</span>
-                        <span className="text-[12px] font-semibold text-slate-600">{stack.questionCount} Qs</span>
+                        <span className="text-[12px] font-semibold text-secondary">{stack.questionCount} Qs</span>
                       </div>
                       <Link
                         href={`${basePath}/${stack.slug}`}
-                        className="flex items-center justify-center h-8 px-3 rounded-md bg-white border border-slate-200 text-[#2e64e5] text-[11px] font-bold uppercase tracking-wider hover:border-[#2e64e5] hover:bg-[#2e64e5]/5 transition-colors shadow-sm"
+                        className="flex items-center justify-center h-8 px-3 rounded-md bg-background border border-border text-[#2e64e5] text-[11px] font-bold uppercase tracking-wider hover:border-[#2e64e5] hover:bg-[#2e64e5]/5 transition-colors shadow-sm"
                       >
                         Start <ChevronRight className="h-3.5 w-3.5 ml-1" />
                       </Link>
@@ -294,7 +294,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
 
                   {/* Preview questions */}
                   {stack.questions.length > 0 && (
-                    <div className="border-t border-slate-100 bg-white px-3 sm:px-4 py-3">
+                    <div className="border-t border-slate-100 bg-background px-3 sm:px-4 py-3">
                       <div className="flex flex-col gap-1.5">
                         {stack.questions.map((q, idx) => (
                           <Link
@@ -303,20 +303,20 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
                             className="group/link flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:pr-4 rounded-[8px] hover:bg-[#f8f9fa] transition-all duration-200"
                           >
                             <div className="flex items-start sm:items-center gap-3 mb-2 sm:mb-0 max-w-full overflow-hidden">
-                              <div className="shrink-0 w-5 h-5 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-400 group-hover/link:border-[#2e64e5] group-hover/link:text-[#2e64e5] shadow-sm transition-all sm:ml-2">
+                              <div className="shrink-0 w-5 h-5 rounded-full bg-background border border-border flex items-center justify-center text-[9px] font-bold text-slate-400 group-hover/link:border-[#2e64e5] group-hover/link:text-[#2e64e5] shadow-sm transition-all sm:ml-2">
                                 {idx + 1}
                               </div>
-                              <h4 className="text-[13.5px] font-medium text-slate-700 group-hover/link:text-slate-900 transition-colors leading-tight truncate">
+                              <h4 className="text-[13.5px] font-medium text-foreground group-hover/link:text-foreground transition-colors leading-tight truncate">
                                 {q.title}
                               </h4>
                             </div>
                             <div className="flex items-center gap-3 pl-8 sm:pl-0 shrink-0 opacity-80 group-hover/link:opacity-100 transition-opacity">
-                              <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded text-white shadow-sm"
+                              <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded text-primary-foreground dark:text-foreground shadow-sm"
                                 style={{ backgroundColor: difficultyColor(q.difficulty) }}
                               >
                                 {difficultyLabel(q.difficulty)}
                               </span>
-                              <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1 min-w-[45px]">
+                              <span className="text-[11px] font-medium text-muted-foreground flex items-center gap-1 min-w-[45px]">
                                 <Clock className="w-3 h-3 text-slate-400" />
                                 {q.estimatedReadTime ?? 5}m
                               </span>
@@ -344,32 +344,32 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
               <div className="px-4 py-3 bg-gradient-to-r from-purple-100 to-pink-100 border-b border-purple-200">
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-purple-600" />
-                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">At a Glance</h3>
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">At a Glance</h3>
                 </div>
               </div>
               <div className="p-4">
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="bg-white rounded-lg p-3 border border-purple-200 shadow-sm">
+                  <div className="bg-background rounded-lg p-3 border border-purple-200 shadow-sm">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-purple-600 mb-1">Stacks</div>
-                    <div className="text-2xl font-black text-slate-900 leading-none">{stacks.length}</div>
+                    <div className="text-2xl font-black text-foreground leading-none">{stacks.length}</div>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border border-purple-200 shadow-sm">
+                  <div className="bg-background rounded-lg p-3 border border-purple-200 shadow-sm">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-purple-600 mb-1">Questions</div>
-                    <div className="text-2xl font-black text-slate-900 leading-none">{totalQuestions}</div>
+                    <div className="text-2xl font-black text-foreground leading-none">{totalQuestions}</div>
                   </div>
                 </div>
                 <div className="space-y-2 pt-3 border-t border-purple-200">
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-600 font-medium">Level</span>
+                    <span className="text-secondary font-medium">Level</span>
                     <span className="font-bold" style={{ color: meta.color }}>{meta.label} ({meta.range})</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-600 font-medium">Language</span>
-                    <span className="font-bold text-slate-900">{toDisplayName(lang)}</span>
+                    <span className="text-secondary font-medium">Language</span>
+                    <span className="font-bold text-foreground">{toDisplayName(lang)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-600 font-medium">Track</span>
-                    <span className="font-bold text-slate-900">{toDisplayName(track)}</span>
+                    <span className="text-secondary font-medium">Track</span>
+                    <span className="font-bold text-foreground">{toDisplayName(track)}</span>
                   </div>
                 </div>
               </div>
@@ -378,11 +378,11 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
             <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-50 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Target className="h-4 w-4 text-teal-600" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">What You'll Learn</h3>
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">What You'll Learn</h3>
               </div>
               <div className="space-y-2">
                 {benefits.map((b, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs text-slate-700">
+                  <div key={i} className="flex items-start gap-2 text-xs text-foreground">
                     <CheckCircle2 className="h-3.5 w-3.5 text-teal-600 mt-0.5 shrink-0" />
                     <span>{b}</span>
                   </div>
@@ -393,28 +393,28 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
             <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
                 <BookMarked className="h-4 w-4 text-indigo-600" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Study Strategy</h3>
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Study Strategy</h3>
               </div>
               <div className="space-y-3">
                 {tips.map((tip, i) => (
-                  <div key={i} className="flex items-start gap-2 bg-white/60 rounded-lg p-2 border border-indigo-100">
+                  <div key={i} className="flex items-start gap-2 bg-background/60 rounded-lg p-2 border border-indigo-100">
                     <span className="text-sm leading-none mt-0.5">{tip.icon}</span>
-                    <p className="text-xs text-slate-700 leading-relaxed">{tip.text}</p>
+                    <p className="text-xs text-foreground leading-relaxed">{tip.text}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm overflow-hidden">
-              <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Quick Actions</h3>
+            <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-border">
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Quick Actions</h3>
               </div>
               <div className="p-3 space-y-2">
-                <Link href="/interview" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
+                <Link href="/interview" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
                   <span>Browse All Languages</span>
                   <ArrowUpRight className="h-3 w-3" />
                 </Link>
-                <Link href="/dashboard" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
+                <Link href="/dashboard" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
                   <span>My Dashboard</span>
                   <ArrowUpRight className="h-3 w-3" />
                 </Link>

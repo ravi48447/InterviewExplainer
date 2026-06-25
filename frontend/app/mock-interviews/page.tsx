@@ -105,14 +105,14 @@ function MockInterviewsContent() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
 
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white">
+      <div className="bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-primary-foreground dark:text-foreground">
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center max-w-3xl mx-auto"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm mb-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-background/20 backdrop-blur-sm mb-6">
               <Mic className="h-4 w-4" />
               <span className="text-sm font-bold">Structured Mock Practice</span>
             </div>
@@ -124,7 +124,7 @@ function MockInterviewsContent() {
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 text-sm font-bold">
               {platformPillars.map(p => (
-                <div key={p.label} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm">
+                <div key={p.label} className="flex items-center gap-2 px-4 py-2 rounded-full bg-background/20 backdrop-blur-sm">
                   <span>{p.icon}</span>
                   <span>{p.label}</span>
                 </div>
@@ -148,13 +148,13 @@ function MockInterviewsContent() {
               <Link
                 href={startHref(mock.id)}
                 className={cn(
-                  "relative overflow-hidden rounded-2xl border-2 border-slate-200 bg-white p-8 shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] group block",
+                  "relative overflow-hidden rounded-2xl border-2 border-border bg-background p-8 shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] group block",
                   mock.recommended && "ring-2 ring-purple-500"
                 )}
               >
                 {mock.recommended && (
                   <div className="absolute top-4 right-4">
-                    <div className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                    <div className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-600 text-primary-foreground dark:text-foreground text-xs font-black uppercase tracking-wider flex items-center gap-1">
                       <Star className="h-3 w-3 fill-current" />
                       {mock.badge || 'Recommended'}
                     </div>
@@ -162,13 +162,13 @@ function MockInterviewsContent() {
                 )}
 
                 <div className={cn("w-16 h-16 rounded-2xl bg-gradient-to-br flex items-center justify-center mb-6", mock.gradient)}>
-                  <mock.icon className="h-8 w-8 text-white" />
+                  <mock.icon className="h-8 w-8 text-primary-foreground dark:text-foreground" />
                 </div>
 
-                <h3 className="text-2xl font-black text-slate-900 mb-2">{mock.title}</h3>
-                <p className="text-sm text-slate-600 mb-6">{mock.description}</p>
+                <h3 className="text-2xl font-black text-foreground mb-2">{mock.title}</h3>
+                <p className="text-sm text-secondary mb-6">{mock.description}</p>
 
-                <div className="flex items-center gap-4 mb-6 text-xs font-bold text-slate-500">
+                <div className="flex items-center gap-4 mb-6 text-xs font-bold text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Clock className="h-4 w-4" />
                     {mock.duration}
@@ -181,7 +181,7 @@ function MockInterviewsContent() {
 
                 <div className="space-y-2 mb-6">
                   {mock.sections.map((section, i) => (
-                    <div key={i} className="flex items-center gap-2 text-sm text-slate-700">
+                    <div key={i} className="flex items-center gap-2 text-sm text-foreground">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                       <span>{section}</span>
                     </div>
@@ -189,7 +189,7 @@ function MockInterviewsContent() {
                 </div>
 
                 <div className={cn(
-                  "w-full py-3 rounded-xl bg-gradient-to-r text-white font-bold text-sm flex items-center justify-center gap-2 group-hover:scale-105 transition-transform shadow-lg",
+                  "w-full py-3 rounded-xl bg-gradient-to-r text-primary-foreground dark:text-foreground font-bold text-sm flex items-center justify-center gap-2 group-hover:scale-105 transition-transform shadow-lg",
                   mock.gradient
                 )}>
                   <Play className="h-4 w-4" />
@@ -201,8 +201,8 @@ function MockInterviewsContent() {
         </div>
 
         {/* Features Section */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm mb-16">
-          <h2 className="text-2xl font-black text-slate-900 mb-8 text-center">What You Get from Mock Practice</h2>
+        <div className="bg-background rounded-2xl border border-border p-8 shadow-sm mb-16">
+          <h2 className="text-2xl font-black text-foreground mb-8 text-center">What You Get from Mock Practice</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, index) => (
               <motion.div
@@ -215,8 +215,8 @@ function MockInterviewsContent() {
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mx-auto mb-4">
                   <feature.icon className="h-7 w-7 text-blue-600" />
                 </div>
-                <h3 className="text-sm font-black text-slate-900 mb-2">{feature.title}</h3>
-                <p className="text-xs text-slate-600">{feature.description}</p>
+                <h3 className="text-sm font-black text-foreground mb-2">{feature.title}</h3>
+                <p className="text-xs text-secondary">{feature.description}</p>
               </motion.div>
             ))}
           </div>
@@ -225,13 +225,13 @@ function MockInterviewsContent() {
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Link href="/mock-interviews/history">
-            <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 border border-slate-200 hover:shadow-lg transition-all group">
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 border border-border hover:shadow-lg transition-all group">
               <div className="flex items-start justify-between mb-4">
                 <FileText className="h-8 w-8 text-blue-600" />
                 <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
               </div>
-              <h3 className="text-lg font-black text-slate-900 mb-2">View Mock History</h3>
-              <p className="text-sm text-slate-600">Review past interviews and track your progress over time</p>
+              <h3 className="text-lg font-black text-foreground mb-2">View Mock History</h3>
+              <p className="text-sm text-secondary">Review past interviews and track your progress over time</p>
             </div>
           </Link>
 
@@ -241,8 +241,8 @@ function MockInterviewsContent() {
                 <Zap className="h-8 w-8 text-purple-600" />
                 <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-purple-600 group-hover:translate-x-1 transition-all" />
               </div>
-              <h3 className="text-lg font-black text-slate-900 mb-2">Performance Analytics</h3>
-              <p className="text-sm text-slate-600">Detailed insights and recommendations on your dashboard</p>
+              <h3 className="text-lg font-black text-foreground mb-2">Performance Analytics</h3>
+              <p className="text-sm text-secondary">Detailed insights and recommendations on your dashboard</p>
             </div>
           </Link>
         </div>

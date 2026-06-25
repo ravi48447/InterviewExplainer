@@ -256,7 +256,7 @@ function QuestionPageLayoutInner({
   return (
     <div
       className={`min-h-screen font-sans transition-colors duration-300 ${
-        d ? "bg-[#111111] text-slate-200" : "bg-slate-50 text-slate-800"
+        d ? "bg-[#111111] text-slate-200" : "bg-surface text-foreground"
       }`}
       style={
         d
@@ -285,7 +285,7 @@ function QuestionPageLayoutInner({
         {/* ── Main content ── */}
         <main
           className={`flex-1 min-w-0 transition-colors duration-300 ${
-            d ? "bg-[#1a1a1a]" : "bg-white"
+            d ? "bg-[#1a1a1a]" : "bg-background"
           }`}
         >
           <article
@@ -298,7 +298,7 @@ function QuestionPageLayoutInner({
             {/* Breadcrumb */}
             <nav
               className={`flex items-center gap-1 text-xs mb-4 flex-wrap ${
-                d ? "text-slate-500" : "text-slate-400"
+                d ? "text-muted-foreground" : "text-slate-400"
               }`}
             >
               <Link
@@ -306,7 +306,7 @@ function QuestionPageLayoutInner({
                 className={`transition-colors flex items-center gap-1 ${
                   d
                     ? "hover:text-slate-300"
-                    : "hover:text-slate-700"
+                    : "hover:text-foreground"
                 }`}
               >
                 <Home className="h-3 w-3" />
@@ -316,13 +316,13 @@ function QuestionPageLayoutInner({
                 <span key={i} className="contents">
                   <ChevronRight
                     className={`h-3 w-3 ${
-                      d ? "text-slate-600" : "text-slate-300"
+                      d ? "text-secondary" : "text-slate-300"
                     }`}
                   />
                   <Link
                     href={bc.href}
                     className={`transition-colors ${
-                      d ? "hover:text-slate-300" : "hover:text-slate-700"
+                      d ? "hover:text-slate-300" : "hover:text-foreground"
                     }`}
                   >
                     {bc.label}
@@ -335,7 +335,7 @@ function QuestionPageLayoutInner({
                   <>
                     <ChevronRight
                       className={`h-3 w-3 ${
-                        d ? "text-slate-600" : "text-slate-300"
+                        d ? "text-secondary" : "text-slate-300"
                       }`}
                     />
                     <Link
@@ -343,7 +343,7 @@ function QuestionPageLayoutInner({
                       className={`transition-colors font-semibold ${
                         d
                           ? "hover:text-slate-300 text-slate-400"
-                          : "hover:text-slate-700 text-slate-500"
+                          : "hover:text-foreground text-muted-foreground"
                       }`}
                     >
                       {currentTopicName}
@@ -358,7 +358,7 @@ function QuestionPageLayoutInner({
                 className={`sticky top-1 z-30 -mx-2 mb-5 flex items-center gap-2 rounded-lg border px-3 py-2 shadow-lg backdrop-blur ${
                   d
                     ? "border-slate-600/50 bg-[#222222]/95 shadow-black/40"
-                    : "border-slate-200 bg-white/95 shadow-slate-200/60"
+                    : "border-border bg-background/95 shadow-slate-200/60"
                 }`}
               >
                 <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap text-[11px]">
@@ -370,7 +370,7 @@ function QuestionPageLayoutInner({
                     Q {currentIdx + 1}{" "}
                     <span
                       className={`font-bold ${
-                        d ? "text-slate-500" : "text-slate-400"
+                        d ? "text-muted-foreground" : "text-slate-400"
                       }`}
                     >
                       of {totalQuestions}
@@ -381,24 +381,24 @@ function QuestionPageLayoutInner({
                     topicQuestions.length > 1 && (
                       <>
                         <span
-                          className={d ? "text-slate-600" : "text-slate-300"}
+                          className={d ? "text-secondary" : "text-slate-300"}
                         >
                           &middot;
                         </span>
                         <span
                           className={`flex items-center gap-1 font-semibold ${
-                            d ? "text-slate-400" : "text-slate-500"
+                            d ? "text-slate-400" : "text-muted-foreground"
                           }`}
                         >
                           <Folder
                             className={`h-3 w-3 ${
-                              d ? "text-slate-500" : "text-slate-400"
+                              d ? "text-muted-foreground" : "text-slate-400"
                             }`}
                           />
                           <span>{currentTopicName}</span>
                           <span
                             className={`tabular-nums ${
-                              d ? "text-slate-500" : "text-slate-400"
+                              d ? "text-muted-foreground" : "text-slate-400"
                             }`}
                           >
                             ({topicIdx + 1}/{topicQuestions.length})
@@ -406,12 +406,12 @@ function QuestionPageLayoutInner({
                         </span>
                       </>
                     )}
-                  <span className={d ? "text-slate-600" : "text-slate-300"}>
+                  <span className={d ? "text-secondary" : "text-slate-300"}>
                     &middot;
                   </span>
                   <span
                     className={`flex items-center gap-1 ${
-                      d ? "text-slate-500" : "text-slate-400"
+                      d ? "text-muted-foreground" : "text-slate-400"
                     }`}
                   >
                     <Clock className="h-3 w-3" />
@@ -425,7 +425,7 @@ function QuestionPageLayoutInner({
                     className={`p-1.5 rounded-md transition-colors ${
                       d
                         ? "text-slate-400 hover:text-amber-300 hover:bg-slate-700/60"
-                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                        : "text-muted-foreground hover:text-foreground hover:bg-surface"
                     }`}
                     aria-label={
                       d ? "Switch to light mode" : "Switch to dark mode"
@@ -448,8 +448,8 @@ function QuestionPageLayoutInner({
                       )}
                       className={`p-1.5 rounded-md transition-colors ${
                         d
-                          ? "hover:bg-slate-700/60 text-slate-500 hover:text-slate-300"
-                          : "hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                          ? "hover:bg-slate-700/60 text-muted-foreground hover:text-slate-300"
+                          : "hover:bg-surface text-slate-400 hover:text-secondary"
                       }`}
                       aria-label={`Previous: ${previousQuestion.title}`}
                       title={`Previous: ${previousQuestion.title}`}
@@ -464,7 +464,7 @@ function QuestionPageLayoutInner({
                         nextQuestion.slug,
                         nextQuestion.stackSlug || stackSlug
                       )}
-                      className="p-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                      className="p-1.5 rounded-md bg-blue-600 text-primary-foreground dark:text-foreground hover:bg-blue-700 transition-colors"
                       aria-label={`Next: ${nextQuestion.title}`}
                       title={`Next: ${nextQuestion.title}`}
                     >
@@ -478,7 +478,7 @@ function QuestionPageLayoutInner({
             {/* Title */}
             <h1
               className={`text-[26px] sm:text-[30px] lg:text-[32px] font-black mb-3 leading-[1.15] tracking-[-0.015em] ${
-                d ? "text-white" : "text-slate-900"
+                d ? "text-primary-foreground dark:text-foreground" : "text-foreground"
               }`}
             >
               {data.questionText || data.title}
@@ -497,7 +497,7 @@ function QuestionPageLayoutInner({
                 </Link>
                 <span
                   className={`font-normal ${
-                    d ? "text-slate-500" : "text-slate-400"
+                    d ? "text-muted-foreground" : "text-slate-400"
                   }`}
                 >
                   {" "}
@@ -509,7 +509,7 @@ function QuestionPageLayoutInner({
             {/* Meta row */}
             <div
               className={`flex flex-wrap items-center gap-2 text-[12px] mb-8 ${
-                d ? "text-slate-400" : "text-slate-500"
+                d ? "text-slate-400" : "text-muted-foreground"
               }`}
             >
               <span
@@ -517,7 +517,7 @@ function QuestionPageLayoutInner({
               >
                 {meta.label}
               </span>
-              <span className={d ? "text-slate-600" : "text-slate-300"}>
+              <span className={d ? "text-secondary" : "text-slate-300"}>
                 &middot;
               </span>
               <span className="flex items-center gap-1">
@@ -526,7 +526,7 @@ function QuestionPageLayoutInner({
               </span>
               {v2?.companyTags && v2.companyTags.length > 0 && (
                 <>
-                  <span className={d ? "text-slate-600" : "text-slate-300"}>
+                  <span className={d ? "text-secondary" : "text-slate-300"}>
                     &middot;
                   </span>
                   <CompanyTagsBadges companyTags={v2.companyTags} />
@@ -553,15 +553,15 @@ function QuestionPageLayoutInner({
                 <div
                   className={`mb-6 rounded-xl border overflow-hidden ${
                     d
-                      ? "border-slate-700/60 bg-[#1e1e1e]"
-                      : "border-slate-200 bg-slate-50"
+                      ? "border-border/60 bg-[#1e1e1e]"
+                      : "border-border bg-surface"
                   }`}
                 >
                   <div
                     className={`flex items-center gap-2 px-5 py-3 border-b ${
                       d
-                        ? "bg-slate-800/80 border-slate-700/60"
-                        : "bg-white border-slate-200"
+                        ? "dark:bg-surface/80 border-border/60"
+                        : "bg-background border-border"
                     }`}
                   >
                     <Target
@@ -571,7 +571,7 @@ function QuestionPageLayoutInner({
                     />
                     <span
                       className={`text-[11px] font-bold uppercase tracking-widest ${
-                        d ? "text-slate-300" : "text-slate-500"
+                        d ? "text-slate-300" : "text-muted-foreground"
                       }`}
                     >
                       Interviewer Insight
@@ -595,7 +595,7 @@ function QuestionPageLayoutInner({
                         </div>
                         <p
                           className={`text-[13px] leading-snug ${
-                            d ? "text-slate-300" : "text-slate-700"
+                            d ? "text-slate-300" : "text-foreground"
                           }`}
                         >
                           {v2.interviewerIntent.testing}
@@ -619,7 +619,7 @@ function QuestionPageLayoutInner({
                         </div>
                         <p
                           className={`text-[13px] leading-snug ${
-                            d ? "text-slate-300" : "text-slate-700"
+                            d ? "text-slate-300" : "text-foreground"
                           }`}
                         >
                           {v2.interviewerIntent.common_mistake}
@@ -643,7 +643,7 @@ function QuestionPageLayoutInner({
                         </div>
                         <p
                           className={`text-[13px] leading-snug ${
-                            d ? "text-slate-300" : "text-slate-700"
+                            d ? "text-slate-300" : "text-foreground"
                           }`}
                         >
                           {v2.interviewerIntent.to_stand_out}
@@ -711,15 +711,15 @@ function QuestionPageLayoutInner({
                 <div
                   className={`rounded-xl overflow-hidden shadow-md ${
                     d
-                      ? "border border-slate-700/60 bg-[#1a1a1a] shadow-black/40"
-                      : "border border-slate-200 bg-white shadow-slate-100/60"
+                      ? "border border-border/60 bg-[#1a1a1a] shadow-black/40"
+                      : "border border-border bg-background shadow-slate-100/60"
                   }`}
                 >
                   <div
                     className={`flex items-center gap-2 px-5 py-2.5 border-b ${
                       d
-                        ? "border-slate-700/60 bg-slate-800/60"
-                        : "border-slate-200 bg-slate-50"
+                        ? "border-border/60 dark:bg-surface/60"
+                        : "border-border bg-surface"
                     }`}
                   >
                     <BookOpen
@@ -729,7 +729,7 @@ function QuestionPageLayoutInner({
                     />
                     <span
                       className={`text-[11px] font-bold uppercase tracking-widest ${
-                        d ? "text-slate-300" : "text-slate-500"
+                        d ? "text-slate-300" : "text-muted-foreground"
                       }`}
                     >
                       Deep dive
@@ -786,7 +786,7 @@ function QuestionPageLayoutInner({
                         </span>
                         <span
                           className={`text-[15px] leading-[1.65] ${
-                            d ? "text-slate-200" : "text-slate-700"
+                            d ? "text-slate-200" : "text-foreground"
                           }`}
                         >
                           {q}
@@ -822,26 +822,26 @@ function QuestionPageLayoutInner({
                     )}
                     className={`sm:w-auto sm:max-w-[40%] flex items-center gap-2 rounded-xl border px-4 py-3 transition-all ${
                       d
-                        ? "border-slate-700/60 bg-slate-800/60 hover:border-slate-600 hover:bg-slate-800"
-                        : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100"
+                        ? "border-border/60 dark:bg-surface/60 hover:border-slate-600 hover:dark:bg-surface"
+                        : "border-border bg-surface hover:border-border hover:bg-surface"
                     }`}
                   >
                     <ArrowLeft
                       className={`h-4 w-4 shrink-0 ${
-                        d ? "text-slate-500" : "text-slate-400"
+                        d ? "text-muted-foreground" : "text-slate-400"
                       }`}
                     />
                     <div className="min-w-0">
                       <div
                         className={`text-[10px] font-bold uppercase tracking-wide ${
-                          d ? "text-slate-400" : "text-slate-500"
+                          d ? "text-slate-400" : "text-muted-foreground"
                         }`}
                       >
                         Previous
                       </div>
                       <div
                         className={`text-[13px] line-clamp-1 ${
-                          d ? "text-slate-300" : "text-slate-600"
+                          d ? "text-slate-300" : "text-secondary"
                         }`}
                       >
                         {previousQuestion.title}
@@ -856,7 +856,7 @@ function QuestionPageLayoutInner({
                       nextQuestion.slug,
                       nextQuestion.stackSlug || stackSlug
                     )}
-                    className="group flex-1 flex items-center justify-between gap-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 shadow-sm transition-all"
+                    className="group flex-1 flex items-center justify-between gap-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-primary-foreground dark:text-foreground px-5 py-3 shadow-sm transition-all"
                   >
                     <div className="min-w-0">
                       <div className="text-[10px] font-black uppercase tracking-widest text-blue-200">
@@ -900,7 +900,7 @@ function QuestionPageLayoutInner({
                 }`}
               >
                 <div className="px-5 py-4 flex items-center gap-4">
-                  <div className="shrink-0 w-10 h-10 rounded-lg bg-emerald-700 flex items-center justify-center text-white text-xs font-black">
+                  <div className="shrink-0 w-10 h-10 rounded-lg bg-emerald-700 flex items-center justify-center text-primary-foreground dark:text-foreground text-xs font-black">
                     {nextCurriculumModule.moduleNumber || "→"}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -913,7 +913,7 @@ function QuestionPageLayoutInner({
                     </div>
                     <div
                       className={`text-[15px] font-black leading-snug truncate group-hover:text-emerald-600 transition-colors ${
-                        d ? "text-slate-100" : "text-slate-800"
+                        d ? "text-slate-100" : "text-foreground"
                       }`}
                     >
                       {nextCurriculumModule.title}
@@ -921,7 +921,7 @@ function QuestionPageLayoutInner({
                     {nextCurriculumModule.pillarName && (
                       <div
                         className={`mt-0.5 text-[11px] leading-snug truncate ${
-                          d ? "text-slate-400" : "text-slate-500"
+                          d ? "text-slate-400" : "text-muted-foreground"
                         }`}
                       >
                         {nextCurriculumModule.pillarName}
@@ -943,22 +943,22 @@ function QuestionPageLayoutInner({
                 aria-labelledby="related-prep-heading"
                 className={`mt-8 rounded-xl border overflow-hidden ${
                   d
-                    ? "border-slate-700/60 bg-slate-800/40"
-                    : "border-slate-200 bg-slate-50/60"
+                    ? "border-border/60 dark:bg-surface/40"
+                    : "border-border bg-surface/60"
                 }`}
               >
                 <div
                   className={`px-5 py-3 border-b flex items-center gap-2 ${
                     d
-                      ? "border-slate-700/60 bg-slate-900/60"
-                      : "border-slate-200 bg-white"
+                      ? "border-border/60 dark:bg-surface/60"
+                      : "border-border bg-background"
                   }`}
                 >
                   <Compass className="h-4 w-4 text-indigo-400" />
                   <h2
                     id="related-prep-heading"
                     className={`text-sm font-black tracking-tight ${
-                      d ? "text-slate-200" : "text-slate-700"
+                      d ? "text-slate-200" : "text-foreground"
                     }`}
                   >
                     Related interview prep categories
@@ -981,21 +981,21 @@ function QuestionPageLayoutInner({
                         href={`/${p.pillarSlug}`}
                         className={`group flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
                           d
-                            ? "border-slate-700/60 bg-slate-800/60 hover:border-indigo-600/50 hover:bg-slate-700/60"
-                            : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/40"
+                            ? "border-border/60 dark:bg-surface/60 hover:border-indigo-600/50 hover:bg-slate-700/60"
+                            : "border-border bg-background hover:border-indigo-300 hover:bg-indigo-50/40"
                         }`}
                       >
                         <div className="flex-1 min-w-0">
                           <div
                             className={`text-[13px] font-black leading-snug group-hover:text-indigo-500 transition-colors ${
-                              d ? "text-slate-200" : "text-slate-700"
+                              d ? "text-slate-200" : "text-foreground"
                             }`}
                           >
                             {p.title.replace(/\s+Interview Prep$/, "")}
                           </div>
                           <div
                             className={`mt-0.5 text-[11px] leading-snug line-clamp-1 ${
-                              d ? "text-slate-400" : "text-slate-500"
+                              d ? "text-slate-400" : "text-muted-foreground"
                             }`}
                           >
                             {p.tagline}
@@ -1004,7 +1004,7 @@ function QuestionPageLayoutInner({
                         <ChevronRight
                           className={`h-3.5 w-3.5 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5 ${
                             d
-                              ? "text-slate-600 group-hover:text-indigo-400"
+                              ? "text-secondary group-hover:text-indigo-400"
                               : "text-slate-300 group-hover:text-indigo-500"
                           }`}
                         />
@@ -1027,7 +1027,7 @@ function QuestionPageLayoutInner({
               >
                 <div className="p-5 flex items-start gap-4 flex-wrap">
                   <div className="shrink-0 w-11 h-11 rounded-lg bg-indigo-700 flex items-center justify-center">
-                    <Compass className="h-5 w-5 text-white" />
+                    <Compass className="h-5 w-5 text-primary-foreground dark:text-foreground" />
                   </div>
                   <div className="flex-1 min-w-[220px]">
                     <div
@@ -1040,14 +1040,14 @@ function QuestionPageLayoutInner({
                     <h2
                       id="roadmap-cta-heading"
                       className={`text-base font-black mb-1 leading-snug ${
-                        d ? "text-slate-100" : "text-slate-800"
+                        d ? "text-slate-100" : "text-foreground"
                       }`}
                     >
                       {roadmapCta.title}
                     </h2>
                     <p
                       className={`text-[13px] leading-relaxed ${
-                        d ? "text-slate-400" : "text-slate-500"
+                        d ? "text-slate-400" : "text-muted-foreground"
                       }`}
                     >
                       {roadmapCta.tagline}
@@ -1056,7 +1056,7 @@ function QuestionPageLayoutInner({
                   <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                     <Link
                       href={roadmapCta.href}
-                      className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 shadow-sm transition-colors"
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-primary-foreground dark:text-foreground font-bold text-sm hover:bg-indigo-700 shadow-sm transition-colors"
                     >
                       {roadmapCta.ctaLabel}
                       <ArrowRight className="h-4 w-4" />
@@ -1067,7 +1067,7 @@ function QuestionPageLayoutInner({
                         className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border font-bold text-sm transition-colors ${
                           d
                             ? "bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600"
-                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                            : "bg-background border-border text-foreground hover:bg-surface"
                         }`}
                       >
                         {roadmapCta.secondaryLabel}
@@ -1086,19 +1086,19 @@ function QuestionPageLayoutInner({
         <aside
           className={`hidden xl:flex w-[280px] shrink-0 flex-col self-start sticky top-0 border-l overflow-y-auto max-h-screen transition-colors duration-300 ${
             d
-              ? "border-slate-700/50 bg-[#1a1a1a]"
-              : "border-slate-200/80 bg-white"
+              ? "border-border/50 bg-[#1a1a1a]"
+              : "border-border/80 bg-background"
           }`}
         >
           {/* Theme toggle at top of sidebar */}
           <div
             className={`px-5 py-3 border-b flex items-center justify-between ${
-              d ? "border-slate-700/50" : "border-slate-100"
+              d ? "border-border/50" : "border-slate-100"
             }`}
           >
             <span
               className={`text-[11px] font-bold uppercase tracking-wider ${
-                d ? "text-slate-500" : "text-slate-400"
+                d ? "text-muted-foreground" : "text-slate-400"
               }`}
             >
               {d ? "Dark mode" : "Light mode"}
@@ -1107,8 +1107,8 @@ function QuestionPageLayoutInner({
               onClick={toggleTheme}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
                 d
-                  ? "border-slate-600 bg-slate-800 text-slate-300 hover:border-amber-500/60 hover:text-amber-300"
-                  : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:text-slate-800"
+                  ? "border-slate-600 dark:bg-surface text-slate-300 hover:border-amber-500/60 hover:text-amber-300"
+                  : "border-border bg-surface text-secondary hover:border-border hover:text-foreground"
               }`}
               aria-label={d ? "Switch to light mode" : "Switch to dark mode"}
             >
@@ -1130,13 +1130,13 @@ function QuestionPageLayoutInner({
           {totalQuestions > 0 && currentIdx >= 0 && (
             <div
               className={`px-5 py-4 border-b ${
-                d ? "border-slate-700/50" : "border-slate-100"
+                d ? "border-border/50" : "border-slate-100"
               }`}
             >
               <div className="flex items-center justify-between mb-2">
                 <span
                   className={`text-[11px] font-bold uppercase tracking-wider ${
-                    d ? "text-slate-400" : "text-slate-500"
+                    d ? "text-slate-400" : "text-muted-foreground"
                   }`}
                 >
                   Progress
@@ -1167,13 +1167,13 @@ function QuestionPageLayoutInner({
           {/* Quick Info */}
           <div
             className={`px-5 py-4 border-b space-y-2.5 ${
-              d ? "border-slate-700/50" : "border-slate-100"
+              d ? "border-border/50" : "border-slate-100"
             }`}
           >
             <div className="flex items-center justify-between">
               <span
                 className={`text-[13px] flex items-center gap-1.5 ${
-                  d ? "text-slate-400" : "text-slate-500"
+                  d ? "text-slate-400" : "text-muted-foreground"
                 }`}
               >
                 <Clock className="h-3.5 w-3.5" />
@@ -1181,7 +1181,7 @@ function QuestionPageLayoutInner({
               </span>
               <span
                 className={`text-[13px] font-semibold ${
-                  d ? "text-slate-300" : "text-slate-600"
+                  d ? "text-slate-300" : "text-secondary"
                 }`}
               >
                 {readTime}–{Math.min(readTime + 1, 5)} min
@@ -1190,7 +1190,7 @@ function QuestionPageLayoutInner({
             <div className="flex items-center justify-between">
               <span
                 className={`text-[13px] flex items-center gap-1.5 ${
-                  d ? "text-slate-400" : "text-slate-500"
+                  d ? "text-slate-400" : "text-muted-foreground"
                 }`}
               >
                 <Target className="h-3.5 w-3.5" />
@@ -1208,12 +1208,12 @@ function QuestionPageLayoutInner({
           {v2?.companyTags && v2.companyTags.length > 0 && (
             <div
               className={`px-5 py-4 border-b ${
-                d ? "border-slate-700/50" : "border-slate-100"
+                d ? "border-border/50" : "border-slate-100"
               }`}
             >
               <div
                 className={`text-[11px] font-bold uppercase tracking-wider mb-2 ${
-                  d ? "text-slate-400" : "text-slate-500"
+                  d ? "text-slate-400" : "text-muted-foreground"
                 }`}
               >
                 Asked at
@@ -1224,8 +1224,8 @@ function QuestionPageLayoutInner({
                     key={tag}
                     className={`text-[12px] font-medium px-2.5 py-0.5 rounded-full border ${
                       d
-                        ? "text-slate-300 bg-slate-800 border-slate-700"
-                        : "text-slate-600 bg-slate-100 border-slate-200"
+                        ? "text-slate-300 dark:bg-surface border-border"
+                        : "text-secondary bg-surface border-border"
                     }`}
                   >
                     {tag}
@@ -1238,12 +1238,12 @@ function QuestionPageLayoutInner({
           {/* Mock Interview CTA */}
           <div
             className={`px-5 py-4 border-b ${
-              d ? "border-slate-700/50" : "border-slate-100"
+              d ? "border-border/50" : "border-slate-100"
             }`}
           >
             <Link
               href="/mock-interviews"
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 transition-colors"
+              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-indigo-600 text-primary-foreground dark:text-foreground text-sm font-bold hover:bg-indigo-700 transition-colors"
             >
               <PlayCircle className="h-4 w-4" />
               Mock Interview
@@ -1255,7 +1255,7 @@ function QuestionPageLayoutInner({
             <div className="px-5 py-4 flex-1">
               <div
                 className={`text-[11px] font-bold uppercase tracking-wider mb-2.5 ${
-                  d ? "text-slate-400" : "text-slate-500"
+                  d ? "text-slate-400" : "text-muted-foreground"
                 }`}
               >
                 In this stack
@@ -1271,13 +1271,13 @@ function QuestionPageLayoutInner({
                             ? "bg-blue-900/40 text-blue-300 font-semibold"
                             : "bg-blue-50 text-blue-700 font-semibold"
                           : d
-                          ? "text-slate-400 hover:text-slate-100 hover:bg-slate-800/70"
-                          : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                          ? "text-slate-400 hover:text-slate-100 hover:dark:bg-surface/70"
+                          : "text-muted-foreground hover:text-foreground hover:bg-surface"
                       }`}
                     >
                       <span
                         className={`mr-1 text-[11px] ${
-                          d ? "text-slate-600" : "text-slate-400"
+                          d ? "text-secondary" : "text-slate-400"
                         }`}
                       >
                         {i + 1}.

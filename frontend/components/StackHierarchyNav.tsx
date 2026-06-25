@@ -75,10 +75,10 @@ export default function StackHierarchyNav({
   return (
     <div className="flex flex-col gap-3">
       {/* Back to domain */}
-      <div className="rounded-xl border border-slate-200 bg-white/90 shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-border bg-background/90 shadow-sm overflow-hidden">
         <Link
           href={`/${domainSlug}`}
-          className="flex items-center gap-2 px-4 py-3 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          className="flex items-center gap-2 px-4 py-3 text-xs font-bold text-secondary hover:text-blue-600 hover:bg-blue-50 transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to All Stacks
@@ -86,11 +86,11 @@ export default function StackHierarchyNav({
       </div>
 
       {/* Hierarchy tree */}
-      <div className="rounded-xl border border-slate-200 bg-white/90 shadow-sm overflow-hidden">
-        <div className="px-4 py-2.5 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
+      <div className="rounded-xl border border-border bg-background/90 shadow-sm overflow-hidden">
+        <div className="px-4 py-2.5 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-border">
           <div className="flex items-center gap-2">
-            <Layers className="h-3.5 w-3.5 text-slate-500" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Study Navigation</span>
+            <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-secondary">Study Navigation</span>
           </div>
         </div>
 
@@ -112,7 +112,7 @@ export default function StackHierarchyNav({
                     "w-full flex items-center justify-between px-3 py-2 text-[11px] font-black uppercase tracking-widest transition-colors",
                     hasActiveStack
                       ? "bg-blue-50 text-blue-700"
-                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                      : "text-muted-foreground hover:bg-surface hover:text-foreground"
                   )}
                 >
                   <span>{cat.name}</span>
@@ -130,7 +130,7 @@ export default function StackHierarchyNav({
                           "flex items-center gap-2 pl-5 pr-3 py-2 text-xs transition-colors border-l-2",
                           isActive
                             ? "border-blue-500 bg-blue-50/70 text-blue-700 font-bold"
-                            : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-800 font-medium"
+                            : "border-transparent text-secondary hover:bg-surface hover:text-foreground font-medium"
                         )}
                       >
                         <BookOpen className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-blue-500" : "text-slate-400")} />
@@ -154,7 +154,7 @@ export default function StackHierarchyNav({
                                     "w-full flex items-center gap-2 pl-3 pr-2 py-1.5 text-[11px] transition-colors",
                                     isActiveSc
                                       ? "bg-indigo-50 text-indigo-700 font-bold"
-                                      : "text-slate-600 hover:bg-slate-50 font-semibold"
+                                      : "text-secondary hover:bg-surface font-semibold"
                                   )}
                                 >
                                   {isExpSc
@@ -171,7 +171,7 @@ export default function StackHierarchyNav({
 
                                 {/* Questions */}
                                 {isExpSc && (
-                                  <div className="ml-3 border-l border-slate-200">
+                                  <div className="ml-3 border-l border-border">
                                     {sc.questions.map((q, idx) => {
                                       const isActiveQ = q.slug === activeQuestionSlug;
                                       return (
@@ -181,8 +181,8 @@ export default function StackHierarchyNav({
                                           className={cn(
                                             "flex items-start gap-2 pl-3 pr-2 py-1.5 text-[11px] transition-colors",
                                             isActiveQ
-                                              ? "bg-blue-600 text-white font-bold"
-                                              : "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                                              ? "bg-blue-600 text-primary-foreground dark:text-foreground font-bold"
+                                              : "text-secondary hover:bg-blue-50 hover:text-blue-700"
                                           )}
                                         >
                                           <span className={cn("shrink-0 mt-0.5", isActiveQ ? "text-blue-200" : "text-slate-300")}>

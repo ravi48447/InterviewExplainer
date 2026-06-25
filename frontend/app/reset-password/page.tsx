@@ -37,7 +37,7 @@ function ResetForm() {
   if (!token) {
     return (
       <div className="text-center space-y-4 py-4">
-        <p className="text-sm text-slate-600">This reset link is missing or invalid.</p>
+        <p className="text-sm text-secondary">This reset link is missing or invalid.</p>
         <Link href="/forgot-password" className="text-sm font-semibold text-blue-600 hover:underline">
           Request a new link
         </Link>
@@ -58,7 +58,7 @@ function ResetForm() {
             id="password" type={show ? 'text' : 'password'} placeholder="At least 6 characters"
             value={password} onChange={(e) => setPassword(e.target.value)} className="pl-10 pr-10" autoFocus required minLength={6}
           />
-          <button type="button" onClick={() => setShow((s) => !s)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600" tabIndex={-1} aria-label="Toggle password">
+          <button type="button" onClick={() => setShow((s) => !s)} className="absolute right-3 top-3 text-slate-400 hover:text-secondary" tabIndex={-1} aria-label="Toggle password">
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
@@ -73,7 +73,7 @@ function ResetForm() {
           />
         </div>
       </div>
-      <Button type="submit" disabled={busy} className="w-full py-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold">
+      <Button type="submit" disabled={busy} className="w-full py-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-primary-foreground dark:text-foreground font-semibold">
         {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
         Reset password & sign in
       </Button>
@@ -83,14 +83,14 @@ function ResetForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center px-4 py-12 bg-slate-50/50 dark:bg-slate-950/50">
+    <div className="min-h-[calc(100vh-120px)] flex flex-col items-center justify-center px-4 py-12 bg-surface/50 dark:bg-slate-950/50">
       <div className="w-full max-w-md animate-fade-in-up">
-        <Card className="border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <Card className="border-border dark:border-border shadow-xl shadow-slate-200/50 dark:shadow-none">
           <CardHeader className="space-y-1 text-center">
-            <CardTitle className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <CardTitle className="text-2xl font-bold tracking-tight text-foreground dark:text-primary-foreground dark:text-foreground">
               Choose a new password
             </CardTitle>
-            <CardDescription className="text-slate-500">
+            <CardDescription className="text-muted-foreground">
               Set a new password for your account.
             </CardDescription>
           </CardHeader>
@@ -98,7 +98,7 @@ export default function ResetPasswordPage() {
             <Suspense fallback={<div className="py-6 text-center text-sm text-slate-400">Loading…</div>}>
               <ResetForm />
             </Suspense>
-            <Link href="/login" className="mt-4 flex items-center justify-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-700">
+            <Link href="/login" className="mt-4 flex items-center justify-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
               <ArrowLeft className="h-4 w-4" /> Back to login
             </Link>
           </CardContent>

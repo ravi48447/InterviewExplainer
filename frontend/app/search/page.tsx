@@ -131,13 +131,13 @@ export default function SearchPage() {
             <Search className="h-3.5 w-3.5" />
             Search
           </div>
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-900 mb-3">
+          <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-foreground mb-3">
             Find Any{" "}
             <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
               Question
             </span>
           </h1>
-          <p className="text-slate-500 text-sm max-w-lg mx-auto">
+          <p className="text-muted-foreground text-sm max-w-lg mx-auto">
             Search across all interview questions, tools, and technologies.
             Instant results powered by local content search.
           </p>
@@ -153,7 +153,7 @@ export default function SearchPage() {
             onChange={(e) => handleInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") doSearch(query); }}
             placeholder="Search questions... (e.g. HashMap, Spring Boot, Docker)"
-            className="w-full pl-14 pr-14 py-5 rounded-2xl bg-white border border-slate-200 focus:border-blue-400 focus:ring-4 focus:ring-blue-100 focus:outline-none text-slate-900 placeholder:text-slate-400 text-base font-medium transition-all shadow-lg shadow-slate-200/50"
+            className="w-full pl-14 pr-14 py-5 rounded-2xl bg-background border border-border focus:border-blue-400 focus:ring-4 focus:ring-blue-100 focus:outline-none text-foreground placeholder:text-slate-400 text-base font-medium transition-all shadow-lg shadow-slate-200/50"
           />
           {loading && (
             <Loader2 className="absolute right-14 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600 animate-spin" />
@@ -161,7 +161,7 @@ export default function SearchPage() {
           {query && (
             <button
               onClick={clearSearch}
-              className="absolute right-5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-slate-100 transition-colors"
+              className="absolute right-5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-surface transition-colors"
             >
               <X className="h-4 w-4 text-slate-400" />
             </button>
@@ -173,7 +173,7 @@ export default function SearchPage() {
           <div className="mb-10 animate-fade-in-up">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="h-4 w-4 text-slate-400" />
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 Popular Searches
               </span>
             </div>
@@ -182,7 +182,7 @@ export default function SearchPage() {
                 <button
                   key={term}
                   onClick={() => handlePopularClick(term)}
-                  className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm"
+                  className="px-4 py-2 rounded-xl bg-background border border-border text-sm font-semibold text-foreground hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm"
                 >
                   {term}
                 </button>
@@ -196,7 +196,7 @@ export default function SearchPage() {
           <div className="flex flex-wrap items-center gap-3 mb-6 animate-fade-in-up" style={{ animationDuration: '0.2s' }}>
             <div className="flex items-center gap-1.5 mr-2">
               <Filter className="h-3.5 w-3.5 text-slate-400" />
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Filter</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Filter</span>
             </div>
 
             {/* Type filters */}
@@ -207,8 +207,8 @@ export default function SearchPage() {
                 className={cn(
                   "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
                   activeCategory === cat.value
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-blue-300",
+                    ? "bg-blue-600 text-primary-foreground dark:text-foreground border-blue-600"
+                    : "bg-background text-secondary border-border hover:border-blue-300",
                 )}
               >
                 {cat.label}
@@ -228,7 +228,7 @@ export default function SearchPage() {
                     "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
                     activeDifficulty === d
                       ? `${cfg.bg} ${cfg.color} ${cfg.border}`
-                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300",
+                      : "bg-background text-secondary border-border hover:border-border",
                   )}
                 >
                   {cfg.label}
@@ -242,25 +242,25 @@ export default function SearchPage() {
           {searched && !loading && (
             <div className="animate-fade-in-up" style={{ animationDuration: '0.2s' }}>
               {results.length === 0 ? (
-                <div className="text-center py-20 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <div className="text-center py-20 bg-background rounded-2xl border border-border shadow-sm">
                   <Search className="h-12 w-12 mx-auto mb-4 text-slate-200" />
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">
+                  <h3 className="text-lg font-bold text-foreground mb-2">
                     No results for &ldquo;{query}&rdquo;
                   </h3>
-                  <p className="text-sm text-slate-500 mb-6">
+                  <p className="text-sm text-muted-foreground mb-6">
                     Try different keywords or browse our content below.
                   </p>
                   <div className="flex items-center justify-center gap-3">
                     <Link
                       href="/domains"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-primary-foreground dark:text-foreground text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors"
                     >
                       <Layers className="h-4 w-4" />
                       Browse Domains
                     </Link>
                     <Link
                       href="/topics"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 border border-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-50 transition-colors"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 border border-border text-foreground text-sm font-bold rounded-xl hover:bg-surface transition-colors"
                     >
                       <BookOpen className="h-4 w-4" />
                       Browse Topics
@@ -272,7 +272,7 @@ export default function SearchPage() {
                   {/* Results header with stats */}
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-slate-900">
+                      <span className="text-sm font-bold text-foreground">
                         {stats.total} result{stats.total !== 1 ? "s" : ""}
                       </span>
                       {stats.total < results.length && (
@@ -305,10 +305,10 @@ export default function SearchPage() {
                         <div key={`${r.domainSlug}-${r.stackSlug}-${r.slug}`}>
                           <Link
                             href={getHref(r)}
-                            className="group flex items-center justify-between p-4 sm:p-5 rounded-xl bg-white border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all"
+                            className="group flex items-center justify-between p-4 sm:p-5 rounded-xl bg-background border border-border hover:border-blue-300 hover:shadow-md transition-all"
                           >
                             <div className="flex-1 min-w-0 mr-4">
-                              <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors line-clamp-1 mb-1.5">
+                              <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 transition-colors line-clamp-1 mb-1.5">
                                 {r.title}
                               </h3>
                               <div className="flex flex-wrap items-center gap-2">
@@ -346,9 +346,9 @@ export default function SearchPage() {
                   </div>
 
                   {filteredResults.length === 0 && results.length > 0 && (
-                    <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
+                    <div className="text-center py-12 bg-background rounded-2xl border border-border">
                       <Filter className="h-8 w-8 mx-auto mb-3 text-slate-200" />
-                      <p className="text-sm font-semibold text-slate-600 mb-2">
+                      <p className="text-sm font-semibold text-secondary mb-2">
                         No results match your filters
                       </p>
                       <button
@@ -369,7 +369,7 @@ export default function SearchPage() {
           <div className="animate-fade-in-up anim-delay-2">
             <div className="flex items-center gap-2 mb-4">
               <Sparkles className="h-4 w-4 text-slate-400" />
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 Quick Links
               </span>
             </div>
@@ -383,14 +383,14 @@ export default function SearchPage() {
                 <Link
                   key={href}
                   href={href}
-                  className="group flex items-center gap-4 p-5 rounded-xl bg-white border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all"
+                  className="group flex items-center gap-4 p-5 rounded-xl bg-background border border-border hover:border-blue-300 hover:shadow-md transition-all"
                 >
                   <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0 group-hover:bg-blue-100 transition-colors">
                     <Icon className="h-5 w-5 text-blue-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{title}</h3>
-                    <p className="text-xs text-slate-500">{desc}</p>
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 transition-colors">{title}</h3>
+                    <p className="text-xs text-muted-foreground">{desc}</p>
                   </div>
                   <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all shrink-0" />
                 </Link>

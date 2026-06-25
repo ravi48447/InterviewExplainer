@@ -67,12 +67,12 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
   ];
   const filtered = exclude ? links.filter((l) => l.key !== exclude) : links;
   return (
-    <section className="mt-12 pt-8 border-t border-slate-200 mb-10">
+    <section className="mt-12 pt-8 border-t border-border mb-10">
       <p className="text-xs font-bold uppercase tracking-widest text-violet-600 mb-1 flex items-center gap-1.5">
         <Compass className="h-3.5 w-3.5" />
         Keep exploring
       </p>
-      <h2 className="text-xl font-black text-slate-900 tracking-tight mb-4">
+      <h2 className="text-xl font-black text-foreground tracking-tight mb-4">
         Browse DSA another way
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -82,12 +82,12 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
             <Link
               key={l.key}
               href={l.href}
-              className="group flex flex-col rounded-2xl border border-slate-200 bg-white hover:border-violet-300 hover:shadow-md hover:-translate-y-0.5 transition-all p-4"
+              className="group flex flex-col rounded-2xl border border-border bg-background hover:border-violet-300 hover:shadow-md hover:-translate-y-0.5 transition-all p-4"
             >
               <div className={`w-9 h-9 rounded-lg border flex items-center justify-center mb-3 ${l.accent}`}>
                 <Icon className="h-4 w-4" />
               </div>
-              <div className="text-sm font-bold text-slate-900 group-hover:text-violet-700 transition-colors">
+              <div className="text-sm font-bold text-foreground group-hover:text-violet-700 transition-colors">
                 {l.label}
               </div>
               <div className="text-[11px] text-slate-400 mt-0.5 leading-snug">{l.blurb}</div>

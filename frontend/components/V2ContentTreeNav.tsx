@@ -81,12 +81,12 @@ export default function V2ContentTreeNav({
   const isFlatLayout = modules.length === 1 && modules[0].moduleSlug === '__flat__';
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm overflow-hidden">
+    <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
+      <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-border">
         <Link
           href={basePath}
-          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-blue-600 transition-colors"
+          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-secondary hover:text-blue-600 transition-colors"
         >
           <ArrowLeft className="h-3 w-3" />
           {toDisplayName(lang)} {toDisplayName(track)}
@@ -115,7 +115,7 @@ export default function V2ContentTreeNav({
                       "w-full flex items-center gap-2 px-2 py-2 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-colors",
                       moduleHasActive
                         ? "text-blue-700 bg-blue-50/60"
-                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                        : "text-muted-foreground hover:text-foreground hover:bg-surface"
                     )}
                   >
                     {isModuleExpanded
@@ -162,7 +162,7 @@ export default function V2ContentTreeNav({
               "w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg transition-colors",
               isActive
                 ? "text-blue-700 font-bold"
-                : "text-slate-600 hover:text-slate-800 hover:bg-slate-50 font-medium"
+                : "text-secondary hover:text-foreground hover:bg-surface font-medium"
             )}
           >
             <Layers className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-blue-500" : "text-slate-400")} />
@@ -190,8 +190,8 @@ export default function V2ContentTreeNav({
                     className={cn(
                       "flex items-start gap-2 pl-2 pr-2 py-1.5 text-[11px] rounded-lg transition-all",
                       isActiveQ
-                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-sm"
-                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-primary-foreground dark:text-foreground font-medium shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-surface"
                     )}
                   >
                     <span className={cn("shrink-0 mt-0.5", isActiveQ ? "text-blue-200" : "text-slate-300")}>

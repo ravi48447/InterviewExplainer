@@ -345,9 +345,9 @@ function CodeBlock({
           tagCls: "bg-emerald-100 text-emerald-700 border-emerald-200",
         }
       : {
-          ring: "border-slate-200",
-          headerBg: "bg-slate-50",
-          headerText: "text-slate-600",
+          ring: "border-border",
+          headerBg: "bg-surface",
+          headerText: "text-secondary",
           iconCls: "text-slate-400",
           IconCmp: FileCode2,
           dotCls: "bg-slate-300",
@@ -368,7 +368,7 @@ function CodeBlock({
 
   return (
     <div
-      className={`group not-prose my-8 rounded-xl border ${accent.ring} bg-white overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-shadow code-pair-item`}
+      className={`group not-prose my-8 rounded-xl border ${accent.ring} bg-background overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-shadow code-pair-item`}
     >
       <div className={`flex items-center gap-2.5 px-4 py-2 border-b border-slate-100 ${accent.headerBg}`}>
         <div className="flex items-center gap-1 shrink-0">
@@ -383,7 +383,7 @@ function CodeBlock({
           </span>
         </div>
         {title && (
-          <span className="text-[12px] text-slate-600 font-medium truncate flex-1">
+          <span className="text-[12px] text-secondary font-medium truncate flex-1">
             {title}
           </span>
         )}
@@ -395,7 +395,7 @@ function CodeBlock({
         )}
         <button
           onClick={onCopy}
-          className="shrink-0 inline-flex items-center gap-1 text-[10.5px] font-semibold text-slate-500 hover:text-slate-800 transition-colors px-1.5 py-0.5 rounded hover:bg-white/70"
+          className="shrink-0 inline-flex items-center gap-1 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-background/70"
           aria-label="Copy code"
         >
           <Copy className="h-3 w-3" />
@@ -435,7 +435,7 @@ type CodeProps = {
 function MarkdownCode({ inline, className, children }: CodeProps) {
   if (inline) {
     return (
-      <code className="bg-slate-50 text-slate-800 rounded px-[5px] py-[1px] text-[0.88em] font-mono border border-slate-200/80">
+      <code className="bg-surface text-foreground rounded px-[5px] py-[1px] text-[0.88em] font-mono border border-border/80">
         {children}
       </code>
     );
@@ -506,7 +506,7 @@ function MarkdownDiv({
 export const baseComponents = {
   p({ children }: { children?: React.ReactNode }) {
     return (
-      <p className="text-[16px] leading-[1.78] text-slate-700 my-4 first:mt-0 last:mb-0">
+      <p className="text-[16px] leading-[1.78] text-foreground my-4 first:mt-0 last:mb-0">
         {children}
       </p>
     );
@@ -514,7 +514,7 @@ export const baseComponents = {
   h2({ children }: { children?: React.ReactNode }) {
     const id = slugify(extractText(children));
     return (
-      <h2 id={id} className="preview-display text-[26px] font-bold text-slate-900 tracking-[-0.01em] mt-12 mb-4 first:mt-0 scroll-mt-24">
+      <h2 id={id} className="preview-display text-[26px] font-bold text-foreground tracking-[-0.01em] mt-12 mb-4 first:mt-0 scroll-mt-24">
         {children}
       </h2>
     );
@@ -524,7 +524,7 @@ export const baseComponents = {
     return (
       <h3
         id={id}
-        className="preview-display text-[20px] font-bold text-slate-900 tracking-[-0.005em] mt-12 mb-3 first:mt-0 scroll-mt-24 relative pl-4 before:content-[''] before:absolute before:left-0 before:top-[8px] before:bottom-[8px] before:w-[3px] before:rounded-full before:bg-slate-200"
+        className="preview-display text-[20px] font-bold text-foreground tracking-[-0.005em] mt-12 mb-3 first:mt-0 scroll-mt-24 relative pl-4 before:content-[''] before:absolute before:left-0 before:top-[8px] before:bottom-[8px] before:w-[3px] before:rounded-full before:bg-slate-200"
       >
         {children}
       </h3>
@@ -532,7 +532,7 @@ export const baseComponents = {
   },
   h4({ children }: { children?: React.ReactNode }) {
     return (
-      <h4 className="text-[12.5px] font-bold text-slate-500 uppercase tracking-[0.12em] mt-7 mb-2">
+      <h4 className="text-[12.5px] font-bold text-muted-foreground uppercase tracking-[0.12em] mt-7 mb-2">
         {children}
       </h4>
     );
@@ -549,47 +549,47 @@ export const baseComponents = {
   },
   li({ children }: { children?: React.ReactNode }) {
     return (
-      <li className="flex items-start gap-3 text-[15.5px] leading-[1.72] text-slate-700">
+      <li className="flex items-start gap-3 text-[15.5px] leading-[1.72] text-foreground">
         <span className="mt-[9px] h-1 w-1 rounded-full bg-slate-400 shrink-0" />
         <span className="flex-1 [&>p]:m-0">{children}</span>
       </li>
     );
   },
   strong({ children }: { children?: React.ReactNode }) {
-    return <strong className="font-semibold text-slate-900">{children}</strong>;
+    return <strong className="font-semibold text-foreground">{children}</strong>;
   },
   em({ children }: { children?: React.ReactNode }) {
-    return <em className="italic text-slate-600">{children}</em>;
+    return <em className="italic text-secondary">{children}</em>;
   },
   code: MarkdownCode,
   pre: MarkdownPre,
   div: MarkdownDiv,
   table({ children }: { children?: React.ReactNode }) {
     return (
-      <div className="my-7 overflow-x-auto rounded-lg border border-slate-200/80 bg-white">
+      <div className="my-7 overflow-x-auto rounded-lg border border-border/80 bg-background">
         <table className="w-full text-[14px] border-collapse">{children}</table>
       </div>
     );
   },
   thead({ children }: { children?: React.ReactNode }) {
-    return <thead className="bg-slate-50/70">{children}</thead>;
+    return <thead className="bg-surface/70">{children}</thead>;
   },
   th({ children }: { children?: React.ReactNode }) {
     return (
-      <th className="px-4 py-2.5 text-left text-[11px] font-bold text-slate-600 uppercase tracking-[0.08em] border-b border-slate-200">
+      <th className="px-4 py-2.5 text-left text-[11px] font-bold text-secondary uppercase tracking-[0.08em] border-b border-border">
         {children}
       </th>
     );
   },
   td({ children }: { children?: React.ReactNode }) {
     return (
-      <td className="px-4 py-3 text-slate-700 align-top border-b border-slate-100 leading-[1.6] [&_code]:text-[12.5px] [&_strong]:text-slate-900">
+      <td className="px-4 py-3 text-foreground align-top border-b border-slate-100 leading-[1.6] [&_code]:text-[12.5px] [&_strong]:text-foreground">
         {children}
       </td>
     );
   },
   tr({ children }: { children?: React.ReactNode }) {
-    return <tr className="last:[&>td]:border-b-0 hover:bg-slate-50/50 transition-colors">{children}</tr>;
+    return <tr className="last:[&>td]:border-b-0 hover:bg-surface/50 transition-colors">{children}</tr>;
   },
   blockquote({ children }: { children?: React.ReactNode }) {
     const { kind, title, body } = detectAlert(children);
@@ -606,16 +606,16 @@ export const baseComponents = {
             </span>
           </div>
           {title && (
-            <div className="text-[15px] font-semibold text-slate-900 mb-1.5 leading-snug">{title}</div>
+            <div className="text-[15px] font-semibold text-foreground mb-1.5 leading-snug">{title}</div>
           )}
-          <div className="text-[14.5px] leading-[1.7] text-slate-700 [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_code]:text-[0.88em]">
+          <div className="text-[14.5px] leading-[1.7] text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_code]:text-[0.88em]">
             {body}
           </div>
         </aside>
       );
     }
     return (
-      <blockquote className="my-6 border-l-[3px] border-slate-200 pl-4 py-1 italic text-slate-600 [&>p]:my-1.5">
+      <blockquote className="my-6 border-l-[3px] border-border pl-4 py-1 italic text-secondary [&>p]:my-1.5">
         {children}
       </blockquote>
     );
@@ -714,7 +714,7 @@ const quickComponents = {
   ...baseComponents,
   p({ children }: { children?: React.ReactNode }) {
     return (
-      <p className="text-[14px] leading-[1.65] text-slate-600 my-2.5 first:mt-0 italic">
+      <p className="text-[14px] leading-[1.65] text-secondary my-2.5 first:mt-0 italic">
         {children}
       </p>
     );
@@ -724,17 +724,17 @@ const quickComponents = {
   },
   li({ children }: { children?: React.ReactNode }) {
     return (
-      <li className="flex items-start gap-3 text-[15.5px] leading-[1.65] text-slate-800 quick-li">
+      <li className="flex items-start gap-3 text-[15.5px] leading-[1.65] text-foreground quick-li">
         <span className="mt-[8px] h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0 ring-[3px] ring-amber-100" />
         <span className="flex-1 [&>p]:m-0">{children}</span>
       </li>
     );
   },
   strong({ children }: { children?: React.ReactNode }) {
-    return <strong className="font-semibold text-slate-900">{children}</strong>;
+    return <strong className="font-semibold text-foreground">{children}</strong>;
   },
   em({ children }: { children?: React.ReactNode }) {
-    return <em className="italic text-slate-500">{children}</em>;
+    return <em className="italic text-muted-foreground">{children}</em>;
   },
 };
 
@@ -765,12 +765,12 @@ export function TableOfContents({ items }: { items: TocItem[] }) {
       <div className="text-[10.5px] font-black uppercase tracking-[0.2em] text-slate-400 mb-3">
         On this page
       </div>
-      <ul className="space-y-1.5 border-l border-slate-200 pl-3">
+      <ul className="space-y-1.5 border-l border-border pl-3">
         {items.map((item) => (
           <li key={item.id}>
             <a
               href={`#${item.id}`}
-              className="block text-[12.5px] leading-snug text-slate-500 hover:text-slate-900 transition-colors py-1"
+              className="block text-[12.5px] leading-snug text-muted-foreground hover:text-foreground transition-colors py-1"
             >
               {item.text}
             </a>
@@ -807,15 +807,15 @@ function ZoneRail({
         <a
           key={it.id}
           href={`#${it.id}`}
-          className="group block py-2 pl-3 border-l-2 border-slate-200 hover:border-slate-900 transition-colors"
+          className="group block py-2 pl-3 border-l-2 border-border hover:border-slate-900 transition-colors"
         >
           <div className="flex items-center gap-2">
             <span className={`h-1.5 w-1.5 rounded-full ${it.accent}`} />
-            <span className="text-[10px] font-black tracking-[0.18em] text-slate-400 group-hover:text-slate-900">
+            <span className="text-[10px] font-black tracking-[0.18em] text-slate-400 group-hover:text-foreground">
               {it.label}
             </span>
           </div>
-          <span className="block mt-0.5 text-[11.5px] font-semibold text-slate-600 group-hover:text-slate-900 leading-tight">
+          <span className="block mt-0.5 text-[11.5px] font-semibold text-secondary group-hover:text-foreground leading-tight">
             {it.sub}
           </span>
         </a>
@@ -841,7 +841,7 @@ export default function PreviewArticle({ article }: Props) {
     "'Crimson Pro', 'Source Serif 4', Charter, 'Iowan Old Style', Palatino, Georgia, serif";
 
   return (
-    <div className="min-h-screen bg-[#fbfaf6] text-slate-800">
+    <div className="min-h-screen bg-[#fbfaf6] text-foreground">
       {/* Subtle paper texture via gradient — magazine feel */}
       <div
         className="pointer-events-none fixed inset-0 opacity-[0.22]"
@@ -978,19 +978,19 @@ export default function PreviewArticle({ article }: Props) {
           {/* Main column */}
           <article className="flex-1 min-w-0 max-w-[860px] xl:max-w-[900px] 2xl:max-w-[960px] mx-auto xl:mx-0">
             {/* ── Hero ───────────────────────────────────────────────────── */}
-            <header className="mb-10 pb-8 border-b border-slate-200/70">
-              <div className="flex items-center gap-2 mb-4 text-[10.5px] font-bold uppercase tracking-[0.22em] text-slate-500">
+            <header className="mb-10 pb-8 border-b border-border/70">
+              <div className="flex items-center gap-2 mb-4 text-[10.5px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
                 <Compass className="h-3 w-3" />
                 <span>Interview Answer</span>
                 <span className="text-slate-300">/</span>
                 <span className="text-slate-400">Java OOP</span>
               </div>
 
-              <h1 className="preview-display text-[32px] sm:text-[38px] lg:text-[44px] font-black leading-[1.1] tracking-[-0.015em] text-slate-900 mb-4">
+              <h1 className="preview-display text-[32px] sm:text-[38px] lg:text-[44px] font-black leading-[1.1] tracking-[-0.015em] text-foreground mb-4">
                 {meta.title}
               </h1>
 
-              <p className="text-[17px] lg:text-[18px] leading-[1.55] text-slate-500 mb-6 max-w-[680px] preview-display italic font-normal">
+              <p className="text-[17px] lg:text-[18px] leading-[1.55] text-muted-foreground mb-6 max-w-[680px] preview-display italic font-normal">
                 {meta.question}
               </p>
 
@@ -1006,7 +1006,7 @@ export default function PreviewArticle({ article }: Props) {
                   </span>
                 )}
                 {meta.reading_time_minutes && (
-                  <span className="px-2.5 py-[3px] rounded-md bg-slate-50 border border-slate-200 text-slate-600 font-semibold flex items-center gap-1 text-[11.5px]">
+                  <span className="px-2.5 py-[3px] rounded-md bg-surface border border-border text-secondary font-semibold flex items-center gap-1 text-[11.5px]">
                     <Clock className="h-3 w-3" />
                     {meta.reading_time_minutes} min read
                   </span>
@@ -1024,7 +1024,7 @@ export default function PreviewArticle({ article }: Props) {
                   {meta.company_tags.map((tag) => (
                     <span
                       key={tag}
-                      className="px-2 py-[2px] rounded bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 font-medium capitalize"
+                      className="px-2 py-[2px] rounded bg-surface border border-border/80 text-[11px] text-secondary font-medium capitalize"
                     >
                       {tag}
                     </span>
@@ -1072,7 +1072,7 @@ export default function PreviewArticle({ article }: Props) {
                   icon={Star}
                   accent="emerald"
                 />
-                <div className="rounded-2xl border border-slate-200/80 bg-white px-6 sm:px-10 py-8 sm:py-10 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                <div className="rounded-2xl border border-border/80 bg-background px-6 sm:px-10 py-8 sm:py-10 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                   <Speakable
                     source={{
                       kind: "legacy",
@@ -1084,7 +1084,7 @@ export default function PreviewArticle({ article }: Props) {
                     <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-emerald-50 text-emerald-600">
                       <Star className="h-3 w-3 fill-emerald-500 text-emerald-500" />
                     </span>
-                    <span className="text-[12.5px] text-slate-500 italic">
+                    <span className="text-[12.5px] text-muted-foreground italic">
                       Read aloud — aim for a calm 2-3 minute delivery, not a checklist.
                     </span>
                   </div>
@@ -1102,7 +1102,7 @@ export default function PreviewArticle({ article }: Props) {
                   icon={BookOpen}
                   accent="slate"
                 />
-                <div className="rounded-2xl border border-slate-200/80 bg-white px-6 sm:px-10 py-8 sm:py-10 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                <div className="rounded-2xl border border-border/80 bg-background px-6 sm:px-10 py-8 sm:py-10 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     rehypePlugins={[
@@ -1127,13 +1127,13 @@ export default function PreviewArticle({ article }: Props) {
                   icon={Compass}
                   accent="indigo"
                 />
-                <ol className="rounded-2xl border border-slate-200/80 bg-white px-6 py-6 sm:px-8 sm:py-7 space-y-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                <ol className="rounded-2xl border border-border/80 bg-background px-6 py-6 sm:px-8 sm:py-7 space-y-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                   {meta.followup_questions.map((q, i) => (
                     <li key={i} className="flex items-start gap-3.5 group">
                       <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 text-[11px] font-black border border-indigo-100">
                         {i + 1}
                       </span>
-                      <span className="text-[15.5px] leading-[1.65] text-slate-700 pt-[1px]">{q}</span>
+                      <span className="text-[15.5px] leading-[1.65] text-foreground pt-[1px]">{q}</span>
                     </li>
                   ))}
                 </ol>
@@ -1141,7 +1141,7 @@ export default function PreviewArticle({ article }: Props) {
             )}
 
             {/* ── Footer meta ────────────────────────────────────────────── */}
-            <footer className="mt-14 pt-6 border-t border-slate-200/70 text-[11.5px] text-slate-400 flex flex-wrap items-center justify-between gap-3">
+            <footer className="mt-14 pt-6 border-t border-border/70 text-[11.5px] text-slate-400 flex flex-wrap items-center justify-between gap-3">
               <span className="flex items-center gap-2">
                 <span className="inline-block h-1 w-1 rounded-full bg-slate-300" />
                 Hand-crafted answer · {meta.last_updated}
@@ -1187,9 +1187,9 @@ export function ZoneHeader({
       iconBg: "bg-emerald-100/80 text-emerald-600",
     },
     slate: {
-      text: "text-slate-600",
-      bg: "bg-slate-50",
-      iconBg: "bg-slate-100 text-slate-600",
+      text: "text-secondary",
+      bg: "bg-surface",
+      iconBg: "bg-surface text-secondary",
     },
     indigo: {
       text: "text-indigo-600",
@@ -1208,7 +1208,7 @@ export function ZoneHeader({
           <div className={`text-[10px] font-black uppercase tracking-[0.2em] ${a.text} mb-0.5`}>
             {kicker}
           </div>
-          <h2 className="preview-display text-[20px] font-bold tracking-[-0.01em] text-slate-900 leading-tight">
+          <h2 className="preview-display text-[20px] font-bold tracking-[-0.01em] text-foreground leading-tight">
             {title}
           </h2>
         </div>

@@ -199,7 +199,7 @@ function MockInterviewHistoryContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white">
+      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-primary-foreground dark:text-foreground">
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -215,27 +215,27 @@ function MockInterviewHistoryContent() {
 
             {/* Stats Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <div className="p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+              <div className="p-4 rounded-xl bg-background/10 backdrop-blur-sm border border-white/20">
                 <p className="text-xs font-bold opacity-75 mb-1">Total Mocks</p>
                 <p className="text-2xl font-black">{stats.totalMocks}</p>
               </div>
-              <div className="p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+              <div className="p-4 rounded-xl bg-background/10 backdrop-blur-sm border border-white/20">
                 <p className="text-xs font-bold opacity-75 mb-1">Avg Score</p>
                 <p className="text-2xl font-black">{stats.averageScore}%</p>
               </div>
-              <div className="p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+              <div className="p-4 rounded-xl bg-background/10 backdrop-blur-sm border border-white/20">
                 <p className="text-xs font-bold opacity-75 mb-1">Best Score</p>
                 <p className="text-2xl font-black">{stats.bestScore}%</p>
               </div>
-              <div className="p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+              <div className="p-4 rounded-xl bg-background/10 backdrop-blur-sm border border-white/20">
                 <p className="text-xs font-bold opacity-75 mb-1">Completion</p>
                 <p className="text-2xl font-black">{stats.completionRate}%</p>
               </div>
-              <div className="p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+              <div className="p-4 rounded-xl bg-background/10 backdrop-blur-sm border border-white/20">
                 <p className="text-xs font-bold opacity-75 mb-1">Total Time</p>
                 <p className="text-2xl font-black">{stats.totalTime}</p>
               </div>
-              <div className="p-4 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
+              <div className="p-4 rounded-xl bg-background/10 backdrop-blur-sm border border-white/20">
                 <p className="text-xs font-bold opacity-75 mb-1">Improvement</p>
                 <p className="text-2xl font-black">{stats.improvement}</p>
               </div>
@@ -252,10 +252,10 @@ function MockInterviewHistoryContent() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-8"
+              className="bg-background rounded-2xl border-2 border-border shadow-lg p-8"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-black text-slate-900">Progress Over Time</h2>
+                <h2 className="text-2xl font-black text-foreground">Progress Over Time</h2>
                 <Button variant="outline" size="sm" className="font-semibold">
                   <Download className="h-4 w-4 mr-2" />
                   Export
@@ -311,15 +311,15 @@ function MockInterviewHistoryContent() {
                   placeholder="Search mock interviews..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border-2 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-sm font-semibold"
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border-2 border-border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-sm font-semibold"
                 />
               </div>
               <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-slate-600" />
+                <Filter className="h-4 w-4 text-secondary" />
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
-                  className="px-4 py-2 rounded-lg border-2 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-sm font-semibold bg-white"
+                  className="px-4 py-2 rounded-lg border-2 border-border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-sm font-semibold bg-background"
                 >
                   <option value="all">All Types</option>
                   <option value="full-mock">Full Mock</option>
@@ -342,19 +342,19 @@ function MockInterviewHistoryContent() {
                     transition={{ delay: index * 0.05 }}
                   >
                     <Link href={`/mock-interviews/results?id=${mock.id}`}>
-                      <div className="group bg-white rounded-2xl border-2 border-slate-200 shadow-sm hover:shadow-lg transition-all p-6 hover:scale-[1.01]">
+                      <div className="group bg-background rounded-2xl border-2 border-border shadow-sm hover:shadow-lg transition-all p-6 hover:scale-[1.01]">
                         <div className="flex items-start gap-6">
                           {/* Icon and Type */}
                           <div className={cn("w-14 h-14 rounded-xl bg-gradient-to-br flex items-center justify-center shrink-0", getTypeColor(mock.type))}>
-                            <Icon className="h-7 w-7 text-white" />
+                            <Icon className="h-7 w-7 text-primary-foreground dark:text-foreground" />
                           </div>
 
                           {/* Main Content */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between mb-3">
                               <div>
-                                <h3 className="text-xl font-black text-slate-900 mb-1">{mock.typeName}</h3>
-                                <div className="flex items-center gap-4 text-xs font-semibold text-slate-500">
+                                <h3 className="text-xl font-black text-foreground mb-1">{mock.typeName}</h3>
+                                <div className="flex items-center gap-4 text-xs font-semibold text-muted-foreground">
                                   <div className="flex items-center gap-1">
                                     <Calendar className="h-3 w-3" />
                                     {new Date(mock.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -404,8 +404,8 @@ function MockInterviewHistoryContent() {
                             {/* Category Breakdown */}
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                               {Object.entries(mock.breakdown).map(([category, score]) => (
-                                <div key={category} className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-                                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 truncate">
+                                <div key={category} className="p-3 rounded-lg bg-surface border border-border">
+                                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1 truncate">
                                     {category === 'coding' && 'Coding'}
                                     {category === 'systemDesign' && 'System Design'}
                                     {category === 'behavioral' && 'Behavioral'}
@@ -437,12 +437,12 @@ function MockInterviewHistoryContent() {
             </div>
 
             {filteredHistory.length === 0 && (
-              <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-12 text-center">
-                <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <div className="bg-background rounded-2xl border-2 border-border shadow-lg p-12 text-center">
+                <div className="w-20 h-20 bg-surface rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <Search className="h-10 w-10 text-slate-400" />
                 </div>
-                <h3 className="text-xl font-black text-slate-900 mb-2">No Results Found</h3>
-                <p className="text-slate-600 mb-6">
+                <h3 className="text-xl font-black text-foreground mb-2">No Results Found</h3>
+                <p className="text-secondary mb-6">
                   Try adjusting your filters or search query
                 </p>
                 <Button onClick={() => { setFilterType('all'); setSearchQuery(''); }} variant="outline">
@@ -463,14 +463,14 @@ function MockInterviewHistoryContent() {
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center">
-                  <Trophy className="h-6 w-6 text-white" />
+                  <Trophy className="h-6 w-6 text-primary-foreground dark:text-foreground" />
                 </div>
                 <div>
                   <p className="text-xs font-bold text-orange-600 uppercase tracking-wider">Latest Achievement</p>
-                  <p className="text-lg font-black text-slate-900">Best Score Yet!</p>
+                  <p className="text-lg font-black text-foreground">Best Score Yet!</p>
                 </div>
               </div>
-              <p className="text-sm text-slate-700 mb-4">
+              <p className="text-sm text-foreground mb-4">
                 You scored <span className="font-black text-emerald-600">85%</span> on your latest Full Mock Interview - your highest score to date!
               </p>
               <div className="flex items-center gap-2 text-xs font-bold text-orange-700">
@@ -484,9 +484,9 @@ function MockInterviewHistoryContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-6"
+              className="bg-background rounded-2xl border-2 border-border shadow-lg p-6"
             >
-              <h3 className="text-lg font-black text-slate-900 mb-4">Quick Actions</h3>
+              <h3 className="text-lg font-black text-foreground mb-4">Quick Actions</h3>
               <div className="space-y-3">
                 <Button asChild className="w-full font-bold bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700">
                   <Link href="/mock-interviews">
@@ -514,9 +514,9 @@ function MockInterviewHistoryContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5 }}
-              className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-6"
+              className="bg-background rounded-2xl border-2 border-border shadow-lg p-6"
             >
-              <h3 className="text-lg font-black text-slate-900 mb-4">Performance Insights</h3>
+              <h3 className="text-lg font-black text-foreground mb-4">Performance Insights</h3>
               <div className="space-y-4">
                 <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
                   <div className="flex items-center gap-2 mb-2">

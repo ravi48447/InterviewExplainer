@@ -9,7 +9,7 @@ export interface User {
   experienceBand: ExperienceBand;
 }
 
-export type ExperienceBand = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+export type ExperienceBand = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | string;
 
 export interface AuthState {
   user: User | null;

@@ -36,10 +36,10 @@ export function PillarCurveCard({
     <div className={cn("min-w-0", disabled && "pointer-events-none opacity-35")}>
       <div
         className={cn(
-          "group relative overflow-hidden rounded-2xl border bg-white transition-all duration-300",
+          "group relative overflow-hidden rounded-2xl border bg-background transition-all duration-300",
           expanded
             ? "border-amber-200/70 shadow-[0_8px_40px_-12px_rgba(245,158,11,0.18)]"
-            : "border-slate-200 shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] hover:border-amber-200/60 hover:shadow-[0_6px_28px_-8px_rgba(245,158,11,0.12)]",
+            : "border-border shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] hover:border-amber-200/60 hover:shadow-[0_6px_28px_-8px_rgba(245,158,11,0.12)]",
         )}
       >
         {/* top accent bar */}
@@ -62,7 +62,7 @@ export function PillarCurveCard({
           {/* pillar number badge */}
           <span
             className={cn(
-              "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-[15px] font-black text-white shadow-md transition-all duration-200",
+              "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-[15px] font-black text-primary-foreground dark:text-foreground shadow-md transition-all duration-200",
               expanded
                 ? "bg-gradient-to-br from-amber-400 via-orange-400 to-amber-500 shadow-amber-200/60 group-hover:scale-105"
                 : "bg-gradient-to-br from-slate-700 to-slate-900 group-hover:from-slate-600 group-hover:to-slate-800",
@@ -79,7 +79,7 @@ export function PillarCurveCard({
             )}>
               Pillar {index + 1}
             </span>
-            <span className="mt-1 block text-[18px] font-bold leading-snug tracking-tight text-slate-900 sm:text-[19px]">
+            <span className="mt-1 block text-[18px] font-bold leading-snug tracking-tight text-foreground sm:text-[19px]">
               {cat.name}
             </span>
             <span className={cn(
@@ -103,7 +103,7 @@ export function PillarCurveCard({
               "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200",
               expanded
                 ? "border-amber-300 bg-amber-50 text-amber-600"
-                : "border-slate-200 bg-white text-slate-400 group-hover:border-slate-300",
+                : "border-border bg-background text-slate-400 group-hover:border-border",
               isRight && "sm:order-first",
             )}
           >
@@ -126,7 +126,7 @@ export function PillarCurveCard({
               "bg-gradient-to-b from-amber-50/40 to-white",
             )}>
               {stacks.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 px-3 py-6 text-center text-[11px] text-slate-500">
+                <p className="rounded-xl border border-dashed border-border bg-surface/50 px-3 py-6 text-center text-[11px] text-muted-foreground">
                   No modules match your filter.
                 </p>
               ) : (
@@ -135,13 +135,13 @@ export function PillarCurveCard({
                     <li key={stack.id} className="list-none">
                       <Link
                         href={`/${domainSlug}/${stack.slug}`}
-                        className="group/link flex items-center gap-3 overflow-hidden rounded-xl border border-slate-200/70 bg-white p-3 shadow-sm transition-all hover:border-amber-200/70 hover:shadow-[0_4px_16px_-4px_rgba(245,158,11,0.15)] sm:p-3.5"
+                        className="group/link flex items-center gap-3 overflow-hidden rounded-xl border border-border/70 bg-background p-3 shadow-sm transition-all hover:border-amber-200/70 hover:shadow-[0_4px_16px_-4px_rgba(245,158,11,0.15)] sm:p-3.5"
                       >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-400 text-[11px] font-black text-white shadow-sm">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-400 text-[11px] font-black text-primary-foreground dark:text-foreground shadow-sm">
                           {String(i + 1).padStart(2, "0")}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-semibold text-slate-800 group-hover/link:text-amber-700">
+                          <span className="block truncate text-[13px] font-semibold text-foreground group-hover/link:text-amber-700">
                             {stack.name}
                           </span>
                           {stack.description && (
@@ -150,7 +150,7 @@ export function PillarCurveCard({
                             </span>
                           )}
                         </span>
-                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
                           <Clock className="h-3 w-3" />
                           {stack.questionCount}
                         </span>
@@ -164,7 +164,7 @@ export function PillarCurveCard({
               )}
               <p className="mt-3 text-center text-[10px] text-slate-400">
                 {filterActive
-                  ? <><strong className="text-slate-600">{totalQ}</strong> matching &middot; <strong className="text-slate-600">{totalQAll}</strong> total</>
+                  ? <><strong className="text-secondary">{totalQ}</strong> matching &middot; <strong className="text-secondary">{totalQAll}</strong> total</>
                   : <>{totalQAll} questions across this pillar</>
                 }
               </p>

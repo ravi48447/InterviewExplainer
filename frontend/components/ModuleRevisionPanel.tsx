@@ -61,21 +61,21 @@ export function ModuleRevisionPanel({
   if (!revision?.sections?.length) return null;
 
   return (
-    <div className={cn("bg-white text-slate-900 [&_a]:text-blue-700", className)}>
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+    <div className={cn("bg-background text-foreground [&_a]:text-blue-700", className)}>
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
         <div>
           <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">
             Revision sheet
           </p>
-          <h3 className="mt-1 text-base font-black leading-tight text-slate-900">
+          <h3 className="mt-1 text-base font-black leading-tight text-foreground">
             {revision.title}
           </h3>
           {revision.estimatedMinutes != null ? (
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-muted-foreground">
               ~{revision.estimatedMinutes} min · {revision.sections.length} sections · save as PDF
             </p>
           ) : (
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-muted-foreground">
               {revision.sections.length} sections · save as PDF below
             </p>
           )}
@@ -83,7 +83,7 @@ export function ModuleRevisionPanel({
         <button
           type="button"
           onClick={() => openRevisionPdfWindow(stackLabel, revision)}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-[11px] font-bold text-slate-700 shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-[11px] font-bold text-foreground shadow-sm transition-colors hover:border-slate-400 hover:bg-surface"
         >
           <Printer className="h-3.5 w-3.5" />
           Print / PDF
@@ -96,9 +96,9 @@ export function ModuleRevisionPanel({
               <span className="font-mono text-[10px] font-bold tabular-nums text-slate-400">
                 {String(idx + 1).padStart(2, "0")}
               </span>
-              <h4 className="m-0 text-[13px] font-black text-slate-900">{sec.title}</h4>
+              <h4 className="m-0 text-[13px] font-black text-foreground">{sec.title}</h4>
             </div>
-            <div className="prose prose-sm max-w-none prose-slate prose-headings:font-black prose-headings:text-slate-900 [&_p]:text-slate-800 [&_li]:text-slate-800 [&_td]:text-slate-800 [&_th]:text-slate-900">
+            <div className="prose prose-sm max-w-none prose-slate prose-headings:font-black prose-headings:text-foreground [&_p]:text-foreground [&_li]:text-foreground [&_td]:text-foreground [&_th]:text-foreground">
               <MarkdownContent content={sec.body} />
             </div>
           </div>

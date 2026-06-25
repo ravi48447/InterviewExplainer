@@ -156,13 +156,13 @@ function sectionToContent(s: V2AnswerSection): string {
       .map(([k, v]) => `**${k}:** ${String(v)}`)
       .join('\n\n');
   }
-  const items = (s as Record<string, unknown>).items;
+  const items = (s as any).items;
   if (Array.isArray(items)) {
     return items
       .map(item => typeof item === 'string' ? `- ${item}` : `- ${JSON.stringify(item)}`)
       .join('\n');
   }
-  const points = (s as Record<string, unknown>).points;
+  const points = (s as any).points;
   if (Array.isArray(points)) {
     return points
       .map(item => typeof item === 'string' ? `- ${item}` : `- ${JSON.stringify(item)}`)

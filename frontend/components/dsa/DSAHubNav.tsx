@@ -62,7 +62,7 @@ export function DSAHubNav({ items }: { items: HubNavItem[] }) {
   };
 
   return (
-    <div className="sticky top-16 z-30 border-b border-slate-200 bg-white/85 backdrop-blur-md">
+    <div className="sticky top-16 z-30 border-b border-border bg-background/85 backdrop-blur-md">
       <div className="mx-auto max-w-screen-2xl px-5 sm:px-8 lg:px-12">
         <nav className="flex items-center gap-1 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {items.map((item) => {
@@ -75,8 +75,8 @@ export function DSAHubNav({ items }: { items: HubNavItem[] }) {
                 onClick={handleClick(item.id)}
                 className={`group inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
                   isActive
-                    ? "bg-violet-600 text-white"
-                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                    ? "bg-violet-600 text-primary-foreground dark:text-foreground"
+                    : "text-muted-foreground hover:bg-surface hover:text-foreground"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />

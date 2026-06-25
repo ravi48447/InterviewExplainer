@@ -27,7 +27,7 @@ export function DSALangToggle({ className = "" }: { className?: string }) {
       role="tablist"
       aria-label="Code language"
       className={cn(
-        "inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm",
+        "inline-flex items-center rounded-lg border border-border bg-background p-0.5 shadow-sm",
         className,
       )}
     >
@@ -43,8 +43,8 @@ export function DSALangToggle({ className = "" }: { className?: string }) {
             className={cn(
               "px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md transition-colors",
               active
-                ? "bg-violet-600 text-white shadow-sm"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100",
+                ? "bg-violet-600 text-primary-foreground dark:text-foreground shadow-sm"
+                : "text-secondary hover:text-foreground hover:bg-surface",
             )}
           >
             {LANG_LABEL[lang]}

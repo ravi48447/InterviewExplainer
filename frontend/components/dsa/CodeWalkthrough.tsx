@@ -215,7 +215,7 @@ export function CodeWalkthrough({
   const fileBase = "solution";
 
   return (
-    <div className="rounded-xl overflow-hidden my-3 shadow-xl ring-1 ring-slate-950/5 border border-slate-700">
+    <div className="rounded-xl overflow-hidden my-3 shadow-xl ring-1 ring-slate-950/5 border border-border">
       {/* Tab bar — filename + lang pill + copy */}
       <div className="flex items-stretch justify-between bg-[#21252b] border-b border-[#181a1f]">
         <div className="flex items-stretch">
@@ -224,7 +224,7 @@ export function CodeWalkthrough({
             <span className="text-[11px] font-mono text-slate-300">
               {fileBase}.{fileExt}
             </span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider bg-slate-900 text-sky-300 border border-slate-700">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider dark:bg-surface text-sky-300 border border-border">
               {LANG_DISPLAY[active] ?? active}
             </span>
           </div>
@@ -271,7 +271,7 @@ export function CodeWalkthrough({
                         ? "text-amber-300/90 bg-amber-400/10 border-amber-500/40 font-bold"
                         : isExplained
                           ? "text-amber-200 bg-amber-400/20 border-amber-400/60 font-black"
-                          : "text-slate-500 border-slate-700/60 bg-[#21252b]",
+                          : "text-muted-foreground border-border/60 bg-[#21252b]",
                     )}
                     style={{ minWidth: `${gutterWidth + 2}ch` }}
                   >
@@ -333,7 +333,7 @@ export function CodeWalkthrough({
               lines above it = what you'd say out loud.
             </span>
           </span>
-          <span className="ml-auto text-slate-500 font-mono text-[10.5px]">
+          <span className="ml-auto text-muted-foreground font-mono text-[10.5px]">
             {rawLines.length} lines
           </span>
         </div>

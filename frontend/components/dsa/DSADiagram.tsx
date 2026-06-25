@@ -35,8 +35,8 @@ function DiagramShell({
   title,
   caption,
   input,
-  toneClass = "border-slate-200",
-  headerClass = "bg-slate-50 border-slate-200 text-slate-700",
+  toneClass = "border-border",
+  headerClass = "bg-surface border-border text-foreground",
   children,
 }: {
   title: string;
@@ -49,7 +49,7 @@ function DiagramShell({
   return (
     <figure
       className={cn(
-        "my-4 rounded-lg border bg-white overflow-hidden",
+        "my-4 rounded-lg border bg-background overflow-hidden",
         toneClass,
       )}
     >
@@ -63,13 +63,13 @@ function DiagramShell({
           {title}
         </span>
         {input && (
-          <code className="text-[11px] font-mono text-slate-700 bg-white border border-slate-200 rounded px-2 py-0.5">
+          <code className="text-[11px] font-mono text-foreground bg-background border border-border rounded px-2 py-0.5">
             {input}
           </code>
         )}
       </figcaption>
       {caption && (
-        <p className="px-4 pt-3 text-[12.5px] text-slate-600 leading-relaxed italic">
+        <p className="px-4 pt-3 text-[12.5px] text-secondary leading-relaxed italic">
           {caption}
         </p>
       )}
@@ -159,18 +159,18 @@ function HashmapStateDiagram({
         {diagram.frames.map((f, i) => (
           <li key={i} className="grid grid-cols-1 md:grid-cols-[140px_1fr] gap-3 items-start">
             <div className="md:pt-1.5">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Frame {i + 1}
               </div>
-              <code className="block mt-0.5 text-[11.5px] font-mono text-slate-800">
+              <code className="block mt-0.5 text-[11.5px] font-mono text-foreground">
                 {f.step}
               </code>
-              <p className="text-[11.5px] text-slate-600 mt-1 leading-relaxed">
+              <p className="text-[11.5px] text-secondary mt-1 leading-relaxed">
                 {f.action}
               </p>
             </div>
 
-            <div className="rounded-md border border-slate-200 bg-slate-50/60 p-2">
+            <div className="rounded-md border border-border bg-surface/60 p-2">
               {f.entries.length === 0 ? (
                 <div className="px-3 py-2 text-[11.5px] font-mono text-slate-400 italic">
                   map = {`{}`} (empty)
@@ -191,24 +191,24 @@ function HashmapStateDiagram({
                               ? "border-amber-500"
                               : isHighlighted
                                 ? "border-violet-500 bg-violet-50"
-                                : "border-slate-300 bg-white",
+                                : "border-border bg-background",
                         )}
                       >
                         <span
                           className={cn(
                             "px-2 py-1 font-bold",
                             isLookup && f.found
-                              ? "bg-emerald-500 text-white"
+                              ? "bg-emerald-500 text-primary-foreground dark:text-foreground"
                               : isLookup
-                                ? "bg-amber-500 text-white"
+                                ? "bg-amber-500 text-primary-foreground dark:text-foreground"
                                 : isHighlighted
-                                  ? "bg-violet-500 text-white"
-                                  : "bg-slate-100 text-slate-800",
+                                  ? "bg-violet-500 text-primary-foreground dark:text-foreground"
+                                  : "bg-surface text-foreground",
                           )}
                         >
                           {e.key}
                         </span>
-                        <span className="px-2 py-1 text-slate-700">
+                        <span className="px-2 py-1 text-foreground">
                           → {e.value}
                         </span>
                       </div>
@@ -236,7 +236,7 @@ function HashmapStateDiagram({
         ))}
       </ol>
 
-      <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-3 text-[10.5px] text-slate-500">
+      <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-3 text-[10.5px] text-muted-foreground">
         <Legend swatch="bg-violet-500" label="Just inserted / updated" />
         <Legend swatch="bg-amber-500" label="Looking up" />
         <Legend swatch="bg-emerald-500" label="Match" />
@@ -272,18 +272,18 @@ function ArrayStateDiagram({ diagram }: { diagram: DSAArrayStateDiagram }) {
               className="grid grid-cols-1 md:grid-cols-[140px_1fr] gap-3 items-start"
             >
               <div className="md:pt-1.5">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   Frame {i + 1}
                 </div>
-                <code className="block mt-0.5 text-[11.5px] font-mono text-slate-800">
+                <code className="block mt-0.5 text-[11.5px] font-mono text-foreground">
                   {f.step}
                 </code>
-                <p className="text-[11.5px] text-slate-600 mt-1 leading-relaxed">
+                <p className="text-[11.5px] text-secondary mt-1 leading-relaxed">
                   {f.action}
                 </p>
               </div>
 
-              <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 overflow-x-auto">
+              <div className="rounded-md border border-border bg-surface/60 p-3 overflow-x-auto">
                 <div className="flex items-end gap-1">
                   {f.values.map((v, idx) => {
                     const ptrs = pointersByIndex.get(idx) ?? [];
@@ -311,8 +311,8 @@ function ArrayStateDiagram({ diagram }: { diagram: DSAArrayStateDiagram }) {
                             isH
                               ? "border-emerald-500 bg-emerald-50 text-emerald-900 font-bold"
                               : isD
-                                ? "border-slate-200 bg-slate-100 text-slate-400"
-                                : "border-slate-300 bg-white text-slate-800",
+                                ? "border-border bg-surface text-slate-400"
+                                : "border-border bg-background text-foreground",
                           )}
                         >
                           {v}

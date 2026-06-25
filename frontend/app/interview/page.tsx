@@ -65,31 +65,31 @@ export default function InterviewIndexPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-slate-800 selection:bg-blue-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-blue-200">
       <div className="w-full min-w-0 min-h-screen flex gap-6 px-6 py-6">
 
         {/* ─── LEFT SIDEBAR ─── */}
         <aside className="hidden lg:flex w-[280px] shrink-0 flex-col gap-4 self-start sticky top-6">
-          <div className="rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
+          <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-border">
               <div className="flex items-center gap-2">
                 <Code2 className="h-3.5 w-3.5 text-blue-600" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Interview Hub</h3>
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Hub</h3>
               </div>
             </div>
             <div className="p-3 space-y-1">
               <Link href="/interview" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg border border-blue-200">
                 <span>All Languages</span>
               </Link>
-              <Link href="/tools" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
+              <Link href="/tools" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
                 <span>Tools & Technologies</span>
                 <ArrowUpRight className="h-3 w-3" />
               </Link>
-              <Link href="/dsa" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
+              <Link href="/dsa" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
                 <span>DSA Problems</span>
                 <ArrowUpRight className="h-3 w-3" />
               </Link>
-              <Link href="/domains" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
+              <Link href="/domains" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
                 <span>Browse All Paths</span>
                 <ArrowUpRight className="h-3 w-3" />
               </Link>
@@ -100,11 +100,11 @@ export default function InterviewIndexPage() {
           <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 to-cyan-50 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
               <Target className="h-4 w-4 text-teal-600" />
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Why InterviewExplainer</h3>
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Why InterviewExplainer</h3>
             </div>
             <div className="space-y-2">
               {benefits.map((b, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs text-slate-700">
+                <div key={i} className="flex items-start gap-2 text-xs text-foreground">
                   <CheckCircle2 className="h-3.5 w-3.5 text-teal-600 mt-0.5 shrink-0" />
                   <span>{b}</span>
                 </div>
@@ -116,7 +116,7 @@ export default function InterviewIndexPage() {
           <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
               <BookMarked className="h-4 w-4 text-indigo-600" />
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">How to Use</h3>
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">How to Use</h3>
             </div>
             <div className="space-y-3">
               {[
@@ -124,9 +124,9 @@ export default function InterviewIndexPage() {
                 { icon: "2️⃣", text: "Select your experience level." },
                 { icon: "3️⃣", text: "Open a stack, explore questions, and start learning." },
               ].map((tip, i) => (
-                <div key={i} className="flex items-start gap-2 bg-white/60 rounded-lg p-2 border border-indigo-100">
+                <div key={i} className="flex items-start gap-2 bg-background/60 rounded-lg p-2 border border-indigo-100">
                   <span className="text-sm leading-none mt-0.5">{tip.icon}</span>
-                  <p className="text-xs text-slate-700 leading-relaxed">{tip.text}</p>
+                  <p className="text-xs text-foreground leading-relaxed">{tip.text}</p>
                 </div>
               ))}
             </div>
@@ -136,29 +136,29 @@ export default function InterviewIndexPage() {
         {/* ─── MAIN COLUMN ─── */}
         <main className="flex-1 min-w-0">
           {/* Hero Header */}
-          <header className="mb-6 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+          <header className="mb-6 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
             <div className="relative px-6 py-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
               <div className="flex flex-wrap gap-2 mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
                   Interview Preparation
                 </span>
               </div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-3">
+              <h1 className="text-3xl font-black tracking-tight text-foreground mb-3">
                 Interview Questions
               </h1>
-              <p className="text-sm text-slate-700 leading-relaxed max-w-3xl">
+              <p className="text-sm text-foreground leading-relaxed max-w-3xl">
                 Curated questions organized by language, track, and experience level. Deep explanations, real-world code, and what interviewers actually want to hear.
               </p>
             </div>
-            <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+            <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
                   <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                     <Code2 className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
-                    <div className="text-xs text-slate-500 font-medium">Languages</div>
-                    <div className="text-lg font-bold text-slate-900">{langData.length}</div>
+                    <div className="text-xs text-muted-foreground font-medium">Languages</div>
+                    <div className="text-lg font-bold text-foreground">{langData.length}</div>
                   </div>
                 </div>
                 <div className="h-10 w-px bg-slate-200" />
@@ -167,8 +167,8 @@ export default function InterviewIndexPage() {
                     <Layers className="h-5 w-5 text-purple-600" />
                   </div>
                   <div>
-                    <div className="text-xs text-slate-500 font-medium">Tech Stacks</div>
-                    <div className="text-lg font-bold text-slate-900">{grandTotalStacks}</div>
+                    <div className="text-xs text-muted-foreground font-medium">Tech Stacks</div>
+                    <div className="text-lg font-bold text-foreground">{grandTotalStacks}</div>
                   </div>
                 </div>
                 <div className="h-10 w-px bg-slate-200" />
@@ -177,8 +177,8 @@ export default function InterviewIndexPage() {
                     <BookOpen className="h-5 w-5 text-emerald-600" />
                   </div>
                   <div>
-                    <div className="text-xs text-slate-500 font-medium">Total Questions</div>
-                    <div className="text-lg font-bold text-slate-900">{grandTotalQs}</div>
+                    <div className="text-xs text-muted-foreground font-medium">Total Questions</div>
+                    <div className="text-lg font-bold text-foreground">{grandTotalQs}</div>
                   </div>
                 </div>
               </div>
@@ -192,9 +192,9 @@ export default function InterviewIndexPage() {
                 <div className="flex items-center gap-3 mb-4 px-2">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
-                      <span className="text-white text-xs font-bold">{lang.charAt(0).toUpperCase()}</span>
+                      <span className="text-primary-foreground dark:text-foreground text-xs font-bold">{lang.charAt(0).toUpperCase()}</span>
                     </div>
-                    <h2 className="text-lg font-black text-slate-900 tracking-tight">{toDisplayName(lang)}</h2>
+                    <h2 className="text-lg font-black text-foreground tracking-tight">{toDisplayName(lang)}</h2>
                   </div>
                   <span className="text-xs text-slate-400 font-medium">{totalStacks} stacks · {totalQs} Qs</span>
                   <div className="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent" />
@@ -202,19 +202,19 @@ export default function InterviewIndexPage() {
 
                 <div className="grid grid-cols-1 gap-3">
                   {tracks.map(({ track, levels, totalQs: trackQs }) => (
-                    <div key={track} className="border rounded-[12px] border-slate-200 shadow-sm bg-[#f8f9fa] overflow-hidden hover:border-slate-300 hover:shadow-md transition-all">
+                    <div key={track} className="border rounded-[12px] border-border shadow-sm bg-[#f8f9fa] overflow-hidden hover:border-border hover:shadow-md transition-all">
                       <div className="flex items-center justify-between p-4 sm:px-5">
                         <div className="flex items-center gap-3">
-                          <div className="shrink-0 w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400">
+                          <div className="shrink-0 w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center text-slate-400">
                             <TrendingUp className="h-3.5 w-3.5" />
                           </div>
                           <div>
-                            <h3 className="text-[15px] font-bold text-slate-800 tracking-tight">{toDisplayName(track)}</h3>
-                            <p className="text-[13px] text-slate-500">{levels.length} levels · {trackQs} questions</p>
+                            <h3 className="text-[15px] font-bold text-foreground tracking-tight">{toDisplayName(track)}</h3>
+                            <p className="text-[13px] text-muted-foreground">{levels.length} levels · {trackQs} questions</p>
                           </div>
                         </div>
                       </div>
-                      <div className="border-t border-slate-100 bg-white px-4 py-3">
+                      <div className="border-t border-slate-100 bg-background px-4 py-3">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                           {levels.map(({ level, stackCount, questionCount }) => {
                             const lm = LEVEL_META[level];
@@ -229,12 +229,12 @@ export default function InterviewIndexPage() {
                                     <GraduationCap className="h-3 w-3" style={{ color: lm.color }} />
                                   </div>
                                   <div>
-                                    <span className="text-[13px] font-bold text-slate-800 group-hover/link:text-[#2e64e5] transition-colors">{lm.label}</span>
+                                    <span className="text-[13px] font-bold text-foreground group-hover/link:text-[#2e64e5] transition-colors">{lm.label}</span>
                                     <span className="text-[11px] text-slate-400 ml-1.5">{lm.range}</span>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[11px] font-medium text-slate-500">{stackCount}S · {questionCount}Q</span>
+                                  <span className="text-[11px] font-medium text-muted-foreground">{stackCount}S · {questionCount}Q</span>
                                   <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover/link:text-[#2e64e5] group-hover/link:translate-x-0.5 transition-all" />
                                 </div>
                               </Link>
@@ -250,7 +250,7 @@ export default function InterviewIndexPage() {
           </div>
 
           {langData.length === 0 && (
-            <div className="text-center py-20 text-slate-500 bg-white/90 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm">
+            <div className="text-center py-20 text-muted-foreground bg-background/90 backdrop-blur-sm rounded-xl border border-border shadow-sm">
               <p className="text-sm">No content available yet. Check back soon.</p>
             </div>
           )}
@@ -263,41 +263,41 @@ export default function InterviewIndexPage() {
             <div className="px-4 py-3 bg-gradient-to-r from-purple-100 to-pink-100 border-b border-purple-200">
               <div className="flex items-center gap-2">
                 <Zap className="h-4 w-4 text-purple-600" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">At a Glance</h3>
+                <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">At a Glance</h3>
               </div>
             </div>
             <div className="p-4">
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="bg-white rounded-lg p-3 border border-purple-200 shadow-sm">
+                <div className="bg-background rounded-lg p-3 border border-purple-200 shadow-sm">
                   <div className="text-[10px] font-bold uppercase tracking-widest text-purple-600 mb-1">Languages</div>
-                  <div className="text-2xl font-black text-slate-900 leading-none">{langData.length}</div>
+                  <div className="text-2xl font-black text-foreground leading-none">{langData.length}</div>
                 </div>
-                <div className="bg-white rounded-lg p-3 border border-purple-200 shadow-sm">
+                <div className="bg-background rounded-lg p-3 border border-purple-200 shadow-sm">
                   <div className="text-[10px] font-bold uppercase tracking-widest text-purple-600 mb-1">Questions</div>
-                  <div className="text-2xl font-black text-slate-900 leading-none">{grandTotalQs}</div>
+                  <div className="text-2xl font-black text-foreground leading-none">{grandTotalQs}</div>
                 </div>
               </div>
               <div className="space-y-2 pt-3 border-t border-purple-200">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-600 font-medium">Tech Stacks</span>
-                  <span className="font-bold text-slate-900">{grandTotalStacks}</span>
+                  <span className="text-secondary font-medium">Tech Stacks</span>
+                  <span className="font-bold text-foreground">{grandTotalStacks}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-600 font-medium">Levels</span>
-                  <span className="font-bold text-slate-900">Beginner · Intermediate · Advanced</span>
+                  <span className="text-secondary font-medium">Levels</span>
+                  <span className="font-bold text-foreground">Beginner · Intermediate · Advanced</span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Available Languages */}
-          <div className="rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Quick Jump</h3>
+          <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-border">
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Quick Jump</h3>
             </div>
             <div className="p-3 space-y-1">
               {langData.map(({ lang, totalQs }) => (
-                <a key={lang} href={`#${lang}`} className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
+                <a key={lang} href={`#${lang}`} className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all border border-transparent hover:border-blue-200">
                   <span>{toDisplayName(lang)}</span>
                   <span className="text-slate-400">{totalQs} Qs</span>
                 </a>
@@ -309,9 +309,9 @@ export default function InterviewIndexPage() {
           <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="h-4 w-4 text-amber-600" />
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wide">Pro Tip</h3>
+              <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Pro Tip</h3>
             </div>
-            <p className="text-xs text-slate-700 leading-relaxed">
+            <p className="text-xs text-foreground leading-relaxed">
               Start with your primary language, pick the track closest to your target role, and begin with medium difficulty questions — they appear most in interviews.
             </p>
           </div>

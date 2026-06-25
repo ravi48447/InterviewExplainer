@@ -200,24 +200,24 @@ const totalQuestions = CATEGORIES.reduce((sum, c) => sum + c.count, 0);
 
 export default function BehavioralPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50/20 to-orange-50/20 font-sans text-slate-800 selection:bg-amber-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50/20 to-orange-50/20 font-sans text-foreground selection:bg-amber-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
           <Link
             href="/"
-            className="hover:text-slate-600 flex items-center gap-1"
+            className="hover:text-secondary flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-600 font-medium">
+          <span className="text-secondary font-medium">
             Behavioral Interview
           </span>
         </nav>
 
         {/* Hero */}
-        <header className="mb-12 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+        <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
           <div className="relative px-8 py-8 bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
             <div className="flex items-center gap-2 mb-3">
               <Brain className="h-5 w-5 text-amber-600" />
@@ -225,27 +225,27 @@ export default function BehavioralPage() {
                 Soft Skills & Culture Fit
               </span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 mb-3">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               Behavioral Interview Prep
             </h1>
-            <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
               Behavioral questions are asked in every single tech interview — at
               Amazon it&apos;s 50% of the evaluation. Master the STAR framework,
               practice with {totalQuestions}+ real questions organized by theme,
               and prepare company-specific responses for FAANG and top tech.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
                   <Layers className="h-5 w-5 text-amber-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Categories
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {CATEGORIES.length}
                   </div>
                 </div>
@@ -256,10 +256,10 @@ export default function BehavioralPage() {
                   <BookOpen className="h-5 w-5 text-orange-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Total Questions
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {totalQuestions}+
                   </div>
                 </div>
@@ -270,10 +270,10 @@ export default function BehavioralPage() {
                   <Briefcase className="h-5 w-5 text-rose-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Company-Specific
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {COMPANY_SPECIFIC.length}
                   </div>
                 </div>
@@ -286,11 +286,11 @@ export default function BehavioralPage() {
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
             <Target className="h-5 w-5 text-amber-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               The STAR Method
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5 max-w-2xl">
+          <p className="text-sm text-muted-foreground mb-5 max-w-2xl">
             Every behavioral answer should follow this framework. Interviewers
             are trained to listen for it.
           </p>
@@ -298,19 +298,19 @@ export default function BehavioralPage() {
             {STAR_STEPS.map((step) => (
               <div
                 key={step.letter}
-                className="rounded-xl border border-slate-200 bg-white shadow-sm p-5"
+                className="rounded-xl border border-border bg-background shadow-sm p-5"
               >
                 <div
                   className={`w-12 h-12 rounded-xl bg-gradient-to-br ${step.color} flex items-center justify-center mb-3`}
                 >
-                  <span className="text-xl font-black text-white">
+                  <span className="text-xl font-black text-primary-foreground dark:text-foreground">
                     {step.letter}
                   </span>
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 mb-1.5">
+                <h3 className="text-sm font-bold text-foreground mb-1.5">
                   {step.title}
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   {step.desc}
                 </p>
               </div>
@@ -322,11 +322,11 @@ export default function BehavioralPage() {
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
             <MessageSquare className="h-5 w-5 text-orange-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               Question Categories
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5 max-w-2xl">
+          <p className="text-sm text-muted-foreground mb-5 max-w-2xl">
             Browse questions by theme. Each category includes sample answers
             with the STAR method applied, plus tips on what interviewers look
             for.
@@ -336,7 +336,7 @@ export default function BehavioralPage() {
               <Link
                 key={cat.slug}
                 href={`/behavioral/${cat.slug}`}
-                className="group rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-amber-300 transition-all p-5"
+                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-amber-300 transition-all p-5"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div
@@ -345,16 +345,16 @@ export default function BehavioralPage() {
                     <cat.icon className={`h-5 w-5 ${cat.color}`} />
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-500">
+                    <span className="text-xs font-semibold text-muted-foreground">
                       {cat.count} Qs
                     </span>
                     <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
                   </div>
                 </div>
-                <h3 className="text-[15px] font-bold text-slate-900 group-hover:text-amber-600 transition-colors mb-1.5">
+                <h3 className="text-[15px] font-bold text-foreground group-hover:text-amber-600 transition-colors mb-1.5">
                   {cat.name}
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   {cat.desc}
                 </p>
               </Link>
@@ -366,11 +366,11 @@ export default function BehavioralPage() {
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
             <Briefcase className="h-5 w-5 text-rose-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               Company-Specific Behavioral Prep
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5 max-w-2xl">
+          <p className="text-sm text-muted-foreground mb-5 max-w-2xl">
             Every company has different behavioral expectations. Amazon lives
             and breathes Leadership Principles. Google values Googleyness. We
             break it down for each.
@@ -380,11 +380,11 @@ export default function BehavioralPage() {
               <Link
                 key={comp.slug}
                 href={`/behavioral/company/${comp.slug}`}
-                className="group flex items-start gap-4 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-amber-300 transition-all p-5"
+                className="group flex items-start gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-amber-300 transition-all p-5"
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <h3 className="text-[15px] font-bold text-slate-900 group-hover:text-amber-600 transition-colors">
+                    <h3 className="text-[15px] font-bold text-foreground group-hover:text-amber-600 transition-colors">
                       {comp.name}
                     </h3>
                     <span
@@ -396,7 +396,7 @@ export default function BehavioralPage() {
                       {comp.count} areas
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     {comp.desc}
                   </p>
                 </div>
@@ -408,17 +408,17 @@ export default function BehavioralPage() {
 
         {/* CTA */}
         <section className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-8 text-center mb-12">
-          <h2 className="text-2xl font-black text-slate-900 mb-3">
+          <h2 className="text-2xl font-black text-foreground mb-3">
             Behavioral Prep Is Part of Every Interview Domain
           </h2>
-          <p className="text-sm text-slate-600 mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
             Select your domain and get behavioral questions mapped to your
             experience level alongside Q&A, system design, DSA, and a complete
             roadmap.
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

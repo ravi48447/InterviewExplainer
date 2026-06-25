@@ -30,11 +30,11 @@ function HighwayStrip({ className }: { className?: string }) {
       {/* asphalt texture gradient */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#22263a] via-[#1a1e2a] to-[#14172200]" />
       {/* left shoulder double line */}
-      <div className="absolute inset-y-0 left-2.5 w-px bg-white/10" />
-      <div className="absolute inset-y-0 left-3.5 w-px bg-white/6" />
+      <div className="absolute inset-y-0 left-2.5 w-px bg-background/10" />
+      <div className="absolute inset-y-0 left-3.5 w-px bg-background/6" />
       {/* right shoulder double line */}
-      <div className="absolute inset-y-0 right-2.5 w-px bg-white/10" />
-      <div className="absolute inset-y-0 right-3.5 w-px bg-white/6" />
+      <div className="absolute inset-y-0 right-2.5 w-px bg-background/10" />
+      <div className="absolute inset-y-0 right-3.5 w-px bg-background/6" />
       {/* centre dashed yellow lane divider */}
       <div
         className="absolute inset-y-0 left-1/2 w-[3px] -translate-x-1/2"
@@ -65,7 +65,7 @@ function RoadStop({ n, expanded, compact }: { n: number; expanded: boolean; comp
       )}
       <div
         className={cn(
-          "relative flex shrink-0 items-center justify-center rounded-2xl border-2 font-black text-white transition-all duration-300",
+          "relative flex shrink-0 items-center justify-center rounded-2xl border-2 font-black text-primary-foreground dark:text-foreground transition-all duration-300",
           compact ? "h-10 w-10 text-xs" : "h-12 w-12 text-sm lg:h-[3.25rem] lg:w-[3.25rem] lg:text-base",
           expanded
             ? "border-amber-300/80 bg-gradient-to-br from-amber-400 via-orange-400 to-amber-500 shadow-lg shadow-amber-900/40"

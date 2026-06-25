@@ -44,14 +44,14 @@ export function ArchitectureMapLayout({
       {/* Quick context */}
       {directAnswer && (
         <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
-          <p className="text-sm font-semibold text-slate-800">{directAnswer}</p>
+          <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
 
       {/* Architecture Diagram */}
       {diagram && (
-        <div className="rounded-xl border-2 border-slate-200 bg-slate-950 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-700">
+        <div className="rounded-xl border-2 border-border bg-slate-950 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-border">
             <Network className="h-4 w-4 text-slate-400" />
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Architecture Diagram</span>
           </div>
@@ -63,9 +63,9 @@ export function ArchitectureMapLayout({
 
       {/* Overview */}
       {overview && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">How It Works</span>
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-surface border-b border-border">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">How It Works</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={overview.content} stripTopHeading />
@@ -75,9 +75,9 @@ export function ArchitectureMapLayout({
 
       {/* Deep Explanation */}
       {deepExplanation && !overview && (
-        <div className="rounded-xl border border-blue-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-blue-50 border-b border-blue-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Deep Dive</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Deep Dive</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={deepExplanation.content} stripTopHeading />
@@ -87,18 +87,18 @@ export function ArchitectureMapLayout({
 
       {/* Expandable Components */}
       {components.length > 0 && (
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Component Deep Dives</span>
+        <div className="rounded-xl border border-border overflow-hidden">
+          <div className="px-5 py-3 bg-surface border-b border-border">
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Component Deep Dives</span>
           </div>
           <div className="divide-y divide-slate-100">
             {components.map((comp, i) => (
               <div key={i}>
                 <button
                   onClick={() => toggleComponent(i)}
-                  className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-slate-50 transition-colors"
+                  className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-surface transition-colors"
                 >
-                  <span className="text-sm font-semibold text-slate-700">
+                  <span className="text-sm font-semibold text-foreground">
                     {comp.sectionTitle || `Component ${i + 1}`}
                   </span>
                   {expandedComponents.has(i)
@@ -107,7 +107,7 @@ export function ArchitectureMapLayout({
                   }
                 </button>
                 {expandedComponents.has(i) && (
-                  <div className="px-5 pb-4 bg-slate-50/50">
+                  <div className="px-5 pb-4 bg-surface/50">
                     <MarkdownContent content={comp.content} stripTopHeading />
                   </div>
                 )}
@@ -119,10 +119,10 @@ export function ArchitectureMapLayout({
 
       {/* Trade-offs */}
       {tradeoffs && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-50 to-orange-50 border-b border-slate-200">
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-50 to-orange-50 border-b border-border">
             <Scale className="h-4 w-4 text-orange-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Trade-offs</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Trade-offs</span>
           </div>
           <div className="px-5 py-4">
             <MarkdownContent content={tradeoffs.content} stripTopHeading />
@@ -159,7 +159,7 @@ export function ArchitectureMapLayout({
       {speakable && (
         <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
           <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Interview Answer</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={speakable.content.replace(/^#[^\n]*\n+/, '').trim()} />

@@ -1,3 +1,4 @@
+import React from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -29,6 +30,7 @@ import {
   isHubEnabled,
 } from "@/lib/launch-config";
 import { getSubcategoriesWithQuestions } from "@/lib/content-reader";
+import { AuthRedirect } from "@/components/landing/auth-redirect";
 
 // Every language we intend to support, ever. `available` is derived from
 // launch-config so the ROADMAP and UI can't drift apart.
@@ -263,34 +265,35 @@ export default function HomePage() {
   const standoutPicks = buildHomeStandoutPicks();
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-background">
+      <AuthRedirect />
       {/* ── Hero ── */}
-      <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-gradient-to-br from-blue-50 via-blue-50 to-indigo-50">
+      <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-surface">
         <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:4rem_4rem]" />
-          <div className="absolute top-1/4 right-1/4 w-[600px] h-[600px] bg-blue-200/20 rounded-full blur-3xl" />
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--border))_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--border))_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-40" />
+          <div className="absolute top-1/4 right-1/4 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
         </div>
 
         <div className="w-full px-6 sm:px-12 lg:px-20 relative z-10">
           <div className="w-full min-w-0">
             <div className="grid lg:grid-cols-2 gap-16 items-center">
               <div className="animate-fade-in-left">
-                <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-100 to-indigo-100 border-2 border-blue-300 rounded-full mb-8 shadow-sm animate-fade-in-up anim-delay-2">
-                  <Sparkles className="h-5 w-5 text-blue-600" />
-                  <span className="text-sm font-bold text-blue-700">Built for developers, by developers</span>
+                <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary/10 border border-primary/20 rounded-full mb-8 shadow-sm animate-fade-in-up anim-delay-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  <span className="text-sm font-bold text-primary">Built for developers, by developers</span>
                 </div>
 
-                <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black text-slate-900 mb-6 leading-[1.05] animate-fade-in-up anim-delay-3">
+                <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black text-foreground mb-6 leading-[1.05] animate-fade-in-up anim-delay-3">
                   Interview Prep That
-                  <span className="block mt-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  <span className="block mt-2 text-primary">
                     Knows Your Stack
                   </span>
                 </h1>
 
-                <p className="text-xl text-slate-600 mb-10 leading-relaxed animate-fade-in-up anim-delay-4">
-                  Get <span className="font-bold text-slate-900">domain-specific questions</span> that match your{" "}
-                  <span className="font-bold text-slate-900">tech stack</span> and{" "}
-                  <span className="font-bold text-slate-900">experience level</span>. No generic content.
+                <p className="text-xl text-muted-foreground mb-10 leading-relaxed animate-fade-in-up anim-delay-4">
+                  Get <span className="font-bold text-foreground">domain-specific questions</span> that match your{" "}
+                  <span className="font-bold text-foreground">tech stack</span> and{" "}
+                  <span className="font-bold text-foreground">experience level</span>. No generic content.
                 </p>
 
                 <div className="animate-fade-in-up anim-delay-5">
@@ -299,8 +302,8 @@ export default function HomePage() {
 
                 <div className="flex flex-wrap items-center gap-8 animate-fade-in-up anim-delay-6">
                   {["100% Free to Browse", `${(ENABLED_LANGUAGES as readonly string[]).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' & ')} Content Live`, "Sign up to track progress"].map((text, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-slate-600">
-                      <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    <div key={idx} className="flex items-center gap-2 text-muted-foreground">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                       <span className="font-semibold">{text}</span>
                     </div>
                   ))}
@@ -319,18 +322,18 @@ export default function HomePage() {
 
       {/* ── Pillars (only shown if we've enabled more than Interview Q&A) ── */}
       {PILLARS.length > 1 && (
-        <section className="py-20 bg-white">
+        <section className="py-20 bg-background">
           <div className="w-full px-6 sm:px-12 lg:px-20">
             <div className="w-full min-w-0">
               <div className="text-center mb-16">
-                <div className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-100 border-2 border-indigo-300 rounded-full mb-6">
-                  <Layers className="h-5 w-5 text-indigo-600" />
-                  <span className="text-sm font-bold text-indigo-700">Everything You Need</span>
+                <div className="inline-flex items-center gap-2 px-5 py-2 bg-primary/10 border border-primary/20 rounded-full mb-6">
+                  <Layers className="h-5 w-5 text-primary" />
+                  <span className="text-sm font-bold text-primary">Everything You Need</span>
                 </div>
-                <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4">
+                <h2 className="text-4xl sm:text-5xl font-black text-foreground mb-4">
                   One Platform. Complete Prep.
                 </h2>
-                <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+                <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
                   Stop juggling 5 different sites. We cover every dimension of the technical interview.
                 </p>
               </div>
@@ -338,15 +341,15 @@ export default function HomePage() {
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {PILLARS.map((pillar) => (
                   <Link href={pillar.href} key={pillar.title}>
-                    <div className="group h-full relative bg-white border border-slate-200 rounded-xl p-6 hover:shadow-xl hover:border-indigo-300 hover:-translate-y-1 transition-all duration-300">
+                    <div className="group h-full relative bg-card border border-border rounded-xl p-6 hover:shadow-xl hover:border-primary/30 hover:-translate-y-1 transition-all duration-300">
                       <div className={`w-12 h-12 bg-gradient-to-br ${pillar.gradient} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-all duration-300`}>
                         <pillar.icon className="h-6 w-6 text-white" />
                       </div>
-                      <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors">{pillar.title}</h3>
-                      <p className="text-sm text-slate-600 leading-relaxed mb-4">{pillar.desc}</p>
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                        <span className="text-xs font-bold text-indigo-600">{pillar.stat}</span>
-                        <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
+                      <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-primary transition-colors">{pillar.title}</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed mb-4">{pillar.desc}</p>
+                      <div className="flex items-center justify-between pt-3 border-t border-border">
+                        <span className="text-xs font-bold text-primary">{pillar.stat}</span>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
                       </div>
                     </div>
                   </Link>
@@ -358,18 +361,18 @@ export default function HomePage() {
       )}
 
       {/* ── Choose Language ── */}
-      <section className="py-20 bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      <section className="py-20 bg-surface">
         <div className="w-full px-6 sm:px-12 lg:px-20">
           <div className="w-full min-w-0">
             <div className="w-full min-w-0 mb-16">
-              <div className="bg-white border-2 border-indigo-200 rounded-2xl p-8 shadow-lg">
-                <p className="text-lg leading-relaxed text-slate-700 text-center">
-                  <span className="font-bold text-slate-900">InterviewExplainer</span> isn't just another question bank. Browse{" "}
-                  <span className="font-bold text-blue-700">domain-specific questions</span> curated for your exact{" "}
-                  <span className="font-bold text-indigo-700">tech stack</span> and{" "}
-                  <span className="font-bold text-purple-700">experience level</span>. Whether you are a junior Java developer or a senior Python architect, you get questions that match{" "}
-                  <span className="font-bold text-slate-900">what real interviewers actually ask</span>.
-                  <span className="block mt-4 text-lg font-bold text-slate-900">
+              <div className="bg-card border border-primary/20 rounded-2xl p-8 shadow-lg">
+                <p className="text-lg leading-relaxed text-foreground text-center">
+                  <span className="font-bold text-foreground">InterviewExplainer</span> isn't just another question bank. Browse{" "}
+                  <span className="font-bold text-primary">domain-specific questions</span> curated for your exact{" "}
+                  <span className="font-bold text-primary">tech stack</span> and{" "}
+                  <span className="font-bold text-primary">experience level</span>. Whether you are a junior Java developer or a senior Python architect, you get questions that match{" "}
+                  <span className="font-bold text-foreground">what real interviewers actually ask</span>.
+                  <span className="block mt-4 text-lg font-bold text-foreground">
                     No generic content. No irrelevant theory. Just focused, practical prep that gets you hired.
                   </span>
                 </p>
@@ -377,28 +380,28 @@ export default function HomePage() {
             </div>
 
             <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-5 py-2 bg-blue-100 border-2 border-blue-300 rounded-full mb-6">
-                <Code2 className="h-5 w-5 text-blue-600" />
-                <span className="text-sm font-bold text-blue-700">Step 1: Choose Your Language</span>
+              <div className="inline-flex items-center gap-2 px-5 py-2 bg-primary/10 border border-primary/20 rounded-full mb-6">
+                <Code2 className="h-5 w-5 text-primary" />
+                <span className="text-sm font-bold text-primary">Step 1: Choose Your Language</span>
               </div>
-              <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4">Pick Your Programming Language</h2>
-              <p className="text-xl text-slate-600">Start with your primary language, then explore tailored career paths</p>
+              <h2 className="text-4xl sm:text-5xl font-black text-foreground mb-4">Pick Your Programming Language</h2>
+              <p className="text-xl text-muted-foreground">Start with your primary language, then explore tailored career paths</p>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
               {LANGUAGES.map((lang) =>
                 lang.available ? (
                   <Link key={lang.name} href={`/domains?language=${lang.name}`}>
-                    <div className="relative bg-white/80 backdrop-blur-sm border border-blue-100 rounded-xl p-4 hover:shadow-lg hover:border-blue-300 hover:-translate-y-1 transition-all duration-300">
+                    <div className="relative bg-card border border-border rounded-xl p-4 hover:shadow-lg hover:border-primary/30 hover:-translate-y-1 transition-all duration-300">
                       <TechIcon name={lang.icon} className="h-12 w-12 mx-auto mb-2" />
-                      <p className="text-center text-sm font-semibold text-slate-800">{lang.name}</p>
+                      <p className="text-center text-sm font-semibold text-foreground">{lang.name}</p>
                     </div>
                   </Link>
                 ) : (
-                  <div key={lang.name} className="relative bg-white/50 border border-slate-100 rounded-xl p-4 opacity-50 cursor-not-allowed">
+                  <div key={lang.name} className="relative bg-card/50 border border-border rounded-xl p-4 opacity-50 cursor-not-allowed">
                     <TechIcon name={lang.icon} className="h-12 w-12 mx-auto mb-2 grayscale" />
-                    <p className="text-center text-sm font-semibold text-slate-500">{lang.name}</p>
-                    <span className="absolute top-1.5 right-1.5 text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">Soon</span>
+                    <p className="text-center text-sm font-semibold text-muted-foreground">{lang.name}</p>
+                    <span className="absolute top-1.5 right-1.5 text-[9px] font-bold text-muted-foreground bg-surface px-1.5 py-0.5 rounded-full">Soon</span>
                   </div>
                 ),
               )}
@@ -408,34 +411,34 @@ export default function HomePage() {
       </section>
 
       {/* ── Quick Paths ── */}
-      <section className="py-20 bg-gradient-to-br from-slate-50 via-indigo-50 to-slate-50">
+      <section className="py-20 bg-background">
         <div className="w-full px-6 sm:px-12 lg:px-20">
           <div className="w-full min-w-0">
             <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-5 py-2 bg-purple-100 border-2 border-purple-300 rounded-full mb-6">
-                <Rocket className="h-5 w-5 text-purple-600" />
-                <span className="text-sm font-bold text-purple-700">Step 2: Quick Start Paths</span>
+              <div className="inline-flex items-center gap-2 px-5 py-2 bg-primary/10 border border-primary/20 rounded-full mb-6">
+                <Rocket className="h-5 w-5 text-primary" />
+                <span className="text-sm font-bold text-primary">Step 2: Quick Start Paths</span>
               </div>
-              <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4">Jump Into Popular Career Paths</h2>
-              <p className="text-xl text-slate-600">Pre-built learning paths for high-demand tech roles</p>
+              <h2 className="text-4xl sm:text-5xl font-black text-foreground mb-4">Jump Into Popular Career Paths</h2>
+              <p className="text-xl text-muted-foreground">Pre-built learning paths for high-demand tech roles</p>
             </div>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {LAUNCH_QUICK_PATHS.map((path) => (
                 <Link href={path.href} key={path.href}>
-                  <div className="group relative bg-white border border-slate-200 rounded-xl p-5 hover:shadow-xl hover:border-indigo-300 hover:-translate-y-1 transition-all duration-300">
+                  <div className="group relative bg-card border border-border rounded-xl p-5 hover:shadow-xl hover:border-primary/30 hover:-translate-y-1 transition-all duration-300">
                     <div className={`absolute left-0 top-6 bottom-6 w-1 bg-gradient-to-b ${path.gradient} rounded-r-full opacity-60 group-hover:w-1.5 transition-all duration-300`} />
                     <div className="relative flex items-start gap-4 mb-3">
                       <div className={`w-14 h-14 bg-gradient-to-br ${path.gradient} rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-300 shadow-md`}>
                         <TechIcon name={path.icon} className="h-7 w-7 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors leading-tight">{path.title}</h3>
-                        <span className="inline-block px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-md border border-indigo-200">{path.level}</span>
+                        <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-primary transition-colors leading-tight">{path.title}</h3>
+                        <span className="inline-block px-2.5 py-1 bg-primary/10 text-primary text-xs font-semibold rounded-md border border-primary/20">{path.level}</span>
                       </div>
                     </div>
-                    <p className="relative text-sm text-slate-600 mb-4 pl-0.5">{path.topics}</p>
-                    <div className="relative flex items-center text-indigo-600 text-sm font-semibold group-hover:gap-1 transition-all">
+                    <p className="relative text-sm text-muted-foreground mb-4 pl-0.5">{path.topics}</p>
+                    <div className="relative flex items-center text-primary text-sm font-semibold group-hover:gap-1 transition-all">
                       Start Learning
                       <ArrowRight className="h-4 w-4 ml-1 group-hover:translate-x-1 transition-transform" />
                     </div>
@@ -445,7 +448,7 @@ export default function HomePage() {
             </div>
 
             <div className="text-center mt-12">
-              <Link href="/domains" className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-lg rounded-xl hover:shadow-xl hover:scale-105 transition-all">
+              <Link href="/domains" className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-white font-bold text-lg rounded-xl hover:shadow-xl hover:opacity-90 transition-all">
                 Browse All Career Paths
                 <ArrowRight className="h-5 w-5" />
               </Link>
@@ -455,26 +458,26 @@ export default function HomePage() {
       </section>
 
       {/* ── Why Different ── */}
-      <section className="py-20 bg-gradient-to-br from-purple-50 via-indigo-50 to-purple-50">
+      <section className="py-20 bg-surface">
         <div className="w-full px-6 sm:px-12 lg:px-20">
           <div className="w-full min-w-0">
             <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-5 py-2 bg-purple-100 border-2 border-purple-300 rounded-full mb-6">
-                <Lightbulb className="h-5 w-5 text-purple-600" />
-                <span className="text-sm font-bold text-purple-700">Why InterviewExplainer</span>
+              <div className="inline-flex items-center gap-2 px-5 py-2 bg-primary/10 border border-primary/20 rounded-full mb-6">
+                <Lightbulb className="h-5 w-5 text-primary" />
+                <span className="text-sm font-bold text-primary">Why InterviewExplainer</span>
               </div>
-              <h2 className="text-4xl sm:text-5xl font-black text-slate-900 mb-4">Built Different. Designed Smart.</h2>
-              <p className="text-xl text-slate-600 max-w-2xl mx-auto">Generic interview prep doesn't work. We adapt everything to you.</p>
+              <h2 className="text-4xl sm:text-5xl font-black text-foreground mb-4">Built Different. Designed Smart.</h2>
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">Generic interview prep doesn't work. We adapt everything to you.</p>
             </div>
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
               {WHY_DIFFERENT.map((feature) => (
-                <div key={feature.title} className="group relative bg-white/80 backdrop-blur-sm border border-purple-100 rounded-xl p-5 hover:shadow-xl hover:border-purple-300 hover:-translate-y-1 transition-all duration-300">
+                <div key={feature.title} className="group relative bg-card border border-border rounded-xl p-5 hover:shadow-xl hover:border-primary/30 hover:-translate-y-1 transition-all duration-300">
                   <div className={`w-12 h-12 bg-gradient-to-br ${feature.gradient} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-all duration-300`}>
                     <feature.icon className="h-6 w-6 text-white" />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">{feature.title}</h3>
-                  <p className="text-sm text-slate-600 leading-relaxed">{feature.desc}</p>
+                  <h3 className="text-lg font-bold text-foreground mb-2">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.desc}</p>
                 </div>
               ))}
             </div>
@@ -483,7 +486,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Stats ── */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600">
+      <section className="py-20 bg-primary">
         <div className="w-full px-6 sm:px-12 lg:px-20">
           <div className="w-full min-w-0">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-10 text-center">
@@ -494,9 +497,9 @@ export default function HomePage() {
                 { value: "∞", label: "Free Forever", Icon: Star },
               ].map((stat) => (
                 <div key={stat.label}>
-                  <stat.Icon className="h-10 w-10 text-blue-200 mx-auto mb-4" />
+                  <stat.Icon className="h-10 w-10 text-white/60 mx-auto mb-4" />
                   <div className="text-5xl font-black text-white mb-2">{stat.value}</div>
-                  <div className="text-base text-blue-100 font-semibold">{stat.label}</div>
+                  <div className="text-base text-white/80 font-semibold">{stat.label}</div>
                 </div>
               ))}
             </div>
@@ -505,11 +508,11 @@ export default function HomePage() {
       </section>
 
       {/* ── Newsletter ── */}
-      <section className="py-20 bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      <section className="py-20 bg-background">
         <div className="w-full px-6 sm:px-12 lg:px-20">
           <div className="max-w-xl mx-auto text-center">
-            <h2 className="text-3xl font-black text-slate-900 mb-3">New domains launching soon</h2>
-            <p className="text-slate-600 mb-8">
+            <h2 className="text-3xl font-black text-foreground mb-3">New domains launching soon</h2>
+            <p className="text-muted-foreground mb-8">
               JavaScript, TypeScript, Go, Ruby, and Kotlin packs are in progress. Be first to know when they go live.
             </p>
             <NewsletterWidget heading="Get notified when new content drops" subheading="" />
@@ -518,14 +521,14 @@ export default function HomePage() {
       </section>
 
       {/* ── Final CTA ── */}
-      <section className="py-32 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <section className="py-32 bg-surface">
         <div className="w-full px-6 sm:px-12 lg:px-20">
           <div className="w-full min-w-0 text-center">
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-yellow-400 to-orange-500 mb-8 shadow-xl">
               <Award className="h-10 w-10 text-white" />
             </div>
-            <h2 className="text-5xl sm:text-6xl font-black text-slate-900 mb-6">Ready to Ace Your Interview?</h2>
-            <p className="text-2xl text-slate-600 mb-12 max-w-2xl mx-auto">
+            <h2 className="text-5xl sm:text-6xl font-black text-foreground mb-6">Ready to Ace Your Interview?</h2>
+            <p className="text-2xl text-muted-foreground mb-12 max-w-2xl mx-auto">
               Browse free. Sign up to track your progress and unlock personalized insights.
             </p>
             <FinalCTA />

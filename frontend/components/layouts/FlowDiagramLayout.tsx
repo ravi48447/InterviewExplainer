@@ -31,16 +31,16 @@ export function FlowDiagramLayout({
     <div className="space-y-8">
       {directAnswer && (
         <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
-          <p className="text-sm font-semibold text-slate-800">{directAnswer}</p>
+          <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
 
       {/* Overview */}
       {overview && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-slate-50 border-b border-slate-200">
+        <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
             <GitBranch className="h-4 w-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">How It Works</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">How It Works</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={overview.content} stripTopHeading />
@@ -50,8 +50,8 @@ export function FlowDiagramLayout({
 
       {/* Flow Diagram */}
       {flowDiagram && (
-        <div className="rounded-xl border-2 border-slate-200 bg-slate-950 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-700">
+        <div className="rounded-xl border-2 border-border bg-slate-950 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-border">
             <ArrowRight className="h-4 w-4 text-slate-400" />
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Flow Diagram</span>
           </div>
@@ -63,9 +63,9 @@ export function FlowDiagramLayout({
 
       {/* Flow Steps / Deep Explanation */}
       {flowSteps && (
-        <div className="rounded-xl border border-blue-200 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-blue-50 border-b border-blue-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Step-by-Step Flow</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Step-by-Step Flow</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={flowSteps.content} stripTopHeading />
@@ -100,8 +100,8 @@ export function FlowDiagramLayout({
 
       {/* Code Example */}
       {codeExample && (
-        <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-700">
+        <div className="rounded-xl border border-border dark:bg-surface overflow-hidden">
+          <div className="px-5 py-3 border-b border-border">
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Java Implementation</span>
           </div>
           <div className="px-5 py-4">
@@ -127,7 +127,7 @@ export function FlowDiagramLayout({
       {speakable && (
         <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
           <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">Interview Answer</span>
+            <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">
             <MarkdownContent content={speakable.content.replace(/^#[^\n]*\n+/, '').trim()} />

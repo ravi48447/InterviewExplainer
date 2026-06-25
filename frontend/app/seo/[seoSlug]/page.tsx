@@ -294,10 +294,10 @@ export default async function SeoModulePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="min-h-screen bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgb(224_231_255/0.5),transparent_50%),rgb(248_250_252))] font-sans text-slate-800">
+      <div className="min-h-screen bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgb(224_231_255/0.5),transparent_50%),rgb(248_250_252))] font-sans text-foreground">
         <div className="flex w-full min-h-screen">
           {/* ── LEFT SIDEBAR ── pillar-scoped, NOT the full JBI tree */}
-          <aside className="hidden lg:flex flex-col w-[280px] shrink-0 self-start sticky top-0 h-screen bg-white border-r border-slate-200">
+          <aside className="hidden lg:flex flex-col w-[280px] shrink-0 self-start sticky top-0 h-screen bg-background border-r border-border">
             <PillarTreeNav
               pillarTitle={pillar?.title ?? entry.title}
               pillarSlug={pillar?.pillarSlug ?? entry.seoSlug}
@@ -312,10 +312,10 @@ export default async function SeoModulePage({
           <main className="flex-1 min-w-0 pb-24 lg:pb-8">
             <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
               {/* Breadcrumbs */}
-              <nav className="flex items-center gap-1.5 text-xs text-slate-500 mb-4 flex-wrap">
+              <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-4 flex-wrap">
                 <Link
                   href="/"
-                  className="hover:text-slate-700 flex items-center gap-1"
+                  className="hover:text-foreground flex items-center gap-1"
                 >
                   <Home className="h-3 w-3" /> Home
                 </Link>
@@ -324,20 +324,20 @@ export default async function SeoModulePage({
                     <ChevronRight className="h-3 w-3" />
                     <Link
                       href={`/${pillar.pillarSlug}`}
-                      className="hover:text-slate-700"
+                      className="hover:text-foreground"
                     >
                       {pillar.title.replace(/\s+Interview Prep.*$/, "")}
                     </Link>
                   </>
                 )}
                 <ChevronRight className="h-3 w-3" />
-                <span className="text-slate-700 font-semibold">
+                <span className="text-foreground font-semibold">
                   {entry.title} Interview Questions
                 </span>
               </nav>
 
               {/* Hero — editorial layout, clear primary action */}
-              <header className="relative mb-8 rounded-2xl border border-slate-200/90 bg-white shadow-[0_20px_50px_-24px_rgba(15,23,42,0.18)] overflow-hidden ring-1 ring-slate-900/[0.04]">
+              <header className="relative mb-8 rounded-2xl border border-border/90 bg-background shadow-[0_20px_50px_-24px_rgba(15,23,42,0.18)] overflow-hidden ring-1 ring-slate-900/[0.04]">
                 <div
                   className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-600 via-indigo-600 to-violet-600"
                   aria-hidden
@@ -353,10 +353,10 @@ export default async function SeoModulePage({
                         Interview Q&amp;A
                       </span>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl lg:text-[2.35rem] font-bold tracking-tight text-slate-900 mb-3 leading-[1.15]">
+                    <h1 className="text-3xl sm:text-4xl lg:text-[2.35rem] font-bold tracking-tight text-foreground mb-3 leading-[1.15]">
                       {entry.title} interview questions
                     </h1>
-                    <p className="text-[15px] sm:text-base text-slate-600 leading-relaxed max-w-3xl">
+                    <p className="text-[15px] sm:text-base text-secondary leading-relaxed max-w-3xl">
                       {totalQ}+ curated questions with the same answer shape every
                       time: quick recap, deep dive, pitfalls, and follow-ups.
                       Coverage includes{" "}
@@ -368,22 +368,22 @@ export default async function SeoModulePage({
                     </p>
                   </div>
 
-                  <div className="px-4 sm:px-6 py-4 bg-white/90 border-t border-slate-100 flex flex-col gap-4 sm:flex-row sm:items-center sm:flex-wrap">
+                  <div className="px-4 sm:px-6 py-4 bg-background/90 border-t border-slate-100 flex flex-col gap-4 sm:flex-row sm:items-center sm:flex-wrap">
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
                       <div className="flex items-center gap-2">
                         <BookOpen className="h-4 w-4 text-indigo-600 shrink-0" />
-                        <span className="font-bold text-slate-900 tabular-nums">
+                        <span className="font-bold text-foreground tabular-nums">
                           {totalQ}
                         </span>
-                        <span className="text-slate-500">questions</span>
+                        <span className="text-muted-foreground">questions</span>
                       </div>
                       <div className="h-5 w-px bg-slate-200 hidden sm:block" />
                       <div className="flex items-center gap-2">
                         <Layers className="h-4 w-4 text-indigo-600 shrink-0" />
-                        <span className="font-bold text-slate-900 tabular-nums">
+                        <span className="font-bold text-foreground tabular-nums">
                           {topicsWithQ.length}
                         </span>
-                        <span className="text-slate-500">topics</span>
+                        <span className="text-muted-foreground">topics</span>
                       </div>
                       <div className="h-5 w-px bg-slate-200 hidden sm:block" />
                       <div
@@ -402,7 +402,7 @@ export default async function SeoModulePage({
                           <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                           {diffMix.hard}
                         </span>
-                        <span className="text-slate-500 ml-1 hidden md:inline text-[11px]">
+                        <span className="text-muted-foreground ml-1 hidden md:inline text-[11px]">
                           difficulty
                         </span>
                       </div>
@@ -411,16 +411,16 @@ export default async function SeoModulePage({
                       <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto w-full sm:w-auto">
                         <Link
                           href={`/${entry.seoSlug}/${firstQ.slug}`}
-                          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-md shadow-indigo-900/20 hover:bg-indigo-700 transition-colors"
+                          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-primary-foreground dark:text-foreground font-bold text-sm shadow-md shadow-indigo-900/20 hover:bg-indigo-700 transition-colors"
                         >
                           <BookOpenCheck className="h-4 w-4 shrink-0" />
                           Open question 1
                         </Link>
                         <Link
                           href={`/${entry.seoSlug}#reading-path`}
-                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 font-semibold text-sm hover:border-indigo-300 hover:bg-indigo-50/50 transition-colors"
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-background text-foreground font-semibold text-sm hover:border-indigo-300 hover:bg-indigo-50/50 transition-colors"
                         >
-                          <ListOrdered className="h-4 w-4 text-slate-500 shrink-0" />
+                          <ListOrdered className="h-4 w-4 text-muted-foreground shrink-0" />
                           How to read this module
                         </Link>
                       </div>
@@ -446,19 +446,19 @@ export default async function SeoModulePage({
               {entry.intro && (
                 <section
                   aria-labelledby="domain-intro-heading"
-                  className="mb-7 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                  className="mb-7 rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
                 >
                   <div className="px-6 py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-center gap-2">
                     <BookOpen className="h-4 w-4 text-indigo-600" />
                     <h2
                       id="domain-intro-heading"
-                      className="text-[13px] font-black uppercase tracking-widest text-slate-700"
+                      className="text-[13px] font-black uppercase tracking-widest text-foreground"
                     >
                       About this page
                     </h2>
                   </div>
                   <div className="px-6 py-5">
-                    <p className="text-[15px] leading-7 text-slate-700">
+                    <p className="text-[15px] leading-7 text-foreground">
                       {entry.intro}
                     </p>
                   </div>
@@ -466,7 +466,7 @@ export default async function SeoModulePage({
               )}
 
               {/* Trust row */}
-              <div className="mb-6 flex items-center gap-3 flex-wrap text-[12px] text-slate-500">
+              <div className="mb-6 flex items-center gap-3 flex-wrap text-[12px] text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
                   <span>Reviewed by senior engineers</span>
@@ -512,13 +512,13 @@ export default async function SeoModulePage({
               {topAsked.length > 0 && (
                 <section
                   aria-labelledby="top-asked-heading"
-                  className="mb-8 rounded-2xl border border-slate-200/90 bg-white shadow-md shadow-slate-200/30 overflow-hidden ring-1 ring-slate-900/[0.03]"
+                  className="mb-8 rounded-2xl border border-border/90 bg-background shadow-md shadow-slate-200/30 overflow-hidden ring-1 ring-slate-900/[0.03]"
                 >
                   <div className="px-5 py-3.5 bg-gradient-to-r from-amber-50/90 via-orange-50/50 to-white border-b border-amber-100/80 flex items-center gap-2">
                     <Flame className="h-4 w-4 text-amber-600 shrink-0" />
                     <h2
                       id="top-asked-heading"
-                      className="text-sm font-bold text-slate-900 tracking-tight"
+                      className="text-sm font-bold text-foreground tracking-tight"
                     >
                       High-signal {entry.title} questions
                     </h2>
@@ -533,14 +533,14 @@ export default async function SeoModulePage({
                           href={`/${entry.seoSlug}/${t.question.slug}`}
                           className="group flex items-start gap-3 px-5 py-3 hover:bg-blue-50/50 transition-colors"
                         >
-                          <span className="mt-0.5 shrink-0 w-6 h-6 rounded-md bg-slate-900 text-white font-black text-[11px] flex items-center justify-center group-hover:bg-blue-600 transition-colors">
+                          <span className="mt-0.5 shrink-0 w-6 h-6 rounded-md dark:bg-surface text-primary-foreground dark:text-foreground font-black text-[11px] flex items-center justify-center group-hover:bg-blue-600 transition-colors">
                             {idx + 1}
                           </span>
                           <span className="flex-1 min-w-0">
                             <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">
                               {t.topic}
                             </span>
-                            <span className="block text-sm font-bold text-slate-900 group-hover:text-blue-700 transition-colors leading-snug">
+                            <span className="block text-sm font-bold text-foreground group-hover:text-blue-700 transition-colors leading-snug">
                               {t.question.title}
                             </span>
                           </span>
@@ -560,12 +560,12 @@ export default async function SeoModulePage({
                     <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600 mb-1.5">
                       Full catalog
                     </p>
-                    <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+                    <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
                       Every question, in reading order
                     </h2>
-                    <p className="mt-1.5 text-sm text-slate-600 max-w-2xl leading-relaxed">
+                    <p className="mt-1.5 text-sm text-secondary max-w-2xl leading-relaxed">
                       Topics are ordered for learning. Within each topic, rows are numbered{" "}
-                      <span className="font-semibold text-slate-800">1–{totalQ}</span>{" "}
+                      <span className="font-semibold text-foreground">1–{totalQ}</span>{" "}
                       globally so you always know where you are. Collapse topics if you want a
                       lighter view — use Expand all when you need the full list again.
                     </p>
@@ -597,13 +597,13 @@ export default async function SeoModulePage({
               {faqBlock.length > 0 && (
                 <section
                   aria-labelledby="faq-heading"
-                  className="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                  className="mb-8 rounded-xl border border-border bg-background shadow-sm overflow-hidden"
                 >
-                  <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 flex items-center gap-2">
+                  <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-border flex items-center gap-2">
                     <HelpCircle className="h-4 w-4 text-blue-500" />
                     <h2
                       id="faq-heading"
-                      className="text-sm font-black text-slate-900 tracking-tight"
+                      className="text-sm font-black text-foreground tracking-tight"
                     >
                       FAQs about {entry.title} interview prep
                     </h2>
@@ -616,15 +616,15 @@ export default async function SeoModulePage({
                         open={idx === 0}
                       >
                         <summary className="flex items-start gap-3 cursor-pointer list-none">
-                          <span className="mt-0.5 shrink-0 w-5 h-5 rounded bg-blue-50 text-blue-600 font-black text-[10px] flex items-center justify-center group-open:bg-blue-600 group-open:text-white transition-colors">
+                          <span className="mt-0.5 shrink-0 w-5 h-5 rounded bg-blue-50 text-blue-600 font-black text-[10px] flex items-center justify-center group-open:bg-blue-600 group-open:text-primary-foreground dark:text-foreground transition-colors">
                             Q
                           </span>
-                          <span className="flex-1 text-[13px] font-bold text-slate-900 leading-snug">
+                          <span className="flex-1 text-[13px] font-bold text-foreground leading-snug">
                             {f.q}
                           </span>
                           <ChevronRight className="h-4 w-4 text-slate-400 mt-0.5 group-open:rotate-90 transition-transform" />
                         </summary>
-                        <div className="mt-2 ml-8 text-[13px] text-slate-600 leading-relaxed">
+                        <div className="mt-2 ml-8 text-[13px] text-secondary leading-relaxed">
                           {f.a}
                         </div>
                       </details>
@@ -645,10 +645,10 @@ export default async function SeoModulePage({
           {/* ── RIGHT RAIL ── (xl+) — TOC + pillar context */}
           <aside className="hidden xl:flex w-[300px] shrink-0 flex-col gap-4 self-start sticky top-6 px-4 py-6">
             {readingRail.length > 0 && (
-              <div className="rounded-2xl border border-slate-200/90 bg-white shadow-md shadow-slate-200/25 overflow-hidden ring-1 ring-slate-900/[0.03]">
+              <div className="rounded-2xl border border-border/90 bg-background shadow-md shadow-slate-200/25 overflow-hidden ring-1 ring-slate-900/[0.03]">
                 <div className="px-4 py-2.5 border-b border-slate-100 bg-gradient-to-r from-indigo-50/80 to-white flex items-center gap-2">
                   <ListOrdered className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
-                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-secondary">
                     Start here (Q1–Q{Math.min(20, readingRail.length)})
                   </h3>
                 </div>
@@ -659,14 +659,14 @@ export default async function SeoModulePage({
                         href={`/${entry.seoSlug}/${q.slug}`}
                         className="flex items-start gap-2.5 px-4 py-2 text-left hover:bg-indigo-50/50 transition-colors group"
                       >
-                        <span className="mt-0.5 flex h-6 min-w-[1.5rem] items-center justify-center rounded-md bg-slate-900 text-[10px] font-bold text-white tabular-nums group-hover:bg-indigo-600 shrink-0">
+                        <span className="mt-0.5 flex h-6 min-w-[1.5rem] items-center justify-center rounded-md dark:bg-surface text-[10px] font-bold text-primary-foreground dark:text-foreground tabular-nums group-hover:bg-indigo-600 shrink-0">
                           {i + 1}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wide truncate">
                             {q.topicName}
                           </span>
-                          <span className="block text-[12px] font-semibold text-slate-800 leading-snug group-hover:text-indigo-800 line-clamp-2">
+                          <span className="block text-[12px] font-semibold text-foreground leading-snug group-hover:text-indigo-800 line-clamp-2">
                             {q.title}
                           </span>
                         </span>
@@ -675,7 +675,7 @@ export default async function SeoModulePage({
                   ))}
                 </ol>
                 {flatQuestions.length > 20 && (
-                  <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/60">
+                  <div className="px-4 py-2 border-t border-slate-100 bg-surface/60">
                     <a
                       href="#all-questions"
                       className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900"
@@ -688,32 +688,32 @@ export default async function SeoModulePage({
             )}
 
             {/* At-a-glance */}
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50">
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-border bg-surface">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                   At a glance
                 </h3>
               </div>
               <div className="p-4 space-y-2.5">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Module</span>
-                  <span className="font-bold text-slate-900 truncate ml-2">
+                  <span className="text-muted-foreground">Module</span>
+                  <span className="font-bold text-foreground truncate ml-2">
                     {entry.title}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Topics</span>
-                  <span className="font-bold text-slate-900">
+                  <span className="text-muted-foreground">Topics</span>
+                  <span className="font-bold text-foreground">
                     {topicsWithQ.length}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Questions</span>
-                  <span className="font-bold text-slate-900">{totalQ}</span>
+                  <span className="text-muted-foreground">Questions</span>
+                  <span className="font-bold text-foreground">{totalQ}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Read time</span>
-                  <span className="font-bold text-slate-900 inline-flex items-center gap-1">
+                  <span className="text-muted-foreground">Read time</span>
+                  <span className="font-bold text-foreground inline-flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {Math.max(3, Math.round(totalQ * 0.5))}m
                   </span>
@@ -723,9 +723,9 @@ export default async function SeoModulePage({
 
             {/* Topic TOC */}
             {topicsWithQ.length > 1 && (
-              <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border bg-surface">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     Topics
                   </h3>
                 </div>
@@ -734,7 +734,7 @@ export default async function SeoModulePage({
                     <li key={sc.slug}>
                       <a
                         href={`#${sc.slug}`}
-                        className="flex items-center gap-2 px-4 py-1.5 text-xs text-slate-600 hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                        className="flex items-center gap-2 px-4 py-1.5 text-xs text-secondary hover:text-blue-700 hover:bg-blue-50 transition-colors"
                       >
                         <span className="text-[10px] font-black text-slate-400 w-5 shrink-0">
                           {String(idx + 1).padStart(2, "0")}
@@ -761,10 +761,10 @@ export default async function SeoModulePage({
                 <div className="text-[10px] font-black uppercase tracking-widest text-indigo-500 mb-1">
                   Part of
                 </div>
-                <div className="text-sm font-black text-slate-900 group-hover:text-indigo-700 transition-colors leading-snug">
+                <div className="text-sm font-black text-foreground group-hover:text-indigo-700 transition-colors leading-snug">
                   {pillar.title.replace(/\s+Interview Prep.*$/, "")}
                 </div>
-                <div className="mt-1 text-[11px] text-slate-500 leading-snug line-clamp-2">
+                <div className="mt-1 text-[11px] text-muted-foreground leading-snug line-clamp-2">
                   {pillar.tagline}
                 </div>
                 <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600">

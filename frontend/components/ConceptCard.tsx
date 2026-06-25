@@ -10,17 +10,17 @@ export default function ConceptCard({ name, slug }: { name: string; slug: string
   // For this implementation, we simulate the expansion to satisfy Feature 4 (Concept Expansion).
   
   return (
-    <div className="border border-white/10 bg-white/[0.02] rounded-xl overflow-hidden transition-all">
+    <div className="border border-white/10 bg-background/[0.02] rounded-xl overflow-hidden transition-all">
       <button 
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-4 text-left hover:bg-white/[0.02]"
+        className="w-full flex items-center justify-between p-4 text-left hover:bg-background/[0.02]"
       >
         <span className="font-semibold text-primary">{name}</span>
         {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
       </button>
       
       {expanded && (
-        <div className="p-4 pt-0 text-sm text-muted-foreground border-t border-white/5 bg-black/20">
+        <div className="p-4 pt-0 text-sm text-muted-foreground border-t border-white/5 bg-foreground dark:bg-background/20">
           <p className="flex items-center gap-2 mb-2 font-black uppercase text-[10px] tracking-widest text-primary/60">
             <BookOpen className="h-3 w-3" /> Concept Definition
           </p>

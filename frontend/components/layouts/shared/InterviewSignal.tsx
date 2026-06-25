@@ -13,7 +13,7 @@ export function InterviewSignal({ title = "Interview Signal", children }: Interv
         <Sparkles className="h-4 w-4 text-violet-600" />
         <span className="text-xs font-bold text-violet-800 uppercase tracking-wide">{title}</span>
       </div>
-      <div className="text-sm text-slate-700">{children}</div>
+      <div className="text-sm text-foreground">{children}</div>
     </div>
   );
 }

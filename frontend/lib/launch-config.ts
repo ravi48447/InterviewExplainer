@@ -60,7 +60,7 @@ export const ENABLED_HUBS = {
 
   // Product surfaces.
   dashboard:       true,   // /dashboard — works for logged-in users
-  mockInterviews:  false,  // /mock-interviews — requires a backend that's not wired for MVP
+  mockInterviews:  true,  // /mock-interviews — requires a backend that's not wired for MVP
   search:          false,  // /search — indexer not populated for launch scope yet
   interviewByLang: false,  // /interview — legacy "browse by language" tree; superseded by /domains
 } as const;

@@ -126,8 +126,8 @@ function LegacyQuestionCard({
             <p
               className={`text-[17px] leading-[1.6] font-medium mb-5 pb-5 border-b border-dashed ${
                 d
-                  ? "text-white border-emerald-800/60"
-                  : "text-slate-800 border-emerald-200/60"
+                  ? "text-primary-foreground dark:text-foreground border-emerald-800/60"
+                  : "text-foreground border-emerald-200/60"
               }`}
             >
               <MarkdownContent content={lede} inline />
@@ -135,7 +135,7 @@ function LegacyQuestionCard({
           )}
           <div
             className={`interview-answer-body text-[15.5px] leading-[1.78] [&_p]:mb-4 [&_p:last-child]:mb-0 ${
-              d ? "text-slate-200" : "text-slate-700"
+              d ? "text-slate-200" : "text-foreground"
             }`}
           >
             <MarkdownContent content={lede ? rest : speakableText} />

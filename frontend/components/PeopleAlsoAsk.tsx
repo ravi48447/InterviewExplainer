@@ -59,7 +59,7 @@ export default function PeopleAlsoAsk({ initialQuestions }: { initialQuestions: 
   return (
     <div className="mt-12">
       <h2 className="text-xl font-black mb-6">People Also Ask</h2>
-      <div className="border border-white/10 rounded-2xl divide-y divide-white/10 overflow-hidden bg-white/[0.02]">
+      <div className="border border-white/10 rounded-2xl divide-y divide-white/10 overflow-hidden bg-background/[0.02]">
         {questions.map((q) => {
           const isExpanded = expandedIds.has(q.id);
           const isLoading = loadingIds.has(q.id);
@@ -68,7 +68,7 @@ export default function PeopleAlsoAsk({ initialQuestions }: { initialQuestions: 
             <div key={q.id} className="group">
               <button 
                 onClick={() => toggleExpand(q)}
-                className="w-full flex items-center justify-between p-5 text-left hover:bg-white/[0.02] transition-colors"
+                className="w-full flex items-center justify-between p-5 text-left hover:bg-background/[0.02] transition-colors"
               >
                 <span className="font-semibold text-foreground group-hover:text-primary transition-colors">{q.title}</span>
                 {isLoading ? (
@@ -81,7 +81,7 @@ export default function PeopleAlsoAsk({ initialQuestions }: { initialQuestions: 
               </button>
               
               {isExpanded && (
-                <div className="px-5 pb-5 pt-2 text-sm text-muted-foreground bg-black/20">
+                <div className="px-5 pb-5 pt-2 text-sm text-muted-foreground bg-foreground dark:bg-background/20">
                   <p className="mb-4">This question explores concepts related to your current reading path. Click below to dive into the full answer.</p>
                   <Link 
                     href={`/${q.domainSlug || 'all'}/${q.stackSlug || 'global'}/${q.slug}`}

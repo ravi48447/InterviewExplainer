@@ -43,20 +43,20 @@ export function DSACurriculumNav({
   return (
     <nav
       aria-label="DSA curriculum"
-      className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+      className="rounded-xl border border-border bg-background shadow-sm overflow-hidden"
     >
       <Link
         href="/dsa"
-        className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-violet-50 via-indigo-50 to-blue-50 hover:from-violet-100/80 hover:via-indigo-100/80 hover:to-blue-100/80 transition-colors group"
+        className="flex items-center gap-2 px-4 py-3 border-b border-border bg-gradient-to-r from-violet-50 via-indigo-50 to-blue-50 hover:from-violet-100/80 hover:via-indigo-100/80 hover:to-blue-100/80 transition-colors group"
       >
         <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center shrink-0">
-          <GraduationCap className="h-4 w-4 text-white" />
+          <GraduationCap className="h-4 w-4 text-primary-foreground dark:text-foreground" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-[10px] font-black uppercase tracking-widest text-violet-700">
             DSA Curriculum
           </div>
-          <div className="text-[12px] font-bold text-slate-800 truncate">
+          <div className="text-[12px] font-bold text-foreground truncate">
             {modules.length} modules
           </div>
         </div>
@@ -77,7 +77,7 @@ export function DSACurriculumNav({
                   "group flex items-start gap-2 px-3 py-2 border-l-2 transition-colors",
                   isActive
                     ? "bg-violet-50 border-violet-500"
-                    : "border-transparent hover:bg-slate-50 hover:border-slate-200",
+                    : "border-transparent hover:bg-surface hover:border-border",
                 )}
                 aria-current={isActive ? "page" : undefined}
               >
@@ -86,8 +86,8 @@ export function DSACurriculumNav({
                     className={cn(
                       "text-[10px] font-black tabular-nums px-1.5 py-0.5 rounded",
                       isActive
-                        ? "bg-violet-600 text-white"
-                        : "bg-slate-100 text-slate-500 group-hover:bg-slate-200",
+                        ? "bg-violet-600 text-primary-foreground dark:text-foreground"
+                        : "bg-surface text-muted-foreground group-hover:bg-slate-200",
                     )}
                   >
                     {m.moduleNumber.replace(/^M/, "")}
@@ -99,7 +99,7 @@ export function DSACurriculumNav({
                       "text-[12.5px] leading-snug",
                       isActive
                         ? "font-black text-violet-900"
-                        : "font-semibold text-slate-700 group-hover:text-slate-900",
+                        : "font-semibold text-foreground group-hover:text-foreground",
                     )}
                   >
                     {m.title}
@@ -130,7 +130,7 @@ export function DSACurriculumNav({
 
       <Link
         href="/dsa"
-        className="flex items-center gap-2 px-4 py-2.5 border-t border-slate-200 bg-slate-50/70 hover:bg-slate-100 transition-colors text-[11px] font-bold text-slate-600 hover:text-slate-900"
+        className="flex items-center gap-2 px-4 py-2.5 border-t border-border bg-surface/70 hover:bg-surface transition-colors text-[11px] font-bold text-secondary hover:text-foreground"
       >
         <Target className="h-3.5 w-3.5 text-slate-400" />
         <span>All tracks &amp; sheets</span>

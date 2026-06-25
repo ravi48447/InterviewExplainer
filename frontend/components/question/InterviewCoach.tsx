@@ -78,7 +78,7 @@ export function InterviewCoach({ timeToAnswer, interviewerExpects }: InterviewCo
                                 "h-4 w-4 rounded-full border flex items-center justify-center transition-all",
                                 item.completed ? "bg-green-500 border-green-500" : "border-white/20"
                             )}>
-                                {item.completed && <CheckCircle2 className="h-3 w-3 text-white" />}
+                                {item.completed && <CheckCircle2 className="h-3 w-3 text-primary-foreground dark:text-foreground" />}
                             </div>
                             <span className="text-[11px] font-semibold">{item.text}</span>
                         </button>

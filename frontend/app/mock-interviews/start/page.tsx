@@ -10,7 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
-const mockTypeNames = {
+const mockTypeNames: Record<string, string> = {
   'full-mock': 'Full Mock Interview',
   'partial-mock': 'Partial Mock Interview',
   'coding-mock': 'Coding Interview',
@@ -141,11 +141,11 @@ function MockInterviewStartContent() {
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="max-w-2xl w-full bg-white rounded-2xl border-2 border-slate-200 shadow-2xl p-8 text-center"
+          className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8 text-center"
         >
           <Loader2 className="h-12 w-12 text-pink-600 animate-spin mx-auto mb-4" />
-          <h2 className="text-2xl font-black text-slate-900 mb-2">Loading Questions...</h2>
-          <p className="text-slate-600">Preparing your domain-specific interview</p>
+          <h2 className="text-2xl font-black text-foreground mb-2">Loading Questions...</h2>
+          <p className="text-secondary">Preparing your domain-specific interview</p>
         </motion.div>
       </div>
     );
@@ -157,11 +157,11 @@ function MockInterviewStartContent() {
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="max-w-2xl w-full bg-white rounded-2xl border-2 border-slate-200 shadow-2xl p-8 text-center"
+          className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8 text-center"
         >
           <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
-          <h2 className="text-2xl font-black text-slate-900 mb-2">Error</h2>
-          <p className="text-slate-600 mb-6">{error || 'No domain selected'}</p>
+          <h2 className="text-2xl font-black text-foreground mb-2">Error</h2>
+          <p className="text-secondary mb-6">{error || 'No domain selected'}</p>
           <Button onClick={() => router.push('/mock-interviews')} variant="outline">
             Go Back
           </Button>
@@ -259,19 +259,19 @@ function MockInterviewStartContent() {
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="max-w-2xl w-full bg-white rounded-2xl border-2 border-slate-200 shadow-2xl p-8"
+          className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8"
         >
           <div className="text-center mb-8">
             <div className="w-20 h-20 bg-gradient-to-br from-pink-500 to-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              {mockType === 'coding-mock' && <Code2 className="h-10 w-10 text-white" />}
-              {mockType === 'system-design-mock' && <GitBranch className="h-10 w-10 text-white" />}
-              {mockType === 'behavioral-mock' && <MessageSquare className="h-10 w-10 text-white" />}
-              {mockType === 'full-mock' && <Play className="h-10 w-10 text-white" />}
+              {mockType === 'coding-mock' && <Code2 className="h-10 w-10 text-primary-foreground dark:text-foreground" />}
+              {mockType === 'system-design-mock' && <GitBranch className="h-10 w-10 text-primary-foreground dark:text-foreground" />}
+              {mockType === 'behavioral-mock' && <MessageSquare className="h-10 w-10 text-primary-foreground dark:text-foreground" />}
+              {mockType === 'full-mock' && <Play className="h-10 w-10 text-primary-foreground dark:text-foreground" />}
             </div>
-            <h1 className="text-3xl font-black text-slate-900 mb-2">
+            <h1 className="text-3xl font-black text-foreground mb-2">
               {mockTypeNames[mockType]}
             </h1>
-            <p className="text-slate-600">
+            <p className="text-secondary">
               You're about to start a mock interview with {questions.length} question{questions.length > 1 ? 's' : ''}
             </p>
           </div>
@@ -280,8 +280,8 @@ function MockInterviewStartContent() {
             <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 border border-blue-200">
               <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-bold text-slate-900 mb-1">Instructions</h3>
-                <ul className="text-sm text-slate-700 space-y-1">
+                <h3 className="font-bold text-foreground mb-1">Instructions</h3>
+                <ul className="text-sm text-foreground space-y-1">
                   <li>• Each question has a time limit - manage your time wisely</li>
                   <li>• You can navigate between questions, but the timer keeps running</li>
                   <li>• Your answers are auto-saved as you type</li>
@@ -292,16 +292,16 @@ function MockInterviewStartContent() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {questions.map((q, idx) => (
-                <div key={idx} className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <div key={idx} className="p-4 rounded-xl bg-surface border border-border">
                   <div className="flex items-center gap-2 mb-2">
                     {q.type === 'coding' && <Code2 className="h-4 w-4 text-blue-600" />}
                     {q.type === 'system-design' && <GitBranch className="h-4 w-4 text-purple-600" />}
                     {q.type === 'behavioral' && <MessageSquare className="h-4 w-4 text-orange-600" />}
-                    <span className="text-xs font-bold text-slate-600 uppercase">{q.type}</span>
+                    <span className="text-xs font-bold text-secondary uppercase">{q.type}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <Clock className="h-4 w-4 text-slate-500" />
-                    <span className="font-semibold text-slate-700">{q.timeLimit} minutes</span>
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-semibold text-foreground">{q.timeLimit} minutes</span>
                   </div>
                 </div>
               ))}
@@ -323,17 +323,17 @@ function MockInterviewStartContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
       {/* Header with Timer and Progress */}
-      <div className="sticky top-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-sm">
+      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border shadow-sm">
         <div className="w-full min-w-0 px-6 py-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center">
-                  <span className="text-white text-sm font-black">{currentQuestionIndex + 1}</span>
+                  <span className="text-primary-foreground dark:text-foreground text-sm font-black">{currentQuestionIndex + 1}</span>
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Question {currentQuestionIndex + 1} of {questions.length}</p>
-                  <p className="text-sm font-black text-slate-900">{mockTypeNames[mockType]}</p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Question {currentQuestionIndex + 1} of {questions.length}</p>
+                  <p className="text-sm font-black text-foreground">{mockTypeNames[mockType]}</p>
                 </div>
               </div>
             </div>
@@ -381,7 +381,7 @@ function MockInterviewStartContent() {
               key={currentQuestionIndex}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-8"
+              className="bg-background rounded-2xl border-2 border-border shadow-lg p-8"
             >
               <div className="flex items-center gap-3 mb-6">
                 <div className={cn(
@@ -390,26 +390,26 @@ function MockInterviewStartContent() {
                   currentQuestion.type === 'system-design' && "bg-gradient-to-br from-purple-500 to-indigo-600",
                   currentQuestion.type === 'behavioral' && "bg-gradient-to-br from-orange-500 to-amber-600"
                 )}>
-                  {currentQuestion.type === 'coding' && <Code2 className="h-6 w-6 text-white" />}
-                  {currentQuestion.type === 'system-design' && <GitBranch className="h-6 w-6 text-white" />}
-                  {currentQuestion.type === 'behavioral' && <MessageSquare className="h-6 w-6 text-white" />}
+                  {currentQuestion.type === 'coding' && <Code2 className="h-6 w-6 text-primary-foreground dark:text-foreground" />}
+                  {currentQuestion.type === 'system-design' && <GitBranch className="h-6 w-6 text-primary-foreground dark:text-foreground" />}
+                  {currentQuestion.type === 'behavioral' && <MessageSquare className="h-6 w-6 text-primary-foreground dark:text-foreground" />}
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
                     {currentQuestion.type.replace('-', ' ')}
                   </p>
-                  <p className="text-sm font-semibold text-slate-600">
+                  <p className="text-sm font-semibold text-secondary">
                     {currentQuestion.timeLimit} minute{currentQuestion.timeLimit > 1 ? 's' : ''} to answer
                   </p>
                 </div>
               </div>
 
-              <h2 className="text-2xl font-black text-slate-900 mb-4 leading-tight">
+              <h2 className="text-2xl font-black text-foreground mb-4 leading-tight">
                 {currentQuestion.question}
               </h2>
 
               {currentQuestion.type === 'coding' && (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-700">
+                <div className="p-4 rounded-xl bg-surface border border-border text-sm text-foreground">
                   <p className="font-semibold mb-2">Tips:</p>
                   <ul className="space-y-1 text-xs">
                     <li>• Explain your thought process as you write</li>
@@ -420,7 +420,7 @@ function MockInterviewStartContent() {
               )}
 
               {currentQuestion.type === 'system-design' && (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-700">
+                <div className="p-4 rounded-xl bg-surface border border-border text-sm text-foreground">
                   <p className="font-semibold mb-2">Areas to cover:</p>
                   <ul className="space-y-1 text-xs">
                     <li>• Requirements clarification (functional & non-functional)</li>
@@ -432,7 +432,7 @@ function MockInterviewStartContent() {
               )}
 
               {currentQuestion.type === 'behavioral' && (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-700">
+                <div className="p-4 rounded-xl bg-surface border border-border text-sm text-foreground">
                   <p className="font-semibold mb-2">Use the STAR method:</p>
                   <ul className="space-y-1 text-xs">
                     <li>• <span className="font-bold">Situation:</span> Set the context</li>
@@ -445,9 +445,9 @@ function MockInterviewStartContent() {
             </motion.div>
 
             {/* Answer Panel */}
-            <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-6">
+            <div className="bg-background rounded-2xl border-2 border-border shadow-lg p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-black text-slate-900">Your Answer</h3>
+                <h3 className="text-lg font-black text-foreground">Your Answer</h3>
 
                 {currentQuestion.type === 'behavioral' && (
                   <Button
@@ -481,11 +481,11 @@ function MockInterviewStartContent() {
                     ? 'Describe your system design approach here...\n\n1. Requirements:\n   - \n\n2. High-level architecture:\n   - \n\n3. Data models:\n   - '
                     : 'Share your experience using the STAR method...\n\nSituation:\n\nTask:\n\nAction:\n\nResult:'
                 }
-                className="w-full h-96 p-4 rounded-xl border-2 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-none font-mono text-sm"
+                className="w-full h-96 p-4 rounded-xl border-2 border-border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all resize-none font-mono text-sm"
               />
 
               <div className="flex items-center justify-between mt-4">
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   {currentAnswer.length} characters • Auto-saved
                 </p>
                 <div className="flex items-center gap-2">
@@ -521,16 +521,24 @@ function MockInterviewStartContent() {
           {/* Right: Overview Panel */}
           <div className="space-y-6">
             {/* Questions Overview */}
-            <div className="bg-white rounded-2xl border-2 border-slate-200 shadow-lg p-6 sticky top-24">
-              <h3 className="text-lg font-black text-slate-900 mb-4">Questions</h3>
+            <div className="bg-background rounded-2xl border-2 border-border shadow-lg p-6 sticky top-24">
+              <h3 className="text-lg font-black text-foreground mb-4">Questions</h3>
               <div className="space-y-2">
                 {questions.map((q, idx) => (
                   <button
                     key={idx}
                     onClick={() => {
-                      setAnswers({ ...answers, [currentQuestionIndex]: currentAnswer });
+                      if (currentQuestion) {
+                        setAnswers({
+                          ...answers,
+                          [currentQuestionIndex]: {
+                            text: currentAnswer,
+                            questionId: currentQuestion.id,
+                          },
+                        });
+                      }
                       setCurrentQuestionIndex(idx);
-                      setCurrentAnswer(answers[idx] || '');
+                      setCurrentAnswer(answers[idx]?.text || '');
                     }}
                     className={cn(
                       "w-full text-left p-3 rounded-xl border-2 transition-all",
@@ -538,17 +546,17 @@ function MockInterviewStartContent() {
                         ? "bg-blue-50 border-blue-500"
                         : answers[idx]
                         ? "bg-emerald-50 border-emerald-300 hover:border-emerald-400"
-                        : "bg-slate-50 border-slate-200 hover:border-slate-300"
+                        : "bg-surface border-border hover:border-border"
                     )}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span className={cn(
                         "text-xs font-black px-2 py-0.5 rounded",
                         idx === currentQuestionIndex
-                          ? "bg-blue-600 text-white"
+                          ? "bg-blue-600 text-primary-foreground dark:text-foreground"
                           : answers[idx]
-                          ? "bg-emerald-600 text-white"
-                          : "bg-slate-300 text-slate-700"
+                          ? "bg-emerald-600 text-primary-foreground dark:text-foreground"
+                          : "bg-slate-300 text-foreground"
                       )}>
                         Q{idx + 1}
                       </span>
@@ -556,15 +564,15 @@ function MockInterviewStartContent() {
                         <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                       )}
                     </div>
-                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">
+                    <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-1">
                       {q.type.replace('-', ' ')}
                     </p>
-                    <p className="text-xs text-slate-500">{q.timeLimit} min</p>
+                    <p className="text-xs text-muted-foreground">{q.timeLimit} min</p>
                   </button>
                 ))}
               </div>
 
-              <div className="mt-6 pt-6 border-t border-slate-200">
+              <div className="mt-6 pt-6 border-t border-border">
                 <Button
                   onClick={() => setShowSubmitConfirm(true)}
                   variant="outline"
@@ -585,7 +593,7 @@ function MockInterviewStartContent() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-6"
+            className="fixed inset-0 bg-foreground dark:bg-background/50 flex items-center justify-center z-50 p-6"
             onClick={() => setShowSubmitConfirm(false)}
           >
             <motion.div
@@ -593,13 +601,13 @@ function MockInterviewStartContent() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-2xl border-2 border-slate-200 shadow-2xl p-8 max-w-md w-full"
+              className="bg-background rounded-2xl border-2 border-border shadow-2xl p-8 max-w-md w-full"
             >
               <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Send className="h-8 w-8 text-white" />
+                <Send className="h-8 w-8 text-primary-foreground dark:text-foreground" />
               </div>
-              <h3 className="text-2xl font-black text-slate-900 mb-2 text-center">Submit Mock Interview?</h3>
-              <p className="text-slate-600 text-center mb-6">
+              <h3 className="text-2xl font-black text-foreground mb-2 text-center">Submit Mock Interview?</h3>
+              <p className="text-secondary text-center mb-6">
                 You've answered {Object.keys(answers).length + 1} out of {questions.length} questions. Your answers will be evaluated and you'll receive detailed feedback.
               </p>
               <div className="flex gap-3">

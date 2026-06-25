@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LogOut, Settings } from "lucide-react";
+import { GlobalSearch } from "@/modules/search/components/GlobalSearch";
 
 interface NavLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   href: string;
@@ -200,11 +201,11 @@ export function SiteHeader() {
   };
 
   const triggerCls =
-    "bg-transparent text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=open]:text-primary data-[state=open]:bg-primary/10 hover:bg-muted rounded-lg h-9 px-3 gap-1.5";
+    "bg-transparent text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=open]:text-primary data-[state=open]:bg-primary/10 hover:bg-muted rounded-lg h-9 px-2 gap-1.5";
 
   const directLinkCls = (href: string) =>
     cn(
-      "inline-flex items-center gap-1.5 rounded-lg px-3 h-9 text-sm font-semibold transition-colors",
+      "inline-flex items-center gap-1.5 rounded-lg px-2 h-9 text-sm font-semibold transition-colors",
       isActive(href)
         ? "text-primary bg-primary/10"
         : "text-muted-foreground hover:text-foreground hover:bg-muted",
@@ -216,7 +217,7 @@ export function SiteHeader() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 shrink-0 group">
           <div className="relative flex h-10 w-10 items-center justify-center">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-400 via-indigo-500 to-purple-600 rounded-xl blur-md opacity-60 group-hover:opacity-80 transition-opacity" />
+            <div className="absolute inset-0 bg-primary rounded-xl blur-md opacity-60 group-hover:opacity-80 transition-opacity" />
             <div className="relative w-10 h-10 group-hover:scale-105 transition-transform duration-200">
               <svg viewBox="0 0 100 100" className="w-full h-full">
                 <defs>
@@ -235,13 +236,18 @@ export function SiteHeader() {
               </div>
             </div>
           </div>
-          <span className="text-xl font-black tracking-tight bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent hidden sm:inline-block">
+          <span className="text-xl font-black tracking-tight text-foreground hidden sm:inline-block">
             InterviewExplainer
           </span>
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden lg:flex items-center gap-1 ml-6">
+        <nav className="hidden lg:flex items-center gap-0 ml-4">
+          <Link href="/" className={directLinkCls("/")}>
+            <Compass className="h-4 w-4" />
+            Home
+          </Link>
+
           {isHubEnabled("dashboard") && (
             <Link href="/dashboard" className={directLinkCls("/dashboard")}>
               <LayoutDashboard className="h-4 w-4" />
@@ -333,14 +339,15 @@ export function SiteHeader() {
             <Link
               href="/mock-interviews"
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg px-3 h-9 text-sm font-semibold transition-colors",
+                "inline-flex items-center gap-1.5 rounded-lg px-3 h-9 text-sm font-semibold transition-colors whitespace-nowrap",
                 isActive("/mock-interviews")
                   ? "text-primary bg-primary/10"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted",
               )}
             >
               <Mic className="h-4 w-4" />
-              Mock Interview
+              <span>Mock Interview</span>
+              <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 whitespace-nowrap">Soon</span>
             </Link>
           )}
 
@@ -350,20 +357,17 @@ export function SiteHeader() {
           </Link>
         </nav>
 
+        {/* Global Search Bar (Desktop) */}
+        <div className="hidden md:flex flex-1 justify-center px-4 max-w-xl mx-auto">
+          <GlobalSearch />
+        </div>
+
         {/* Controls */}
         <div className="flex items-center gap-2 ml-auto">
-          {isHubEnabled("search") && (
-            <Link href="/search" className="hidden lg:flex">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted"
-              >
-                <Search className="h-4 w-4" />
-                <span className="sr-only">Search</span>
-              </Button>
-            </Link>
-          )}
+          {/* Global Search Button (Mobile/Tablet) */}
+          <div className="md:hidden">
+            <GlobalSearch />
+          </div>
 
           {mounted && (
             <Button
@@ -432,7 +436,7 @@ export function SiteHeader() {
               <Button variant="ghost" size="sm" asChild className="font-semibold text-muted-foreground hover:text-foreground">
                 <Link href="/login">Log in</Link>
               </Button>
-              <Button size="sm" asChild className="font-bold rounded-lg px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md text-white">
+              <Button size="sm" asChild className="font-bold rounded-lg px-5 bg-primary hover:opacity-90 shadow-md text-white">
                 <Link href="/signup">Sign up</Link>
               </Button>
             </div>
@@ -477,7 +481,10 @@ export function SiteHeader() {
                         )}
                       >
                         <item.icon className="h-4 w-4" />
-                        {item.label}
+                        <span className="flex-1">{item.label}</span>
+                        {item.href === "/mock-interviews" && (
+                          <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 whitespace-nowrap">Soon</span>
+                        )}
                       </Link>
                     );
                   })}
@@ -489,7 +496,7 @@ export function SiteHeader() {
                 <Button variant="outline" size="sm" asChild className="font-semibold">
                   <Link href="/login">Log in</Link>
                 </Button>
-                <Button size="sm" asChild className="font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+                <Button size="sm" asChild className="font-bold bg-primary text-white">
                   <Link href="/signup">Sign up free</Link>
                 </Button>
               </div>

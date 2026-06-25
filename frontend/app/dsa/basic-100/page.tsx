@@ -69,12 +69,12 @@ function HeroStat({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.04] p-3.5 transition-colors hover:bg-white/[0.07] hover:border-emerald-500/25">
+    <div className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-background/[0.04] p-3.5 transition-colors hover:bg-background/[0.07] hover:border-emerald-500/25">
       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/15 shrink-0">
         <Icon className="h-4 w-4 text-emerald-300" />
       </div>
       <div className="min-w-0">
-        <div className="text-lg font-black text-white leading-none tracking-tight">
+        <div className="text-lg font-black text-primary-foreground dark:text-foreground leading-none tracking-tight">
           {value}
         </div>
         <div className="text-[11px] font-medium text-zinc-500 mt-1.5 truncate">
@@ -115,7 +115,7 @@ function ProblemRow({
         <span
           className={`block text-sm font-semibold truncate transition-colors ${
             authored
-              ? "text-slate-800 group-hover:text-violet-700"
+              ? "text-foreground group-hover:text-violet-700"
               : "text-slate-400"
           }`}
         >
@@ -126,7 +126,7 @@ function ProblemRow({
         </span>
       </span>
       {pattern && (
-        <span className="hidden sm:inline-flex text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 shrink-0 capitalize">
+        <span className="hidden sm:inline-flex text-[10px] font-medium text-muted-foreground bg-surface border border-border rounded px-1.5 py-0.5 shrink-0 capitalize">
           {pattern.replace(/-/g, " ")}
         </span>
       )}
@@ -135,7 +135,7 @@ function ProblemRow({
           Solved
         </span>
       ) : (
-        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-slate-100 text-slate-500 border-slate-200 shrink-0">
+        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-surface text-muted-foreground border-border shrink-0">
           Queued
         </span>
       )}
@@ -146,20 +146,20 @@ function ProblemRow({
   );
 
   const baseClass =
-    "group flex items-center gap-3 px-3.5 py-2.5 rounded-xl border bg-white";
+    "group flex items-center gap-3 px-3.5 py-2.5 rounded-xl border bg-background";
 
   if (href) {
     return (
       <Link
         href={href}
-        className={`${baseClass} border-slate-200 hover:border-violet-300 hover:shadow-sm hover:bg-violet-50/30 transition-all`}
+        className={`${baseClass} border-border hover:border-violet-300 hover:shadow-sm hover:bg-violet-50/30 transition-all`}
       >
         {RowInner}
       </Link>
     );
   }
   return (
-    <div className={`${baseClass} border-slate-100 bg-slate-50/60`}>
+    <div className={`${baseClass} border-slate-100 bg-surface/60`}>
       {RowInner}
     </div>
   );
@@ -184,7 +184,7 @@ function SectionHeading({
         <Icon className="h-3.5 w-3.5" />
         {kicker}
       </p>
-      <h2 className="text-[1.4rem] font-black text-slate-900 tracking-[-0.01em] leading-tight">
+      <h2 className="text-[1.4rem] font-black text-foreground tracking-[-0.01em] leading-tight">
         {title}
       </h2>
     </div>
@@ -258,7 +258,7 @@ export default function Basic100Page() {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] to-[#f4f5f7] font-sans text-slate-800">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] to-[#f4f5f7] font-sans text-foreground">
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-0"
@@ -275,7 +275,7 @@ export default function Basic100Page() {
       />
 
       {/* ─── HERO ─────────────────────────────────────────────────── */}
-      <header className="relative z-10 overflow-hidden bg-[#0f1014] text-white">
+      <header className="relative z-10 overflow-hidden bg-[#0f1014] text-primary-foreground dark:text-foreground">
         <div className="pointer-events-none absolute inset-0" style={BG_HERO_GRID} aria-hidden />
         <div
           className="pointer-events-none absolute inset-0"
@@ -308,7 +308,7 @@ export default function Basic100Page() {
                 </span>
               </div>
 
-              <h1 className="text-4xl sm:text-[3rem] font-black tracking-[-0.02em] text-white leading-[1.02] mb-4 text-pretty">
+              <h1 className="text-4xl sm:text-[3rem] font-black tracking-[-0.02em] text-primary-foreground dark:text-foreground leading-[1.02] mb-4 text-pretty">
                 {catalog.title}
               </h1>
               <p className="text-base sm:text-[1.0625rem] text-zinc-400 leading-[1.65] max-w-[580px] mb-7 text-pretty">
@@ -319,14 +319,14 @@ export default function Basic100Page() {
                 {firstAuthored && (
                   <Link
                     href={`/dsa/problem/${firstAuthored.slug}`}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors text-sm shadow-lg shadow-emerald-900/40"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-primary-foreground dark:text-foreground font-bold rounded-xl transition-colors text-sm shadow-lg shadow-emerald-900/40"
                   >
                     <Play className="h-4 w-4" /> Start first problem
                   </Link>
                 )}
                 <a
                   href="#problems"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.12] text-zinc-300 hover:text-white font-medium rounded-xl transition-colors text-sm"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-zinc-300 hover:text-primary-foreground dark:text-foreground font-medium rounded-xl transition-colors text-sm"
                 >
                   Jump to the 100 problems <ChevronRight className="h-4 w-4" />
                 </a>
@@ -342,14 +342,14 @@ export default function Basic100Page() {
               </div>
 
               {total > 0 && (
-                <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
+                <div className="rounded-xl border border-white/[0.08] bg-background/[0.03] p-4">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">
                       Walkthroughs authored
                     </span>
-                    <span className="text-xs font-black text-white">{progressPercent}%</span>
+                    <span className="text-xs font-black text-primary-foreground dark:text-foreground">{progressPercent}%</span>
                   </div>
-                  <div className="h-2 bg-white/[0.08] rounded-full overflow-hidden">
+                  <div className="h-2 bg-background/[0.08] rounded-full overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-emerald-500 to-teal-400"
                       style={{ width: `${progressPercent}%` }}
@@ -372,7 +372,7 @@ export default function Basic100Page() {
 
           {/* About */}
           {descParagraphs.length > 0 && (
-            <section className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 shadow-[0_2px_20px_-10px_rgba(16,185,129,0.22)] overflow-hidden">
+            <section className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 shadow-[0_2px_20px_-10px_rgba(16,185,129,0.22)] overflow-hidden">
               <div className="px-6 sm:px-8 pt-5 pb-3 border-b border-slate-100 bg-gradient-to-br from-slate-50 to-white">
                 <p className="text-xs font-bold uppercase tracking-widest text-emerald-600 flex items-center gap-1.5">
                   <Baby className="h-3.5 w-3.5" />
@@ -383,9 +383,9 @@ export default function Basic100Page() {
                 {descParagraphs.map((p, i) => (
                   <p
                     key={i}
-                    className={`mb-4 last:mb-0 text-slate-700 ${
+                    className={`mb-4 last:mb-0 text-foreground ${
                       i === 0
-                        ? "text-[16px] leading-[1.75] text-slate-800 font-medium"
+                        ? "text-[16px] leading-[1.75] text-foreground font-medium"
                         : "text-[15px] leading-[1.8]"
                     }`}
                   >
@@ -411,7 +411,7 @@ export default function Basic100Page() {
                 {catalog.howToUse.map((line, i) => (
                   <li
                     key={i}
-                    className="flex gap-3 text-[14.5px] text-slate-700 leading-[1.7]"
+                    className="flex gap-3 text-[14.5px] text-foreground leading-[1.7]"
                   >
                     <span className="text-[11px] font-bold font-mono text-violet-700 bg-violet-100 border border-violet-200 rounded-lg w-6 h-6 flex items-center justify-center shrink-0">
                       {i + 1}
@@ -441,11 +441,11 @@ export default function Basic100Page() {
                   <div
                     key={group.groupSlug}
                     id={`grp-${group.groupSlug}`}
-                    className="scroll-mt-24 rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden"
+                    className="scroll-mt-24 rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden"
                   >
                     <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 bg-gradient-to-br from-slate-50 to-white">
-                      <h3 className="text-[15px] font-bold text-slate-900 flex items-center gap-2.5 tracking-tight">
-                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 text-white text-xs font-black shadow-sm shadow-emerald-200">
+                      <h3 className="text-[15px] font-bold text-foreground flex items-center gap-2.5 tracking-tight">
+                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 text-primary-foreground dark:text-foreground text-xs font-black shadow-sm shadow-emerald-200">
                           {gi + 1}
                         </span>
                         {group.title}
@@ -455,7 +455,7 @@ export default function Basic100Page() {
                       </span>
                     </div>
                     {group.blurb && (
-                      <p className="text-sm text-slate-600 px-5 pt-3 -mb-1">
+                      <p className="text-sm text-secondary px-5 pt-3 -mb-1">
                         {group.blurb}
                       </p>
                     )}
@@ -494,14 +494,14 @@ export default function Basic100Page() {
                 <Link
                   key={c.href}
                   href={c.href}
-                  className="group rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 shadow-[0_2px_16px_-10px_rgba(124,58,237,0.18)] hover:border-violet-300 hover:shadow-xl hover:shadow-violet-200/50 hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col"
+                  className="group rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 shadow-[0_2px_16px_-10px_rgba(124,58,237,0.18)] hover:border-violet-300 hover:shadow-xl hover:shadow-violet-200/50 hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col"
                 >
                   <div className="h-1.5 bg-gradient-to-r from-emerald-500 to-violet-500" />
                   <div className="p-5 flex flex-col flex-1">
-                    <div className="text-lg font-black text-slate-900 group-hover:text-violet-700 tracking-tight transition-colors">
+                    <div className="text-lg font-black text-foreground group-hover:text-violet-700 tracking-tight transition-colors">
                       {c.label}
                     </div>
-                    <div className="text-sm text-slate-500 mt-1 leading-snug">{c.desc}</div>
+                    <div className="text-sm text-muted-foreground mt-1 leading-snug">{c.desc}</div>
                     <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-violet-600">
                       Continue <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
                     </div>
@@ -514,7 +514,7 @@ export default function Basic100Page() {
           <div className="pt-2">
             <Link
               href="/dsa"
-              className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-violet-700 transition-colors"
+              className="inline-flex items-center gap-2 text-sm font-medium text-secondary hover:text-violet-700 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to DSA hub

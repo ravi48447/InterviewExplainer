@@ -217,7 +217,7 @@ const TAG_COLORS: Record<string, string> = {
   Cloud: "bg-orange-100 text-orange-700",
   Java: "bg-rose-100 text-rose-700",
   Python: "bg-indigo-100 text-indigo-700",
-  "Build Tools": "bg-slate-100 text-slate-700",
+  "Build Tools": "bg-surface text-foreground",
   Frontend: "bg-pink-100 text-pink-700",
   Security: "bg-yellow-100 text-yellow-700",
   Concurrency: "bg-teal-100 text-teal-700",
@@ -229,24 +229,24 @@ const allTags = [...new Set(COMPARISONS.map((c) => c.tag))];
 
 export default function ComparePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-slate-800 selection:bg-blue-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-blue-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
           <Link
             href="/"
-            className="hover:text-slate-600 flex items-center gap-1"
+            className="hover:text-secondary flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-600 font-medium">
+          <span className="text-secondary font-medium">
             Compare (X vs Y)
           </span>
         </nav>
 
         {/* Hero */}
-        <header className="mb-12 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+        <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
           <div className="relative px-8 py-8 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
             <div className="flex items-center gap-2 mb-3">
               <ArrowLeftRight className="h-5 w-5 text-blue-600" />
@@ -254,10 +254,10 @@ export default function ComparePage() {
                 Head-to-Head Analysis
               </span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 mb-3">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               X vs Y — Interview-Ready Comparisons
             </h1>
-            <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
               &quot;When would you use Kafka over RabbitMQ?&quot; — Every
               interviewer loves comparison questions. These aren&apos;t generic
               articles. Each comparison is framed for the interview: key
@@ -265,17 +265,17 @@ export default function ComparePage() {
               say. Includes real-world use cases and architecture implications.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                   <ArrowLeftRight className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Comparisons
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {COMPARISONS.length}
                   </div>
                 </div>
@@ -286,10 +286,10 @@ export default function ComparePage() {
                   <Layers className="h-5 w-5 text-indigo-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Categories
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {allTags.length}
                   </div>
                 </div>
@@ -300,10 +300,10 @@ export default function ComparePage() {
                   <TrendingUp className="h-5 w-5 text-purple-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Total Monthly Searches
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     1.2M+
                   </div>
                 </div>
@@ -317,7 +317,7 @@ export default function ComparePage() {
           {allTags.map((tag) => (
             <span
               key={tag}
-              className={`text-xs font-bold px-3 py-1.5 rounded-full ${TAG_COLORS[tag] ?? "bg-slate-100 text-slate-600"}`}
+              className={`text-xs font-bold px-3 py-1.5 rounded-full ${TAG_COLORS[tag] ?? "bg-surface text-secondary"}`}
             >
               {tag} ({COMPARISONS.filter((c) => c.tag === tag).length})
             </span>
@@ -328,11 +328,11 @@ export default function ComparePage() {
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-2">
             <TrendingUp className="h-5 w-5 text-blue-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               Most Searched Comparisons
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5">
+          <p className="text-sm text-muted-foreground mb-5">
             The comparison questions with highest search volume — every
             interviewer asks at least one of these.
           </p>
@@ -344,12 +344,12 @@ export default function ComparePage() {
               <Link
                 key={c.slug}
                 href={`/compare/${c.slug}`}
-                className="group rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-blue-300 transition-all p-5"
+                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-blue-300 transition-all p-5"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TAG_COLORS[c.tag] ?? "bg-slate-100 text-slate-600"}`}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TAG_COLORS[c.tag] ?? "bg-surface text-secondary"}`}
                     >
                       {c.tag}
                     </span>
@@ -361,7 +361,7 @@ export default function ComparePage() {
                   <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
                 </div>
 
-                <h3 className="text-[15px] font-bold text-slate-900 group-hover:text-blue-600 transition-colors mb-2">
+                <h3 className="text-[15px] font-bold text-foreground group-hover:text-blue-600 transition-colors mb-2">
                   {c.title}
                 </h3>
 
@@ -375,8 +375,8 @@ export default function ComparePage() {
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-500 leading-relaxed pt-3 border-t border-slate-100">
-                  <span className="font-semibold text-slate-700">
+                <p className="text-xs text-muted-foreground leading-relaxed pt-3 border-t border-slate-100">
+                  <span className="font-semibold text-foreground">
                     Quick verdict:
                   </span>{" "}
                   {c.verdict}
@@ -390,11 +390,11 @@ export default function ComparePage() {
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-2">
             <BookOpen className="h-5 w-5 text-indigo-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               All Comparisons
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5">
+          <p className="text-sm text-muted-foreground mb-5">
             Complete list across all categories. Each comparison includes
             trade-off tables, when-to-use flowcharts, and interview phrasing.
           </p>
@@ -404,23 +404,23 @@ export default function ComparePage() {
               <Link
                 key={c.slug}
                 href={`/compare/${c.slug}`}
-                className="group flex items-center gap-4 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-blue-300 transition-all p-4"
+                className="group flex items-center gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-blue-300 transition-all p-4"
               >
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center shrink-0">
                   <ArrowLeftRight className="h-5 w-5 text-blue-600" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                    <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 transition-colors">
                       {c.title}
                     </h3>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TAG_COLORS[c.tag] ?? "bg-slate-100 text-slate-600"}`}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TAG_COLORS[c.tag] ?? "bg-surface text-secondary"}`}
                     >
                       {c.tag}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 leading-snug line-clamp-1">
+                  <p className="text-xs text-muted-foreground leading-snug line-clamp-1">
                     {c.verdict}
                   </p>
                 </div>
@@ -435,17 +435,17 @@ export default function ComparePage() {
 
         {/* CTA */}
         <section className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-8 text-center mb-12">
-          <h2 className="text-2xl font-black text-slate-900 mb-3">
+          <h2 className="text-2xl font-black text-foreground mb-3">
             Comparisons in Your Interview Prep
           </h2>
-          <p className="text-sm text-slate-600 mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
             These comparisons appear as interview questions in your domain
             prep. Select your path and get them mapped alongside Q&A, system
             design, DSA, and behavioral.
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

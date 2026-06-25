@@ -72,7 +72,7 @@ export function DSAProblemRow({
         <span
           className={`text-[13.5px] font-semibold leading-snug block truncate ${
             authored
-              ? "text-slate-800 group-hover:text-violet-700"
+              ? "text-foreground group-hover:text-violet-700"
               : "text-slate-400"
           }`}
         >
@@ -91,7 +91,7 @@ export function DSAProblemRow({
           {companies.map((c) => (
             <span
               key={c}
-              className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5"
+              className="text-[10px] font-medium text-muted-foreground bg-surface border border-border rounded px-1.5 py-0.5"
             >
               {COMPANY_DISPLAY[c] ?? c}
             </span>
@@ -118,7 +118,7 @@ export function DSAProblemRow({
           Explained
         </span>
       ) : (
-        <span className="text-[10px] font-bold text-slate-400 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 shrink-0">
+        <span className="text-[10px] font-bold text-slate-400 bg-surface border border-border rounded px-1.5 py-0.5 shrink-0">
           Queued
         </span>
       )}
@@ -137,14 +137,14 @@ export function DSAProblemRow({
     return (
       <Link
         href={`/dsa/problem/${problem.slug}`}
-        className={`${base} border-slate-200 bg-white hover:border-violet-300 hover:shadow-sm hover:bg-violet-50/40`}
+        className={`${base} border-border bg-background hover:border-violet-300 hover:shadow-sm hover:bg-violet-50/40`}
       >
         {inner}
       </Link>
     );
   }
   return (
-    <div className={`${base} border-slate-100 bg-slate-50/60 opacity-75`}>
+    <div className={`${base} border-slate-100 bg-surface/60 opacity-75`}>
       {inner}
     </div>
   );
@@ -165,7 +165,7 @@ export function DSAProblemList({
 }) {
   if (problems.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500 text-center">
+      <div className="rounded-xl border border-dashed border-border bg-surface p-6 text-sm text-muted-foreground text-center">
         No problems indexed here yet.
       </div>
     );

@@ -75,12 +75,12 @@ export default function AccountPage() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Account</h1>
-        <p className="text-sm text-slate-500">Manage your profile, goal and plan.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground dark:text-primary-foreground dark:text-foreground">Account</h1>
+        <p className="text-sm text-muted-foreground">Manage your profile, goal and plan.</p>
       </div>
 
       {/* Plan card */}
-      <Card className="border-slate-200 dark:border-slate-800">
+      <Card className="border-border dark:border-border">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Crown className={`h-5 w-5 ${isPro ? 'text-amber-500' : 'text-slate-400'}`} />
@@ -105,7 +105,7 @@ export default function AccountPage() {
       </Card>
 
       {/* Profile / goal form */}
-      <Card className="border-slate-200 dark:border-slate-800">
+      <Card className="border-border dark:border-border">
         <CardHeader>
           <CardTitle className="text-lg">Profile & goal</CardTitle>
           <CardDescription>This personalizes your dashboard and readiness countdown.</CardDescription>
@@ -158,7 +158,7 @@ export default function AccountPage() {
                   id="level"
                   value={experienceLevel}
                   onChange={(e) => setExperienceLevel(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-border dark:border-border bg-background dark:dark:bg-surface px-3 py-2 text-sm"
                 >
                   <option value="">Not set</option>
                   {LEVELS.map((l) => (
@@ -185,7 +185,7 @@ export default function AccountPage() {
 
       <button
         onClick={logout}
-        className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-red-600 transition-colors"
+        className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-red-600 transition-colors"
       >
         <LogOut className="h-4 w-4" /> Sign out
       </button>

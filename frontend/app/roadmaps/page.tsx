@@ -183,24 +183,24 @@ const TIMELINE_PLANS = [
 
 export default function RoadmapsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50/20 to-emerald-50/20 font-sans text-slate-800 selection:bg-green-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50/20 to-emerald-50/20 font-sans text-foreground selection:bg-green-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
           <Link
             href="/"
-            className="hover:text-slate-600 flex items-center gap-1"
+            className="hover:text-secondary flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-600 font-medium">
+          <span className="text-secondary font-medium">
             Roadmaps & Study Plans
           </span>
         </nav>
 
         {/* Hero */}
-        <header className="mb-12 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+        <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
           <div className="relative px-8 py-8 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
             <div className="flex items-center gap-2 mb-3">
               <Map className="h-5 w-5 text-green-600" />
@@ -208,27 +208,27 @@ export default function RoadmapsPage() {
                 Structured Learning Paths
               </span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 mb-3">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               Interview Roadmaps & Study Plans
             </h1>
-            <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
               Stop guessing what to study. Follow structured, week-by-week plans
               designed for your domain and timeline. Includes domain-specific
               roadmaps, curated DSA problem sets, and flexible timeline-based
               plans from 2-week sprints to 12-week mastery programs.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
                   <Briefcase className="h-5 w-5 text-green-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Domain Roadmaps
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {DOMAIN_ROADMAPS.length}
                   </div>
                 </div>
@@ -239,10 +239,10 @@ export default function RoadmapsPage() {
                   <Code2 className="h-5 w-5 text-emerald-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     DSA Study Plans
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {DSA_PLANS.length}
                   </div>
                 </div>
@@ -253,10 +253,10 @@ export default function RoadmapsPage() {
                   <Calendar className="h-5 w-5 text-teal-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Timeline Plans
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {TIMELINE_PLANS.length}
                   </div>
                 </div>
@@ -269,11 +269,11 @@ export default function RoadmapsPage() {
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
             <Clock className="h-5 w-5 text-green-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               Choose Your Timeline
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5 max-w-2xl">
+          <p className="text-sm text-muted-foreground mb-5 max-w-2xl">
             Got an interview in 2 weeks or planning 3 months ahead? Pick the
             plan that fits your schedule.
           </p>
@@ -281,24 +281,24 @@ export default function RoadmapsPage() {
             {TIMELINE_PLANS.map((plan) => (
               <div
                 key={plan.duration}
-                className="rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all p-5"
+                className="rounded-xl border border-border bg-background shadow-sm hover:shadow-md transition-all p-5"
               >
                 <div
                   className={`w-10 h-10 rounded-lg ${plan.bg} flex items-center justify-center mb-3`}
                 >
                   <plan.icon className={`h-5 w-5 ${plan.color}`} />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900 mb-1.5">
+                <h3 className="text-sm font-bold text-foreground mb-1.5">
                   {plan.duration}
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed mb-3">
+                <p className="text-xs text-muted-foreground leading-relaxed mb-3">
                   {plan.desc}
                 </p>
                 <div className="pt-3 border-t border-slate-100">
                   <p className="text-[10px] font-bold uppercase text-slate-400 mb-1">
                     Ideal for
                   </p>
-                  <p className="text-xs text-slate-600 font-medium">
+                  <p className="text-xs text-secondary font-medium">
                     {plan.ideal}
                   </p>
                 </div>
@@ -311,11 +311,11 @@ export default function RoadmapsPage() {
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
             <Target className="h-5 w-5 text-emerald-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               Domain-Specific Roadmaps
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5 max-w-2xl">
+          <p className="text-sm text-muted-foreground mb-5 max-w-2xl">
             Complete week-by-week study plans tailored to your specific career
             path and experience level. Each includes Q&A, system design, DSA,
             behavioral, and tools.
@@ -325,22 +325,22 @@ export default function RoadmapsPage() {
               <Link
                 key={roadmap.slug}
                 href={`/roadmaps/${roadmap.slug}`}
-                className="group rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-green-300 transition-all p-5"
+                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-green-300 transition-all p-5"
               >
                 <div className="flex items-start gap-4">
                   <div
                     className={`w-12 h-12 rounded-xl bg-gradient-to-br ${roadmap.gradient} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}
                   >
-                    <Layers className="h-6 w-6 text-white" />
+                    <Layers className="h-6 w-6 text-primary-foreground dark:text-foreground" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <h3 className="text-[15px] font-bold text-slate-900 group-hover:text-green-600 transition-colors">
+                      <h3 className="text-[15px] font-bold text-foreground group-hover:text-green-600 transition-colors">
                         {roadmap.name}
                       </h3>
                       <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-green-500 group-hover:translate-x-1 transition-all shrink-0" />
                     </div>
-                    <p className="text-xs text-slate-500 mb-2">
+                    <p className="text-xs text-muted-foreground mb-2">
                       {roadmap.stacks}
                     </p>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -350,7 +350,7 @@ export default function RoadmapsPage() {
                       {roadmap.levels.map((level) => (
                         <span
                           key={level}
-                          className="text-[10px] font-medium text-slate-400 bg-slate-50 px-2 py-0.5 rounded-full"
+                          className="text-[10px] font-medium text-slate-400 bg-surface px-2 py-0.5 rounded-full"
                         >
                           {level}
                         </span>
@@ -367,11 +367,11 @@ export default function RoadmapsPage() {
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
             <Code2 className="h-5 w-5 text-violet-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               Curated DSA Problem Sets
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5 max-w-2xl">
+          <p className="text-sm text-muted-foreground mb-5 max-w-2xl">
             The internet&apos;s most trusted problem lists, restructured with
             explanations, pattern tags, and progress tracking.
           </p>
@@ -380,14 +380,14 @@ export default function RoadmapsPage() {
               <Link
                 key={plan.slug}
                 href={`/roadmaps/dsa/${plan.slug}`}
-                className="group flex items-start gap-4 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-violet-300 transition-all p-5"
+                className="group flex items-start gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-violet-300 transition-all p-5"
               >
                 <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
                   <Code2 className="h-5 w-5 text-violet-600" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-[15px] font-bold text-slate-900 group-hover:text-violet-600 transition-colors">
+                    <h3 className="text-[15px] font-bold text-foreground group-hover:text-violet-600 transition-colors">
                       {plan.name}
                     </h3>
                     <span
@@ -396,7 +396,7 @@ export default function RoadmapsPage() {
                       {plan.tag}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed mb-2">
+                  <p className="text-xs text-muted-foreground leading-relaxed mb-2">
                     {plan.desc}
                   </p>
                   <div className="flex items-center gap-4 text-xs font-semibold text-slate-400">
@@ -417,17 +417,17 @@ export default function RoadmapsPage() {
 
         {/* CTA */}
         <section className="rounded-xl border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 p-8 text-center mb-12">
-          <h2 className="text-2xl font-black text-slate-900 mb-3">
+          <h2 className="text-2xl font-black text-foreground mb-3">
             Get a Personalized Roadmap for Your Domain
           </h2>
-          <p className="text-sm text-slate-600 mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
             Select your language, track, and experience level to get a
             customized study plan with progress tracking across Q&A, system
             design, DSA, and behavioral prep.
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

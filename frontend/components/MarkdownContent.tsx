@@ -193,16 +193,16 @@ function buildRendererOptions(theme: 'dark' | 'light') {
         const tag = `h${depth}`;
         const cls: Record<number, string> = d
           ? {
-              1: 'text-[22px] font-black text-slate-100 mt-8 mb-4 first:mt-0 pb-2.5 border-b border-slate-700/60 tracking-tight leading-tight',
-              2: 'text-[19px] font-bold text-slate-100 mt-8 mb-3 first:mt-0 pb-1.5 border-b border-slate-700/40 tracking-tight leading-snug',
+              1: 'text-[22px] font-black text-slate-100 mt-8 mb-4 first:mt-0 pb-2.5 border-b border-border/60 tracking-tight leading-tight',
+              2: 'text-[19px] font-bold text-slate-100 mt-8 mb-3 first:mt-0 pb-1.5 border-b border-border/40 tracking-tight leading-snug',
               3: 'text-[16.5px] font-bold text-slate-100 mt-7 mb-2.5 first:mt-0 leading-snug pl-3 border-l-[3px] border-blue-500/60',
               4: 'text-[12.5px] font-bold text-slate-400 uppercase tracking-[0.12em] mt-5 mb-1.5',
             }
           : {
-              1: 'text-[22px] font-black text-slate-900 mt-8 mb-4 first:mt-0 pb-2.5 border-b border-slate-200 tracking-tight leading-tight',
-              2: 'text-[19px] font-bold text-slate-900 mt-8 mb-3 first:mt-0 pb-1.5 border-b border-slate-200 tracking-tight leading-snug',
-              3: 'text-[16.5px] font-bold text-slate-800 mt-7 mb-2.5 first:mt-0 leading-snug pl-3 border-l-[3px] border-blue-500/70',
-              4: 'text-[12.5px] font-bold text-slate-500 uppercase tracking-[0.12em] mt-5 mb-1.5',
+              1: 'text-[22px] font-black text-foreground mt-8 mb-4 first:mt-0 pb-2.5 border-b border-border tracking-tight leading-tight',
+              2: 'text-[19px] font-bold text-foreground mt-8 mb-3 first:mt-0 pb-1.5 border-b border-border tracking-tight leading-snug',
+              3: 'text-[16.5px] font-bold text-foreground mt-7 mb-2.5 first:mt-0 leading-snug pl-3 border-l-[3px] border-blue-500/70',
+              4: 'text-[12.5px] font-bold text-muted-foreground uppercase tracking-[0.12em] mt-5 mb-1.5',
             };
         return `<${tag} class="${cls[depth] ?? ''}">${text}</${tag}>`;
       },
@@ -212,7 +212,7 @@ function buildRendererOptions(theme: 'dark' | 'light') {
         const text = this.parser.parseInline(tokens);
         const cls = d
           ? 'text-[15.5px] leading-[1.78] text-slate-200 mb-5 last:mb-0'
-          : 'text-[15.5px] leading-[1.78] text-slate-700 mb-5 last:mb-0';
+          : 'text-[15.5px] leading-[1.78] text-foreground mb-5 last:mb-0';
         return `<p class="${cls}">${text}</p>`;
       },
 
@@ -221,7 +221,7 @@ function buildRendererOptions(theme: 'dark' | 'light') {
         const body = this.parser.parse(tokens);
         const cls = d
           ? 'border-l-4 border-blue-500/60 pl-4 py-2 my-4 bg-blue-950/30 rounded-r-lg text-slate-300 italic'
-          : 'border-l-4 border-blue-400/60 pl-4 py-2 my-4 bg-blue-50 rounded-r-lg text-slate-600 italic';
+          : 'border-l-4 border-blue-400/60 pl-4 py-2 my-4 bg-blue-50 rounded-r-lg text-secondary italic';
         return `<blockquote class="${cls}">${body}</blockquote>`;
       },
 
@@ -237,10 +237,10 @@ function buildRendererOptions(theme: 'dark' | 'light') {
               const num = counter++;
               const badgeCls = d
                 ? 'mt-[3px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-slate-700/70 text-[11px] font-bold text-slate-200 border border-slate-600/60'
-                : 'mt-[3px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-bold text-slate-700 border border-slate-200';
+                : 'mt-[3px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-surface text-[11px] font-bold text-foreground border border-border';
               const textCls = d
                 ? 'flex-1 text-[15.5px] leading-[1.78] text-slate-200 min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0'
-                : 'flex-1 text-[15.5px] leading-[1.78] text-slate-700 min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
+                : 'flex-1 text-[15.5px] leading-[1.78] text-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
               return `<li class="flex items-start gap-3"><span class="${badgeCls}">${num}</span><div class="${textCls}">${body}</div></li>`;
             }
             const dotCls = d
@@ -248,7 +248,7 @@ function buildRendererOptions(theme: 'dark' | 'light') {
               : 'mt-[9px] h-[7px] w-[7px] rounded-full bg-blue-500 shrink-0';
             const textCls = d
               ? 'flex-1 text-[15.5px] leading-[1.78] text-slate-200 min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0'
-              : 'flex-1 text-[15.5px] leading-[1.78] text-slate-700 min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
+              : 'flex-1 text-[15.5px] leading-[1.78] text-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
             return `<li class="flex items-start gap-3"><span class="${dotCls}"></span><div class="${textCls}">${body}</div></li>`;
           })
           .join('');
@@ -257,13 +257,13 @@ function buildRendererOptions(theme: 'dark' | 'light') {
 
       strong(token: any) {
         const { text } = token;
-        const cls = d ? 'font-bold text-white' : 'font-bold text-slate-900';
+        const cls = d ? 'font-bold text-primary-foreground dark:text-foreground' : 'font-bold text-foreground';
         return `<strong class="${cls}">${text}</strong>`;
       },
 
       em(token: any) {
         const { text } = token;
-        const cls = d ? 'italic text-slate-300' : 'italic text-slate-600';
+        const cls = d ? 'italic text-slate-300' : 'italic text-secondary';
         return `<em class="${cls}">${text}</em>`;
       },
 
@@ -284,7 +284,7 @@ function buildRendererOptions(theme: 'dark' | 'light') {
       },
 
       hr() {
-        const cls = d ? 'border-slate-700/60 my-6' : 'border-slate-200 my-6';
+        const cls = d ? 'border-border/60 my-6' : 'border-border my-6';
         return `<hr class="${cls}" />`;
       },
 
@@ -299,16 +299,16 @@ function buildRendererOptions(theme: 'dark' | 'light') {
       table(this: any, token: any) {
         const { header, rows } = token;
         const thCls = d
-          ? 'px-4 py-3 bg-slate-800 font-bold text-slate-200 border-b border-slate-700/60 text-left text-[11.5px] uppercase tracking-[0.08em]'
-          : 'px-4 py-3 bg-slate-50 font-bold text-slate-700 border-b border-slate-200 text-left text-[11.5px] uppercase tracking-[0.08em]';
+          ? 'px-4 py-3 dark:bg-surface font-bold text-slate-200 border-b border-border/60 text-left text-[11.5px] uppercase tracking-[0.08em]'
+          : 'px-4 py-3 bg-surface font-bold text-foreground border-b border-border text-left text-[11.5px] uppercase tracking-[0.08em]';
         const tdCls = d
-          ? 'px-4 py-3 border-b border-slate-700/40 text-slate-300 text-[14px] leading-[1.6] align-top'
-          : 'px-4 py-3 border-b border-slate-100 text-slate-700 text-[14px] leading-[1.6] align-top';
-        const trEvenCls = d ? 'bg-slate-800/30' : 'bg-slate-50/50';
+          ? 'px-4 py-3 border-b border-border/40 text-slate-300 text-[14px] leading-[1.6] align-top'
+          : 'px-4 py-3 border-b border-slate-100 text-foreground text-[14px] leading-[1.6] align-top';
+        const trEvenCls = d ? 'dark:bg-surface/30' : 'bg-surface/50';
         const containerCls = d
-          ? 'overflow-x-auto my-6 rounded-lg border border-slate-700/60'
-          : 'overflow-x-auto my-6 rounded-lg border border-slate-200';
-        const theadCls = d ? 'bg-slate-800' : 'bg-slate-50';
+          ? 'overflow-x-auto my-6 rounded-lg border border-border/60'
+          : 'overflow-x-auto my-6 rounded-lg border border-border';
+        const theadCls = d ? 'dark:bg-surface' : 'bg-surface';
 
         const headerCells = (header as any[])
           .map((cell: any) => `<th class="${thCls}">${this.parser.parseInline(cell.tokens)}</th>`)

@@ -15,15 +15,15 @@ export interface BreadcrumbItem {
  */
 export function DSABreadcrumb({ trail }: { trail: BreadcrumbItem[] }) {
   return (
-    <nav className="flex items-center gap-1.5 text-[12px] text-slate-500 mb-4 flex-wrap">
+    <nav className="flex items-center gap-1.5 text-[12px] text-muted-foreground mb-4 flex-wrap">
       <Link
         href="/"
-        className="hover:text-slate-700 flex items-center gap-1"
+        className="hover:text-foreground flex items-center gap-1"
       >
         <Home className="h-3 w-3" /> Home
       </Link>
       <ChevronRight className="h-3 w-3 text-slate-300" />
-      <Link href="/dsa" className="hover:text-slate-700">
+      <Link href="/dsa" className="hover:text-foreground">
         DSA
       </Link>
       {trail.map((item, i) => {
@@ -32,11 +32,11 @@ export function DSABreadcrumb({ trail }: { trail: BreadcrumbItem[] }) {
           <span key={`${item.label}-${i}`} className="flex items-center gap-1.5">
             <ChevronRight className="h-3 w-3 text-slate-300" />
             {isLast || !item.href ? (
-              <span className="text-slate-600 font-medium truncate max-w-[240px]">
+              <span className="text-secondary font-medium truncate max-w-[240px]">
                 {item.label}
               </span>
             ) : (
-              <Link href={item.href} className="hover:text-slate-700">
+              <Link href={item.href} className="hover:text-foreground">
                 {item.label}
               </Link>
             )}

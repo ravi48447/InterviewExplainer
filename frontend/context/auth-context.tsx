@@ -24,11 +24,19 @@ interface User {
   authProvider?: 'password' | 'google' | 'github' | 'magic';
 }
 
+export interface SignupData {
+  name: string;
+  email: string;
+  password: string;
+  experienceBand?: string;
+  [key: string]: any;
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<User>;
-  signup: (userData: any) => Promise<User>;
+  signup: (userData: SignupData) => Promise<User>;
   refreshUser: () => Promise<void>;
   logout: () => void;
 }
@@ -72,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user;
   };
 
-  const signup = async (userData: any) => {
+  const signup = async (userData: SignupData) => {
     const guest = hasGuestData() ? getGuestData() : undefined;
     const res = await apiClient.post('/auth/signup', { ...userData, guest });
     const { token, user } = res.data;

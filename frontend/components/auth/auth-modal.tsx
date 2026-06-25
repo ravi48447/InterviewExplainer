@@ -76,11 +76,11 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+      <div className="absolute inset-0 dark:bg-surface/60 backdrop-blur-sm animate-in fade-in" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-2xl bg-background dark:dark:bg-surface border border-border dark:border-border shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         <button
           onClick={onClose}
-          className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 transition-colors"
+          className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-400 hover:bg-surface dark:hover:dark:bg-surface hover:text-secondary transition-colors"
           aria-label="Close"
         >
           <X className="h-4 w-4" />
@@ -92,17 +92,17 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
                 <CheckCircle2 className="h-6 w-6 text-emerald-600" />
               </div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Check your inbox</h2>
-              <p className="mt-1.5 text-sm text-slate-500">
+              <h2 className="text-lg font-bold text-foreground dark:text-primary-foreground dark:text-foreground">Check your inbox</h2>
+              <p className="mt-1.5 text-sm text-muted-foreground">
                 We sent a secure sign-in link to <strong>{email}</strong>.
               </p>
             </div>
           ) : (
             <>
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+              <h2 className="text-xl font-bold text-foreground dark:text-primary-foreground dark:text-foreground">
                 {title ?? (tab === 'login' ? 'Welcome back' : 'Save your progress')}
               </h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {subtitle ?? (tab === 'login'
                   ? 'Sign in to sync your bookmarks and progress.'
                   : 'Create a free account — your reading stays personalized.')}
@@ -120,9 +120,9 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
               </div>
 
               <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-200 dark:border-slate-800" /></div>
+                <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border dark:border-border" /></div>
                 <div className="relative flex justify-center text-[11px] uppercase">
-                  <span className="bg-white dark:bg-slate-900 px-2 text-slate-400">or with email</span>
+                  <span className="bg-background dark:dark:bg-surface px-2 text-slate-400">or with email</span>
                 </div>
               </div>
 
@@ -136,7 +136,7 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
                     <User className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                     <input
                       type="text" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400"
+                      className="w-full rounded-lg border border-border dark:border-border bg-background dark:dark:bg-surface py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400"
                       autoComplete="name"
                     />
                   </div>
@@ -145,7 +145,7 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
                   <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                   <input
                     type="email" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400"
+                    className="w-full rounded-lg border border-border dark:border-border bg-background dark:dark:bg-surface py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400"
                     autoComplete="email"
                   />
                 </div>
@@ -154,17 +154,17 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
                   <input
                     type={showPwd ? 'text' : 'password'} placeholder={tab === 'signup' ? 'Password (6+ chars)' : 'Password'}
                     value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6}
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-9 pr-9 text-sm outline-none focus:border-indigo-400"
+                    className="w-full rounded-lg border border-border dark:border-border bg-background dark:dark:bg-surface py-2 pl-9 pr-9 text-sm outline-none focus:border-indigo-400"
                     autoComplete={tab === 'signup' ? 'new-password' : 'current-password'}
                   />
-                  <button type="button" onClick={() => setShowPwd((s) => !s)} className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600" tabIndex={-1} aria-label="Toggle password">
+                  <button type="button" onClick={() => setShowPwd((s) => !s)} className="absolute right-3 top-2.5 text-slate-400 hover:text-secondary" tabIndex={-1} aria-label="Toggle password">
                     {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
 
                 <button
                   type="submit" disabled={busy}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 py-2.5 text-sm font-semibold text-white hover:from-blue-700 hover:to-indigo-700 transition-colors disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 py-2.5 text-sm font-semibold text-primary-foreground dark:text-foreground hover:from-blue-700 hover:to-indigo-700 transition-colors disabled:opacity-60"
                 >
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {tab === 'login' ? 'Sign In' : 'Create Free Account'}
@@ -177,7 +177,7 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
                 </button>
                 <button
                   onClick={() => { setTab(tab === 'login' ? 'signup' : 'login'); setError(null); }}
-                  className="font-medium text-slate-500 hover:text-slate-700"
+                  className="font-medium text-muted-foreground hover:text-foreground"
                 >
                   {tab === 'login' ? 'New here? Sign up' : 'Have an account? Sign in'}
                 </button>

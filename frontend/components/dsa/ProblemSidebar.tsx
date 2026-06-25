@@ -89,12 +89,12 @@ export function ProblemSidebar({
   return (
     <nav
       aria-label="Problem navigation"
-      className="text-[13px] text-slate-700"
+      className="text-[13px] text-foreground"
     >
       {backHref && (
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-violet-700 transition-colors mb-4"
+          className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:text-violet-700 transition-colors mb-4"
         >
           <ArrowLeft className="h-3 w-3" />
           {backLabel ?? "Back"}
@@ -122,7 +122,7 @@ export function ProblemSidebar({
       )}
 
       {/* ── Quick Info ─────────────────────────────────────────── */}
-      <div className="space-y-2 mb-5 pb-5 border-b border-slate-200">
+      <div className="space-y-2 mb-5 pb-5 border-b border-border">
         <Row
           icon={<Target className="h-3.5 w-3.5 text-slate-400" />}
           label="Difficulty"
@@ -139,7 +139,7 @@ export function ProblemSidebar({
             icon={<Zap className="h-3.5 w-3.5 text-emerald-500" />}
             label="Optimal"
             value={
-              <span className="font-mono text-[11.5px] font-bold text-slate-800">
+              <span className="font-mono text-[11.5px] font-bold text-foreground">
                 {optimalComplexity.time} · {optimalComplexity.space}
               </span>
             }
@@ -150,7 +150,7 @@ export function ProblemSidebar({
             icon={<Flame className="h-3.5 w-3.5 text-amber-500" />}
             label="Frequency"
             value={
-              <span className="text-[11.5px] font-medium text-slate-600">
+              <span className="text-[11.5px] font-medium text-secondary">
                 {frequencyLabel}
               </span>
             }
@@ -161,7 +161,7 @@ export function ProblemSidebar({
             icon={<Clock className="h-3.5 w-3.5 text-slate-400" />}
             label="Read"
             value={
-              <span className="text-[11.5px] font-medium text-slate-600">
+              <span className="text-[11.5px] font-medium text-secondary">
                 {readingTimeMinutes}–{Math.min(readingTimeMinutes + 2, 20)} min
               </span>
             }
@@ -171,7 +171,7 @@ export function ProblemSidebar({
 
       {/* ── Companies ──────────────────────────────────────────── */}
       {companies && companies.length > 0 && (
-        <div className="mb-5 pb-5 border-b border-slate-200">
+        <div className="mb-5 pb-5 border-b border-border">
           <div className="flex items-center gap-1.5 mb-2">
             <Building2 className="h-3 w-3 text-slate-400" />
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
@@ -182,7 +182,7 @@ export function ProblemSidebar({
             {companies.slice(0, 6).map((c) => (
               <span
                 key={c}
-                className="text-[11px] font-medium text-slate-600 bg-white border border-slate-200 rounded-full px-2 py-0.5"
+                className="text-[11px] font-medium text-secondary bg-background border border-border rounded-full px-2 py-0.5"
               >
                 {toDisplayName(c)}
               </span>
@@ -208,7 +208,7 @@ export function ProblemSidebar({
                       "block py-1.5 px-2 rounded-md text-[12.5px] leading-snug transition-colors",
                       active
                         ? "bg-violet-50 text-violet-700 font-semibold"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/70",
+                        : "text-secondary hover:text-foreground hover:bg-surface/70",
                     )}
                   >
                     <span
@@ -230,11 +230,11 @@ export function ProblemSidebar({
 
       {/* ── Prev / Next ─────────────────────────────────────── */}
       {(prev || next) && (
-        <div className="pt-4 border-t border-slate-200 grid grid-cols-2 gap-2">
+        <div className="pt-4 border-t border-border grid grid-cols-2 gap-2">
           {prev ? (
             <Link
               href={`/dsa/problem/${prev.slug}`}
-              className="group flex items-start gap-1 text-[11.5px] text-slate-500 hover:text-violet-700"
+              className="group flex items-start gap-1 text-[11.5px] text-muted-foreground hover:text-violet-700"
             >
               <ArrowLeft className="h-3 w-3 mt-0.5 shrink-0" />
               <span>
@@ -252,7 +252,7 @@ export function ProblemSidebar({
           {next ? (
             <Link
               href={`/dsa/problem/${next.slug}`}
-              className="group flex items-start gap-1 text-right text-[11.5px] text-slate-500 hover:text-violet-700 justify-end"
+              className="group flex items-start gap-1 text-right text-[11.5px] text-muted-foreground hover:text-violet-700 justify-end"
             >
               <span>
                 <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-violet-500">
@@ -284,7 +284,7 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="flex items-center gap-1.5 text-[12px] text-slate-500">
+      <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
         {icon}
         {label}
       </span>

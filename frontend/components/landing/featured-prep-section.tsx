@@ -84,27 +84,27 @@ function renderPillarCard(p: FeaturedPillarCard) {
     <Link
       key={p.pillarSlug}
       href={`/${p.pillarSlug}`}
-      className="group relative flex items-center gap-3 px-4 py-3 rounded-lg border border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md transition-all duration-200"
+      className="group relative flex items-center gap-3 px-4 py-3 rounded-lg border border-border bg-background hover:border-indigo-300 hover:shadow-md transition-all duration-200"
     >
       <div className="shrink-0 w-9 h-9 rounded-md bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
-        <Icon className="h-4 w-4 text-white" />
+        <Icon className="h-4 w-4 text-primary-foreground dark:text-foreground" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-black text-slate-900 group-hover:text-indigo-600 transition-colors leading-tight truncate">
+        <div className="text-sm font-black text-foreground group-hover:text-indigo-600 transition-colors leading-tight truncate">
           {p.title}
         </div>
-        <div className="mt-0.5 text-xs text-slate-500 leading-snug line-clamp-2">
+        <div className="mt-0.5 text-xs text-muted-foreground leading-snug line-clamp-2">
           {p.tagline}
         </div>
-        <div className="mt-1.5 flex items-center gap-3 text-[11px] text-slate-500">
+        <div className="mt-1.5 flex items-center gap-3 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <BookOpen className="h-3 w-3" />
-            <span className="font-bold text-slate-700">{p.questionCount}</span>
+            <span className="font-bold text-foreground">{p.questionCount}</span>
             <span>Q&amp;A</span>
           </span>
           <span className="inline-flex items-center gap-1">
             <Layers className="h-3 w-3" />
-            <span className="font-bold text-slate-700">{p.moduleCount}</span>
+            <span className="font-bold text-foreground">{p.moduleCount}</span>
             <span>modules</span>
           </span>
         </div>
@@ -144,11 +144,11 @@ export function FeaturedPrepSection({
             </div>
             <h2
               id="featured-prep-heading"
-              className="text-4xl sm:text-5xl font-black text-slate-900 mb-4"
+              className="text-4xl sm:text-5xl font-black text-foreground mb-4"
             >
               Every Interview Round, One Hub Away
             </h2>
-            <p className="text-lg text-slate-600 max-w-3xl mx-auto">
+            <p className="text-lg text-secondary max-w-3xl mx-auto">
               Every prep category below is a self-contained, standalone
               question set. Pick your interview round, pick your hub, drill
               the modules.
@@ -161,13 +161,13 @@ export function FeaturedPrepSection({
                 {tiers!.map((tier) => (
                   <div
                     key={tier.title}
-                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                    className="rounded-2xl border border-border bg-background p-5 shadow-sm"
                   >
                     <div className="mb-4 pb-4 border-b border-slate-100">
-                      <h3 className="text-lg font-black text-slate-900 leading-tight">
+                      <h3 className="text-lg font-black text-foreground leading-tight">
                         {tier.title}
                       </h3>
-                      <p className="mt-1 text-xs text-slate-500 leading-snug">
+                      <p className="mt-1 text-xs text-muted-foreground leading-snug">
                         {tier.tagline}
                       </p>
                     </div>
@@ -181,7 +181,7 @@ export function FeaturedPrepSection({
               <div className="mt-10 flex justify-center">
                 <Link
                   href={indexHref}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-bold text-sm hover:from-indigo-700 hover:to-blue-700 shadow-sm transition-colors"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-primary-foreground dark:text-foreground font-bold text-sm hover:from-indigo-700 hover:to-blue-700 shadow-sm transition-colors"
                 >
                   Browse the full prep index
                   <ArrowRight className="h-4 w-4" />
@@ -202,7 +202,7 @@ export function FeaturedPrepSection({
                     type="button"
                     onClick={() => setExpanded((v) => !v)}
                     aria-expanded={expanded}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white border-2 border-indigo-200 text-indigo-700 font-bold text-sm hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-background border-2 border-indigo-200 text-indigo-700 font-bold text-sm hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
                   >
                     {expanded ? (
                       <>
@@ -220,7 +220,7 @@ export function FeaturedPrepSection({
                 )}
                 <Link
                   href={indexHref}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-bold text-sm hover:from-indigo-700 hover:to-blue-700 shadow-sm transition-colors"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 text-primary-foreground dark:text-foreground font-bold text-sm hover:from-indigo-700 hover:to-blue-700 shadow-sm transition-colors"
                 >
                   Browse the full prep index
                   <ArrowRight className="h-4 w-4" />

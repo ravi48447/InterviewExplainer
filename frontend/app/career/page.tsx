@@ -168,22 +168,22 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default function CareerPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-rose-50/20 to-pink-50/20 font-sans text-slate-800 selection:bg-rose-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-rose-50/20 to-pink-50/20 font-sans text-foreground selection:bg-rose-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
           <Link
             href="/"
-            className="hover:text-slate-600 flex items-center gap-1"
+            className="hover:text-secondary flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-slate-600 font-medium">Career Guide</span>
+          <span className="text-secondary font-medium">Career Guide</span>
         </nav>
 
         {/* Hero */}
-        <header className="mb-12 rounded-xl border border-slate-200 bg-white/90 backdrop-blur-sm shadow-lg overflow-hidden">
+        <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
           <div className="relative px-8 py-8 bg-gradient-to-br from-rose-50 via-pink-50 to-fuchsia-50">
             <div className="flex items-center gap-2 mb-3">
               <Briefcase className="h-5 w-5 text-rose-600" />
@@ -191,10 +191,10 @@ export default function CareerPage() {
                 Beyond the Interview
               </span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 mb-3">
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               Career Guide for Software Engineers
             </h1>
-            <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
               Acing the technical interview is only half the battle. This guide
               covers everything else — crafting a resume that passes ATS
               screens, understanding interview processes at 20+ companies,
@@ -203,17 +203,17 @@ export default function CareerPage() {
               through it.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-slate-200">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
                   <Layers className="h-5 w-5 text-rose-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Sections
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {MAIN_SECTIONS.length}
                   </div>
                 </div>
@@ -224,10 +224,10 @@ export default function CareerPage() {
                   <BookOpen className="h-5 w-5 text-pink-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Articles
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     {MAIN_SECTIONS.reduce((s, sec) => s + sec.articles, 0)}+
                   </div>
                 </div>
@@ -238,10 +238,10 @@ export default function CareerPage() {
                   <Target className="h-5 w-5 text-fuchsia-600" />
                 </div>
                 <div>
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-muted-foreground font-medium">
                     Templates
                   </div>
-                  <div className="text-lg font-bold text-slate-900">
+                  <div className="text-lg font-bold text-foreground">
                     Included
                   </div>
                 </div>
@@ -254,11 +254,11 @@ export default function CareerPage() {
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
             <BookOpen className="h-5 w-5 text-rose-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               Complete Career Sections
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5 max-w-2xl">
+          <p className="text-sm text-muted-foreground mb-5 max-w-2xl">
             Each section is a comprehensive guide with actionable advice,
             templates, and real examples from industry professionals.
           </p>
@@ -267,7 +267,7 @@ export default function CareerPage() {
               <Link
                 key={section.slug}
                 href={`/career/${section.slug}`}
-                className="group rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-rose-300 transition-all p-5"
+                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-rose-300 transition-all p-5"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div
@@ -284,10 +284,10 @@ export default function CareerPage() {
                     <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-rose-500 group-hover:translate-x-1 transition-all" />
                   </div>
                 </div>
-                <h3 className="text-[15px] font-bold text-slate-900 group-hover:text-rose-600 transition-colors mb-1.5">
+                <h3 className="text-[15px] font-bold text-foreground group-hover:text-rose-600 transition-colors mb-1.5">
                   {section.name}
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed mb-3">
+                <p className="text-xs text-muted-foreground leading-relaxed mb-3">
                   {section.desc}
                 </p>
                 <div className="pt-2 border-t border-slate-100">
@@ -304,11 +304,11 @@ export default function CareerPage() {
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
             <Star className="h-5 w-5 text-amber-600" />
-            <h2 className="text-xl font-black text-slate-900">
+            <h2 className="text-xl font-black text-foreground">
               Popular Articles
             </h2>
           </div>
-          <p className="text-sm text-slate-500 mb-5 max-w-2xl">
+          <p className="text-sm text-muted-foreground mb-5 max-w-2xl">
             The most-read career guides. Each one is a deep-dive with actionable
             takeaways you can implement immediately.
           </p>
@@ -317,18 +317,18 @@ export default function CareerPage() {
               <Link
                 key={guide.slug}
                 href={`/career/articles/${guide.slug}`}
-                className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-rose-200 transition-all p-4"
+                className="group flex items-center gap-3 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-rose-200 transition-all p-4"
               >
-                <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 group-hover:bg-rose-100 transition-colors">
-                  <guide.icon className="h-4 w-4 text-slate-500 group-hover:text-rose-600 transition-colors" />
+                <div className="w-9 h-9 rounded-lg bg-surface flex items-center justify-center shrink-0 group-hover:bg-rose-100 transition-colors">
+                  <guide.icon className="h-4 w-4 text-muted-foreground group-hover:text-rose-600 transition-colors" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-slate-900 group-hover:text-rose-600 transition-colors leading-snug mb-0.5">
+                  <h3 className="text-sm font-bold text-foreground group-hover:text-rose-600 transition-colors leading-snug mb-0.5">
                     {guide.title}
                   </h3>
                   <div className="flex items-center gap-2">
                     <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${CATEGORY_COLORS[guide.category] ?? "bg-slate-100 text-slate-600"}`}
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${CATEGORY_COLORS[guide.category] ?? "bg-surface text-secondary"}`}
                     >
                       {guide.category}
                     </span>
@@ -345,17 +345,17 @@ export default function CareerPage() {
 
         {/* CTA */}
         <section className="rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 to-pink-50 p-8 text-center mb-12">
-          <h2 className="text-2xl font-black text-slate-900 mb-3">
+          <h2 className="text-2xl font-black text-foreground mb-3">
             Career Guidance + Technical Prep = Complete Package
           </h2>
-          <p className="text-sm text-slate-600 mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
             Combine career strategy with domain-specific interview prep. Select
             your path and get Q&A, system design, DSA, behavioral, roadmap,
             cheatsheets — plus all the career guidance above.
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-rose-600 to-pink-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

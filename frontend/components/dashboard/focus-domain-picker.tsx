@@ -102,7 +102,7 @@ export function FocusDomainPicker({
 
   if (loading) {
     return (
-      <div className={cn('flex items-center justify-center gap-2 py-6 text-sm text-slate-500', className)}>
+      <div className={cn('flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground', className)}>
         <Loader2 className="h-4 w-4 animate-spin" /> Loading domains…
       </div>
     );
@@ -110,7 +110,7 @@ export function FocusDomainPicker({
 
   if (enabled.length === 0) {
     return (
-      <p className={cn('py-4 text-sm text-slate-500', className)}>
+      <p className={cn('py-4 text-sm text-muted-foreground', className)}>
         No domains available right now.
       </p>
     );
@@ -130,8 +130,8 @@ export function FocusDomainPicker({
               className={cn(
                 'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors',
                 lang === l.slug
-                  ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50',
+                  ? 'bg-indigo-600 text-primary-foreground dark:text-foreground border-indigo-600'
+                  : 'bg-background text-foreground border-border hover:border-indigo-300 hover:bg-indigo-50',
               )}
             >
               {l.name}
@@ -153,8 +153,8 @@ export function FocusDomainPicker({
                 className={cn(
                   'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors',
                   track === t.slug
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50',
+                    ? 'bg-indigo-600 text-primary-foreground dark:text-foreground border-indigo-600'
+                    : 'bg-background text-foreground border-border hover:border-indigo-300 hover:bg-indigo-50',
                 )}
               >
                 {t.name}
@@ -180,13 +180,13 @@ export function FocusDomainPicker({
                     'group flex items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all',
                     selected
                       ? 'border-indigo-400 bg-indigo-50 ring-1 ring-indigo-300'
-                      : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/60',
+                      : 'border-border bg-background hover:border-indigo-300 hover:bg-indigo-50/60',
                     emphasizeLevels && 'flex-col items-start',
                   )}
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-900">{d.levelLabel}</p>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-sm font-bold text-foreground">{d.levelLabel}</p>
+                    <p className="text-[11px] text-muted-foreground">
                       {d.levelRange} · {d.stackCount} module{d.stackCount === 1 ? '' : 's'}
                       {d.questionCount > 0 ? ` · ${d.questionCount} Q` : ''}
                     </p>

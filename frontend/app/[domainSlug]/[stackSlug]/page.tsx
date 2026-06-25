@@ -381,19 +381,19 @@ export default function StackPage({
         {/* ─── MAIN COLUMN ─── */}
         <main className="flex-1 min-w-0">
           {/* Breadcrumb */}
-          <nav className="flex items-center gap-1.5 text-xs mb-4 text-slate-500">
+          <nav className="flex items-center gap-1.5 text-xs mb-4 text-muted-foreground">
             <Link href="/" className="flex items-center gap-1 hover:text-slate-300 transition-colors">
               <Home className="h-3 w-3" /> Home
             </Link>
-            <ChevronRight className="h-3 w-3 text-slate-700" />
+            <ChevronRight className="h-3 w-3 text-foreground" />
             <Link href={`/${domainSlug}`} className="hover:text-slate-300 transition-colors">
               {domainSlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
             </Link>
-            <ChevronRight className="h-3 w-3 text-slate-700" />
+            <ChevronRight className="h-3 w-3 text-foreground" />
             <span className="font-semibold text-slate-300">{stack.name}</span>
             {activeSubcat && (
               <>
-                <ChevronRight className="h-3 w-3 text-slate-700" />
+                <ChevronRight className="h-3 w-3 text-foreground" />
                 <span className={cn("font-semibold", premiumCourse ? "text-amber-400" : "text-blue-400")}>
                   {mergedSubcats.find(sc => sc.slug === activeSubcat)?.name}
                 </span>
@@ -418,7 +418,7 @@ export default function StackPage({
                   )}>
                     Interview Track
                   </p>
-                  <h1 className="text-[1.85rem] font-black text-white tracking-tight leading-tight">
+                  <h1 className="text-[1.85rem] font-black text-primary-foreground dark:text-foreground tracking-tight leading-tight">
                     {stack.name}
                     {activeSubcat && (
                       <span className="font-bold text-blue-300">
@@ -432,7 +432,7 @@ export default function StackPage({
                     </p>
                   )}
                   <div className="mt-4 flex items-center gap-2 flex-wrap">
-                    <span className="rounded-md border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-slate-100">
+                    <span className="rounded-md border border-white/20 bg-background/10 px-2.5 py-1 text-[11px] font-semibold text-slate-100">
                       {mergedSubcats.length} topics
                     </span>
                     <span className="rounded-md border border-blue-400/30 bg-blue-500/15 px-2.5 py-1 text-[11px] font-semibold text-blue-200">
@@ -442,7 +442,7 @@ export default function StackPage({
                       ~{totalTime} min
                     </span>
                     {pendingCount > 0 && (
-                      <span className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
+                      <span className="rounded-md border border-white/10 bg-background/5 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
                         {pendingCount} pending
                       </span>
                     )}
@@ -454,8 +454,8 @@ export default function StackPage({
                         className={cn(
                           "inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-all",
                           premiumCourse
-                            ? "bg-amber-500 text-white hover:bg-amber-400"
-                            : "bg-blue-500 text-white hover:bg-blue-400",
+                            ? "bg-amber-500 text-primary-foreground dark:text-foreground hover:bg-amber-400"
+                            : "bg-blue-500 text-primary-foreground dark:text-foreground hover:bg-blue-400",
                         )}
                       >
                         <Play className="h-4 w-4 fill-current" />
@@ -464,7 +464,7 @@ export default function StackPage({
                       {curriculumNav.nextModule && (
                         <Link
                           href={`/${domainSlug}/${curriculumNav.nextModule.moduleSlug}`}
-                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/20 text-white/70 text-sm font-semibold hover:bg-white/10 transition-colors"
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/20 text-primary-foreground dark:text-foreground/70 text-sm font-semibold hover:bg-background/10 transition-colors"
                         >
                           Next module
                           <ArrowUpRight className="h-4 w-4" />
@@ -475,16 +475,16 @@ export default function StackPage({
                 </div>
 
                 {/* Readiness ring */}
-                <div className="hidden lg:flex flex-col items-center justify-center w-28 h-28 rounded-2xl border border-white/10 bg-white/5 shrink-0 gap-1">
-                  <span className="text-3xl font-black text-white leading-none">{completionPct}%</span>
+                <div className="hidden lg:flex flex-col items-center justify-center w-28 h-28 rounded-2xl border border-white/10 bg-background/5 shrink-0 gap-1">
+                  <span className="text-3xl font-black text-primary-foreground dark:text-foreground leading-none">{completionPct}%</span>
                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">coverage</span>
-                  <div className="mt-1 w-14 h-1 rounded-full bg-white/10 overflow-hidden">
+                  <div className="mt-1 w-14 h-1 rounded-full bg-background/10 overflow-hidden">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-blue-400 to-indigo-400"
                       style={{ width: `${completionPct}%` }}
                     />
                   </div>
-                  <span className="text-[9px] text-slate-500">{allQuestions.length}/{totalContentQ}</span>
+                  <span className="text-[9px] text-muted-foreground">{allQuestions.length}/{totalContentQ}</span>
                 </div>
               </div>
             </div>
@@ -494,14 +494,14 @@ export default function StackPage({
               "px-7 py-3 border-t flex items-center gap-5 flex-wrap",
               premiumCourse
                 ? "bg-zinc-900 border-zinc-800"
-                : "bg-slate-800 border-slate-700/60",
+                : "dark:bg-surface border-border/60",
             )}>
               <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
                 <BookCheck className="h-3.5 w-3.5 text-blue-400" />
                 {mergedSubcats.length} topics
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                <Layers className="h-3.5 w-3.5 text-slate-500" />
+                <Layers className="h-3.5 w-3.5 text-muted-foreground" />
                 {allQuestions.length}/{totalContentQ} loaded
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
@@ -527,7 +527,7 @@ export default function StackPage({
               {curriculumNav.previousModule ? (
                 <Link
                   href={`/${domainSlug}/${curriculumNav.previousModule.moduleSlug}`}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/8 border border-white/15 text-[13px] font-semibold text-slate-300 hover:bg-white/15 hover:text-white transition-all"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-background/8 border border-white/15 text-[13px] font-semibold text-slate-300 hover:bg-background/15 hover:text-primary-foreground dark:text-foreground transition-all"
                 >
                   <ChevronRight className="h-4 w-4 rotate-180 shrink-0" />
                   {curriculumNav.previousModule.title}
@@ -537,7 +537,7 @@ export default function StackPage({
               {curriculumNav.nextModule ? (
                 <Link
                   href={`/${domainSlug}/${curriculumNav.nextModule.moduleSlug}`}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/8 border border-white/15 text-[13px] font-semibold text-slate-300 hover:bg-white/15 hover:text-white transition-all"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-background/8 border border-white/15 text-[13px] font-semibold text-slate-300 hover:bg-background/15 hover:text-primary-foreground dark:text-foreground transition-all"
                 >
                   {curriculumNav.nextModule.title}
                   <ChevronRight className="h-4 w-4 shrink-0" />
@@ -554,7 +554,7 @@ export default function StackPage({
             >
               <div className="px-6 py-5 border-b border-amber-100 flex items-start gap-4 flex-wrap">
                 <div className="shrink-0 w-11 h-11 rounded-lg bg-amber-500 flex items-center justify-center">
-                  <Hammer className="h-5 w-5 text-white" />
+                  <Hammer className="h-5 w-5 text-primary-foreground dark:text-foreground" />
                 </div>
                 <div className="flex-1 min-w-[240px]">
                   <div className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-1">
@@ -562,11 +562,11 @@ export default function StackPage({
                   </div>
                   <h2
                     id="coming-soon-heading"
-                    className="text-lg font-black text-slate-900 mb-1 leading-snug"
+                    className="text-lg font-black text-foreground mb-1 leading-snug"
                   >
                     {stack.name} questions are being authored
                   </h2>
-                  <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
+                  <p className="text-sm text-secondary leading-relaxed max-w-2xl">
                     This module is scaffolded but doesn't have question
                     content yet. We ship curated, interview-ready answers
                     one pillar at a time — check back soon, or explore a
@@ -578,14 +578,14 @@ export default function StackPage({
               <div className="px-6 py-4 flex items-center gap-3 flex-wrap">
                 <Link
                   href={`/${domainSlug}`}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg dark:bg-surface text-primary-foreground dark:text-foreground font-bold text-sm hover:dark:bg-surface transition-colors"
                 >
                   <Layers className="h-4 w-4" />
                   Back to roadmap
                 </Link>
                 <Link
                   href="/prep"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-background border border-border text-foreground font-bold text-sm hover:bg-surface transition-colors"
                 >
                   <Compass className="h-4 w-4" />
                   All prep categories
@@ -593,8 +593,8 @@ export default function StackPage({
               </div>
 
               {matchingPillarHubs.length > 0 && (
-                <div className="px-6 py-4 border-t border-amber-100 bg-white/60">
-                  <div className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                <div className="px-6 py-4 border-t border-amber-100 bg-background/60">
+                  <div className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
                     Related prep you can start now
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -602,13 +602,13 @@ export default function StackPage({
                       <Link
                         key={p.pillarSlug}
                         href={`/${p.pillarSlug}`}
-                        className="group flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 hover:border-amber-300 hover:shadow-sm transition-all"
+                        className="group flex items-start gap-2.5 rounded-lg border border-border bg-background px-3 py-2.5 hover:border-amber-300 hover:shadow-sm transition-all"
                       >
                         <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-black text-slate-900 group-hover:text-amber-700 leading-snug">
+                          <div className="text-[13px] font-black text-foreground group-hover:text-amber-700 leading-snug">
                             {p.title.replace(/\s+Interview Prep$/, "")}
                           </div>
-                          <div className="mt-0.5 text-[11px] text-slate-500 leading-snug line-clamp-1">
+                          <div className="mt-0.5 text-[11px] text-muted-foreground leading-snug line-clamp-1">
                             {p.tagline}
                           </div>
                         </div>
@@ -622,13 +622,13 @@ export default function StackPage({
           )}
 
           {/* Study toolbar */}
-          <section className="mb-4 rounded-xl border border-white/10 bg-white/95 backdrop-blur-sm shadow-xl">
+          <section className="mb-4 rounded-xl border border-white/10 bg-background/95 backdrop-blur-sm shadow-xl">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                 Study filters
               </p>
               <div className="flex items-center gap-2 text-[11px]">
-                <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-bold text-slate-700">
+                <span className="rounded-md border border-border bg-surface px-2 py-1 font-bold text-foreground">
                   {displayedSubcats.length} topics
                 </span>
                 <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 font-bold text-blue-700">
@@ -643,8 +643,8 @@ export default function StackPage({
                   className={cn(
                     "px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
                     activeSubcat === null
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+                      ? "bg-blue-600 text-primary-foreground dark:text-foreground border-blue-600"
+                      : "bg-background text-secondary border-border hover:border-blue-300 hover:text-blue-600"
                   )}
                 >
                   All Topics
@@ -656,8 +656,8 @@ export default function StackPage({
                     className={cn(
                       "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border",
                       activeSubcat === sc.slug
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+                        ? "bg-blue-600 text-primary-foreground dark:text-foreground border-blue-600"
+                        : "bg-background text-secondary border-border hover:border-blue-300 hover:text-blue-600"
                     )}
                   >
                     {sc.name}
@@ -681,11 +681,11 @@ export default function StackPage({
                       className={cn(
                         "px-2.5 py-1 rounded-md text-[11px] font-bold transition-all border capitalize",
                         difficultyFilter === d
-                          ? d === "all" ? "bg-slate-700 text-white border-slate-700"
-                            : d === "easy" ? "bg-green-600 text-white border-green-600"
-                            : d === "medium" ? "bg-amber-500 text-white border-amber-500"
-                            : "bg-red-500 text-white border-red-500"
-                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                          ? d === "all" ? "bg-slate-700 text-primary-foreground dark:text-foreground border-border"
+                            : d === "easy" ? "bg-green-600 text-primary-foreground dark:text-foreground border-green-600"
+                            : d === "medium" ? "bg-amber-500 text-primary-foreground dark:text-foreground border-amber-500"
+                            : "bg-red-500 text-primary-foreground dark:text-foreground border-red-500"
+                          : "bg-background text-secondary border-border hover:border-border"
                       )}
                     >
                       {d === "all" ? "All" : d}
@@ -700,13 +700,13 @@ export default function StackPage({
                     value={questionQuery}
                     onChange={(e) => setQuestionQuery(e.target.value)}
                     placeholder="Search questions in this module..."
-                    className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-9 text-sm text-slate-800 placeholder:text-slate-400 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-200/60"
+                    className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-slate-400 focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-200/60"
                   />
                   {questionQuery ? (
                     <button
                       type="button"
                       onClick={() => setQuestionQuery("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-surface hover:text-secondary"
                       aria-label="Clear search"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -720,11 +720,11 @@ export default function StackPage({
           {/* Subcategory groups */}
           <div className="space-y-4 pb-10">
             {displayedSubcats.length === 0 && !moduleRevision && (
-              <div className="rounded-xl border border-dashed border-white/15 bg-white/5 px-6 py-10 text-center">
+              <div className="rounded-xl border border-dashed border-white/15 bg-background/5 px-6 py-10 text-center">
                 <p className="text-sm font-bold text-slate-300">
                   No topics match your current filters.
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Try clearing search or switching difficulty/topic filters.
                 </p>
                 <button
@@ -734,7 +734,7 @@ export default function StackPage({
                     setDifficultyFilter("all");
                     setQuestionQuery("");
                   }}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/8 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/15 hover:text-white transition-all"
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-background/8 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-background/15 hover:text-primary-foreground dark:text-foreground transition-all"
                 >
                   <X className="h-3.5 w-3.5" />
                   Clear all filters
@@ -755,18 +755,18 @@ export default function StackPage({
                 if (!matchesQuery) return null;
                 const isRevExpanded = expandedSubcats.has(REVISION_SUBCAT_SLUG);
                 return (
-                  <div className="rounded-2xl overflow-hidden bg-white border border-blue-200/80 shadow-[0_4px_24px_rgba(30,64,175,0.25)]">
+                  <div className="rounded-2xl overflow-hidden bg-background border border-blue-200/80 shadow-[0_4px_24px_rgba(30,64,175,0.25)]">
                     <button
                       onClick={() => toggleSubcat(REVISION_SUBCAT_SLUG)}
                       className="relative w-full flex items-center gap-4 px-5 py-4 transition-colors border-b border-blue-700/60 bg-gradient-to-r from-blue-900 via-indigo-900 to-blue-900 hover:from-blue-800 hover:via-indigo-800 hover:to-blue-800 overflow-hidden"
                     >
-                      <span className="absolute right-14 top-1/2 -translate-y-1/2 text-[3.5rem] font-black text-white/[0.06] select-none pointer-events-none leading-none tabular-nums">
+                      <span className="absolute right-14 top-1/2 -translate-y-1/2 text-[3.5rem] font-black text-primary-foreground dark:text-foreground/[0.06] select-none pointer-events-none leading-none tabular-nums">
                         00
                       </span>
                       <div className="w-1 h-9 rounded-full shrink-0 bg-gradient-to-b from-blue-300 to-indigo-400" />
                       <div className="flex-1 text-left min-w-0 relative z-10">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-[14px] font-black leading-tight tracking-tight text-white flex items-center gap-2">
+                          <h2 className="text-[14px] font-black leading-tight tracking-tight text-primary-foreground dark:text-foreground flex items-center gap-2">
                             <BookOpen className="h-3.5 w-3.5" />
                             Revision
                           </h2>
@@ -809,10 +809,10 @@ export default function StackPage({
                 <div
                   key={sc.slug}
                   className={cn(
-                    "rounded-2xl overflow-hidden bg-white",
+                    "rounded-2xl overflow-hidden bg-background",
                     hasQuestions
-                      ? "border border-slate-200/80 shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
-                      : "border border-dashed border-slate-300/50 shadow-lg opacity-60"
+                      ? "border border-border/80 shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
+                      : "border border-dashed border-border/50 shadow-lg opacity-60"
                   )}
                 >
                   {/* Subcategory header */}
@@ -821,12 +821,12 @@ export default function StackPage({
                     className={cn(
                       "relative w-full flex items-center gap-4 px-5 py-4 transition-colors border-b overflow-hidden",
                       hasQuestions
-                        ? "bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:via-slate-700 hover:to-slate-800 border-slate-700/60"
+                        ? "bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:via-slate-700 hover:to-slate-800 border-border/60"
                         : "bg-slate-700/60 hover:bg-slate-700/80 border-slate-600/40 opacity-70"
                     )}
                   >
                     {/* Decorative large module number */}
-                    <span className="absolute right-14 top-1/2 -translate-y-1/2 text-[3.5rem] font-black text-white/[0.04] select-none pointer-events-none leading-none tabular-nums">
+                    <span className="absolute right-14 top-1/2 -translate-y-1/2 text-[3.5rem] font-black text-primary-foreground dark:text-foreground/[0.04] select-none pointer-events-none leading-none tabular-nums">
                       {String(scIdx + 1).padStart(2, '0')}
                     </span>
 
@@ -840,12 +840,12 @@ export default function StackPage({
                       <div className="flex flex-wrap items-center gap-2">
                         <h2 className={cn(
                           "text-[14px] font-black leading-tight tracking-tight",
-                          hasQuestions ? "text-white" : "text-slate-500",
+                          hasQuestions ? "text-primary-foreground dark:text-foreground" : "text-muted-foreground",
                         )}>
                           {sc.name}
                         </h2>
                       </div>
-                      <p className={cn("text-[10px] mt-0.5 font-medium", hasQuestions ? "text-slate-400" : "text-slate-600")}>
+                      <p className={cn("text-[10px] mt-0.5 font-medium", hasQuestions ? "text-slate-400" : "text-secondary")}>
                         {hasQuestions
                           ? `${sc.questions.length} questions ready${sc.contentCount > sc.questions.length ? ` · ${sc.contentCount - sc.questions.length} coming soon` : " · fully loaded"}`
                           : `${sc.contentCount} questions in progress`}
@@ -874,14 +874,14 @@ export default function StackPage({
 
                     <span className={cn(
                       "text-[11px] font-black px-2.5 py-1 rounded-lg shrink-0 relative z-10",
-                      hasQuestions ? "bg-blue-500/20 text-blue-300 border border-blue-700/40" : "bg-slate-700/50 text-slate-500"
+                      hasQuestions ? "bg-blue-500/20 text-blue-300 border border-blue-700/40" : "bg-slate-700/50 text-muted-foreground"
                     )}>
                       {sc.contentCount}
                     </span>
 
                     {isExpanded
-                      ? <ChevronUp className="h-4 w-4 text-slate-500 shrink-0 relative z-10" />
-                      : <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 relative z-10" />}
+                      ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 relative z-10" />
+                      : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 relative z-10" />}
                   </button>
 
                   {/* Question list */}
@@ -897,7 +897,7 @@ export default function StackPage({
                                 ? "bg-amber-50/60 hover:bg-amber-50"
                                 : q.difficulty === "hard"
                                 ? "bg-red-50/50 hover:bg-red-50/80"
-                                : "bg-white hover:bg-slate-50";
+                                : "bg-background hover:bg-surface";
                             return (
                             <div key={`${idx}-${q.slug}`}>
                               <Link
@@ -913,7 +913,7 @@ export default function StackPage({
                                   {String(idx + 1).padStart(2, "0")}
                                 </span>
                                 <div className="flex-1 min-w-0">
-                                  <h3 className="text-[13.5px] font-semibold text-slate-800 group-hover:text-blue-700 transition-colors leading-snug line-clamp-1">
+                                  <h3 className="text-[13.5px] font-semibold text-foreground group-hover:text-blue-700 transition-colors leading-snug line-clamp-1">
                                     {q.title}
                                   </h3>
                                   <div className="mt-0.5 flex items-center gap-2">
@@ -930,7 +930,7 @@ export default function StackPage({
                                     </span>
                                   </div>
                                 </div>
-                                <div className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500 group-hover:border-blue-300 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                <div className="shrink-0 rounded-lg border border-border bg-background px-2.5 py-1 text-[10px] font-bold text-muted-foreground group-hover:border-blue-300 group-hover:bg-blue-600 group-hover:text-primary-foreground dark:text-foreground transition-all">
                                   Open →
                                 </div>
                               </Link>
@@ -940,7 +940,7 @@ export default function StackPage({
                         </div>
                       ) : sc.questions.length === 0 ? (
                         <div className="px-5 py-6 text-center">
-                          <div className="inline-flex items-center gap-2 text-slate-400 text-xs bg-slate-50 px-4 py-2 rounded-lg border border-dashed border-slate-200 bg-amber-50/50">
+                          <div className="inline-flex items-center gap-2 text-slate-400 text-xs bg-surface px-4 py-2 rounded-lg border border-dashed border-border bg-amber-50/50">
                             <AlertCircle className="h-3.5 w-3.5" />
                             <span>
                               {sc.contentCount} questions ready to import
@@ -961,9 +961,9 @@ export default function StackPage({
 
           {/* Completion Banner */}
           {allQuestions.length > 0 && !hasActiveFilters && (
-            <section className="mb-8 p-7 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-xl">
+            <section className="mb-8 p-7 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-border flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-xl">
               <div className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-[0.08] pointer-events-none">
-                <Award className="w-64 h-64 text-white" />
+                <Award className="w-64 h-64 text-primary-foreground dark:text-foreground" />
               </div>
               <div className="relative z-10">
                 <div className="flex items-center gap-2 mb-2">
@@ -972,7 +972,7 @@ export default function StackPage({
                     Complete the Path
                   </span>
                 </div>
-                <h2 className="text-xl font-black text-white mb-1">
+                <h2 className="text-xl font-black text-primary-foreground dark:text-foreground mb-1">
                   {allQuestions.length} questions across {mergedSubcats.length} topics
                 </h2>
                 <p className="text-sm text-slate-300 max-w-md">
@@ -984,7 +984,7 @@ export default function StackPage({
                 <div className="relative z-10 shrink-0 flex flex-col sm:flex-row gap-2">
                   <Link
                     href={`/${domainSlug}/${stackSlug}/${firstQuestion.slug}`}
-                    className="inline-flex items-center gap-2 px-7 py-3 rounded-xl bg-blue-600 text-white font-black text-sm hover:bg-blue-700 transition-all shadow-lg"
+                    className="inline-flex items-center gap-2 px-7 py-3 rounded-xl bg-blue-600 text-primary-foreground dark:text-foreground font-black text-sm hover:bg-blue-700 transition-all shadow-lg"
                   >
                     <Play className="h-5 w-5 fill-current" />
                     Begin from Start
@@ -992,7 +992,7 @@ export default function StackPage({
                   {curriculumNav.nextModule ? (
                     <Link
                       href={`/${domainSlug}/${curriculumNav.nextModule.moduleSlug}`}
-                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white border border-slate-300 text-slate-800 font-black text-sm hover:bg-slate-100 transition-all shadow-sm"
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-background border border-border text-foreground font-black text-sm hover:bg-surface transition-all shadow-sm"
                     >
                       Skip to next module
                       <ArrowUpRight className="h-4 w-4" />
@@ -1007,8 +1007,8 @@ export default function StackPage({
         {/* ─── RIGHT SIDEBAR — Stats ─── */}
         <aside className="hidden xl:flex w-[260px] shrink-0 flex-col gap-4 self-start sticky top-5 px-3 py-5">
           {/* Quick Stats */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center gap-2">
+          <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+            <div className="px-4 py-2.5 dark:bg-surface border-b border-border flex items-center gap-2">
               <Zap className="h-3.5 w-3.5 text-amber-300" />
               <h3 className="text-[11px] font-bold text-slate-100 uppercase tracking-wide">Overview</h3>
             </div>
@@ -1019,9 +1019,9 @@ export default function StackPage({
                 { label: "Total Curriculum", value: totalContentQ },
                 { label: "Est. Time", value: `${totalTime}m` },
               ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between text-xs rounded-lg px-3 py-2 border border-slate-200 bg-slate-50">
-                  <span className="text-slate-600 font-medium">{label}</span>
-                  <span className="font-black text-slate-900">{value}</span>
+                <div key={label} className="flex justify-between text-xs rounded-lg px-3 py-2 border border-border bg-surface">
+                  <span className="text-secondary font-medium">{label}</span>
+                  <span className="font-black text-foreground">{value}</span>
                 </div>
               ))}
               <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
@@ -1034,10 +1034,10 @@ export default function StackPage({
           </div>
 
           {/* Difficulty Mix */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
             <div className="px-4 py-2.5 bg-blue-700 border-b border-blue-800 flex items-center gap-2">
               <BarChart2 className="h-3.5 w-3.5 text-blue-200" />
-              <h3 className="text-[11px] font-bold text-white uppercase tracking-wide">Difficulty Mix</h3>
+              <h3 className="text-[11px] font-bold text-primary-foreground dark:text-foreground uppercase tracking-wide">Difficulty Mix</h3>
             </div>
             <div className="p-3 space-y-2.5">
               {[
@@ -1048,9 +1048,9 @@ export default function StackPage({
                 <div key={label} className="space-y-1">
                   <div className="flex justify-between text-xs">
                     <span className="font-bold" style={{ color }}>{label}</span>
-                    <span className="font-black text-slate-900">{count}</span>
+                    <span className="font-black text-foreground">{count}</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                  <div className="w-full h-1.5 bg-surface rounded-full overflow-hidden border border-border">
                     <div
                       className={`h-full rounded-full bg-gradient-to-r ${gradient}`}
                       style={{ width: allQuestions.length ? `${(count / allQuestions.length) * 100}%` : "0%" }}
@@ -1062,10 +1062,10 @@ export default function StackPage({
           </div>
 
           {/* Study tips */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
             <div className="px-4 py-2.5 bg-amber-600 border-b border-amber-700 flex items-center gap-2">
               <BookMarked className="h-3.5 w-3.5 text-amber-100" />
-              <h3 className="text-[11px] font-bold text-white uppercase tracking-wide">Study Tips</h3>
+              <h3 className="text-[11px] font-bold text-primary-foreground dark:text-foreground uppercase tracking-wide">Study Tips</h3>
             </div>
             <div className="p-3">
               <div className="space-y-2">
@@ -1074,11 +1074,11 @@ export default function StackPage({
                   "Practice answers aloud before checking notes.",
                   "Mark hard questions and revisit them tomorrow.",
                 ].map((tip, i) => (
-                  <div key={tip} className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
-                    <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">
+                  <div key={tip} className="flex items-start gap-2 rounded-lg border border-border bg-surface px-2.5 py-2">
+                    <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full dark:bg-surface text-[10px] font-bold text-primary-foreground dark:text-foreground">
                       {i + 1}
                     </span>
-                    <p className="text-[11px] text-slate-700 leading-relaxed">{tip}</p>
+                    <p className="text-[11px] text-foreground leading-relaxed">{tip}</p>
                   </div>
                 ))}
               </div>
@@ -1093,12 +1093,12 @@ export default function StackPage({
 function StatItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+      <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center shrink-0">
         {icon}
       </div>
       <div>
-        <div className="text-[10px] text-slate-500 font-medium">{label}</div>
-        <div className="text-base font-bold text-slate-900 leading-tight">{value}</div>
+        <div className="text-[10px] text-muted-foreground font-medium">{label}</div>
+        <div className="text-base font-bold text-foreground leading-tight">{value}</div>
       </div>
     </div>
   );

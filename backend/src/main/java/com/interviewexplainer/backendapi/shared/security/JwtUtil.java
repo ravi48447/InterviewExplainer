@@ -11,17 +11,26 @@ import java.util.Date;
 import java.util.UUID;
 import java.util.function.Function;
 
+import org.springframework.beans.factory.annotation.Value;
+
 @Component
 public class JwtUtil {
 
-    // TODO: Move to environment variable or application.properties for production
-    private final String SECRET_KEY = System.getenv("JWT_SECRET") != null
-        ? System.getenv("JWT_SECRET")
-        : "my_super_secret_key_for_jwt_auth_interview_explainer_v3_development_only";
-    private final long EXPIRATION_TIME = 86400000; // 24 hours
+    private final String secretKey;
+    private final long expirationTime;
+
+    public JwtUtil(
+            @Value("${jwt.secret:}") String secretKey,
+            @Value("${jwt.expiration:86400000}") long expirationTime) {
+        if (secretKey == null || secretKey.trim().isEmpty() || secretKey.length() < 32) {
+            throw new IllegalStateException("JWT_SECRET must be set and must be at least 32 characters long for safety.");
+        }
+        this.secretKey = secretKey;
+        this.expirationTime = expirationTime;
+    }
 
     private Key getSigningKey() {
-        return Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
+        return Keys.hmacShaKeyFor(secretKey.getBytes());
     }
 
     public String generateToken(UUID userId, String email) {
@@ -29,7 +38,7 @@ public class JwtUtil {
                 .setSubject(email)
                 .claim("userId", userId.toString())
                 .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+                .setExpiration(new Date(System.currentTimeMillis() + expirationTime))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
