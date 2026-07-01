@@ -198,7 +198,7 @@ export default function SpeakablePrimitivesPage() {
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
           Speakable visual story page
         </h1>
-        <p className="text-[14px] text-secondary dark:text-slate-400 max-w-prose">
+        <p className="text-[14px] text-muted-foreground dark:text-slate-400 max-w-prose">
           Phase 1 visual exit gate for the 7 layout primitives. Toggle theme +
           mobile breakpoint to verify each primitive in all rendering modes per
           docs/speakable/visual-style-guide.md §6 + §7. Phase 1.3 will extend
@@ -208,14 +208,14 @@ export default function SpeakablePrimitivesPage() {
           <button
             type="button"
             onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
-            className="px-3 py-1.5 rounded-md border border-border dark:border-border bg-background dark:dark:bg-surface hover:bg-surface dark:hover:dark:bg-surface"
+            className="px-3 py-1.5 rounded-md border border-border dark:border-border bg-background dark:bg-surface hover:bg-surface dark:hover:bg-surface"
           >
             Theme: <strong>{theme}</strong>
           </button>
           <button
             type="button"
             onClick={() => setMobile((m) => !m)}
-            className="px-3 py-1.5 rounded-md border border-border dark:border-border bg-background dark:dark:bg-surface hover:bg-surface dark:hover:dark:bg-surface"
+            className="px-3 py-1.5 rounded-md border border-border dark:border-border bg-background dark:bg-surface hover:bg-surface dark:hover:bg-surface"
           >
             Width: <strong>{mobile ? "mobile (~360px)" : "desktop (~720px)"}</strong>
           </button>

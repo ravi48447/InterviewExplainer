@@ -49,7 +49,7 @@ export function NewsletterWidget({
   if (status === "success") {
     return (
       <div className={`flex flex-col items-center gap-3 text-center ${compact ? "py-4" : "py-8"}`}>
-        <CheckCircle2 className="w-8 h-8 text-green-500" />
+        <CheckCircle2 className="w-8 h-8 text-green-500 dark:text-green-400" />
         <p className="font-semibold text-foreground">You are on the list!</p>
         <p className="text-sm text-muted-foreground">We will reach out when new content drops.</p>
       </div>

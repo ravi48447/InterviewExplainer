@@ -134,14 +134,14 @@ export function ReadAloudButton({
           onClick={handleStop}
           variant="outline"
           size="sm"
-          className="font-semibold text-red-600 border-red-200 hover:bg-red-50"
+          className="font-semibold text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/20 hover:bg-red-50 dark:bg-red-500/10"
         >
           <Square className="h-4 w-4 mr-2" />
           {stopLabel}
         </Button>
       )}
       {error ? (
-        <p className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+        <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded px-2 py-1">
           {error}
         </p>
       ) : null}

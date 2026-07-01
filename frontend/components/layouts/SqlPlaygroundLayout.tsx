@@ -37,7 +37,7 @@ export function SqlPlaygroundLayout({
   return (
     <div className="space-y-8">
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
@@ -46,7 +46,7 @@ export function SqlPlaygroundLayout({
       {overview && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
-            <Database className="h-4 w-4 text-blue-600" />
+            <Database className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Concept Overview</span>
           </div>
           <div className="px-5 py-5">
@@ -72,13 +72,13 @@ export function SqlPlaygroundLayout({
       {queryExamples.length > 0 && (
         <div className="rounded-xl border border-border dark:bg-surface overflow-hidden">
           <div className="flex items-center gap-1 px-4 py-2 border-b border-border">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mr-2">Query</span>
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mr-2">Query</span>
             {queryExamples.map((q, i) => (
               <button
                 key={i}
                 onClick={() => setActiveQuery(i)}
                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                  activeQuery === i ? "bg-slate-700 text-slate-100" : "text-muted-foreground hover:text-slate-300"
+                  activeQuery === i ? "bg-slate-700 dark:bg-slate-800 text-muted-foreground" : "text-muted-foreground hover:text-muted-foreground"
                 }`}
               >
                 {q.sectionTitle || `Example ${i + 1}`}
@@ -93,9 +93,9 @@ export function SqlPlaygroundLayout({
 
       {/* Output Preview */}
       {outputPreview && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100/50 border-b border-emerald-200">
-            <span className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Query Output</span>
+        <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-950/20/50 border-b border-emerald-200 dark:border-emerald-500/20">
+            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wide">Query Output</span>
           </div>
           <div className="px-5 py-4 overflow-x-auto">
             <MarkdownContent content={outputPreview.content} stripTopHeading />
@@ -105,10 +105,10 @@ export function SqlPlaygroundLayout({
 
       {/* EXPLAIN ANALYZE output */}
       {explainOutput && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/40 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-amber-100/50 border-b border-amber-200">
-            <Zap className="h-4 w-4 text-amber-600" />
-            <span className="text-xs font-bold text-amber-800 uppercase tracking-wide">EXPLAIN ANALYZE Output</span>
+        <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/40 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-amber-100 dark:bg-amber-950/20/50 border-b border-amber-200 dark:border-amber-500/20">
+            <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <span className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wide">EXPLAIN ANALYZE Output</span>
           </div>
           <div className="px-5 py-4">
             <MarkdownContent content={explainOutput.content} stripTopHeading />
@@ -118,8 +118,8 @@ export function SqlPlaygroundLayout({
 
       {/* Deep Explanation */}
       {deepExplain && (
-        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-blue-50 border-b border-blue-200">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-blue-200 dark:border-blue-500/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Deep Dive</span>
           </div>
           <div className="px-5 py-5">
@@ -130,9 +130,9 @@ export function SqlPlaygroundLayout({
 
       {/* Performance Tips */}
       {performanceTips && (
-        <div className="rounded-xl border border-orange-200 bg-orange-50/40 overflow-hidden">
-          <div className="px-5 py-3 bg-orange-100/50 border-b border-orange-200">
-            <span className="text-xs font-bold text-orange-800 uppercase tracking-wide">Performance Notes</span>
+        <div className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-orange-50 dark:bg-orange-500/10 dark:bg-orange-950/20/40 overflow-hidden">
+          <div className="px-5 py-3 bg-orange-100 dark:bg-orange-950/20/50 border-b border-orange-200 dark:border-orange-500/20">
+            <span className="text-xs font-bold text-orange-800 dark:text-orange-400 uppercase tracking-wide">Performance Notes</span>
           </div>
           <div className="px-5 py-4">
             <MarkdownContent content={performanceTips.content} stripTopHeading />
@@ -144,7 +144,7 @@ export function SqlPlaygroundLayout({
       {optimizationList && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
-            <CheckSquare className="h-4 w-4 text-blue-600" />
+            <CheckSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Optimization Checklist</span>
           </div>
           <div className="px-5 py-4">
@@ -155,9 +155,9 @@ export function SqlPlaygroundLayout({
 
       {/* Function Reference */}
       {functionRef && (
-        <div className="rounded-xl border border-purple-200 bg-purple-50/40 overflow-hidden">
-          <div className="px-5 py-3 bg-purple-100/50 border-b border-purple-200">
-            <span className="text-xs font-bold text-purple-800 uppercase tracking-wide">Function Reference</span>
+        <div className="rounded-xl border border-purple-200 dark:border-purple-500/20 bg-purple-50 dark:bg-purple-950/20/40 overflow-hidden">
+          <div className="px-5 py-3 bg-purple-100 dark:bg-purple-950/20/50 border-b border-purple-200 dark:border-purple-500/20">
+            <span className="text-xs font-bold text-purple-800 dark:text-purple-400 uppercase tracking-wide">Function Reference</span>
           </div>
           <div className="px-5 py-4">
             <MarkdownContent content={functionRef.content} stripTopHeading />
@@ -167,8 +167,8 @@ export function SqlPlaygroundLayout({
 
       {/* Speakable */}
       {speakable && (
-        <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
+        <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-500/30 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

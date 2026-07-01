@@ -70,15 +70,15 @@ export function InterviewCoach({ timeToAnswer, interviewerExpects }: InterviewCo
                             className={cn(
                                 "w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 text-left border",
                                 item.completed
-                                    ? "bg-green-500/5 border-green-500/20 text-green-500 font-bold"
+                                    ? "bg-green-500 dark:bg-green-800/5 border-green-500 dark:border-green-700/20 text-white dark:text-green-400 font-bold"
                                     : "bg-foreground/5 border-border/50 text-muted-foreground hover:border-border"
                             )}
                         >
                             <div className={cn(
                                 "h-4 w-4 rounded-full border flex items-center justify-center transition-all",
-                                item.completed ? "bg-green-500 border-green-500" : "border-white/20"
+                                item.completed ? "bg-green-500 dark:bg-green-800 border-green-500 dark:border-green-700" : "border-white/20"
                             )}>
-                                {item.completed && <CheckCircle2 className="h-3 w-3 text-primary-foreground dark:text-foreground" />}
+                                {item.completed && <CheckCircle2 className="h-3 w-3 text-white" />}
                             </div>
                             <span className="text-[11px] font-semibold">{item.text}</span>
                         </button>
@@ -88,12 +88,12 @@ export function InterviewCoach({ timeToAnswer, interviewerExpects }: InterviewCo
 
             {/* Reward/XP */}
             <div className="space-y-4 pt-8 mt-auto">
-                <div className="p-5 rounded-2xl bg-gradient-to-br from-yellow-500/10 to-transparent border border-yellow-500/20 text-center relative overflow-hidden group">
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-yellow-500/10 to-transparent border border-yellow-500 dark:border-yellow-700/20 text-center relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:scale-110 transition-transform">
-                        <Trophy className="h-12 w-12 text-yellow-500" />
+                        <Trophy className="h-12 w-12 text-yellow-500 dark:text-yellow-400" />
                     </div>
                     <div className="relative z-10">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-yellow-600 mb-1">Potential Reward</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-yellow-600 dark:text-yellow-400 mb-1">Potential Reward</p>
                         <div className="text-3xl font-black text-foreground">+50 XP</div>
                         <p className="text-[10px] font-medium text-muted-foreground mt-2">Awarded on topic mastery</p>
                     </div>

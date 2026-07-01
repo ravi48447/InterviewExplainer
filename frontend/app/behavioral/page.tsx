@@ -40,8 +40,8 @@ const CATEGORIES = [
     count: 12,
     desc: "Taking ownership, driving projects, influencing without authority, leading under pressure",
     icon: Star,
-    color: "text-amber-600",
-    bg: "bg-amber-100",
+    color: "text-amber-600 dark:text-amber-400",
+    bg: "bg-amber-100 dark:bg-amber-950/20",
   },
   {
     slug: "teamwork",
@@ -49,8 +49,8 @@ const CATEGORIES = [
     count: 10,
     desc: "Cross-functional work, resolving disagreements, building consensus, supporting teammates",
     icon: Users,
-    color: "text-blue-600",
-    bg: "bg-blue-100",
+    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-blue-100 dark:bg-blue-950/20",
   },
   {
     slug: "conflict-resolution",
@@ -58,8 +58,8 @@ const CATEGORIES = [
     count: 8,
     desc: "Handling disagreements, managing stakeholders, navigating difficult conversations",
     icon: Shield,
-    color: "text-rose-600",
-    bg: "bg-rose-100",
+    color: "text-rose-600 dark:text-rose-400",
+    bg: "bg-rose-100 dark:bg-rose-950/20",
   },
   {
     slug: "failure-learning",
@@ -67,8 +67,8 @@ const CATEGORIES = [
     count: 6,
     desc: "Discussing mistakes constructively, showing growth mindset, post-mortem culture",
     icon: AlertTriangle,
-    color: "text-orange-600",
-    bg: "bg-orange-100",
+    color: "text-orange-600 dark:text-orange-400",
+    bg: "bg-orange-100 dark:bg-orange-950/20",
   },
   {
     slug: "problem-solving",
@@ -76,8 +76,8 @@ const CATEGORIES = [
     count: 8,
     desc: "Ambiguous situations, creative solutions, data-driven decisions, debugging production",
     icon: Lightbulb,
-    color: "text-violet-600",
-    bg: "bg-violet-100",
+    color: "text-violet-600 dark:text-violet-400",
+    bg: "bg-violet-100 dark:bg-violet-950/20",
   },
   {
     slug: "communication",
@@ -86,7 +86,7 @@ const CATEGORIES = [
     desc: "Explaining technical concepts, presenting to executives, writing technical docs",
     icon: MessageSquare,
     color: "text-cyan-600",
-    bg: "bg-cyan-100",
+    bg: "bg-cyan-100 dark:bg-cyan-950/20",
   },
   {
     slug: "growth-adaptability",
@@ -95,7 +95,7 @@ const CATEGORIES = [
     desc: "Learning new technologies, adapting to change, handling ambiguity, continuous improvement",
     icon: TrendingUp,
     color: "text-green-600",
-    bg: "bg-green-100",
+    bg: "bg-green-100 dark:bg-green-950/20",
   },
   {
     slug: "customer-focus",
@@ -104,7 +104,7 @@ const CATEGORIES = [
     desc: "User empathy, prioritizing customer impact, measuring outcomes, product thinking",
     icon: Heart,
     color: "text-pink-600",
-    bg: "bg-pink-100",
+    bg: "bg-pink-100 dark:bg-pink-950/20",
   },
   {
     slug: "time-management",
@@ -113,7 +113,7 @@ const CATEGORIES = [
     desc: "Managing competing priorities, estimating work, saying no, deadline management",
     icon: Target,
     color: "text-indigo-600",
-    bg: "bg-indigo-100",
+    bg: "bg-indigo-100 dark:bg-indigo-950/20",
   },
   {
     slug: "mentoring",
@@ -122,7 +122,7 @@ const CATEGORIES = [
     desc: "Coaching junior engineers, code reviews as teaching, fostering team growth",
     icon: Award,
     color: "text-teal-600",
-    bg: "bg-teal-100",
+    bg: "bg-teal-100 dark:bg-teal-950/20",
   },
 ];
 
@@ -133,7 +133,7 @@ const COMPANY_SPECIFIC = [
     count: 16,
     desc: "All 16 LPs with behavioral question mapping. Customer Obsession, Ownership, Dive Deep, and more. The most behavioral-heavy interview in tech.",
     tag: "FAANG",
-    tagColor: "bg-orange-100 text-orange-700",
+    tagColor: "bg-orange-100 dark:bg-orange-950/20 text-orange-700",
   },
   {
     slug: "google-behavioral",
@@ -141,7 +141,7 @@ const COMPANY_SPECIFIC = [
     count: 8,
     desc: "Google's unique behavioral dimensions: cognitive ability, role-related knowledge, Googleyness, and leadership signals they look for.",
     tag: "FAANG",
-    tagColor: "bg-blue-100 text-blue-700",
+    tagColor: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
   },
   {
     slug: "meta-behavioral",
@@ -149,7 +149,7 @@ const COMPANY_SPECIFIC = [
     count: 8,
     desc: "Meta values impact and velocity. Questions focus on autonomy, driving impact, working at scale, and cross-functional collaboration.",
     tag: "FAANG",
-    tagColor: "bg-indigo-100 text-indigo-700",
+    tagColor: "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400",
   },
   {
     slug: "microsoft-behavioral",
@@ -157,7 +157,7 @@ const COMPANY_SPECIFIC = [
     count: 6,
     desc: "Microsoft's culture emphasizes growth mindset, empathy, and customer obsession. Unique focus on inclusive leadership and accessibility.",
     tag: "FAANG",
-    tagColor: "bg-emerald-100 text-emerald-700",
+    tagColor: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400",
   },
   {
     slug: "startup-behavioral",
@@ -165,7 +165,7 @@ const COMPANY_SPECIFIC = [
     count: 6,
     desc: "Startup interviews value resourcefulness, wearing multiple hats, handling ambiguity, and delivering with limited resources.",
     tag: "Startups",
-    tagColor: "bg-purple-100 text-purple-700",
+    tagColor: "bg-purple-100 dark:bg-purple-950/20 text-purple-700 dark:text-purple-400",
   },
 ];
 
@@ -203,15 +203,15 @@ export default function BehavioralPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50/20 to-orange-50/20 font-sans text-foreground selection:bg-amber-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
+        <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
           <Link
             href="/"
-            className="hover:text-secondary flex items-center gap-1"
+            className="hover:text-muted-foreground flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-secondary font-medium">
+          <span className="text-muted-foreground font-medium">
             Behavioral Interview
           </span>
         </nav>
@@ -220,26 +220,26 @@ export default function BehavioralPage() {
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
           <div className="relative px-8 py-8 bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
             <div className="flex items-center gap-2 mb-3">
-              <Brain className="h-5 w-5 text-amber-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">
+              <Brain className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
                 Soft Skills & Culture Fit
               </span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               Behavioral Interview Prep
             </h1>
-            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-3xl">
               Behavioral questions are asked in every single tech interview — at
               Amazon it&apos;s 50% of the evaluation. Master the STAR framework,
               practice with {totalQuestions}+ real questions organized by theme,
               and prepare company-specific responses for FAANG and top tech.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                  <Layers className="h-5 w-5 text-amber-600" />
+                <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-950/20 flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -250,10 +250,10 @@ export default function BehavioralPage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200" />
+              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                  <BookOpen className="h-5 w-5 text-orange-600" />
+                <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-950/20 flex items-center justify-center">
+                  <BookOpen className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -264,10 +264,10 @@ export default function BehavioralPage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200" />
+              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
-                  <Briefcase className="h-5 w-5 text-rose-600" />
+                <div className="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-950/20 flex items-center justify-center">
+                  <Briefcase className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -285,7 +285,7 @@ export default function BehavioralPage() {
         {/* STAR Method */}
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
-            <Target className="h-5 w-5 text-amber-600" />
+            <Target className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             <h2 className="text-xl font-black text-foreground">
               The STAR Method
             </h2>
@@ -303,7 +303,7 @@ export default function BehavioralPage() {
                 <div
                   className={`w-12 h-12 rounded-xl bg-gradient-to-br ${step.color} flex items-center justify-center mb-3`}
                 >
-                  <span className="text-xl font-black text-primary-foreground dark:text-foreground">
+                  <span className="text-xl font-black text-white">
                     {step.letter}
                   </span>
                 </div>
@@ -321,7 +321,7 @@ export default function BehavioralPage() {
         {/* Question Categories */}
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
-            <MessageSquare className="h-5 w-5 text-orange-600" />
+            <MessageSquare className="h-5 w-5 text-orange-600 dark:text-orange-400" />
             <h2 className="text-xl font-black text-foreground">
               Question Categories
             </h2>
@@ -336,7 +336,7 @@ export default function BehavioralPage() {
               <Link
                 key={cat.slug}
                 href={`/behavioral/${cat.slug}`}
-                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-amber-300 transition-all p-5"
+                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-amber-300 dark:border-amber-500/30 transition-all p-5"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div
@@ -348,10 +348,10 @@ export default function BehavioralPage() {
                     <span className="text-xs font-semibold text-muted-foreground">
                       {cat.count} Qs
                     </span>
-                    <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-amber-500 dark:text-amber-400 group-hover:translate-x-1 transition-all" />
                   </div>
                 </div>
-                <h3 className="text-[15px] font-bold text-foreground group-hover:text-amber-600 transition-colors mb-1.5">
+                <h3 className="text-[15px] font-bold text-foreground group-hover:text-amber-600 dark:text-amber-400 transition-colors mb-1.5">
                   {cat.name}
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
@@ -365,7 +365,7 @@ export default function BehavioralPage() {
         {/* Company-Specific */}
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
-            <Briefcase className="h-5 w-5 text-rose-600" />
+            <Briefcase className="h-5 w-5 text-rose-600 dark:text-rose-400" />
             <h2 className="text-xl font-black text-foreground">
               Company-Specific Behavioral Prep
             </h2>
@@ -380,11 +380,11 @@ export default function BehavioralPage() {
               <Link
                 key={comp.slug}
                 href={`/behavioral/company/${comp.slug}`}
-                className="group flex items-start gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-amber-300 transition-all p-5"
+                className="group flex items-start gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-amber-300 dark:border-amber-500/30 transition-all p-5"
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <h3 className="text-[15px] font-bold text-foreground group-hover:text-amber-600 transition-colors">
+                    <h3 className="text-[15px] font-bold text-foreground group-hover:text-amber-600 dark:text-amber-400 transition-colors">
                       {comp.name}
                     </h3>
                     <span
@@ -392,7 +392,7 @@ export default function BehavioralPage() {
                     >
                       {comp.tag}
                     </span>
-                    <span className="text-xs font-semibold text-slate-400">
+                    <span className="text-xs font-semibold text-muted-foreground">
                       {comp.count} areas
                     </span>
                   </div>
@@ -400,25 +400,25 @@ export default function BehavioralPage() {
                     {comp.desc}
                   </p>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-amber-500 group-hover:translate-x-1 transition-all mt-1 shrink-0" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-amber-500 dark:text-amber-400 group-hover:translate-x-1 transition-all mt-1 shrink-0" />
               </Link>
             ))}
           </div>
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-8 text-center mb-12">
+        <section className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-r from-amber-50 to-orange-50 p-8 text-center mb-12">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Behavioral Prep Is Part of Every Interview Domain
           </h2>
-          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-muted-foreground mb-6 max-w-xl mx-auto">
             Select your domain and get behavioral questions mapped to your
             experience level alongside Q&A, system design, DSA, and a complete
             roadmap.
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

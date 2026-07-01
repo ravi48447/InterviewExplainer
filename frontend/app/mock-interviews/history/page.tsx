@@ -146,10 +146,10 @@ function MockInterviewHistoryContent() {
   });
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-emerald-600';
-    if (score >= 70) return 'text-blue-600';
-    if (score >= 60) return 'text-orange-600';
-    return 'text-red-600';
+    if (score >= 80) return 'text-emerald-600 dark:text-emerald-400';
+    if (score >= 70) return 'text-blue-600 dark:text-blue-400';
+    if (score >= 60) return 'text-orange-600 dark:text-orange-400';
+    return 'text-red-600 dark:text-red-400';
   };
 
   const getScoreGradient = (score: number) => {
@@ -199,7 +199,7 @@ function MockInterviewHistoryContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-primary-foreground dark:text-foreground">
+      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white">
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -305,21 +305,21 @@ function MockInterviewHistoryContent() {
             {/* Filters and Search */}
             <div className="flex items-center gap-4">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search mock interviews..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border-2 border-border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-sm font-semibold"
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border-2 border-border focus:border-blue-500 dark:border-blue-700 focus:ring-2 focus:ring-blue-200 transition-all text-sm font-semibold"
                 />
               </div>
               <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-secondary" />
+                <Filter className="h-4 w-4 text-muted-foreground" />
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
-                  className="px-4 py-2 rounded-lg border-2 border-border focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-sm font-semibold bg-background"
+                  className="px-4 py-2 rounded-lg border-2 border-border focus:border-blue-500 dark:border-blue-700 focus:ring-2 focus:ring-blue-200 transition-all text-sm font-semibold bg-background"
                 >
                   <option value="all">All Types</option>
                   <option value="full-mock">Full Mock</option>
@@ -346,7 +346,7 @@ function MockInterviewHistoryContent() {
                         <div className="flex items-start gap-6">
                           {/* Icon and Type */}
                           <div className={cn("w-14 h-14 rounded-xl bg-gradient-to-br flex items-center justify-center shrink-0", getTypeColor(mock.type))}>
-                            <Icon className="h-7 w-7 text-primary-foreground dark:text-foreground" />
+                            <Icon className="h-7 w-7 text-white" />
                           </div>
 
                           {/* Main Content */}
@@ -378,24 +378,24 @@ function MockInterviewHistoryContent() {
                                   {mock.improvement !== 'first' && (
                                     <>
                                       {mock.improvement.startsWith('+') ? (
-                                        <TrendingUp className="h-3 w-3 text-emerald-600" />
+                                        <TrendingUp className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                                       ) : mock.improvement.startsWith('-') ? (
-                                        <TrendingDown className="h-3 w-3 text-red-600" />
+                                        <TrendingDown className="h-3 w-3 text-red-600 dark:text-red-400" />
                                       ) : (
-                                        <Minus className="h-3 w-3 text-slate-400" />
+                                        <Minus className="h-3 w-3 text-muted-foreground" />
                                       )}
                                       <span className={cn(
                                         "text-xs font-bold",
-                                        mock.improvement.startsWith('+') && "text-emerald-600",
-                                        mock.improvement.startsWith('-') && "text-red-600",
-                                        !mock.improvement.startsWith('+') && !mock.improvement.startsWith('-') && "text-slate-400"
+                                        mock.improvement.startsWith('+') && "text-emerald-600 dark:text-emerald-400",
+                                        mock.improvement.startsWith('-') && "text-red-600 dark:text-red-400",
+                                        !mock.improvement.startsWith('+') && !mock.improvement.startsWith('-') && "text-muted-foreground"
                                       )}>
                                         {mock.improvement}
                                       </span>
                                     </>
                                   )}
                                   {mock.improvement === 'first' && (
-                                    <span className="text-xs font-bold text-slate-400">First attempt</span>
+                                    <span className="text-xs font-bold text-muted-foreground">First attempt</span>
                                   )}
                                 </div>
                               </div>
@@ -411,7 +411,7 @@ function MockInterviewHistoryContent() {
                                     {category === 'behavioral' && 'Behavioral'}
                                   </p>
                                   <div className="flex items-center gap-2">
-                                    <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                    <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                                       <div
                                         className={cn("h-full bg-gradient-to-r", getScoreGradient(score))}
                                         style={{ width: `${score}%` }}
@@ -427,7 +427,7 @@ function MockInterviewHistoryContent() {
                           </div>
 
                           {/* Arrow */}
-                          <ChevronRight className="h-6 w-6 text-slate-300 group-hover:text-blue-600 group-hover:translate-x-1 transition-all shrink-0 mt-4" />
+                          <ChevronRight className="h-6 w-6 text-muted-foreground group-hover:text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-all shrink-0 mt-4" />
                         </div>
                       </div>
                     </Link>
@@ -439,10 +439,10 @@ function MockInterviewHistoryContent() {
             {filteredHistory.length === 0 && (
               <div className="bg-background rounded-2xl border-2 border-border shadow-lg p-12 text-center">
                 <div className="w-20 h-20 bg-surface rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Search className="h-10 w-10 text-slate-400" />
+                  <Search className="h-10 w-10 text-muted-foreground" />
                 </div>
                 <h3 className="text-xl font-black text-foreground mb-2">No Results Found</h3>
-                <p className="text-secondary mb-6">
+                <p className="text-muted-foreground mb-6">
                   Try adjusting your filters or search query
                 </p>
                 <Button onClick={() => { setFilterType('all'); setSearchQuery(''); }} variant="outline">
@@ -459,21 +459,21 @@ function MockInterviewHistoryContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl border-2 border-yellow-400 shadow-lg p-6 sticky top-6"
+              className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-950/20 dark:to-orange-950/20 rounded-2xl border-2 border-yellow-400 dark:border-yellow-700 shadow-lg p-6 sticky top-6"
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center">
-                  <Trophy className="h-6 w-6 text-primary-foreground dark:text-foreground" />
+                  <Trophy className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-orange-600 uppercase tracking-wider">Latest Achievement</p>
+                  <p className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider">Latest Achievement</p>
                   <p className="text-lg font-black text-foreground">Best Score Yet!</p>
                 </div>
               </div>
               <p className="text-sm text-foreground mb-4">
-                You scored <span className="font-black text-emerald-600">85%</span> on your latest Full Mock Interview - your highest score to date!
+                You scored <span className="font-black text-emerald-600 dark:text-emerald-400">85%</span> on your latest Full Mock Interview - your highest score to date!
               </p>
-              <div className="flex items-center gap-2 text-xs font-bold text-orange-700">
+              <div className="flex items-center gap-2 text-xs font-bold text-orange-700 dark:text-orange-400">
                 <Award className="h-4 w-4" />
                 <span>Keep up the great work!</span>
               </div>
@@ -518,32 +518,32 @@ function MockInterviewHistoryContent() {
             >
               <h3 className="text-lg font-black text-foreground mb-4">Performance Insights</h3>
               <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
                   <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className="h-4 w-4 text-emerald-600" />
-                    <p className="text-sm font-bold text-emerald-900">Strongest Area</p>
+                    <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <p className="text-sm font-bold text-emerald-900 dark:text-emerald-400">Strongest Area</p>
                   </div>
-                  <p className="text-xs text-emerald-800">
+                  <p className="text-xs text-emerald-800 dark:text-emerald-400">
                     <span className="font-black">Coding Interviews</span> - Average score: 79%
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-orange-50 border border-orange-200">
+                <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20">
                   <div className="flex items-center gap-2 mb-2">
-                    <TrendingDown className="h-4 w-4 text-orange-600" />
-                    <p className="text-sm font-bold text-orange-900">Area to Improve</p>
+                    <TrendingDown className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                    <p className="text-sm font-bold text-orange-900 dark:text-orange-400">Area to Improve</p>
                   </div>
-                  <p className="text-xs text-orange-800">
+                  <p className="text-xs text-orange-800 dark:text-orange-400">
                     <span className="font-black">Behavioral Interviews</span> - Average score: 73%
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
+                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20">
                   <div className="flex items-center gap-2 mb-2">
-                    <BarChart3 className="h-4 w-4 text-blue-600" />
-                    <p className="text-sm font-bold text-blue-900">Most Practiced</p>
+                    <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <p className="text-sm font-bold text-blue-900 dark:text-blue-400">Most Practiced</p>
                   </div>
-                  <p className="text-xs text-blue-800">
+                  <p className="text-xs text-blue-800 dark:text-blue-400">
                     You've taken <span className="font-black">3 Coding Mocks</span> in the last 2 weeks
                   </p>
                 </div>

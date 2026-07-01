@@ -197,13 +197,13 @@ function buildToc(sections: AnswerSection[]): TocItem[] {
  * ────────────────────────────────────────────────────────────────────────── */
 
 const CM_COLORS: Record<string, { bar: string; chip: string }> = {
-  amber: { bar: "bg-amber-400", chip: "text-amber-700 bg-amber-50" },
-  blue: { bar: "bg-blue-400", chip: "text-blue-700 bg-blue-50" },
-  emerald: { bar: "bg-emerald-400", chip: "text-emerald-700 bg-emerald-50" },
-  violet: { bar: "bg-violet-400", chip: "text-violet-700 bg-violet-50" },
-  indigo: { bar: "bg-indigo-400", chip: "text-indigo-700 bg-indigo-50" },
-  rose: { bar: "bg-rose-400", chip: "text-rose-700 bg-rose-50" },
-  slate: { bar: "bg-slate-400", chip: "text-foreground bg-surface" },
+  amber: { bar: "bg-amber-400", chip: "text-amber-950 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10" },
+  blue: { bar: "bg-blue-400", chip: "text-white dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10" },
+  emerald: { bar: "bg-emerald-400", chip: "text-white dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10" },
+  violet: { bar: "bg-violet-400", chip: "text-white dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10" },
+  indigo: { bar: "bg-indigo-400", chip: "text-white dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10" },
+  rose: { bar: "bg-rose-400", chip: "text-white dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10" },
+  slate: { bar: "bg-slate-400 dark:bg-slate-800", chip: "text-foreground bg-surface" },
 };
 
 function ConceptMapLight({
@@ -269,7 +269,7 @@ function ConceptMapLight({
                 {c.points.map((p, j) => (
                   <li
                     key={j}
-                    className="flex items-start gap-2 text-[13px] leading-[1.55] text-secondary"
+                    className="flex items-start gap-2 text-[13px] leading-[1.55] text-muted-foreground"
                   >
                     <span
                       className={`mt-[7px] h-1 w-1 rounded-full shrink-0 ${theme.bar}`}
@@ -293,7 +293,7 @@ function ConceptMapLight({
 function TopToc({ items }: { items: TocItem[] }) {
   return (
     <nav className="mb-8 rounded-xl border border-border/70 bg-surface/60 px-5 py-4">
-      <div className="text-[10.5px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2.5">
+      <div className="text-[10.5px] font-black uppercase tracking-[0.18em] text-muted-foreground mb-2.5">
         On this page
       </div>
       <ul className="flex flex-wrap gap-x-5 gap-y-1.5">
@@ -301,7 +301,7 @@ function TopToc({ items }: { items: TocItem[] }) {
           <li key={item.id}>
             <a
               href={`#${item.id}`}
-              className="text-[13px] leading-snug text-secondary hover:text-foreground transition-colors"
+              className="text-[13px] leading-snug text-muted-foreground hover:text-foreground transition-colors"
             >
               {item.text}
             </a>
@@ -387,7 +387,7 @@ export function DeepDiveArticle({ sections, followupQuestions }: Props) {
           <ol className="rounded-2xl border border-border/80 bg-background px-6 py-6 sm:px-8 sm:py-7 space-y-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
             {followupQuestions!.map((q, i) => (
               <li key={i} className="flex items-start gap-3.5">
-                <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 text-[11px] font-black border border-indigo-100">
+                <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-black border border-indigo-100 dark:border-indigo-500/20">
                   {i + 1}
                 </span>
                 <span className="text-[15.5px] leading-[1.65] text-foreground pt-[1px]">

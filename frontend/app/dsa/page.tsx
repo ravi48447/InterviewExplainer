@@ -82,30 +82,30 @@ const BG_HERO_GRID: React.CSSProperties = {
 
 // ─── Topic metadata ───────────────────────────────────────────────────────────
 const TOPIC_META: Record<string, { icon: React.ElementType; accent: string; bg: string }> = {
-  arrays:                { icon: List,         accent: "text-blue-600",    bg: "bg-blue-50 border-blue-200" },
-  strings:               { icon: Type,         accent: "text-violet-600",  bg: "bg-violet-50 border-violet-200" },
-  "linked-lists":        { icon: Link2,        accent: "text-cyan-600",    bg: "bg-cyan-50 border-cyan-200" },
-  trees:                 { icon: GitBranch,    accent: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200" },
-  graphs:                { icon: Share2,       accent: "text-indigo-600",  bg: "bg-indigo-50 border-indigo-200" },
-  "dynamic-programming": { icon: Layers,       accent: "text-amber-600",   bg: "bg-amber-50 border-amber-200" },
-  "binary-search":       { icon: Search,       accent: "text-teal-600",    bg: "bg-teal-50 border-teal-200" },
-  heaps:                 { icon: BarChart2,    accent: "text-orange-600",  bg: "bg-orange-50 border-orange-200" },
-  "stack-queue":         { icon: AlignJustify, accent: "text-pink-600",    bg: "bg-pink-50 border-pink-200" },
-  backtracking:          { icon: RotateCcw,    accent: "text-rose-600",    bg: "bg-rose-50 border-rose-200" },
-  intervals:             { icon: Calendar,     accent: "text-lime-600",    bg: "bg-lime-50 border-lime-200" },
-  tries:                 { icon: GitMerge,     accent: "text-fuchsia-600", bg: "bg-fuchsia-50 border-fuchsia-200" },
-  "bit-manipulation":    { icon: Binary,       accent: "text-secondary",   bg: "bg-surface border-border" },
-  math:                  { icon: Calculator,   accent: "text-yellow-600",  bg: "bg-yellow-50 border-yellow-200" },
-  "two-pointers":        { icon: ScanSearch,   accent: "text-sky-600",     bg: "bg-sky-50 border-sky-200" },
-  greedy:                { icon: Cpu,          accent: "text-green-600",   bg: "bg-green-50 border-green-200" },
+  arrays:                { icon: List,         accent: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20" },
+  strings:               { icon: Type,         accent: "text-violet-600 dark:text-violet-400",  bg: "bg-violet-50 dark:bg-violet-500/10 border-violet-200 dark:border-violet-500/20" },
+  "linked-lists":        { icon: Link2,        accent: "text-cyan-600 dark:text-cyan-400",    bg: "bg-cyan-50 dark:bg-cyan-500/10 border-cyan-200 dark:border-cyan-500/20" },
+  trees:                 { icon: GitBranch,    accent: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20" },
+  graphs:                { icon: Share2,       accent: "text-indigo-600 dark:text-indigo-400",  bg: "bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/20" },
+  "dynamic-programming": { icon: Layers,       accent: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20" },
+  "binary-search":       { icon: Search,       accent: "text-teal-600 dark:text-teal-400",    bg: "bg-teal-50 dark:bg-teal-500/10 border-teal-200 dark:border-teal-500/20" },
+  heaps:                 { icon: BarChart2,    accent: "text-orange-600 dark:text-orange-400",  bg: "bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20" },
+  "stack-queue":         { icon: AlignJustify, accent: "text-pink-600 dark:text-pink-400",    bg: "bg-pink-50 dark:bg-pink-500/10 border-pink-200 dark:border-pink-500/20" },
+  backtracking:          { icon: RotateCcw,    accent: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20" },
+  intervals:             { icon: Calendar,     accent: "text-lime-600 dark:text-lime-400",    bg: "bg-lime-50 dark:bg-lime-500/10 border-lime-200 dark:border-lime-500/20" },
+  tries:                 { icon: GitMerge,     accent: "text-fuchsia-600 dark:text-fuchsia-400", bg: "bg-fuchsia-50 dark:bg-fuchsia-500/10 border-fuchsia-200 dark:border-fuchsia-500/20" },
+  "bit-manipulation":    { icon: Binary,       accent: "text-muted-foreground",   bg: "bg-surface border-border" },
+  math:                  { icon: Calculator,   accent: "text-yellow-600 dark:text-yellow-400",  bg: "bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20" },
+  "two-pointers":        { icon: ScanSearch,   accent: "text-sky-600 dark:text-sky-400",     bg: "bg-sky-50 dark:bg-sky-500/10 border-sky-200 dark:border-sky-500/20" },
+  greedy:                { icon: Cpu,          accent: "text-green-600 dark:text-green-400",   bg: "bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/20" },
 };
-const FALLBACK_TOPIC = { icon: List, accent: "text-secondary", bg: "bg-surface border-border" };
+const FALLBACK_TOPIC = { icon: List, accent: "text-muted-foreground", bg: "bg-surface border-border" };
 
 // ─── Difficulty ───────────────────────────────────────────────────────────────
 const DIFF: Record<string, { badge: string }> = {
-  easy:   { badge: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-  medium: { badge: "bg-amber-50 text-amber-700 border border-amber-200" },
-  hard:   { badge: "bg-red-50 text-red-700 border border-red-200" },
+  easy:   { badge: "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-900/40" },
+  medium: { badge: "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 dark:border-amber-900/40" },
+  hard:   { badge: "bg-red-50 dark:bg-red-500/10 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/20 dark:border-red-900/40" },
 };
 
 // ─── Curated sheets ───────────────────────────────────────────────────────────
@@ -117,8 +117,8 @@ const SHEETS = [
     note: "The OG FAANG list — minimum viable problem set",
     weeks: "6–8 wks",
     color: "from-amber-500 to-orange-500",
-    iconBg: "bg-amber-50 border-amber-200",
-    iconColor: "text-amber-500",
+    iconBg: "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20",
+    iconColor: "text-amber-500 dark:text-amber-400",
   },
   {
     slug: "neetcode-150",
@@ -127,8 +127,8 @@ const SHEETS = [
     note: "Blind 75 + 75 follow-ups — comprehensive coverage",
     weeks: "10–14 wks",
     color: "from-violet-500 to-purple-500",
-    iconBg: "bg-violet-50 border-violet-200",
-    iconColor: "text-violet-500",
+    iconBg: "bg-violet-50 dark:bg-violet-500/10 border-violet-200 dark:border-violet-500/20",
+    iconColor: "text-violet-500 dark:text-violet-400",
   },
   {
     slug: "grind-75",
@@ -137,8 +137,8 @@ const SHEETS = [
     note: "Time-aware weekly schedule by Yangshun",
     weeks: "8 wks",
     color: "from-emerald-500 to-teal-500",
-    iconBg: "bg-emerald-50 border-emerald-200",
-    iconColor: "text-emerald-500",
+    iconBg: "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20",
+    iconColor: "text-emerald-500 dark:text-emerald-400",
   },
   {
     slug: "leetcode-150",
@@ -147,8 +147,8 @@ const SHEETS = [
     note: "LeetCode's official Top Interview 150 study plan",
     weeks: "8–12 wks",
     color: "from-orange-500 to-amber-500",
-    iconBg: "bg-orange-50 border-orange-200",
-    iconColor: "text-orange-500",
+    iconBg: "bg-orange-50 dark:bg-orange-500/10 border-orange-200",
+    iconColor: "text-orange-500 dark:text-orange-400",
   },
   {
     slug: "hackerrank-150",
@@ -158,7 +158,7 @@ const SHEETS = [
     weeks: "8–10 wks",
     color: "from-green-500 to-emerald-500",
     iconBg: "bg-green-50 border-green-200",
-    iconColor: "text-green-600",
+    iconColor: "text-green-600 dark:text-green-400",
   },
   {
     slug: "hackerearth-150",
@@ -167,8 +167,8 @@ const SHEETS = [
     note: "Campus & competitive classics — MST, segment trees, DP",
     weeks: "10–14 wks",
     color: "from-sky-500 to-blue-500",
-    iconBg: "bg-sky-50 border-sky-200",
-    iconColor: "text-sky-500",
+    iconBg: "bg-sky-50 dark:bg-sky-500/10 border-sky-200 dark:border-sky-500/20",
+    iconColor: "text-sky-500 dark:text-sky-400",
   },
   {
     slug: "best-problems",
@@ -177,8 +177,8 @@ const SHEETS = [
     note: "Curated best-of — 100% authored, zero gaps",
     weeks: "3–4 wks",
     color: "from-fuchsia-500 to-pink-500",
-    iconBg: "bg-fuchsia-50 border-fuchsia-200",
-    iconColor: "text-fuchsia-500",
+    iconBg: "bg-fuchsia-50 dark:bg-fuchsia-950/20 border-fuchsia-200 dark:border-fuchsia-500/20",
+    iconColor: "text-fuchsia-500 dark:text-fuchsia-400",
   },
 ];
 
@@ -222,41 +222,41 @@ const PHASE_META: Record<Phase, {
     label: "Foundations",
     description: "Big-O analysis & recursion — mental models every pattern builds on",
     icon: GraduationCap,
-    nodeBg: "bg-blue-600", nodeText: "text-primary-foreground dark:text-foreground",
+    nodeBg: "bg-blue-600", nodeText: "text-white",
     lineBg: "bg-blue-200",
-    cardAccent: "bg-blue-500", cardNumBg: "bg-blue-50", cardNumText: "text-blue-700",
-    hoverBorder: "hover:border-blue-300",
-    headerBg: "bg-gradient-to-br from-blue-50 to-blue-50/30", cardBorder: "border-blue-100",
+    cardAccent: "bg-blue-500", cardNumBg: "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/40", cardNumText: "text-white dark:text-blue-400",
+    hoverBorder: "hover:border-blue-300 dark:hover:border-blue-700/50",
+    headerBg: "bg-gradient-to-br from-blue-50 to-blue-50/30 dark:from-blue-950/40 dark:to-blue-950/10", cardBorder: "border-blue-100 dark:border-blue-500/20 dark:border-blue-900/40",
   },
   core: {
     label: "Core Patterns",
     description: "6 patterns that unlock ~60% of all interview problems — start here",
     icon: Target,
-    nodeBg: "bg-violet-600", nodeText: "text-primary-foreground dark:text-foreground",
+    nodeBg: "bg-violet-600", nodeText: "text-white",
     lineBg: "bg-violet-200",
-    cardAccent: "bg-violet-500", cardNumBg: "bg-violet-50", cardNumText: "text-violet-700",
-    hoverBorder: "hover:border-violet-300",
-    headerBg: "bg-gradient-to-br from-violet-50 to-violet-50/30", cardBorder: "border-violet-100",
+    cardAccent: "bg-violet-500", cardNumBg: "bg-violet-50 dark:bg-violet-500/10 dark:bg-violet-950/40", cardNumText: "text-white dark:text-violet-400",
+    hoverBorder: "hover:border-violet-300 dark:border-violet-500/30 dark:hover:border-violet-700/50",
+    headerBg: "bg-gradient-to-br from-violet-50 to-violet-50/30 dark:from-violet-950/40 dark:to-violet-950/10", cardBorder: "border-violet-100 dark:border-violet-500/20 dark:border-violet-900/40",
   },
   advanced: {
     label: "Advanced",
     description: "Trees, Graphs, DP, Backtracking — hard-medium tier that separates candidates",
     icon: Flame,
-    nodeBg: "bg-orange-500", nodeText: "text-primary-foreground dark:text-foreground",
+    nodeBg: "bg-orange-500", nodeText: "text-white",
     lineBg: "bg-orange-200",
-    cardAccent: "bg-orange-500", cardNumBg: "bg-orange-50", cardNumText: "text-orange-700",
-    hoverBorder: "hover:border-orange-300",
-    headerBg: "bg-gradient-to-br from-orange-50 to-orange-50/30", cardBorder: "border-orange-100",
+    cardAccent: "bg-orange-500", cardNumBg: "bg-orange-50 dark:bg-orange-500/10 dark:bg-orange-950/40", cardNumText: "text-white dark:text-orange-400",
+    hoverBorder: "hover:border-orange-300 dark:hover:border-orange-700/50",
+    headerBg: "bg-gradient-to-br from-orange-50 to-orange-50/30 dark:from-orange-950/40 dark:to-orange-950/10", cardBorder: "border-orange-100 dark:border-orange-500/20 dark:border-orange-900/40",
   },
   specialised: {
     label: "Specialised",
     description: "Intervals, Bit tricks, Math, Tries — round out coverage before the loop",
     icon: Star,
-    nodeBg: "bg-slate-600", nodeText: "text-primary-foreground dark:text-foreground",
+    nodeBg: "bg-slate-600", nodeText: "text-white",
     lineBg: "bg-slate-300",
-    cardAccent: "bg-slate-500", cardNumBg: "bg-surface", cardNumText: "text-secondary",
-    hoverBorder: "hover:border-border",
-    headerBg: "bg-gradient-to-br from-slate-100 to-slate-50/40", cardBorder: "border-border",
+    cardAccent: "bg-slate-500", cardNumBg: "bg-surface dark:bg-slate-900/40", cardNumText: "text-muted-foreground dark:text-white",
+    hoverBorder: "hover:border-border dark:hover:border-slate-700/50",
+    headerBg: "bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-900/40 dark:to-slate-900/20/40 dark:from-slate-900/40 dark:to-slate-900/10", cardBorder: "border-border dark:border-slate-800/40",
   },
 };
 
@@ -382,13 +382,13 @@ export default function DSAIndexPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] to-[#f4f5f7]">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] dark:from-background to-[#f4f5f7] dark:to-surface dark:from-background dark:to-background">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       {/* ══════════════════════════════════════════════
           HERO — study-plan forward
       ══════════════════════════════════════════════ */}
-      <header className="relative overflow-hidden bg-[#0f1014] text-primary-foreground dark:text-foreground">
+      <header className="relative overflow-hidden bg-[#0f1014] text-white">
         <div className="pointer-events-none absolute inset-0" style={BG_HERO_GRID} aria-hidden />
         <div
           className="pointer-events-none absolute inset-0"
@@ -398,12 +398,12 @@ export default function DSAIndexPage() {
 
         <div className="relative mx-auto max-w-screen-2xl px-5 sm:px-8 lg:px-12">
           {/* Breadcrumb */}
-          <nav className="flex items-center gap-1.5 text-xs text-zinc-500 pt-4 pb-2">
-            <Link href="/" className="hover:text-zinc-300 transition-colors flex items-center gap-1">
+          <nav className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 pt-4 pb-2">
+            <Link href="/" className="hover:text-muted-foreground transition-colors flex items-center gap-1">
               <Home className="h-3 w-3" /> Home
             </Link>
             <ChevronRight className="h-3 w-3" />
-            <span className="text-zinc-400 font-medium">DSA</span>
+            <span className="text-muted-foreground font-medium">DSA</span>
           </nav>
 
           {/* Two-column hero */}
@@ -411,22 +411,22 @@ export default function DSAIndexPage() {
 
             {/* ── LEFT: headline + CTAs ── */}
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-500/25 bg-violet-500/10 px-3.5 py-1.5">
-                <Sparkles className="h-3 w-3 text-violet-400" />
-                <span className="text-xs font-bold uppercase tracking-widest text-violet-300">DSA Interview Prep</span>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-violet-500 dark:border-violet-500/50 dark:border-violet-700/25 bg-violet-500 dark:bg-violet-800/10 px-3.5 py-1.5">
+                <Sparkles className="h-3 w-3 text-violet-400 dark:text-violet-300" />
+                <span className="text-xs font-bold uppercase tracking-widest text-violet-300 dark:text-violet-300">DSA Interview Prep</span>
               </div>
 
-              <h1 className="text-3xl sm:text-[2.75rem] font-black tracking-tight text-primary-foreground dark:text-foreground leading-[1.05] mb-4">
+              <h1 className="text-3xl sm:text-[2.75rem] font-black tracking-tight text-white leading-[1.05] mb-4">
                 Crack the coding round with a{" "}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-purple-300 to-indigo-400">
                   proven study plan
                 </span>
               </h1>
 
-              <p className="text-sm sm:text-base text-zinc-400 leading-relaxed max-w-[560px] mb-6">
+              <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-[560px] mb-6">
                 Pick a battle-tested problem set — Blind 75, NeetCode 150, Grind 75 — and we
                 walk you through every problem brute-force → optimal in{" "}
-                <span className="text-zinc-200 font-semibold">Java and Python</span>, with
+                <span className="text-muted-foreground font-semibold">Java and Python</span>, with
                 line-by-line explanations and interview coaching.
               </p>
 
@@ -434,19 +434,19 @@ export default function DSAIndexPage() {
               <div className="flex flex-wrap gap-2.5 mb-6">
                 <a
                   href="#plans"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-primary-foreground dark:text-foreground font-bold rounded-xl transition-colors text-sm shadow-lg shadow-violet-900/40"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 dark:bg-violet-800 hover:bg-violet-500 dark:bg-violet-800 text-white font-bold rounded-xl transition-colors text-sm shadow-lg shadow-violet-900/40"
                 >
                   <Trophy className="h-4 w-4" /> Choose a study plan
                 </a>
                 <Link
                   href={primaryCtaHref}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-zinc-300 hover:text-primary-foreground dark:text-foreground font-medium rounded-xl transition-colors text-sm"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-muted-foreground hover:text-white font-medium rounded-xl transition-colors text-sm"
                 >
                   <Play className="h-4 w-4" /> Start learning
                 </Link>
                 <a
                   href="#problems"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-zinc-300 hover:text-primary-foreground dark:text-foreground font-medium rounded-xl transition-colors text-sm"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-muted-foreground hover:text-white font-medium rounded-xl transition-colors text-sm"
                 >
                   Browse {problems.length}+ problems <ChevronRight className="h-4 w-4" />
                 </a>
@@ -461,9 +461,9 @@ export default function DSAIndexPage() {
                   { value: "~" + totalHours + "h",         label: "Of content", icon: Clock },
                 ].map((s) => (
                   <div key={s.label} className="flex items-center gap-2">
-                    <s.icon className="h-4 w-4 text-violet-400 shrink-0" />
-                    <span className="text-sm font-black text-primary-foreground dark:text-foreground leading-none">{s.value}</span>
-                    <span className="text-[11px] text-zinc-500">{s.label}</span>
+                    <s.icon className="h-4 w-4 text-violet-400 dark:text-violet-300 shrink-0" />
+                    <span className="text-sm font-black text-white leading-none">{s.value}</span>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">{s.label}</span>
                   </div>
                 ))}
               </div>
@@ -487,8 +487,8 @@ export default function DSAIndexPage() {
               { icon: Compass,       text: "Time & space complexity" },
             ].map((f) => (
               <div key={f.text} className="flex items-center gap-1.5">
-                <f.icon className="h-3 w-3 text-violet-400 shrink-0" />
-                <span className="text-xs text-zinc-500">{f.text}</span>
+                <f.icon className="h-3 w-3 text-violet-400 dark:text-violet-300 shrink-0" />
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">{f.text}</span>
               </div>
             ))}
           </div>
@@ -514,7 +514,7 @@ export default function DSAIndexPage() {
         {/* ── 0 · CHOOSE YOUR PATH (orientation) ─────── */}
         <section aria-label="How to use this hub">
           <div className="mb-5">
-            <p className="text-xs font-bold uppercase tracking-widest text-violet-600 mb-1 flex items-center gap-1.5">
+            <p className="text-xs font-bold uppercase tracking-widest text-violet-600 dark:text-violet-400 mb-1 flex items-center gap-1.5">
               <Compass className="h-3.5 w-3.5" /> New here? Start in 10 seconds
             </p>
             <h2 className="text-2xl font-black text-foreground tracking-tight">
@@ -536,9 +536,9 @@ export default function DSAIndexPage() {
                 bestIf: "You have interviews coming up",
                 body: "Pick a battle-tested checklist (Blind 75, NeetCode 150…) and work it end-to-end. The fastest route if you're short on time.",
                 cta: "Go to Study Plans",
-                ring: "hover:border-amber-300 hover:shadow-amber-100/60",
-                chip: "bg-amber-50 border-amber-200 text-amber-600",
-                accent: "text-amber-600",
+                ring: "hover:border-amber-300 dark:border-amber-500/30 hover:shadow-amber-100/60",
+                chip: "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400",
+                accent: "text-amber-600 dark:text-amber-400",
                 glow: "shadow-[0_2px_20px_-10px_rgba(245,158,11,0.3)]",
               },
               {
@@ -549,9 +549,9 @@ export default function DSAIndexPage() {
                 bestIf: "You're building DSA from scratch",
                 body: "Follow the 18-module roadmap, phase by phase. Each module starts with theory, then problems — ordered by how interviewers actually test.",
                 cta: "Go to the Roadmap",
-                ring: "hover:border-violet-300 hover:shadow-violet-100/60",
-                chip: "bg-violet-50 border-violet-200 text-violet-600",
-                accent: "text-violet-600",
+                ring: "hover:border-violet-300 dark:border-violet-500/30 hover:shadow-violet-100/60",
+                chip: "bg-violet-50 dark:bg-violet-500/10 border-violet-200 dark:border-violet-500/20 text-violet-600 dark:text-violet-400",
+                accent: "text-violet-600 dark:text-violet-400",
                 glow: "shadow-[0_2px_20px_-10px_rgba(124,58,237,0.3)]",
               },
               {
@@ -563,21 +563,21 @@ export default function DSAIndexPage() {
                 body: "Jump into the full problem library or browse by topic. Filter by difficulty, module, or company to attack exactly what you need.",
                 cta: "Go to Problems",
                 ring: "hover:border-indigo-300 hover:shadow-indigo-100/60",
-                chip: "bg-indigo-50 border-indigo-200 text-indigo-600",
-                accent: "text-indigo-600",
+                chip: "bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400",
+                accent: "text-indigo-600 dark:text-indigo-400",
                 glow: "shadow-[0_2px_20px_-10px_rgba(79,70,229,0.3)]",
               },
             ].map((p) => (
               <a
                 key={p.href}
                 href={p.href}
-                className={`group relative flex flex-col rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 ${p.glow} p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg ${p.ring}`}
+                className={`group relative flex flex-col rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 ${p.glow} p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg ${p.ring}`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className={`w-11 h-11 rounded-xl border flex items-center justify-center ${p.chip}`}>
                     <p.icon className={`h-5 w-5 ${p.accent}`} />
                   </div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     {p.step}
                   </span>
                 </div>
@@ -599,7 +599,7 @@ export default function DSAIndexPage() {
         <section aria-label="Basic 100 for freshers">
           <Link
             href="/dsa/basic-100"
-            className="group relative block overflow-hidden rounded-2xl bg-[#0f1014] text-primary-foreground dark:text-foreground shadow-lg transition-all hover:-translate-y-0.5"
+            className="group relative block overflow-hidden rounded-2xl bg-[#0f1014] text-white shadow-lg transition-all hover:-translate-y-0.5"
           >
             <div
               aria-hidden
@@ -608,24 +608,24 @@ export default function DSAIndexPage() {
             />
             <div className="relative flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
               <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-emerald-400/30 bg-emerald-500/15">
-                  <GraduationCap className="h-6 w-6 text-emerald-300" />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-emerald-400 dark:border-emerald-700/30 bg-emerald-500 dark:bg-emerald-800/15">
+                  <GraduationCap className="h-6 w-6 text-emerald-300 dark:text-emerald-300" />
                 </div>
                 <div className="min-w-0">
-                  <div className="mb-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                  <div className="mb-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-400 dark:border-emerald-700/25 bg-emerald-500 dark:bg-emerald-800/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white dark:text-emerald-300">
                     <Sparkles className="h-3 w-3" /> Brand new to DSA? Start here
                   </div>
                   <h2 className="text-xl font-black tracking-tight sm:text-2xl">
                     Basic 100 — beginner problems for freshers
                   </h2>
-                  <p className="mt-1 max-w-xl text-sm text-zinc-400 leading-relaxed">
+                  <p className="mt-1 max-w-xl text-sm text-muted-foreground leading-relaxed">
                     100 of the simplest, most-asked coding problems — reverse a string, find the max,
                     FizzBuzz, check a prime — each explained step by step in Java and Python before you
                     tackle Easy, Medium, and Hard.
                   </p>
                 </div>
               </div>
-              <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-primary-foreground dark:text-foreground shadow-lg shadow-emerald-900/40 transition-colors group-hover:bg-emerald-500 sm:self-center">
+              <span className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl bg-emerald-600 dark:bg-emerald-800 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/40 transition-colors group-hover:bg-emerald-500 dark:bg-emerald-800 sm:self-center">
                 <Play className="h-4 w-4" /> Start the Basic 100
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </span>
@@ -637,7 +637,7 @@ export default function DSAIndexPage() {
         <section id="plans" className="scroll-mt-32">
           <SectionHeading
             kicker="Start here"
-            kickerColor="text-amber-600"
+            kickerColor="text-amber-600 dark:text-amber-400"
             title="Pick a study plan"
             subtitle="Industry-standard problem sets, time-boxed for interview prep. Each one links straight into our line-by-line walkthroughs."
             purpose="For: a ready-made checklist"
@@ -651,14 +651,14 @@ export default function DSAIndexPage() {
                       <Trophy className={`h-5 w-5 ${s.iconColor}`} />
                     </div>
                     {s.authored
-                      ? <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">Available</span>
-                      : <span className="text-xs font-bold text-slate-400 bg-surface border border-border px-2 py-0.5 rounded-md">Soon</span>
+                      ? <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-2 py-0.5 rounded-md">Available</span>
+                      : <span className="text-xs font-bold text-muted-foreground bg-surface border border-border px-2 py-0.5 rounded-md">Soon</span>
                     }
                   </div>
                   <div className="text-base font-bold text-foreground mb-1">{s.name}</div>
                   <div className="text-sm text-muted-foreground mb-3 leading-snug line-clamp-2">{s.tagline}</div>
-                  <div className="flex items-center gap-3 text-xs text-slate-400 mt-auto">
-                    <span className="font-semibold text-secondary">{s.count} problems</span>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-auto">
+                    <span className="font-semibold text-muted-foreground">{s.count} problems</span>
                     <span>·</span>
                     <span>{s.duration}</span>
                   </div>
@@ -668,11 +668,11 @@ export default function DSAIndexPage() {
                 <Link
                   key={s.slug}
                   href={`/dsa/sheet/${s.slug}`}
-                  className="group rounded-2xl border border-border bg-background hover:border-violet-300 hover:shadow-lg hover:shadow-violet-100/60 hover:-translate-y-0.5 transition-all flex flex-col overflow-hidden"
+                  className="group rounded-2xl border border-border bg-background hover:border-violet-300 dark:border-violet-500/30 hover:shadow-lg hover:shadow-violet-100/60 hover:-translate-y-0.5 transition-all flex flex-col overflow-hidden"
                 >
                   <div className={`h-1.5 bg-gradient-to-r ${s.color}`} />
                   {inner}
-                  <div className="px-5 pb-4 pt-3 border-t border-slate-100 flex items-center gap-1.5 text-xs font-semibold text-violet-600 group-hover:text-violet-700">
+                  <div className="px-5 pb-4 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-400 group-hover:text-violet-700 dark:text-violet-400">
                     Open this plan <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </Link>
@@ -690,7 +690,7 @@ export default function DSAIndexPage() {
         <section id="roadmap" className="scroll-mt-32">
           <SectionHeading
             kicker="Structured preparation"
-            kickerColor="text-violet-600"
+            kickerColor="text-violet-600 dark:text-violet-400"
             title="Or follow the full roadmap"
             subtitle={`${modules.length} modules across 4 phases · ~${totalHours}h · ordered by how interviewers actually test.`}
             purpose="For: learning topic-by-topic"
@@ -704,7 +704,7 @@ export default function DSAIndexPage() {
               { n: "3", title: "Work the phases in order", body: "Foundations → Core (≈60% of interviews) → Advanced → Specialised." },
             ].map((step) => (
               <div key={step.n} className="flex items-start gap-3 rounded-xl border border-border bg-background p-4">
-                <span className="shrink-0 w-7 h-7 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center text-sm font-black">
+                <span className="shrink-0 w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-950/20 text-violet-700 dark:text-violet-400 flex items-center justify-center text-sm font-black">
                   {step.n}
                 </span>
                 <div>
@@ -736,10 +736,10 @@ export default function DSAIndexPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                           Phase {phaseIdx + 1}
                         </span>
-                        <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                        <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                           {phaseMods.length} modules · <Clock className="h-3 w-3" /> ~{hours}h
                         </span>
                       </div>
@@ -759,27 +759,27 @@ export default function DSAIndexPage() {
                         <Link
                           key={m.moduleSlug}
                           href={`/dsa/module/${m.moduleSlug}`}
-                          className={`group flex items-center gap-3 rounded-xl border border-slate-100 bg-surface/60 px-3 py-2.5 hover:bg-background hover:shadow-sm transition-all ${meta.hoverBorder}`}
+                          className={`group flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-800/60 bg-surface/60 dark:bg-surface/40 px-3 py-2.5 hover:bg-background dark:hover:bg-slate-900/50 hover:shadow-sm transition-all ${meta.hoverBorder}`}
                         >
                           <div className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black ${meta.cardNumBg} ${meta.cardNumText}`}>
                             {moduleNum}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-foreground group-hover:text-violet-700 transition-colors truncate">
+                              <span className="text-sm font-semibold text-foreground group-hover:text-violet-700 dark:text-violet-400 transition-colors truncate">
                                 {m.title}
                               </span>
                               {hasTheory && (
-                                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-md shrink-0">
+                                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 rounded-md shrink-0">
                                   <BookOpen className="h-2.5 w-2.5" /> Learn
                                 </span>
                               )}
                             </div>
                           </div>
                           {indexed > 0 && (
-                            <span className="hidden sm:inline text-[11px] text-slate-400 shrink-0">{indexed}</span>
+                            <span className="hidden sm:inline text-[11px] text-muted-foreground shrink-0">{indexed}</span>
                           )}
-                          <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-violet-500 transition-colors shrink-0" />
+                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-violet-500 dark:text-violet-400 transition-colors shrink-0" />
                         </Link>
                       );
                     })}
@@ -794,7 +794,7 @@ export default function DSAIndexPage() {
         <section id="problems" className="scroll-mt-32">
           <SectionHeading
             kicker="All problems"
-            kickerColor="text-indigo-600"
+            kickerColor="text-indigo-600 dark:text-indigo-400"
             title="Browse the problem library"
             subtitle={`${problems.length} problems · ${diffCounts.easy} easy · ${diffCounts.medium} medium · ${diffCounts.hard} hard · filter by difficulty, module, or search.`}
             purpose="For: drilling specific problems"
@@ -803,9 +803,9 @@ export default function DSAIndexPage() {
           {/* Most-asked quick strip */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
-              <Flame className="h-4 w-4 text-amber-500" />
+              <Flame className="h-4 w-4 text-amber-500 dark:text-amber-400" />
               <h3 className="text-sm font-bold text-foreground">Most-asked in FAANG interviews</h3>
-              <span className="text-xs text-slate-400">— start with these</span>
+              <span className="text-xs text-muted-foreground">— start with these</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {topQuestions.map((q, i) => {
@@ -814,20 +814,20 @@ export default function DSAIndexPage() {
                   <Link
                     key={q.slug}
                     href={`/dsa/problem/${q.slug}`}
-                    className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-border bg-background hover:border-violet-300 hover:shadow-sm transition-all"
+                    className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-border bg-background hover:border-violet-300 dark:border-violet-500/30 hover:shadow-sm transition-all"
                   >
-                    <span className="shrink-0 w-6 h-6 rounded-full bg-surface border border-border group-hover:border-violet-200 flex items-center justify-center text-[11px] font-bold text-slate-400 group-hover:text-violet-500 transition-colors">
+                    <span className="shrink-0 w-6 h-6 rounded-full bg-surface border border-border group-hover:border-violet-200 dark:border-violet-500/20 flex items-center justify-center text-[11px] font-bold text-muted-foreground group-hover:text-violet-500 dark:text-violet-400 transition-colors">
                       {i + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold text-foreground group-hover:text-violet-700 transition-colors truncate">
+                      <div className="text-[13px] font-semibold text-foreground group-hover:text-violet-700 dark:text-violet-400 transition-colors truncate">
                         {q.title}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${d.badge}`}>
                           {q.difficulty.charAt(0).toUpperCase() + q.difficulty.slice(1)}
                         </span>
-                        <span className="text-[10px] text-slate-400 truncate">{q.pattern}</span>
+                        <span className="text-[10px] text-muted-foreground truncate">{q.pattern}</span>
                       </div>
                     </div>
                   </Link>
@@ -838,9 +838,9 @@ export default function DSAIndexPage() {
 
           {/* Full explorer */}
           <div className="rounded-2xl border border-border bg-background shadow-sm p-5 sm:p-6">
-            <div className="flex items-center gap-2 mb-4 text-xs text-slate-400">
+            <div className="flex items-center gap-2 mb-4 text-xs text-muted-foreground">
               <Filter className="h-3.5 w-3.5" />
-              <span className="font-semibold text-secondary">Full problem explorer</span>
+              <span className="font-semibold text-muted-foreground">Full problem explorer</span>
             </div>
             <DSAProblemExplorer problems={problemRows} moduleMap={moduleMap} />
           </div>
@@ -850,7 +850,7 @@ export default function DSAIndexPage() {
         <section id="topics" className="scroll-mt-32">
           <SectionHeading
             kicker="What's covered"
-            kickerColor="text-blue-600"
+            kickerColor="text-blue-600 dark:text-blue-400"
             title="Browse by topic"
             subtitle={`${categoryChips.length} topics — each links to a theory page plus problems and solutions.`}
             purpose="For: targeting one topic"
@@ -863,14 +863,14 @@ export default function DSAIndexPage() {
                 <Link
                   key={cat.slug}
                   href={`/dsa/${cat.slug}`}
-                  className="group flex items-center gap-3 rounded-xl border border-border bg-background hover:border-violet-300 hover:shadow-sm px-3.5 py-3 transition-all"
+                  className="group flex items-center gap-3 rounded-xl border border-border bg-background hover:border-violet-300 dark:border-violet-500/30 hover:shadow-sm px-3.5 py-3 transition-all"
                 >
                   <div className={`shrink-0 w-9 h-9 rounded-lg border flex items-center justify-center ${meta.bg}`}>
                     <Icon className={`h-4 w-4 ${meta.accent}`} />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-foreground group-hover:text-violet-700 truncate transition-colors">{cat.name}</div>
-                    <div className="text-xs text-slate-400 mt-0.5">{cat.count} problems</div>
+                    <div className="text-sm font-semibold text-foreground group-hover:text-violet-700 dark:text-violet-400 truncate transition-colors">{cat.name}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{cat.count} problems</div>
                   </div>
                 </Link>
               );
@@ -881,9 +881,9 @@ export default function DSAIndexPage() {
         {/* ── 5 · PAIRS WELL WITH (slim band) ─────────── */}
         <section className="rounded-2xl border border-border bg-background shadow-sm p-5 sm:p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Award className="h-4 w-4 text-emerald-600" />
+            <Award className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <h2 className="text-base font-bold text-foreground">Pairs well with</h2>
-            <span className="text-xs text-slate-400">— complete your prep</span>
+            <span className="text-xs text-muted-foreground">— complete your prep</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
@@ -891,13 +891,13 @@ export default function DSAIndexPage() {
               { href: "/java-fullstack-intermediate",  title: "Java Fullstack — Intermediate", desc: "Spring Boot + React · TypeScript · Web fundamentals" },
               { href: "/go-intermediate",              title: "Go — Intermediate",             desc: "Goroutines · gRPC · Gin · System Design · Cloud" },
             ].map((item) => (
-              <Link key={item.href} href={item.href} className="group flex items-start gap-3 rounded-xl border border-border bg-surface/60 hover:bg-background hover:border-emerald-300 hover:shadow-sm p-4 transition-all">
-                <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 mt-1.5" />
+              <Link key={item.href} href={item.href} className="group flex items-start gap-3 rounded-xl border border-border bg-surface/60 hover:bg-background hover:border-emerald-300 dark:border-emerald-500/30 hover:shadow-sm p-4 transition-all">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 dark:bg-emerald-800 shrink-0 mt-1.5" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-foreground group-hover:text-emerald-700 transition-colors">{item.title}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">{item.desc}</div>
+                  <div className="text-sm font-semibold text-foreground group-hover:text-emerald-700 dark:text-emerald-400 transition-colors">{item.title}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{item.desc}</div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-emerald-500 shrink-0 transition-colors mt-0.5" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-emerald-500 dark:text-emerald-400 shrink-0 transition-colors mt-0.5" />
               </Link>
             ))}
           </div>
@@ -907,19 +907,19 @@ export default function DSAIndexPage() {
         <section id="faq" className="scroll-mt-32">
           <SectionHeading
             kicker="Common questions"
-            kickerColor="text-indigo-600"
+            kickerColor="text-indigo-600 dark:text-indigo-400"
             title="Frequently asked"
           />
           <div className="space-y-2">
             {FAQS.map((f, i) => (
-              <details key={i} className="group rounded-xl border border-border bg-background hover:border-violet-200 transition-colors">
+              <details key={i} className="group rounded-xl border border-border bg-background hover:border-violet-200 dark:border-violet-500/20 transition-colors">
                 <summary className="flex items-center justify-between gap-4 px-5 py-3.5 cursor-pointer list-none">
-                  <span className="text-sm font-semibold text-foreground group-hover:text-violet-700 transition-colors leading-snug">
+                  <span className="text-sm font-semibold text-foreground group-hover:text-violet-700 dark:text-violet-400 transition-colors leading-snug">
                     {f.q}
                   </span>
-                  <ChevronRight className="h-4 w-4 text-slate-400 shrink-0 group-open:rotate-90 transition-transform" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 group-open:rotate-90 transition-transform" />
                 </summary>
-                <div className="px-5 pb-4 text-sm text-secondary leading-relaxed border-t border-slate-100 pt-3">
+                <div className="px-5 pb-4 text-sm text-muted-foreground leading-relaxed border-t border-slate-100 dark:border-slate-800/60 pt-3">
                   {f.a}
                 </div>
               </details>
@@ -959,7 +959,7 @@ function SectionHeading({
       </div>
       {purpose && (
         <span className="shrink-0 inline-flex items-center gap-1.5 self-start rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-muted-foreground shadow-sm">
-          <Compass className="h-3.5 w-3.5 text-violet-500" />
+          <Compass className="h-3.5 w-3.5 text-violet-500 dark:text-violet-400" />
           {purpose}
         </span>
       )}
@@ -988,13 +988,13 @@ function FeaturedPlanCard({
   href: string;
 }) {
   const card = (
-    <div className="rounded-2xl border border-white/[0.1] bg-background/[0.04] p-5 backdrop-blur-sm transition-colors group-hover:border-violet-500/40 group-hover:bg-background/[0.07]">
+    <div className="rounded-2xl border border-white/[0.1] bg-background/[0.04] p-5 backdrop-blur-sm transition-colors group-hover:border-violet-500 dark:border-violet-500/50 dark:border-violet-700/40 group-hover:bg-background/[0.07]">
       <div className="flex items-center justify-between mb-4">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest text-amber-300">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500 dark:border-amber-700/25 bg-amber-500 dark:bg-amber-800/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest text-amber-950 dark:text-amber-300">
           <Star className="h-3 w-3" /> Recommended start
         </span>
         {sheet.authored && (
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 dark:text-emerald-300">
             <CheckCircle2 className="h-3 w-3" /> Ready
           </span>
         )}
@@ -1004,19 +1004,19 @@ function FeaturedPlanCard({
         <Trophy className={`h-6 w-6 ${sheet.iconColor}`} />
       </div>
 
-      <div className="text-xl font-black text-primary-foreground dark:text-foreground mb-1">{sheet.name}</div>
-      <p className="text-sm text-zinc-400 leading-relaxed mb-4">{sheet.tagline}</p>
+      <div className="text-xl font-black text-white mb-1">{sheet.name}</div>
+      <p className="text-sm text-muted-foreground leading-relaxed mb-4">{sheet.tagline}</p>
 
-      <div className="flex items-center gap-4 text-xs text-zinc-500 mb-4 pb-4 border-b border-white/[0.08]">
-        <span className="flex items-center gap-1.5 text-zinc-300 font-semibold">
-          <Target className="h-3.5 w-3.5 text-violet-400" /> {sheet.count} problems
+      <div className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400 mb-4 pb-4 border-b border-white/[0.08]">
+        <span className="flex items-center gap-1.5 text-muted-foreground font-semibold">
+          <Target className="h-3.5 w-3.5 text-violet-400 dark:text-violet-300" /> {sheet.count} problems
         </span>
         <span className="flex items-center gap-1.5">
-          <Clock className="h-3.5 w-3.5 text-violet-400" /> {sheet.duration}
+          <Clock className="h-3.5 w-3.5 text-violet-400 dark:text-violet-300" /> {sheet.duration}
         </span>
       </div>
 
-      <span className="inline-flex items-center gap-2 text-sm font-bold text-violet-300 group-hover:text-violet-200">
+      <span className="inline-flex items-center gap-2 text-sm font-bold text-violet-300 dark:text-violet-300 group-hover:text-violet-200 dark:text-violet-300">
         {sheet.authored ? "Open this plan" : "See all plans"}
         <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
       </span>

@@ -209,8 +209,8 @@ export default async function DSACompanyPage({
       {topPatterns.length > 0 && (
         <section className="mb-10">
           <div className="flex items-center gap-1.5 mb-3">
-            <Workflow className="h-3 w-3 text-slate-400" />
-            <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            <Workflow className="h-3 w-3 text-muted-foreground" />
+            <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               Patterns {name} actually tests
             </h2>
           </div>
@@ -219,13 +219,13 @@ export default async function DSACompanyPage({
               <Link
                 key={slug}
                 href={`/dsa/pattern/${slug}`}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:border-violet-300 hover:text-violet-700 transition-colors"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:border-violet-300 dark:border-violet-500/30 hover:text-violet-700 dark:text-violet-400 transition-colors"
               >
                 {slug
                   .split("-")
                   .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
                   .join(" ")}
-                <span className="text-[10px] text-slate-400">{count}</span>
+                <span className="text-[10px] text-muted-foreground">{count}</span>
               </Link>
             ))}
           </div>
@@ -234,7 +234,7 @@ export default async function DSACompanyPage({
 
       {/* Problem list grouped by module */}
       <section className="mb-12">
-        <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 mb-1">
+        <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-1">
           Grouped by curriculum module
         </p>
         <h2 className="text-xl font-black text-foreground tracking-tight mb-5">
@@ -252,13 +252,13 @@ export default async function DSACompanyPage({
                 >
                   <Link
                     href={`/dsa/module/${m.moduleSlug}`}
-                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 bg-surface/70 hover:bg-violet-50/40 transition-colors"
+                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 hover:bg-violet-50/40 dark:bg-violet-500/10 transition-colors"
                   >
-                    <span className="text-sm font-bold text-foreground group-hover:text-violet-700 inline-flex items-center gap-1.5 transition-colors">
+                    <span className="text-sm font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400 inline-flex items-center gap-1.5 transition-colors">
                       {m.title}
-                      <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-violet-500" />
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-violet-500 dark:text-violet-400" />
                     </span>
-                    <span className="text-[11px] font-semibold text-slate-400">
+                    <span className="text-[11px] font-semibold text-muted-foreground">
                       {modProblems.length} problem{modProblems.length === 1 ? "" : "s"}
                     </span>
                   </Link>
@@ -270,7 +270,7 @@ export default async function DSACompanyPage({
             })}
           {(byModule.get("unknown") ?? []).length > 0 && (
             <div className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100 bg-surface/70 text-sm font-bold text-foreground">
+              <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 text-sm font-bold text-foreground">
                 Uncategorised
               </div>
               <div className="p-4">
@@ -295,7 +295,7 @@ export default async function DSACompanyPage({
       {/* Other companies */}
       {otherCompanies.length > 0 && (
         <section className="mb-10">
-          <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">
+          <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
             Other companies
           </h2>
           <div className="flex flex-wrap gap-2">
@@ -303,10 +303,10 @@ export default async function DSACompanyPage({
               <Link
                 key={c.slug}
                 href={`/dsa/company/${c.slug}`}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:border-violet-300 hover:text-violet-700 transition-colors"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:border-violet-300 dark:border-violet-500/30 hover:text-violet-700 dark:text-violet-400 transition-colors"
               >
                 {toDisplayName(c.slug)}
-                <span className="text-[10px] text-slate-400">{c.count}</span>
+                <span className="text-[10px] text-muted-foreground">{c.count}</span>
               </Link>
             ))}
           </div>

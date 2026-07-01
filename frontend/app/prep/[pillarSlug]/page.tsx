@@ -342,7 +342,7 @@ export default async function PillarHubPage({
       <div className="min-h-screen bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgb(224_231_255/0.45),transparent_50%),rgb(248_250_252))] font-sans text-foreground">
         <div className="flex w-full min-h-screen">
           {/* ── LEFT SIDEBAR ── pillar-scoped tree (no JBI overlap) */}
-          <aside className="hidden lg:flex flex-col w-[280px] shrink-0 self-start sticky top-0 h-screen bg-background border-r border-border">
+          <aside className="hidden lg:flex flex-col w-[280px] shrink-0 self-start sticky top-0 h-screen bg-background border-r border-border overflow-y-auto custom-scrollbar">
             <PillarTreeNav
               pillarTitle={pillar.title}
               pillarSlug={pillar.pillarSlug}
@@ -388,8 +388,8 @@ export default async function PillarHubPage({
                   aria-hidden
                 />
                 <div className="relative pl-4 sm:pl-5">
-                <div className="px-4 sm:px-6 pt-7 pb-6 sm:pt-8 sm:pb-7 bg-gradient-to-br from-slate-50/90 via-white to-indigo-50/35">
-                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600 mb-2">
+                <div className="px-4 sm:px-6 pt-7 pb-6 sm:pt-8 sm:pb-7 bg-gradient-to-br from-slate-50/90 via-white to-indigo-50/35 dark:from-slate-900/40 dark:via-background dark:to-indigo-950/20">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400 mb-2">
                     {hubEyebrow}
                   </div>
                   <h1 className="text-3xl sm:text-4xl lg:text-[2.35rem] font-bold tracking-tight text-foreground mb-3 leading-[1.15]">
@@ -398,48 +398,48 @@ export default async function PillarHubPage({
                   <p className="text-base md:text-lg font-semibold text-foreground mb-4 leading-snug">
                     {pillar.tagline}
                   </p>
-                  <p className="text-[15px] md:text-base text-secondary leading-relaxed max-w-3xl">
+                  <p className="text-[15px] md:text-base text-muted-foreground leading-relaxed max-w-3xl">
                     {pillar.heroBlurb}
                   </p>
                 </div>
 
-                <div className="px-4 sm:px-6 py-4 bg-background/90 border-t border-slate-100 flex items-center gap-5 flex-wrap">
+                <div className="px-4 sm:px-6 py-4 bg-background/90 border-t border-slate-100 dark:border-slate-800/60 flex items-center gap-5 flex-wrap">
                   <div className="flex items-center gap-2 text-sm">
-                    <BookOpen className="h-4 w-4 text-blue-600" />
+                    <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                     <span className="font-bold text-foreground">{totalQ}+</span>
                     <span className="text-muted-foreground">curated questions</span>
                   </div>
-                  <div className="h-5 w-px bg-slate-200" />
+                  <div className="h-5 w-px bg-slate-200 dark:bg-slate-800" />
                   <div className="flex items-center gap-2 text-sm">
-                    <Layers className="h-4 w-4 text-indigo-600" />
+                    <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                     <span className="font-bold text-foreground">
                       {modules.length}
                     </span>
                     <span className="text-muted-foreground">modules</span>
                   </div>
-                  <div className="h-5 w-px bg-slate-200" />
+                  <div className="h-5 w-px bg-slate-200 dark:bg-slate-800" />
                   <div className="flex items-center gap-2 text-sm">
-                    <Target className="h-4 w-4 text-amber-600" />
+                    <Target className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                     <span className="font-bold text-foreground">
                       {totalTopics}
                     </span>
                     <span className="text-muted-foreground">topics</span>
                   </div>
-                  <div className="h-5 w-px bg-slate-200" />
+                  <div className="h-5 w-px bg-slate-200 dark:bg-slate-800" />
                   <div
                     className="flex items-center gap-1.5 text-xs"
                     title={`${diffMix.easy} easy · ${diffMix.medium} medium · ${diffMix.hard} hard`}
                   >
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-800" />
                       {diffMix.easy}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-800" />
                       {diffMix.medium}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 font-bold">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 dark:bg-rose-800" />
                       {diffMix.hard}
                     </span>
                     <span className="text-muted-foreground ml-1 hidden sm:inline text-[11px]">
@@ -462,17 +462,17 @@ export default async function PillarHubPage({
               {/* Trust row — tiny, keeps page feeling credible without screaming */}
               <div className="mb-6 flex items-center gap-3 flex-wrap text-[12px] text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
                   <span>Reviewed by senior engineers</span>
                 </span>
-                <span className="text-slate-300">·</span>
+                <span className="text-muted-foreground">·</span>
                 <span className="inline-flex items-center gap-1.5">
-                  <Zap className="h-3.5 w-3.5 text-amber-500" />
+                  <Zap className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
                   <span>Updated for {new Date().getFullYear()}</span>
                 </span>
-                <span className="text-slate-300">·</span>
+                <span className="text-muted-foreground">·</span>
                 <span className="inline-flex items-center gap-1.5">
-                  <GraduationCap className="h-3.5 w-3.5 text-blue-500" />
+                  <GraduationCap className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
                   <span>Free · No sign-up required</span>
                 </span>
               </div>
@@ -485,14 +485,14 @@ export default async function PillarHubPage({
                   className="mb-6 rounded-xl border border-border bg-background shadow-sm overflow-hidden"
                 >
                   <div className="px-5 py-3 bg-gradient-to-r from-amber-50 via-orange-50 to-white border-b border-border flex items-center gap-2">
-                    <Flame className="h-4 w-4 text-amber-500" />
+                    <Flame className="h-4 w-4 text-amber-500 dark:text-amber-400" />
                     <h2
                       id="start-here-heading"
                       className="text-sm font-black text-foreground tracking-tight"
                     >
                       Start here — kick-off questions
                     </h2>
-                    <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <span className="ml-auto text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                       Most-asked
                     </span>
                   </div>
@@ -501,20 +501,20 @@ export default async function PillarHubPage({
                       <Link
                         key={s.question.slug}
                         href={`/${s.seoSlug}/${s.question.slug}`}
-                        className="group flex flex-col gap-2 rounded-lg border border-border bg-surface/40 p-4 hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm transition-all"
+                        className="group flex flex-col gap-2 rounded-lg border border-border bg-surface/40 p-4 hover:border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40 hover:shadow-sm transition-all"
                       >
                         <div className="flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-md bg-blue-600 text-primary-foreground dark:text-foreground font-black text-[11px] flex items-center justify-center">
+                          <span className="w-6 h-6 rounded-md bg-blue-600 dark:bg-blue-800 text-white font-black text-[11px] flex items-center justify-center">
                             {idx + 1}
                           </span>
-                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground truncate">
                             {s.moduleTitle}
                           </span>
                         </div>
-                        <span className="text-[14px] font-bold text-foreground group-hover:text-blue-700 transition-colors leading-snug line-clamp-3">
+                        <span className="text-[14px] font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors leading-snug line-clamp-3">
                           {s.question.title}
                         </span>
-                        <span className="mt-auto inline-flex items-center gap-1 text-[11px] font-bold text-blue-600">
+                        <span className="mt-auto inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400">
                           Read answer
                           <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
                         </span>
@@ -533,7 +533,7 @@ export default async function PillarHubPage({
                   className="mb-6 rounded-xl border border-border bg-background p-4"
                 >
                   <div className="flex items-center gap-2 mb-3">
-                    <Sparkles className="h-4 w-4 text-indigo-500" />
+                    <Sparkles className="h-4 w-4 text-indigo-500 dark:text-indigo-400" />
                     <h2
                       id="topics-heading"
                       className="text-sm font-black text-foreground tracking-tight"
@@ -546,10 +546,10 @@ export default async function PillarHubPage({
                       <a
                         key={`${t.seoSlug}::${t.name}`}
                         href={`#${t.anchor}`}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface text-foreground text-[12px] font-bold hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface text-foreground text-[12px] font-bold hover:bg-blue-100 dark:bg-blue-950/20 hover:text-blue-700 dark:text-blue-400 transition-colors"
                       >
                         {t.name}
-                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-background text-blue-600">
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-background text-blue-600 dark:text-blue-400">
                           {t.count}
                         </span>
                       </a>
@@ -564,20 +564,20 @@ export default async function PillarHubPage({
                   aria-label="Modules"
                   className="mb-6 rounded-xl border border-border bg-background p-3 flex flex-wrap gap-2"
                 >
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 self-center mr-1">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground self-center mr-1">
                     Jump to
                   </span>
                   {data.map((m, idx) => (
                     <a
                       key={m.entry.seoSlug}
                       href={`#mod-${m.entry.seoSlug}`}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-surface text-[12px] font-bold text-foreground hover:border-blue-300 hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-surface text-[12px] font-bold text-foreground hover:border-blue-300 dark:border-blue-700 hover:text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:bg-blue-500/10 transition-colors"
                     >
-                      <Hash className="h-3 w-3 text-slate-400" />
+                      <Hash className="h-3 w-3 text-muted-foreground" />
                       <span>
                         {String(idx + 1).padStart(2, "0")} · {m.entry.title}
                       </span>
-                      <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-background text-blue-700 border border-blue-100">
+                      <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-background text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-500/20">
                         {m.totalQuestions}
                       </span>
                     </a>
@@ -652,12 +652,12 @@ export default async function PillarHubPage({
                       <Link
                         key={rp.pillarSlug}
                         href={`/${rp.pillarSlug}`}
-                        className="group block rounded-lg border border-border bg-surface/40 px-4 py-3 hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm transition-all"
+                        className="group block rounded-lg border border-border bg-surface/40 px-4 py-3 hover:border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40 hover:shadow-sm transition-all"
                       >
-                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">
                           Prep category
                         </div>
-                        <div className="text-sm font-black text-foreground group-hover:text-blue-700 transition-colors leading-snug">
+                        <div className="text-sm font-black text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors leading-snug">
                           {rp.title.replace(/\s+Interview Prep.*$/, "")}
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground leading-snug line-clamp-2">
@@ -674,8 +674,8 @@ export default async function PillarHubPage({
                 aria-labelledby="faq-heading"
                 className="mb-8 rounded-xl border border-border bg-background shadow-sm overflow-hidden"
               >
-                <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-border flex items-center gap-2">
-                  <HelpCircle className="h-4 w-4 text-blue-500" />
+                <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-b border-border flex items-center gap-2">
+                  <HelpCircle className="h-4 w-4 text-blue-500 dark:text-blue-400" />
                   <h2
                     id="faq-heading"
                     className="text-sm font-black text-foreground tracking-tight"
@@ -683,7 +683,7 @@ export default async function PillarHubPage({
                     FAQs about this prep category
                   </h2>
                 </div>
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
                   {faq.map((f, idx) => (
                     <details
                       key={idx}
@@ -691,15 +691,15 @@ export default async function PillarHubPage({
                       open={idx === 0}
                     >
                       <summary className="flex items-start gap-3 cursor-pointer list-none">
-                        <span className="mt-0.5 shrink-0 w-5 h-5 rounded bg-blue-50 text-blue-600 font-black text-[10px] flex items-center justify-center group-open:bg-blue-600 group-open:text-primary-foreground dark:text-foreground transition-colors">
+                        <span className="mt-0.5 shrink-0 w-5 h-5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-black text-[10px] flex items-center justify-center group-open:bg-blue-600 group-open:text-white transition-colors">
                           Q
                         </span>
                         <span className="flex-1 text-[13px] font-bold text-foreground leading-snug">
                           {f.q}
                         </span>
-                        <ChevronRight className="h-4 w-4 text-slate-400 mt-0.5 group-open:rotate-90 transition-transform" />
+                        <ChevronRight className="h-4 w-4 text-muted-foreground mt-0.5 group-open:rotate-90 transition-transform" />
                       </summary>
-                      <div className="mt-2 ml-8 text-[13px] text-secondary leading-relaxed">
+                      <div className="mt-2 ml-8 text-[13px] text-muted-foreground leading-relaxed">
                         {f.a}
                       </div>
                     </details>
@@ -710,7 +710,7 @@ export default async function PillarHubPage({
               {/* Footer cross-link to the structured roadmap (kept low-key) */}
               <footer className="mt-10 rounded-xl border border-border bg-background p-5">
                 <div className="flex items-start gap-4 flex-wrap">
-                  <Compass className="h-5 w-5 text-indigo-500 shrink-0 mt-0.5" />
+                  <Compass className="h-5 w-5 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-[220px]">
                     <div className="text-sm font-black text-foreground mb-1">
                       {trackCta.title}
@@ -722,7 +722,7 @@ export default async function PillarHubPage({
                   <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                     <Link
                       href={trackCta.href}
-                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md dark:bg-surface text-primary-foreground dark:text-foreground font-bold text-xs hover:dark:bg-surface transition-colors"
+                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md dark:bg-surface text-white font-bold text-xs hover:dark:bg-surface transition-colors"
                     >
                       {trackCta.ctaLabel}
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -735,7 +735,7 @@ export default async function PillarHubPage({
                     </Link>
                   </div>
                 </div>
-                <p className="mt-4 pt-4 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
+                <p className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/60 text-[11px] text-muted-foreground leading-relaxed">
                   Answers maintained by senior engineers · Free to read ·
                   Updated for {new Date().getFullYear()}.
                 </p>
@@ -744,7 +744,7 @@ export default async function PillarHubPage({
           </main>
 
           {/* ── RIGHT RAIL ── (xl+) — quick stats + pillar contents */}
-          <aside className="hidden xl:flex w-[280px] shrink-0 flex-col gap-4 self-start sticky top-6 px-4 py-6">
+          <aside className="hidden xl:flex w-[280px] shrink-0 flex-col gap-4 self-start sticky top-6 px-4 py-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
             {/* At-a-glance */}
             <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
               <div className="px-4 py-2.5 border-b border-border bg-surface">
@@ -785,15 +785,15 @@ export default async function PillarHubPage({
                     <li key={m.entry.seoSlug}>
                       <a
                         href={`#mod-${m.entry.seoSlug}`}
-                        className="flex items-center gap-2 px-4 py-1.5 text-xs text-secondary hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                        className="flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground hover:text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:bg-blue-500/10 transition-colors"
                       >
-                        <span className="text-[10px] font-black text-slate-400 w-5 shrink-0">
+                        <span className="text-[10px] font-black text-muted-foreground w-5 shrink-0">
                           {String(idx + 1).padStart(2, "0")}
                         </span>
                         <span className="flex-1 truncate font-semibold">
                           {m.entry.title}
                         </span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 shrink-0">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shrink-0">
                           {m.totalQuestions}
                         </span>
                       </a>
@@ -810,7 +810,7 @@ export default async function PillarHubPage({
                   How to use
                 </h3>
               </div>
-              <ol className="px-4 py-3 space-y-2 text-xs text-secondary leading-relaxed list-decimal list-inside">
+              <ol className="px-4 py-3 space-y-2 text-xs text-muted-foreground leading-relaxed list-decimal list-inside">
                 <li>Pick a module that matches your weakest area.</li>
                 <li>
                   Skim the topic headers — each one is a self-contained

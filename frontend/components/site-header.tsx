@@ -132,6 +132,7 @@ const visibleTools     = LEARN_TOOLS.filter(e => isHubEnabled(e.hub));
 const visibleResources = LEARN_RESOURCES.filter(e => isHubEnabled(e.hub));
 const totalLearnEntries = visibleSkills.length + visibleTools.length + visibleResources.length;
 const showLearnMenu = totalLearnEntries > 0;
+const activeColumns = (visibleSkills.length > 0 ? 1 : 0) + (visibleTools.length > 0 ? 1 : 0) + (visibleResources.length > 0 ? 1 : 0);
 
 // Mobile drawer sections — same launch gating.
 const MOBILE_NAV: Array<{ title: string; items: Array<{ href: string; label: string; icon: typeof Code2; hub?: HubKey }> }> = [
@@ -205,14 +206,14 @@ export function SiteHeader() {
 
   const directLinkCls = (href: string) =>
     cn(
-      "inline-flex items-center gap-1.5 rounded-lg px-2 h-9 text-sm font-semibold transition-colors",
+      "inline-flex items-center gap-1.5 px-2 xl:px-3 h-9 text-sm font-medium transition-colors relative",
       isActive(href)
-        ? "text-primary bg-primary/10"
-        : "text-muted-foreground hover:text-foreground hover:bg-muted",
+        ? "text-foreground"
+        : "text-muted-foreground hover:text-foreground",
     );
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-xl shadow-sm">
+    <header className="sticky top-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur-2xl">
       <PageContainer className="flex h-16 items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 shrink-0 group">
@@ -271,8 +272,8 @@ export function SiteHeader() {
                     Learn
                   </NavigationMenuTrigger>
                   <NavigationMenuContent>
-                    <div className="w-[640px] p-5">
-                      <div className="grid grid-cols-3 gap-5">
+                    <div className={cn("p-5", activeColumns === 1 ? "w-[240px]" : activeColumns === 2 ? "w-[460px]" : "w-[640px]")}>
+                      <div className={cn("grid gap-5", activeColumns === 1 ? "grid-cols-1" : activeColumns === 2 ? "grid-cols-2" : "grid-cols-3")}>
                         {visibleSkills.length > 0 && (
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3 px-1">
@@ -358,7 +359,7 @@ export function SiteHeader() {
         </nav>
 
         {/* Global Search Bar (Desktop) */}
-        <div className="hidden md:flex flex-1 justify-center px-4 max-w-xl mx-auto">
+        <div className="hidden md:flex flex-1 justify-center px-2 max-w-[220px] xl:max-w-md mx-auto">
           <GlobalSearch />
         </div>
 
@@ -432,11 +433,11 @@ export function SiteHeader() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className="hidden sm:flex items-center gap-2">
-              <Button variant="ghost" size="sm" asChild className="font-semibold text-muted-foreground hover:text-foreground">
+            <div className="hidden sm:flex items-center gap-1.5 ml-2">
+              <Button variant="ghost" size="sm" asChild className="font-medium text-muted-foreground hover:text-foreground hover:bg-transparent px-4">
                 <Link href="/login">Log in</Link>
               </Button>
-              <Button size="sm" asChild className="font-bold rounded-lg px-5 bg-primary hover:opacity-90 shadow-md text-white">
+              <Button variant="premium" size="sm" asChild className="font-medium rounded-full px-5 transition-all hover:-translate-y-0.5 border border-white/10">
                 <Link href="/signup">Sign up</Link>
               </Button>
             </div>

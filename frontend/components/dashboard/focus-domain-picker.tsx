@@ -120,7 +120,7 @@ export function FocusDomainPicker({
     <div className={cn('space-y-3.5', className)}>
       {/* Step 1 — Language */}
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">1 · Language / Role</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">1 · Language / Role</p>
         <div className="flex flex-wrap gap-1.5">
           {languages.map(l => (
             <button
@@ -130,8 +130,8 @@ export function FocusDomainPicker({
               className={cn(
                 'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors',
                 lang === l.slug
-                  ? 'bg-indigo-600 text-primary-foreground dark:text-foreground border-indigo-600'
-                  : 'bg-background text-foreground border-border hover:border-indigo-300 hover:bg-indigo-50',
+                  ? 'bg-indigo-600 text-white border-indigo-600 dark:border-indigo-700'
+                  : 'bg-background text-foreground border-border hover:border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:bg-indigo-500/10',
               )}
             >
               {l.name}
@@ -143,7 +143,7 @@ export function FocusDomainPicker({
       {/* Step 2 — Track */}
       {lang && tracks.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">2 · Track</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">2 · Track</p>
           <div className="flex flex-wrap gap-1.5">
             {tracks.map(t => (
               <button
@@ -153,8 +153,8 @@ export function FocusDomainPicker({
                 className={cn(
                   'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors',
                   track === t.slug
-                    ? 'bg-indigo-600 text-primary-foreground dark:text-foreground border-indigo-600'
-                    : 'bg-background text-foreground border-border hover:border-indigo-300 hover:bg-indigo-50',
+                    ? 'bg-indigo-600 text-white border-indigo-600 dark:border-indigo-700'
+                    : 'bg-background text-foreground border-border hover:border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:bg-indigo-500/10',
                 )}
               >
                 {t.name}
@@ -167,7 +167,7 @@ export function FocusDomainPicker({
       {/* Step 3 — Level (commits the selection) */}
       {lang && track && levels.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">3 · Experience Level</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5">3 · Experience Level</p>
           <div className={cn('grid gap-1.5', emphasizeLevels ? 'grid-cols-3' : 'grid-cols-1')}>
             {levels.map(d => {
               const selected = d.slug === valueSlug;
@@ -179,8 +179,8 @@ export function FocusDomainPicker({
                   className={cn(
                     'group flex items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all',
                     selected
-                      ? 'border-indigo-400 bg-indigo-50 ring-1 ring-indigo-300'
-                      : 'border-border bg-background hover:border-indigo-300 hover:bg-indigo-50/60',
+                      ? 'border-indigo-400 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 ring-1 ring-indigo-300'
+                      : 'border-border bg-background hover:border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/60',
                     emphasizeLevels && 'flex-col items-start',
                   )}
                 >
@@ -192,8 +192,8 @@ export function FocusDomainPicker({
                     </p>
                   </div>
                   {selected
-                    ? <Check className="h-4 w-4 text-indigo-600 shrink-0" aria-hidden="true" />
-                    : <span className="text-[10px] font-bold text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Select →</span>}
+                    ? <Check className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" aria-hidden="true" />
+                    : <span className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Select →</span>}
                 </button>
               );
             })}

@@ -34,9 +34,9 @@ export default function ForgotPasswordPage() {
         <Card className="border-border dark:border-border shadow-xl shadow-slate-200/50 dark:shadow-none">
           <CardHeader className="space-y-1 text-center">
             <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-100 dark:bg-blue-950/40 mx-auto mb-4">
-              <KeyRound className="h-8 w-8 text-blue-600" />
+              <KeyRound className="h-8 w-8 text-blue-600 dark:text-blue-400" />
             </div>
-            <CardTitle className="text-2xl font-bold tracking-tight text-foreground dark:text-primary-foreground dark:text-foreground">
+            <CardTitle className="text-2xl font-bold tracking-tight text-foreground dark:text-white">
               Reset your password
             </CardTitle>
             <CardDescription className="text-muted-foreground">
@@ -46,10 +46,10 @@ export default function ForgotPasswordPage() {
           <CardContent>
             {sent ? (
               <div className="text-center py-4">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-                  <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/20">
+                  <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <p className="text-sm text-secondary dark:text-slate-300 leading-relaxed">
+                <p className="text-sm text-muted-foreground dark:text-slate-300 leading-relaxed">
                   If an account exists for <strong>{email}</strong>, a reset link is on its way.
                   Check your inbox (and spam).
                 </p>
@@ -59,14 +59,14 @@ export default function ForgotPasswordPage() {
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="email" type="email" placeholder="name@example.com" value={email}
                       onChange={(e) => setEmail(e.target.value)} className="pl-10" autoFocus required
                     />
                   </div>
                 </div>
-                <Button type="submit" disabled={busy || !email} className="w-full py-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-primary-foreground dark:text-foreground font-semibold">
+                <Button type="submit" disabled={busy || !email} className="w-full py-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold">
                   {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Send reset link
                 </Button>
@@ -75,7 +75,7 @@ export default function ForgotPasswordPage() {
           </CardContent>
           <CardFooter>
             <Link href="/login" className="w-full">
-              <Button variant="ghost" className="w-full gap-2 text-secondary">
+              <Button variant="ghost" className="w-full gap-2 text-muted-foreground">
                 <ArrowLeft className="h-4 w-4" />
                 Back to Login
               </Button>

@@ -35,12 +35,12 @@ export function AnswerContent({ answer }: AnswerContentProps) {
             {/* 1. What the Interviewer Wants to Hear */}
             <section className="space-y-5">
                 <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-500">
+                    <div className="p-2.5 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 dark:text-blue-400">
                         <MessageSquareQuote className="h-5 w-5" />
                     </div>
-                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-blue-400">What the Interviewer Wants to Hear</h2>
+                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-blue-400 dark:text-blue-300">What the Interviewer Wants to Hear</h2>
                 </div>
-                <div className="p-8 rounded-[2rem] bg-blue-500/[0.03] border border-blue-500/10 leading-relaxed relative overflow-hidden group">
+                <div className="p-8 rounded-[2rem] bg-blue-500 dark:bg-blue-800/[0.03] border border-blue-500 dark:border-blue-700/10 leading-relaxed relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
                         <MessageSquareQuote className="h-12 w-12" />
                     </div>
@@ -58,7 +58,7 @@ export function AnswerContent({ answer }: AnswerContentProps) {
                     <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
                         <Zap className="h-5 w-5" />
                     </div>
-                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-primary-foreground dark:text-foreground/80">Core Concepts & Deep Dive</h2>
+                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white/80">Core Concepts & Deep Dive</h2>
                 </div>
                 <div className="prose prose-invert prose-p:text-muted-foreground prose-p:leading-[1.8] prose-headings:text-foreground prose-strong:text-primary max-w-none text-[15px] font-medium px-1">
                     <ReactMarkdown>{answer.deepExplanation}</ReactMarkdown>
@@ -68,15 +68,15 @@ export function AnswerContent({ answer }: AnswerContentProps) {
             {/* 3. Important Points (Summary Block) */}
             <section className="space-y-5">
                 <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-orange-500/10 text-orange-500">
+                    <div className="p-2.5 rounded-xl bg-orange-500/10 dark:bg-orange-500/20 text-orange-500 dark:text-orange-400">
                         <Lightbulb className="h-5 w-5" />
                     </div>
-                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-orange-400">Important Points</h2>
+                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-orange-400 dark:text-orange-300">Important Points</h2>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {answer.interviewTips.split('•').filter(t => t.trim()).slice(0, 4).map((tip, idx) => (
-                        <div key={idx} className="p-5 rounded-2xl bg-background/[0.03] border border-white/5 flex items-start gap-4 hover:border-orange-500/20 transition-colors">
-                            <span className="text-[10px] font-black text-orange-500/40 mt-1">0{idx + 1}</span>
+                        <div key={idx} className="p-5 rounded-2xl bg-background/[0.03] border border-white/5 flex items-start gap-4 hover:border-orange-500 dark:border-orange-700/20 transition-colors">
+                            <span className="text-[10px] font-black text-orange-500 dark:text-orange-400/40 mt-1">0{idx + 1}</span>
                             <p className="text-xs font-medium text-muted-foreground leading-relaxed">{tip.trim()}</p>
                         </div>
                     ))}
@@ -88,10 +88,10 @@ export function AnswerContent({ answer }: AnswerContentProps) {
                 <section className="space-y-5">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-500">
+                            <div className="p-2.5 rounded-xl bg-cyan-500 dark:bg-cyan-800/10 text-white dark:text-cyan-400">
                                 <Code2 className="h-5 w-5" />
                             </div>
-                            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-cyan-400">Implementation Pattern</h2>
+                            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-cyan-400 dark:text-cyan-300">Implementation Pattern</h2>
                         </div>
                         <button
                             onClick={() => copyToClipboard(answer.codeSnippet || "")}
@@ -102,7 +102,7 @@ export function AnswerContent({ answer }: AnswerContentProps) {
                         </button>
                     </div>
                     <div className="relative group">
-                        <pre className="p-10 rounded-[2.5rem] bg-foreground dark:bg-background/40 border border-white/5 overflow-x-auto text-[14px] font-mono text-cyan-500/80 leading-relaxed shadow-inner">
+                        <pre className="p-10 rounded-[2.5rem] bg-foreground dark:bg-background/40 border border-white/5 overflow-x-auto text-[14px] font-mono text-cyan-500 dark:text-cyan-400/80 leading-relaxed shadow-inner">
                             <code>{answer.codeSnippet}</code>
                         </pre>
                         <div className="absolute top-6 right-8 text-[9px] font-mono text-muted-foreground/20 uppercase tracking-[0.3em]">IDE Edition</div>
@@ -123,7 +123,7 @@ export function AnswerContent({ answer }: AnswerContentProps) {
                             <Volume2 className="h-6 w-6" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-black uppercase tracking-tight text-primary-foreground dark:text-foreground/90 italic">The Speakable Answer</h2>
+                            <h2 className="text-xl font-black uppercase tracking-tight text-white/90 italic">The Speakable Answer</h2>
                             <p className="text-[10px] font-bold text-muted-foreground/40 uppercase tracking-[0.2em]">Target: {answer.timeToAnswer}</p>
                         </div>
                     </div>
@@ -137,7 +137,7 @@ export function AnswerContent({ answer }: AnswerContentProps) {
                             <Zap className="h-3.5 w-3.5 text-primary" />
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Mastery Standard</span>
                         </div>
-                        <button className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 hover:text-primary-foreground dark:text-foreground transition-colors">
+                        <button className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 hover:text-white transition-colors">
                             Copy to Revise List
                         </button>
                     </div>

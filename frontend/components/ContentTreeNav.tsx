@@ -295,7 +295,7 @@ export default function ContentTreeNav({
         <div className="flex items-center justify-between gap-2 px-4 py-3">
           <Link
             href={`/${domainSlug}`}
-            className="flex items-center gap-1.5 text-sm font-bold text-slate-400 hover:text-blue-400 transition-colors truncate"
+            className="flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-blue-400 dark:text-blue-300 transition-colors truncate"
           >
             <ArrowLeft className="h-4 w-4 shrink-0" />
             {!collapsed && <span className="truncate">Back to roadmap</span>}
@@ -303,7 +303,7 @@ export default function ContentTreeNav({
           <button
             onClick={() => setCollapsed(c => !c)}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="shrink-0 p-1.5 rounded-lg hover:dark:bg-surface transition-colors text-muted-foreground hover:text-slate-200"
+            className="shrink-0 p-1.5 rounded-lg hover:dark:bg-surface transition-colors text-muted-foreground hover:text-muted-foreground"
           >
             {collapsed
               ? <PanelLeftOpen className="h-4 w-4" />
@@ -316,10 +316,10 @@ export default function ContentTreeNav({
               Curriculum Navigator
             </p>
             <div className="mt-2 flex items-center gap-2 text-[11px]">
-              <span className="rounded-md border border-border dark:bg-surface px-2 py-1 font-bold text-slate-300">
+              <span className="rounded-md border border-border dark:bg-surface px-2 py-1 font-bold text-muted-foreground">
                 {totalStacks} modules
               </span>
-              <span className="rounded-md border border-blue-700/50 bg-blue-900/40 px-2 py-1 font-bold text-blue-300">
+              <span className="rounded-md border border-blue-700 dark:border-blue-700/50 bg-blue-900 dark:bg-blue-800/40 px-2 py-1 font-bold text-blue-300 dark:text-blue-300">
                 {totalQuestions} questions
               </span>
             </div>
@@ -339,8 +339,8 @@ export default function ContentTreeNav({
                 className={cn(
                   "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
                   stack.slug === activeStackSlug
-                    ? "bg-blue-600 text-primary-foreground dark:text-foreground"
-                    : "dark:bg-surface text-slate-400 hover:bg-blue-900/50 hover:text-blue-400"
+                    ? "bg-blue-600 text-white"
+                    : "dark:bg-surface text-muted-foreground hover:bg-blue-900 dark:bg-blue-800/50 hover:text-blue-400 dark:text-blue-300"
                 )}
               >
                 <BookOpen className="h-4 w-4" />
@@ -365,34 +365,34 @@ export default function ContentTreeNav({
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all",
                     hasCatActive
-                      ? "bg-gradient-to-r from-amber-900/70 to-amber-800/40 text-amber-200 ring-1 ring-amber-500/50 shadow-sm"
-                      : "dark:bg-surface text-slate-200 hover:bg-slate-700/80 hover:text-primary-foreground dark:text-foreground border border-border/50"
+                      ? "bg-gradient-to-r from-amber-900/70 to-amber-800/40 text-amber-200 dark:text-amber-300 ring-1 ring-amber-500/50 shadow-sm"
+                      : "dark:bg-surface text-muted-foreground hover:bg-slate-700 dark:bg-slate-800/80 hover:text-white border border-border/50"
                   )}
                 >
                   {/* Pillar number badge */}
                   <span className={cn(
                     "shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-[12px] font-black",
-                    hasCatActive ? "bg-amber-500/40 text-amber-200" : "bg-slate-600/80 text-slate-300"
+                    hasCatActive ? "bg-amber-500 dark:bg-amber-800/40 text-amber-950 dark:text-amber-300" : "bg-slate-600 dark:bg-slate-800/80 text-muted-foreground"
                   )}>
                     {catIdx + 1}
                   </span>
                   <span className="flex-1 text-left text-[14px] font-extrabold leading-snug truncate tracking-tight">{cat.name}</span>
                   <span className={cn(
                     "text-[11px] font-bold px-1.5 py-0.5 rounded shrink-0",
-                    hasCatActive ? "bg-amber-800/60 text-amber-300" : "bg-slate-700 text-slate-400"
+                    hasCatActive ? "bg-amber-800 dark:bg-amber-800/60 text-amber-300 dark:text-amber-300" : "bg-slate-700 dark:bg-slate-800 text-muted-foreground"
                   )}>
                     {cat.stacks.length}
                   </span>
                   <ChevronRight className={cn(
                     "h-4 w-4 shrink-0 transition-transform duration-200",
                     isCatOpen && "rotate-90",
-                    hasCatActive ? "text-amber-400" : "text-muted-foreground"
+                    hasCatActive ? "text-amber-400 dark:text-amber-300" : "text-muted-foreground"
                   )} />
                 </button>
 
                 {/* ── Stacks ── */}
                 {isCatOpen && (
-                  <div className="ml-1 mt-1.5 space-y-0.5 border-l-2 border-slate-600/60 pl-3">
+                  <div className="ml-1 mt-1.5 space-y-0.5 border-l-2 border-slate-600 dark:border-slate-700/60 pl-3">
                     {cat.stacks.map(stack => {
                       const isActiveStack = stack.slug === activeStackSlug;
                       const isExpStack = expandedStacks.has(stack.slug);
@@ -405,8 +405,8 @@ export default function ContentTreeNav({
                           <div className={cn(
                             "flex items-center rounded-lg transition-all",
                             isActiveStack
-                              ? "bg-blue-600/25 ring-1 ring-blue-500/50"
-                              : "hover:bg-slate-700/60"
+                              ? "bg-blue-600 dark:bg-blue-800/25 ring-1 ring-blue-500/50"
+                              : "hover:bg-slate-700 dark:bg-slate-800/60"
                           )}>
                             <button
                               onClick={() => toggleStack(stack.slug)}
@@ -415,27 +415,27 @@ export default function ContentTreeNav({
                               {/* Active indicator bar */}
                               <div className={cn(
                                 "w-1 h-5 rounded-full shrink-0",
-                                isActiveStack ? "bg-blue-400" : "bg-transparent"
+                                isActiveStack ? "bg-blue-400 dark:bg-blue-800" : "bg-transparent"
                               )} />
                               <span className={cn(
                                 "flex-1 text-[13px] leading-tight truncate",
-                                isActiveStack ? "font-bold text-blue-100" : "font-semibold text-slate-300 hover:text-slate-100"
+                                isActiveStack ? "font-bold text-blue-100 dark:text-blue-300" : "font-semibold text-muted-foreground hover:text-muted-foreground"
                               )}>
                                 {stack.name}
                               </span>
                               <span className={cn(
                                 "text-[11px] shrink-0 mr-1 px-1.5 py-0.5 rounded font-bold",
-                                isActiveStack ? "bg-blue-700/60 text-blue-200" : "text-muted-foreground"
+                                isActiveStack ? "bg-blue-700 dark:bg-blue-800/60 text-blue-200 dark:text-blue-300" : "text-muted-foreground"
                               )}>
                                 {stack.questionCount}
                               </span>
                               {isLoadingStack ? (
-                                <Loader2 className="h-3 w-3 text-blue-500 animate-spin shrink-0" />
+                                <Loader2 className="h-3 w-3 text-blue-500 dark:text-blue-400 animate-spin shrink-0" />
                               ) : (
                                 <ChevronRight className={cn(
                                   "h-3.5 w-3.5 transition-transform duration-200 shrink-0",
                                   isExpStack && "rotate-90",
-                                  isActiveStack ? "text-blue-400" : "text-muted-foreground"
+                                  isActiveStack ? "text-blue-400 dark:text-blue-300" : "text-muted-foreground"
                                 )} />
                               )}
                             </button>
@@ -448,7 +448,7 @@ export default function ContentTreeNav({
 
                             if (isFlatStack) {
                               return (
-                                <div className="ml-3 border-l border-slate-600/50 pl-2 mt-1 mb-1 space-y-0.5">
+                                <div className="ml-3 border-l border-slate-600 dark:border-slate-700/50 pl-2 mt-1 mb-1 space-y-0.5">
                                   {flatQuestions.map(q => {
                                     const isActiveQ = q.slug === activeQuestionSlug;
                                     const qHref = `/${domainSlug}/${stack.slug}/${q.slug}`;
@@ -465,11 +465,11 @@ export default function ContentTreeNav({
                                         className={cn(
                                           "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-[12px] leading-snug transition-all",
                                           isActiveQ
-                                            ? "bg-emerald-600 text-primary-foreground dark:text-foreground font-bold shadow-sm ring-1 ring-emerald-500"
-                                            : "text-slate-400 hover:bg-slate-700/60 hover:text-slate-200"
+                                            ? "bg-emerald-600 dark:bg-emerald-800 text-white font-bold shadow-sm ring-1 ring-emerald-500"
+                                            : "text-muted-foreground hover:bg-slate-700 dark:bg-slate-800/60 hover:text-muted-foreground"
                                         )}
                                       >
-                                        <span className={cn("mt-0.5 shrink-0", isActiveQ ? "text-emerald-200" : "text-secondary")}>
+                                        <span className={cn("mt-0.5 shrink-0", isActiveQ ? "text-emerald-200 dark:text-emerald-300" : "text-muted-foreground")}>
                                           {isActiveQ ? <CheckCircle2 className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
                                         </span>
                                         <span className="line-clamp-2 leading-snug">{q.title}</span>
@@ -481,7 +481,7 @@ export default function ContentTreeNav({
                             }
 
                             return (
-                              <div className="ml-3 border-l border-slate-600/50 pl-2 mt-1 mb-1 space-y-0.5">
+                              <div className="ml-3 border-l border-slate-600 dark:border-slate-700/50 pl-2 mt-1 mb-1 space-y-0.5">
                                 {subs.map(sc => {
                                   const subcatKey = `${stack.slug}:${sc.slug}`;
                                   const isExpSubcat = expandedSubcats.has(subcatKey);
@@ -496,15 +496,15 @@ export default function ContentTreeNav({
                                         className={cn(
                                           "w-full flex items-center gap-1.5 px-2 py-2 rounded-md text-[12.5px] transition-colors",
                                           hasActiveQ
-                                            ? "bg-amber-900/40 text-amber-300 font-bold ring-1 ring-amber-700/40"
-                                            : "text-slate-300 hover:bg-slate-700/60 font-semibold hover:text-slate-100"
+                                            ? "bg-amber-900 dark:bg-amber-800/40 text-amber-300 dark:text-amber-300 font-bold ring-1 ring-amber-700/40"
+                                            : "text-muted-foreground hover:bg-slate-700 dark:bg-slate-800/60 font-semibold hover:text-muted-foreground"
                                         )}
                                       >
                                         {isExpSubcat
-                                          ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                                          ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-400 dark:text-amber-300" />
                                           : <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                                         <span className="flex-1 text-left truncate">{sc.name}</span>
-                                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-400 shrink-0">
+                                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-900 dark:bg-amber-800/40 text-amber-400 dark:text-amber-300 shrink-0">
                                           {sc.questionCount}
                                         </span>
                                         <ChevronRight
@@ -516,7 +516,7 @@ export default function ContentTreeNav({
                                       </button>
 
                                       {isExpSubcat && (
-                                        <div className="ml-3 border-l border-slate-600/50 pl-1.5 space-y-0.5 mt-0.5 mb-1.5">
+                                        <div className="ml-3 border-l border-slate-600 dark:border-slate-700/50 pl-1.5 space-y-0.5 mt-0.5 mb-1.5">
                                           {sc.questions.map(q => {
                                             const isActiveQ = q.slug === activeQuestionSlug;
                                             const qHref = `/${domainSlug}/${stack.slug}/${q.slug}`;
@@ -533,11 +533,11 @@ export default function ContentTreeNav({
                                                 className={cn(
                                                   "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-[12px] leading-snug transition-all",
                                                   isActiveQ
-                                                    ? "bg-emerald-600 text-primary-foreground dark:text-foreground font-bold shadow-sm ring-1 ring-emerald-500"
-                                                    : "text-slate-400 hover:bg-slate-700/60 hover:text-slate-200"
+                                                    ? "bg-emerald-600 dark:bg-emerald-800 text-white font-bold shadow-sm ring-1 ring-emerald-500"
+                                                    : "text-muted-foreground hover:bg-slate-700 dark:bg-slate-800/60 hover:text-muted-foreground"
                                                 )}
                                               >
-                                                <span className={cn("mt-0.5 shrink-0", isActiveQ ? "text-emerald-200" : "text-secondary")}>
+                                                <span className={cn("mt-0.5 shrink-0", isActiveQ ? "text-emerald-200 dark:text-emerald-300" : "text-muted-foreground")}>
                                                   {isActiveQ ? <CheckCircle2 className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
                                                 </span>
                                                 <span className="line-clamp-2 leading-snug">{q.title}</span>
@@ -605,14 +605,14 @@ export default function ContentTreeNav({
             className="absolute right-0 top-0 h-full w-3 z-50 cursor-col-resize group/handle flex items-center justify-center"
           >
             {/* Hover highlight line */}
-            <div className="absolute inset-y-0 right-0 w-px bg-blue-500/0 group-hover/handle:bg-blue-500/50 transition-colors duration-150" />
+            <div className="absolute inset-y-0 right-0 w-px bg-blue-500 dark:bg-blue-800/0 group-hover/handle:bg-blue-500/50 transition-colors duration-150" />
             {/* Arrow badge — always faintly visible, bright on hover */}
             <div className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-1/2
                             flex items-center gap-0.5 px-1 py-0.5 rounded-full
                             dark:bg-surface border border-border/80 shadow-lg
                             opacity-30 group-hover/handle:opacity-100 transition-opacity duration-150">
-              <span className="text-[9px] font-black text-slate-300 leading-none select-none">‹</span>
-              <span className="text-[9px] font-black text-slate-300 leading-none select-none">›</span>
+              <span className="text-[9px] font-black text-muted-foreground leading-none select-none">‹</span>
+              <span className="text-[9px] font-black text-muted-foreground leading-none select-none">›</span>
             </div>
           </div>
         )}
@@ -622,7 +622,7 @@ export default function ContentTreeNav({
       {/* ── Mobile FAB ───────────────────────────────────────────────── */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed bottom-6 left-4 z-40 w-12 h-12 rounded-full bg-blue-600 text-primary-foreground dark:text-foreground shadow-xl flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-all"
+        className="lg:hidden fixed bottom-6 left-4 z-40 w-12 h-12 rounded-full bg-blue-600 dark:bg-blue-800 text-white shadow-xl flex items-center justify-center hover:bg-blue-700 dark:bg-blue-800 active:scale-95 transition-all"
         aria-label="Open navigation"
       >
         <Menu className="h-5 w-5" />

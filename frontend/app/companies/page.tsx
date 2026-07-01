@@ -198,18 +198,18 @@ const FINANCE = [
 ];
 
 const DSA_LEVEL_COLORS: Record<string, string> = {
-  Medium: "bg-amber-100 text-amber-700",
-  "Medium-Hard": "bg-orange-100 text-orange-700",
-  Hard: "bg-red-100 text-red-700",
-  "Very Hard": "bg-red-200 text-red-800",
+  Medium: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400",
+  "Medium-Hard": "bg-orange-100 dark:bg-orange-950/20 text-orange-700",
+  Hard: "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400",
+  "Very Hard": "bg-red-200 dark:bg-red-900/40 text-red-800 dark:text-red-400",
 };
 
 const SD_LEVEL_COLORS: Record<string, string> = {
-  Medium: "bg-blue-100 text-blue-700",
-  "Medium-High": "bg-blue-100 text-blue-700",
-  High: "bg-indigo-100 text-indigo-700",
-  "Very High": "bg-violet-100 text-violet-700",
-  "High (L4+)": "bg-indigo-100 text-indigo-700",
+  Medium: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
+  "Medium-High": "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
+  High: "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400",
+  "Very High": "bg-violet-100 dark:bg-violet-950/20 text-violet-700 dark:text-violet-400",
+  "High (L4+)": "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400",
 };
 
 function CompanyCard({
@@ -222,7 +222,7 @@ function CompanyCard({
   return (
     <Link
       href={`/companies/${company.slug}`}
-      className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-orange-300 transition-all overflow-hidden"
+      className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-orange-300 dark:border-orange-700 transition-all overflow-hidden"
     >
       {showGradient && (
         <div
@@ -231,10 +231,10 @@ function CompanyCard({
       )}
       <div className="p-5">
         <div className="flex items-start justify-between mb-3">
-          <h3 className="text-lg font-black text-foreground group-hover:text-orange-600 transition-colors">
+          <h3 className="text-lg font-black text-foreground group-hover:text-orange-600 dark:text-orange-400 transition-colors">
             {company.name}
           </h3>
-          <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-orange-500 group-hover:translate-x-1 transition-all mt-1" />
+          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-orange-500 dark:text-orange-400 group-hover:translate-x-1 transition-all mt-1" />
         </div>
 
         <p className="text-xs text-muted-foreground leading-relaxed mb-4">
@@ -243,17 +243,17 @@ function CompanyCard({
 
         <div className="flex items-center gap-2 flex-wrap mb-3">
           <span
-            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${DSA_LEVEL_COLORS[company.dsaFocus] ?? "bg-surface text-secondary"}`}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${DSA_LEVEL_COLORS[company.dsaFocus] ?? "bg-surface text-muted-foreground"}`}
           >
             DSA: {company.dsaFocus}
           </span>
           <span
-            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${SD_LEVEL_COLORS[company.sdFocus] ?? "bg-surface text-secondary"}`}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${SD_LEVEL_COLORS[company.sdFocus] ?? "bg-surface text-muted-foreground"}`}
           >
             System Design: {company.sdFocus}
           </span>
           {"behavioralFocus" in company && company.behavioralFocus && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400">
               Behavioral: {company.behavioralFocus}
             </span>
           )}
@@ -264,7 +264,7 @@ function CompanyCard({
           <span className="font-medium">{company.rounds}</span>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100">
+        <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100 dark:border-slate-800/60">
           {company.topPatterns.map((p) => (
             <span
               key={p}
@@ -274,7 +274,7 @@ function CompanyCard({
             </span>
           ))}
           {"timeline" in company && (
-            <span className="text-[10px] font-medium text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md ml-auto">
+            <span className="text-[10px] font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 px-2 py-0.5 rounded-md ml-auto">
               {company.timeline}
             </span>
           )}
@@ -292,30 +292,30 @@ export default function CompaniesPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/20 to-amber-50/20 font-sans text-foreground selection:bg-orange-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
+        <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
           <Link
             href="/"
-            className="hover:text-secondary flex items-center gap-1"
+            className="hover:text-muted-foreground flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-secondary font-medium">Company Prep</span>
+          <span className="text-muted-foreground font-medium">Company Prep</span>
         </nav>
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
           <div className="relative px-8 py-8 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
             <div className="flex items-center gap-2 mb-3">
-              <Building2 className="h-5 w-5 text-orange-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-orange-600">
+              <Building2 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400">
                 Company-Specific Preparation
               </span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               Company Interview Prep
             </h1>
-            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-3xl">
               Every company interviews differently. Amazon is 50% behavioral.
               Google has the hardest DSA bar. Stripe has a bug-squash round.
               We break down the process, focus areas, key patterns, and
@@ -323,11 +323,11 @@ export default function CompaniesPage() {
               exactly what to prepare.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
-                  <Building2 className="h-5 w-5 text-orange-600" />
+                <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-950/20 flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -338,10 +338,10 @@ export default function CompaniesPage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200" />
+              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                  <Layers className="h-5 w-5 text-amber-600" />
+                <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-950/20 flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -350,10 +350,10 @@ export default function CompaniesPage() {
                   <div className="text-lg font-bold text-foreground">4</div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200" />
+              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-yellow-100 flex items-center justify-center">
-                  <Target className="h-5 w-5 text-yellow-600" />
+                <div className="w-10 h-10 rounded-lg bg-yellow-100 dark:bg-yellow-950/20 flex items-center justify-center">
+                  <Target className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -375,12 +375,12 @@ export default function CompaniesPage() {
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
-              { icon: Gauge, label: "Interview Process", color: "text-orange-600", bg: "bg-orange-100" },
-              { icon: Code2, label: "DSA Focus Areas", color: "text-violet-600", bg: "bg-violet-100" },
-              { icon: Network, label: "System Design", color: "text-emerald-600", bg: "bg-emerald-100" },
-              { icon: Brain, label: "Behavioral Prep", color: "text-amber-600", bg: "bg-amber-100" },
-              { icon: TrendingUp, label: "Difficulty Level", color: "text-red-600", bg: "bg-red-100" },
-              { icon: Star, label: "Culture Signals", color: "text-blue-600", bg: "bg-blue-100" },
+              { icon: Gauge, label: "Interview Process", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-100 dark:bg-orange-950/20" },
+              { icon: Code2, label: "DSA Focus Areas", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-100 dark:bg-violet-950/20" },
+              { icon: Network, label: "System Design", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-100 dark:bg-emerald-950/20" },
+              { icon: Brain, label: "Behavioral Prep", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-100 dark:bg-amber-950/20" },
+              { icon: TrendingUp, label: "Difficulty Level", color: "text-red-600", bg: "bg-red-100 dark:bg-red-950/20" },
+              { icon: Star, label: "Culture Signals", color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-100 dark:bg-blue-950/20" },
             ].map((item) => (
               <div key={item.label} className="text-center">
                 <div
@@ -399,7 +399,7 @@ export default function CompaniesPage() {
         {/* FAANG */}
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-1.5">
-            <Star className="h-5 w-5 text-orange-600" />
+            <Star className="h-5 w-5 text-orange-600 dark:text-orange-400" />
             <h2 className="text-xl font-black text-foreground">
               FAANG / Big Tech
             </h2>
@@ -418,7 +418,7 @@ export default function CompaniesPage() {
         {/* Unicorns */}
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-1.5">
-            <TrendingUp className="h-5 w-5 text-violet-600" />
+            <TrendingUp className="h-5 w-5 text-violet-600 dark:text-violet-400" />
             <h2 className="text-xl font-black text-foreground">
               Top Unicorns & Growth Companies
             </h2>
@@ -440,7 +440,7 @@ export default function CompaniesPage() {
         {/* India Tier-1 */}
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-1.5">
-            <Users className="h-5 w-5 text-emerald-600" />
+            <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             <h2 className="text-xl font-black text-foreground">
               India Tier-1 Tech
             </h2>
@@ -462,7 +462,7 @@ export default function CompaniesPage() {
         {/* Finance */}
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-1.5">
-            <DollarSign className="h-5 w-5 text-blue-600" />
+            <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             <h2 className="text-xl font-black text-foreground">
               Finance & Banking
             </h2>
@@ -482,18 +482,18 @@ export default function CompaniesPage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 p-8 text-center mb-12">
+        <section className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-gradient-to-r from-orange-50 to-amber-50 p-8 text-center mb-12">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Company Prep Is Part of Your Domain Dashboard
           </h2>
-          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-muted-foreground mb-6 max-w-xl mx-auto">
             Select your domain and get company-specific prep mapped to your
             tech stack, alongside Q&A, system design, DSA, behavioral,
             roadmap, and progress tracking.
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

@@ -154,7 +154,7 @@ export default async function DSAPatternPage({
 
       {/* Problems grouped by curriculum module */}
       <section className="mb-12">
-        <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 mb-1">
+        <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-1">
           Where this pattern shows up
         </p>
         <h2 className="text-xl font-black text-foreground tracking-tight mb-5">
@@ -172,13 +172,13 @@ export default async function DSAPatternPage({
                 >
                   <Link
                     href={`/dsa/module/${m.moduleSlug}`}
-                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 bg-surface/70 hover:bg-violet-50/40 transition-colors"
+                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 hover:bg-violet-50/40 dark:bg-violet-500/10 transition-colors"
                   >
-                    <span className="text-sm font-bold text-foreground group-hover:text-violet-700 inline-flex items-center gap-1.5 transition-colors">
+                    <span className="text-sm font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400 inline-flex items-center gap-1.5 transition-colors">
                       {m.title}
-                      <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-violet-500" />
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-violet-500 dark:text-violet-400" />
                     </span>
-                    <span className="text-[11px] font-semibold text-slate-400">
+                    <span className="text-[11px] font-semibold text-muted-foreground">
                       {modProblems.length} problem{modProblems.length === 1 ? "" : "s"}
                     </span>
                   </Link>
@@ -190,7 +190,7 @@ export default async function DSAPatternPage({
             })}
           {(byModule.get("unknown") ?? []).length > 0 && (
             <div className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-100 bg-surface/70 text-sm font-bold text-foreground">
+              <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 text-sm font-bold text-foreground">
                 Uncategorised
               </div>
               <div className="p-4">
@@ -215,7 +215,7 @@ export default async function DSAPatternPage({
       {/* Sibling patterns */}
       {siblings.length > 0 && (
         <section className="mb-12">
-          <h2 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">
+          <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
             Related patterns
           </h2>
           <div className="flex flex-wrap gap-2">
@@ -223,10 +223,10 @@ export default async function DSAPatternPage({
               <Link
                 key={s.slug}
                 href={`/dsa/pattern/${s.slug}`}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:border-violet-300 hover:text-violet-700 transition-colors"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:border-violet-300 dark:border-violet-500/30 hover:text-violet-700 dark:text-violet-400 transition-colors"
               >
                 {toDisplayName(s.slug)}
-                <span className="text-[10px] text-slate-400">{s.count}</span>
+                <span className="text-[10px] text-muted-foreground">{s.count}</span>
               </Link>
             ))}
           </div>

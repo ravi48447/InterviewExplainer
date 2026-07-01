@@ -45,7 +45,7 @@ export function RecipeBuilderLayout({
   return (
     <div className="space-y-8">
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
@@ -82,7 +82,7 @@ export function RecipeBuilderLayout({
                   className={`h-2 rounded-full transition-all ${
                     i < activeStep ? "bg-emerald-500 flex-1" :
                     i === activeStep ? "bg-blue-600 flex-[2]" :
-                    "bg-slate-200 flex-1"
+                    "bg-slate-200 dark:bg-slate-800 flex-1"
                   }`}
                 />
               ))}
@@ -91,9 +91,9 @@ export function RecipeBuilderLayout({
 
           {/* Step content */}
           <div className="bg-background">
-            <div className="px-5 py-4 border-b border-slate-100">
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/60">
               <div className="flex items-center gap-3">
-                <span className="w-7 h-7 rounded-full bg-blue-600 text-primary-foreground dark:text-foreground text-sm font-bold flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-full bg-blue-600 dark:bg-blue-800 text-white text-sm font-bold flex items-center justify-center shrink-0">
                   {activeStep + 1}
                 </span>
                 <h3 className="text-base font-bold text-foreground">
@@ -111,19 +111,19 @@ export function RecipeBuilderLayout({
             <button
               onClick={() => setActiveStep(v => Math.max(0, v - 1))}
               disabled={activeStep === 0}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-secondary hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="h-3 w-3" /> Previous
             </button>
             {activeStep < steps.length - 1 ? (
               <button
                 onClick={() => setActiveStep(v => Math.min(steps.length - 1, v + 1))}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-primary-foreground dark:text-foreground hover:bg-blue-700 transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 dark:bg-blue-800 text-white hover:bg-blue-700 dark:bg-blue-800 transition-colors"
               >
                 Next <ChevronRight className="h-3 w-3" />
               </button>
             ) : (
-              <span className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-emerald-700">
+              <span className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                 <CheckCircle className="h-3 w-3" /> All steps done!
               </span>
             )}
@@ -133,8 +133,8 @@ export function RecipeBuilderLayout({
 
       {/* Deep explanation fallback */}
       {!hasSteps && deepExplain && (
-        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-blue-50 border-b border-blue-200">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-blue-200 dark:border-blue-500/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Implementation Guide</span>
           </div>
           <div className="px-5 py-5">
@@ -160,13 +160,13 @@ export function RecipeBuilderLayout({
           <div className="flex items-center justify-between px-5 py-3 border-b border-border">
             <button
               onClick={() => setShowFullCode(v => !v)}
-              className="text-xs font-bold text-slate-300 uppercase tracking-wide hover:text-primary-foreground dark:text-foreground transition-colors"
+              className="text-xs font-bold text-muted-foreground uppercase tracking-wide hover:text-white transition-colors"
             >
               {showFullCode ? "Hide" : "Show"} Complete Implementation
             </button>
             <button
               onClick={copyCode}
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-muted-foreground transition-colors"
             >
               <Copy className="h-3.5 w-3.5" />
               {copied ? "Copied!" : "Copy all"}
@@ -182,8 +182,8 @@ export function RecipeBuilderLayout({
 
       {/* Interview Summary */}
       {interviewSummary && (
-        <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
+        <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-500/30 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">
               What the Interviewer Sees You Know
             </span>

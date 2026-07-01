@@ -35,8 +35,8 @@ export function DiffViewer({
       <div className={`${mode === "split" ? "grid grid-cols-2 divide-x divide-slate-200" : ""}`}>
         {(mode === "split" || mode === "before") && (
           <div className="p-4">
-            <div className="text-[11px] font-bold text-red-600 uppercase tracking-wide mb-2 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+            <div className="text-[11px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wide mb-2 flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-red-500 dark:bg-red-800 inline-block" />
               {beforeLabel}
             </div>
             <MarkdownContent content={before} />
@@ -44,8 +44,8 @@ export function DiffViewer({
         )}
         {(mode === "split" || mode === "after") && (
           <div className="p-4">
-            <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wide mb-2 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+            <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide mb-2 flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-800 inline-block" />
               {afterLabel}
             </div>
             <MarkdownContent content={after} />

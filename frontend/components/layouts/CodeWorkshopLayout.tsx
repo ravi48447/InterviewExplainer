@@ -40,7 +40,7 @@ export function CodeWorkshopLayout({
     <div className="space-y-8">
       {/* Quick intro */}
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
@@ -49,7 +49,7 @@ export function CodeWorkshopLayout({
       {overview && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
-            <BookOpen className="h-4 w-4 text-blue-600" />
+            <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Core Concepts</span>
           </div>
           <div className="px-5 py-5">
@@ -60,9 +60,9 @@ export function CodeWorkshopLayout({
 
       {/* Deep Explanation */}
       {explanation && (
-        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-blue-50 border-b border-blue-200">
-            <Sparkles className="h-4 w-4 text-blue-600" />
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-blue-200 dark:border-blue-500/20">
+            <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">How It Works</span>
           </div>
           <div className="px-5 py-5">
@@ -81,7 +81,7 @@ export function CodeWorkshopLayout({
                 key={i}
                 onClick={() => setActiveRecipe(i)}
                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                  activeRecipe === i ? "bg-background shadow-sm text-blue-700" : "text-muted-foreground hover:text-foreground"
+                  activeRecipe === i ? "bg-background shadow-sm text-blue-700 dark:text-blue-400" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {r.sectionTitle || `Pattern ${i + 1}`}
@@ -96,9 +96,9 @@ export function CodeWorkshopLayout({
 
       {/* Best Practices */}
       {bestPractices && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100/60 border-b border-emerald-200">
-            <span className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Best Practices</span>
+        <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-950/20/60 border-b border-emerald-200 dark:border-emerald-500/20">
+            <span className="text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wide">Best Practices</span>
           </div>
           <div className="px-5 py-4">
             <MarkdownContent content={bestPractices.content} stripTopHeading />
@@ -111,7 +111,7 @@ export function CodeWorkshopLayout({
         <div>
           <button
             onClick={() => setShowMistakes(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-700 mb-3"
+            className="flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 mb-3"
           >
             <AlertTriangle className="h-4 w-4" />
             {showMistakes ? "Hide" : "Show"} Common Mistakes ({mistakes.length})
@@ -130,8 +130,8 @@ export function CodeWorkshopLayout({
 
       {/* Speakable */}
       {speakable && (
-        <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
+        <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-500/30 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

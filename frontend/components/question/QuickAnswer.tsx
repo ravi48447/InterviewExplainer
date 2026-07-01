@@ -36,28 +36,28 @@ function NutshellCard({ children }: { children: React.ReactNode }) {
       <div
         className={`rounded-xl overflow-hidden shadow-md ${
           d
-            ? "border border-amber-600/50 bg-[#1a1408] shadow-black/40"
-            : "border border-amber-200/80 bg-amber-50/70 shadow-amber-100/60"
+            ? "border border-amber-600 dark:border-amber-700/50 bg-[#1a1408] shadow-black/40"
+            : "border border-amber-200 dark:border-amber-500/20/80 bg-amber-50/70 dark:bg-amber-500/10 shadow-amber-100/60"
         }`}
       >
         <div
           className={`flex items-center gap-2 px-5 py-2.5 border-b ${
             d
-              ? "border-amber-700/50 bg-amber-900/30"
-              : "border-amber-200/60 bg-amber-100/50"
+              ? "border-amber-700 dark:border-amber-700/50 bg-amber-900 dark:bg-amber-800/30"
+              : "border-amber-200 dark:border-amber-500/20/60 bg-amber-100 dark:bg-amber-950/20/50"
           }`}
         >
-          <Lightbulb className={`h-3.5 w-3.5 ${d ? "text-amber-400" : "text-amber-600"}`} />
+          <Lightbulb className={`h-3.5 w-3.5 ${d ? "text-amber-400" : "text-amber-600 dark:text-amber-400"}`} />
           <span
             className={`text-[11px] font-bold uppercase tracking-widest ${
-              d ? "text-amber-300" : "text-amber-700"
+              d ? "text-amber-300" : "text-amber-700 dark:text-amber-400"
             }`}
           >
             In a nutshell
           </span>
           <span
             className={`ml-auto text-[11px] font-medium ${
-              d ? "text-amber-500" : "text-amber-600"
+              d ? "text-amber-500" : "text-amber-600 dark:text-amber-400"
             }`}
           >
             Quick revision
@@ -92,12 +92,12 @@ export function QuickAnswer({
               <li key={i} className="flex items-start gap-3">
                 <span
                   className={`mt-[8px] h-1.5 w-1.5 rounded-full shrink-0 ${
-                    d ? "bg-amber-500" : "bg-amber-600"
+                    d ? "bg-amber-500 dark:bg-amber-800" : "bg-amber-600 dark:bg-amber-800"
                   }`}
                 />
                 <span
                   className={`text-[15.5px] leading-[1.7] ${
-                    d ? "text-slate-200" : "text-foreground"
+                    d ? "text-muted-foreground" : "text-foreground"
                   }`}
                 >
                   <MarkdownContent content={point} inline />
@@ -114,7 +114,7 @@ export function QuickAnswer({
       <NutshellCard>
         <div
           className={`text-[15.5px] leading-[1.7] ${
-            d ? "text-slate-200" : "text-foreground"
+            d ? "text-muted-foreground" : "text-foreground"
           }`}
         >
           <MarkdownContent content={body} />
@@ -137,12 +137,12 @@ export function QuickAnswer({
               <li key={i} className="flex items-start gap-3">
                 <span
                   className={`mt-[8px] h-1.5 w-1.5 rounded-full shrink-0 ${
-                    d ? "bg-amber-500" : "bg-amber-600"
+                    d ? "bg-amber-500 dark:bg-amber-800" : "bg-amber-600 dark:bg-amber-800"
                   }`}
                 />
                 <span
                   className={`text-[15.5px] leading-[1.7] ${
-                    d ? "text-slate-200" : "text-foreground"
+                    d ? "text-muted-foreground" : "text-foreground"
                   }`}
                 >
                   {point.trim()}

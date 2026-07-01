@@ -41,8 +41,8 @@ const MAIN_SECTIONS = [
     name: "Resume & Portfolio",
     desc: "ATS-optimized resume templates, action verb lists, project descriptions that impress, GitHub portfolio strategy, LinkedIn optimization",
     icon: FileText,
-    color: "text-blue-600",
-    bg: "bg-blue-100",
+    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-blue-100 dark:bg-blue-950/20",
     articles: 8,
     highlight: "Includes downloadable templates",
   },
@@ -51,8 +51,8 @@ const MAIN_SECTIONS = [
     name: "Interview Process Deep-Dive",
     desc: "Step-by-step breakdown of tech interview processes at 20+ companies. What to expect in each round, how to prepare, timeline management",
     icon: Search,
-    color: "text-violet-600",
-    bg: "bg-violet-100",
+    color: "text-violet-600 dark:text-violet-400",
+    bg: "bg-violet-100 dark:bg-violet-950/20",
     articles: 12,
     highlight: "FAANG + unicorn processes covered",
   },
@@ -61,8 +61,8 @@ const MAIN_SECTIONS = [
     name: "Salary Negotiation Playbook",
     desc: "Evidence-based negotiation strategies. How to evaluate offers, negotiate base + equity + signing bonus, handle competing offers, know your leverage",
     icon: DollarSign,
-    color: "text-emerald-600",
-    bg: "bg-emerald-100",
+    color: "text-emerald-600 dark:text-emerald-400",
+    bg: "bg-emerald-100 dark:bg-emerald-950/20",
     articles: 6,
     highlight: "Scripts and email templates included",
   },
@@ -71,8 +71,8 @@ const MAIN_SECTIONS = [
     name: "Company Tier Rankings",
     desc: "How companies are tiered in the industry. FAANG vs Tier-2 vs startups. Compensation benchmarks, work-life balance, growth trajectories",
     icon: Building2,
-    color: "text-amber-600",
-    bg: "bg-amber-100",
+    color: "text-amber-600 dark:text-amber-400",
+    bg: "bg-amber-100 dark:bg-amber-950/20",
     articles: 5,
     highlight: "2025 compensation data",
   },
@@ -81,8 +81,8 @@ const MAIN_SECTIONS = [
     name: "Career Transitions",
     desc: "Switching roles: frontend to backend, IC to management, big tech to startup, non-tech to tech. Framework for evaluating transitions",
     icon: TrendingUp,
-    color: "text-rose-600",
-    bg: "bg-rose-100",
+    color: "text-rose-600 dark:text-rose-400",
+    bg: "bg-rose-100 dark:bg-rose-950/20",
     articles: 7,
     highlight: "Real transition stories",
   },
@@ -91,8 +91,8 @@ const MAIN_SECTIONS = [
     name: "Networking & Referrals",
     desc: "How to get referrals without being spammy. Cold outreach templates, conference networking, building your professional brand",
     icon: Users,
-    color: "text-cyan-600",
-    bg: "bg-cyan-100",
+    color: "text-cyan-600 dark:text-cyan-400",
+    bg: "bg-cyan-100 dark:bg-cyan-950/20",
     articles: 4,
     highlight: "Cold message templates",
   },
@@ -158,12 +158,12 @@ const QUICK_GUIDES = [
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Resume: "bg-blue-100 text-blue-700",
-  Negotiation: "bg-emerald-100 text-emerald-700",
-  Process: "bg-violet-100 text-violet-700",
-  Transitions: "bg-rose-100 text-rose-700",
-  Growth: "bg-amber-100 text-amber-700",
-  Compensation: "bg-cyan-100 text-cyan-700",
+  Resume: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
+  Negotiation: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400",
+  Process: "bg-violet-100 dark:bg-violet-950/20 text-violet-700 dark:text-violet-400",
+  Transitions: "bg-rose-100 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400",
+  Growth: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400",
+  Compensation: "bg-cyan-100 dark:bg-cyan-950/20 text-cyan-700 dark:text-cyan-400",
 };
 
 export default function CareerPage() {
@@ -171,30 +171,30 @@ export default function CareerPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-rose-50/20 to-pink-50/20 font-sans text-foreground selection:bg-rose-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
+        <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
           <Link
             href="/"
-            className="hover:text-secondary flex items-center gap-1"
+            className="hover:text-muted-foreground flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-secondary font-medium">Career Guide</span>
+          <span className="text-muted-foreground font-medium">Career Guide</span>
         </nav>
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
           <div className="relative px-8 py-8 bg-gradient-to-br from-rose-50 via-pink-50 to-fuchsia-50">
             <div className="flex items-center gap-2 mb-3">
-              <Briefcase className="h-5 w-5 text-rose-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-rose-600">
+              <Briefcase className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-rose-600 dark:text-rose-400">
                 Beyond the Interview
               </span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               Career Guide for Software Engineers
             </h1>
-            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-3xl">
               Acing the technical interview is only half the battle. This guide
               covers everything else — crafting a resume that passes ATS
               screens, understanding interview processes at 20+ companies,
@@ -203,11 +203,11 @@ export default function CareerPage() {
               through it.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
-                  <Layers className="h-5 w-5 text-rose-600" />
+                <div className="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-950/20 flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-rose-600 dark:text-rose-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -218,10 +218,10 @@ export default function CareerPage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200" />
+              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-pink-100 flex items-center justify-center">
-                  <BookOpen className="h-5 w-5 text-pink-600" />
+                <div className="w-10 h-10 rounded-lg bg-pink-100 dark:bg-pink-950/20 flex items-center justify-center">
+                  <BookOpen className="h-5 w-5 text-pink-600 dark:text-pink-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -232,10 +232,10 @@ export default function CareerPage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200" />
+              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-fuchsia-100 flex items-center justify-center">
-                  <Target className="h-5 w-5 text-fuchsia-600" />
+                <div className="w-10 h-10 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-950/20 flex items-center justify-center">
+                  <Target className="h-5 w-5 text-fuchsia-600 dark:text-fuchsia-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -253,7 +253,7 @@ export default function CareerPage() {
         {/* Main Sections */}
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
-            <BookOpen className="h-5 w-5 text-rose-600" />
+            <BookOpen className="h-5 w-5 text-rose-600 dark:text-rose-400" />
             <h2 className="text-xl font-black text-foreground">
               Complete Career Sections
             </h2>
@@ -267,7 +267,7 @@ export default function CareerPage() {
               <Link
                 key={section.slug}
                 href={`/career/${section.slug}`}
-                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-rose-300 transition-all p-5"
+                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-rose-300 dark:border-rose-500/30 transition-all p-5"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div
@@ -278,20 +278,20 @@ export default function CareerPage() {
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-400">
+                    <span className="text-xs font-semibold text-muted-foreground">
                       {section.articles} articles
                     </span>
-                    <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-rose-500 group-hover:translate-x-1 transition-all" />
+                    <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 dark:text-rose-400 group-hover:translate-x-1 transition-all" />
                   </div>
                 </div>
-                <h3 className="text-[15px] font-bold text-foreground group-hover:text-rose-600 transition-colors mb-1.5">
+                <h3 className="text-[15px] font-bold text-foreground group-hover:text-rose-600 dark:text-rose-400 transition-colors mb-1.5">
                   {section.name}
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed mb-3">
                   {section.desc}
                 </p>
-                <div className="pt-2 border-t border-slate-100">
-                  <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full">
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60">
+                  <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 px-2.5 py-1 rounded-full">
                     {section.highlight}
                   </span>
                 </div>
@@ -303,7 +303,7 @@ export default function CareerPage() {
         {/* Popular Articles */}
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
-            <Star className="h-5 w-5 text-amber-600" />
+            <Star className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             <h2 className="text-xl font-black text-foreground">
               Popular Articles
             </h2>
@@ -317,45 +317,45 @@ export default function CareerPage() {
               <Link
                 key={guide.slug}
                 href={`/career/articles/${guide.slug}`}
-                className="group flex items-center gap-3 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-rose-200 transition-all p-4"
+                className="group flex items-center gap-3 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-rose-200 dark:border-rose-500/20 transition-all p-4"
               >
-                <div className="w-9 h-9 rounded-lg bg-surface flex items-center justify-center shrink-0 group-hover:bg-rose-100 transition-colors">
-                  <guide.icon className="h-4 w-4 text-muted-foreground group-hover:text-rose-600 transition-colors" />
+                <div className="w-9 h-9 rounded-lg bg-surface flex items-center justify-center shrink-0 group-hover:bg-rose-100 dark:bg-rose-950/20 transition-colors">
+                  <guide.icon className="h-4 w-4 text-muted-foreground group-hover:text-rose-600 dark:text-rose-400 transition-colors" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-foreground group-hover:text-rose-600 transition-colors leading-snug mb-0.5">
+                  <h3 className="text-sm font-bold text-foreground group-hover:text-rose-600 dark:text-rose-400 transition-colors leading-snug mb-0.5">
                     {guide.title}
                   </h3>
                   <div className="flex items-center gap-2">
                     <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${CATEGORY_COLORS[guide.category] ?? "bg-surface text-secondary"}`}
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${CATEGORY_COLORS[guide.category] ?? "bg-surface text-muted-foreground"}`}
                     >
                       {guide.category}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-medium">
+                    <span className="text-[10px] text-muted-foreground font-medium">
                       {guide.readTime}
                     </span>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-rose-500 group-hover:translate-x-1 transition-all shrink-0" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 dark:text-rose-400 group-hover:translate-x-1 transition-all shrink-0" />
               </Link>
             ))}
           </div>
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 to-pink-50 p-8 text-center mb-12">
+        <section className="rounded-xl border border-rose-200 dark:border-rose-500/20 bg-gradient-to-r from-rose-50 to-pink-50 p-8 text-center mb-12">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Career Guidance + Technical Prep = Complete Package
           </h2>
-          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-muted-foreground mb-6 max-w-xl mx-auto">
             Combine career strategy with domain-specific interview prep. Select
             your path and get Q&A, system design, DSA, behavioral, roadmap,
             cheatsheets — plus all the career guidance above.
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-rose-600 to-pink-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

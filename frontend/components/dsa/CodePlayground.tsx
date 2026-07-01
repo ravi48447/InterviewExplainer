@@ -10,7 +10,7 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-[360px] bg-[#1e1e1e]">
-      <Loader2 className="h-5 w-5 text-slate-400 animate-spin" />
+      <Loader2 className="h-5 w-5 text-slate-400 dark:text-slate-300 animate-spin" />
     </div>
   ),
 });
@@ -51,17 +51,17 @@ type Props = {
 function statusMeta(statusId: number): { color: string; icon: React.ReactNode } {
   if (statusId === 3)
     return {
-      color: "text-emerald-400",
-      icon: <CheckCircle2 className="h-4 w-4 text-emerald-400" />,
+      color: "text-emerald-400 dark:text-emerald-300",
+      icon: <CheckCircle2 className="h-4 w-4 text-emerald-400 dark:text-emerald-300" />,
     };
   if (statusId === 6)
     return {
-      color: "text-amber-400",
-      icon: <AlertCircle className="h-4 w-4 text-amber-400" />,
+      color: "text-amber-400 dark:text-amber-300",
+      icon: <AlertCircle className="h-4 w-4 text-amber-400 dark:text-amber-300" />,
     };
   return {
-    color: "text-rose-400",
-    icon: <XCircle className="h-4 w-4 text-rose-400" />,
+    color: "text-rose-400 dark:text-rose-300",
+    icon: <XCircle className="h-4 w-4 text-rose-400 dark:text-rose-300" />,
   };
 }
 
@@ -140,8 +140,8 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
       {/* Header bar */}
       <div className="flex items-center justify-between bg-[#21252b] border-b border-[#181a1f] px-4 py-2">
         <div className="flex items-center gap-2">
-          <Terminal className="h-3.5 w-3.5 text-emerald-400" />
-          <span className="text-[11px] font-bold uppercase tracking-widest text-slate-300">
+          <Terminal className="h-3.5 w-3.5 text-emerald-400 dark:text-emerald-300" />
+          <span className="text-[11px] font-bold uppercase tracking-widest text-slate-300 dark:text-slate-300">
             Try it — {LANG_DISPLAY[activeLang] ?? activeLang}
           </span>
           <span className="text-[10px] text-muted-foreground italic hidden sm:inline">
@@ -151,14 +151,14 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowStdin((v) => !v)}
-            className="text-[10.5px] font-semibold text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-700"
+            className="text-[10.5px] font-semibold text-slate-400 dark:text-slate-300 hover:text-slate-200 dark:text-slate-300 transition-colors px-2 py-1 rounded hover:bg-slate-700 dark:bg-slate-800"
           >
             {showStdin ? "Hide stdin" : "Custom input"}
           </button>
           <button
             onClick={handleReset}
             title="Reset to starter code"
-            className="flex items-center gap-1 text-[10.5px] font-semibold text-slate-400 hover:text-slate-200 transition-colors px-2 py-1 rounded hover:bg-slate-700"
+            className="flex items-center gap-1 text-[10.5px] font-semibold text-slate-400 dark:text-slate-300 hover:text-slate-200 dark:text-slate-300 transition-colors px-2 py-1 rounded hover:bg-slate-700 dark:bg-slate-800"
           >
             <RotateCcw className="h-3 w-3" />
             Reset
@@ -197,14 +197,14 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
       {/* Custom stdin (collapsible) */}
       {showStdin && (
         <div className="bg-[#21252b] border-t border-[#181a1f] px-4 py-3">
-          <label className="block text-[10.5px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+          <label className="block text-[10.5px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-300 mb-1.5">
             stdin (custom input)
           </label>
           <textarea
             value={stdin}
             onChange={(e) => setStdin(e.target.value)}
             rows={3}
-            className="w-full bg-[#1e1e1e] text-slate-200 font-mono text-[13px] rounded border border-slate-600 px-3 py-2 resize-y focus:outline-none focus:border-slate-400 placeholder:text-secondary"
+            className="w-full bg-[#1e1e1e] text-slate-200 dark:text-slate-300 font-mono text-[13px] rounded border border-slate-600 dark:border-slate-700 px-3 py-2 resize-y focus:outline-none focus:border-slate-400 dark:border-slate-700 placeholder:text-secondary"
             placeholder="Enter input for your program here..."
             spellCheck={false}
           />
@@ -217,7 +217,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
           <button
             onClick={handleRun}
             disabled={running}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-primary-foreground dark:text-foreground font-bold text-[13px] transition-colors"
+            className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-emerald-600 dark:bg-emerald-800 hover:bg-emerald-500 dark:bg-emerald-800 disabled:bg-slate-600 disabled:cursor-not-allowed text-primary-foreground dark:text-foreground font-bold text-[13px] transition-colors"
           >
             {running ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -236,13 +236,13 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
                 </span>
               )}
               {result.time && (
-                <span className="flex items-center gap-1 text-slate-400">
+                <span className="flex items-center gap-1 text-slate-400 dark:text-slate-300">
                   <Clock className="h-3 w-3" />
                   {result.time}s
                 </span>
               )}
               {result.memory && (
-                <span className="flex items-center gap-1 text-slate-400">
+                <span className="flex items-center gap-1 text-slate-400 dark:text-slate-300">
                   <Cpu className="h-3 w-3" />
                   {(result.memory / 1024).toFixed(0)} MB
                 </span>
@@ -258,12 +258,12 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
               Output
             </p>
             {running ? (
-              <div className="flex items-center gap-2 text-slate-400 text-[13px] font-mono">
+              <div className="flex items-center gap-2 text-slate-400 dark:text-slate-300 text-[13px] font-mono">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Executing…
               </div>
             ) : (
-              <pre className="text-[13px] font-mono text-slate-200 whitespace-pre-wrap break-words leading-[1.6] max-h-48 overflow-y-auto">
+              <pre className="text-[13px] font-mono text-slate-200 dark:text-slate-300 whitespace-pre-wrap break-words leading-[1.6] max-h-48 overflow-y-auto">
                 {outputText || (
                   <span className="text-muted-foreground italic">No output.</span>
                 )}

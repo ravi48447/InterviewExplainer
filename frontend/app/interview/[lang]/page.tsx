@@ -52,7 +52,7 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
   if (!meta) notFound();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20">
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
@@ -67,7 +67,7 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
           <h1 className="text-4xl font-black tracking-tight text-foreground mb-3">
             {meta.name} Interview Questions
           </h1>
-          <p className="text-lg text-secondary max-w-3xl leading-relaxed">
+          <p className="text-lg text-muted-foreground max-w-3xl leading-relaxed">
             Everything you need to ace {meta.name} interviews — across every track and experience level.
             Beginner to advanced, interview-framed answers with production examples.
           </p>
@@ -82,21 +82,21 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
                 <Link
                   key={track.slug}
                   href={`/interview/${lang}/${track.slug}`}
-                  className="group flex items-start gap-4 p-5 bg-background rounded-2xl border border-border hover:border-blue-400 hover:shadow-lg transition-all"
+                  className="group flex items-start gap-4 p-5 bg-background rounded-2xl border border-border hover:border-blue-400 dark:border-blue-700 hover:shadow-lg transition-all"
                 >
                   <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
-                    <Icon className="h-5 w-5 text-primary-foreground dark:text-foreground" />
+                    <Icon className="h-5 w-5 text-white" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-base font-black text-foreground group-hover:text-blue-600 transition-colors mb-0.5">{track.name}</h3>
-                    <p className="text-xs text-slate-400 font-medium mb-2">{track.stacks}</p>
-                    <p className="text-sm text-secondary leading-relaxed">{track.desc}</p>
+                    <h3 className="text-base font-black text-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors mb-0.5">{track.name}</h3>
+                    <p className="text-xs text-muted-foreground font-medium mb-2">{track.stacks}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{track.desc}</p>
                     <div className="mt-3 flex gap-2">
                       {["Beginner", "Intermediate", "Advanced"].map(lvl => (
                         <Link
                           key={lvl}
                           href={`/interview/${lang}/${track.slug}/${lvl.toLowerCase()}`}
-                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-surface text-secondary hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                          className="text-[10px] font-bold px-2 py-1 rounded-lg bg-surface text-muted-foreground hover:bg-blue-100 dark:bg-blue-950/20 hover:text-blue-700 dark:text-blue-400 transition-colors"
                           onClick={e => e.stopPropagation()}
                         >
                           {lvl}
@@ -104,7 +104,7 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
                       ))}
                     </div>
                   </div>
-                  <ChevronRight className="h-5 w-5 text-slate-300 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+                  <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-blue-400 dark:text-blue-300 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
                 </Link>
               );
             })}
@@ -112,12 +112,12 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
         </section>
 
         {/* Quick links to levels */}
-        <section className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-6">
+        <section className="rounded-2xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 to-purple-50 p-6">
           <h2 className="text-lg font-black text-foreground mb-4">Jump Directly to a Level</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { level: "beginner", label: "Beginner", range: "0–2 yrs", color: "border-emerald-300 hover:bg-emerald-50 text-emerald-700" },
-              { level: "intermediate", label: "Intermediate", range: "2–5 yrs", color: "border-amber-300 hover:bg-amber-50 text-amber-700" },
+              { level: "beginner", label: "Beginner", range: "0–2 yrs", color: "border-emerald-300 dark:border-emerald-500/30 hover:bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" },
+              { level: "intermediate", label: "Intermediate", range: "2–5 yrs", color: "border-amber-300 dark:border-amber-500/30 hover:bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400" },
             ].map(({ level, label, range, color }) => (
               <Link
                 key={level}

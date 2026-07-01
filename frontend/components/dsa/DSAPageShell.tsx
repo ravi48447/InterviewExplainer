@@ -43,7 +43,7 @@ export function DSAPageShell({
     (sidebar && rightRail ? "1640px" : hasSide ? "1520px" : "1200px");
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] to-[#f4f5f7] font-sans text-foreground">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] dark:from-background to-[#f4f5f7] dark:to-surface font-sans text-foreground">
       {jsonLd && (
         <script
           type="application/ld+json"
@@ -53,7 +53,7 @@ export function DSAPageShell({
       {/* Soft violet wash up top to tie the page to the dark hero. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[340px] bg-gradient-to-b from-violet-200/40 via-violet-100/15 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[340px] bg-gradient-to-b from-violet-200/40 dark:from-violet-900/20 via-violet-100/15 dark:via-violet-900/10 to-transparent"
       />
       <div
         className="relative w-full mx-auto px-3 sm:px-5 lg:px-6 py-5 lg:py-6"
@@ -62,13 +62,13 @@ export function DSAPageShell({
         {hasSide ? (
           <div className="flex gap-5 lg:gap-7 items-start">
             {sidebar && (
-              <aside className="hidden lg:block w-[240px] xl:w-[260px] shrink-0 self-start sticky top-6">
+              <aside className="hidden lg:block w-[240px] xl:w-[260px] shrink-0 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
                 {sidebar}
               </aside>
             )}
             <main className="flex-1 min-w-0">{children}</main>
             {rightRail && (
-              <aside className="hidden xl:block w-[280px] shrink-0 self-start sticky top-6">
+              <aside className="hidden xl:block w-[280px] shrink-0 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
                 {rightRail}
               </aside>
             )}

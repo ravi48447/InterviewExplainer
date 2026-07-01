@@ -78,7 +78,7 @@ export default function StackHierarchyNav({
       <div className="rounded-xl border border-border bg-background/90 shadow-sm overflow-hidden">
         <Link
           href={`/${domainSlug}`}
-          className="flex items-center gap-2 px-4 py-3 text-xs font-bold text-secondary hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          className="flex items-center gap-2 px-4 py-3 text-xs font-bold text-muted-foreground hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-blue-500/10 transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to All Stacks
@@ -87,16 +87,16 @@ export default function StackHierarchyNav({
 
       {/* Hierarchy tree */}
       <div className="rounded-xl border border-border bg-background/90 shadow-sm overflow-hidden">
-        <div className="px-4 py-2.5 bg-gradient-to-r from-slate-100 to-slate-50 border-b border-border">
+        <div className="px-4 py-2.5 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-900/40 dark:to-slate-900/20 border-b border-border">
           <div className="flex items-center gap-2">
             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-secondary">Study Navigation</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Study Navigation</span>
           </div>
         </div>
 
         <div className="overflow-y-auto max-h-[calc(100vh-240px)]">
           {categories.length === 0 && (
-            <div className="px-4 py-6 text-[11px] text-slate-400 text-center">Loading stacks…</div>
+            <div className="px-4 py-6 text-[11px] text-muted-foreground text-center">Loading stacks…</div>
           )}
 
           {categories.map(cat => {
@@ -111,7 +111,7 @@ export default function StackHierarchyNav({
                   className={cn(
                     "w-full flex items-center justify-between px-3 py-2 text-[11px] font-black uppercase tracking-widest transition-colors",
                     hasActiveStack
-                      ? "bg-blue-50 text-blue-700"
+                      ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400"
                       : "text-muted-foreground hover:bg-surface hover:text-foreground"
                   )}
                 >
@@ -129,18 +129,18 @@ export default function StackHierarchyNav({
                         className={cn(
                           "flex items-center gap-2 pl-5 pr-3 py-2 text-xs transition-colors border-l-2",
                           isActive
-                            ? "border-blue-500 bg-blue-50/70 text-blue-700 font-bold"
-                            : "border-transparent text-secondary hover:bg-surface hover:text-foreground font-medium"
+                            ? "border-blue-500 dark:border-blue-700 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/70 text-blue-700 dark:text-blue-400 font-bold"
+                            : "border-transparent text-muted-foreground hover:bg-surface hover:text-foreground font-medium"
                         )}
                       >
-                        <BookOpen className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-blue-500" : "text-slate-400")} />
+                        <BookOpen className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-blue-500 dark:text-blue-400" : "text-muted-foreground")} />
                         <span className="flex-1 truncate">{stack.name}</span>
-                        <span className="text-[11px] text-slate-400 font-medium shrink-0">{stack.questionCount}</span>
+                        <span className="text-[11px] text-muted-foreground font-medium shrink-0">{stack.questionCount}</span>
                       </Link>
 
                       {/* Subcategories — only shown for active stack */}
                       {isActive && (
-                        <div className="border-l-2 border-blue-200 ml-5">
+                        <div className="border-l-2 border-blue-200 dark:border-blue-500/20 ml-5">
                           {subcats.map(sc => {
                             const isActiveSc = sc.slug === activeSubcatSlug;
                             const isExpSc    = expandedSubcats.has(sc.slug);
@@ -153,20 +153,20 @@ export default function StackHierarchyNav({
                                   className={cn(
                                     "w-full flex items-center gap-2 pl-3 pr-2 py-1.5 text-[11px] transition-colors",
                                     isActiveSc
-                                      ? "bg-indigo-50 text-indigo-700 font-bold"
-                                      : "text-secondary hover:bg-surface font-semibold"
+                                      ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-bold"
+                                      : "text-muted-foreground hover:bg-surface font-semibold"
                                   )}
                                 >
                                   {isExpSc
-                                    ? <FolderOpen className="h-3 w-3 shrink-0 text-blue-500" />
-                                    : <Folder className="h-3 w-3 shrink-0 text-blue-400" />}
+                                    ? <FolderOpen className="h-3 w-3 shrink-0 text-blue-500 dark:text-blue-400" />
+                                    : <Folder className="h-3 w-3 shrink-0 text-blue-400 dark:text-blue-300" />}
                                   <span className="flex-1 text-left truncate">{sc.name}</span>
-                                  <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 shrink-0">
+                                  <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 shrink-0">
                                     {sc.questionCount}
                                   </span>
                                   {isExpSc
-                                    ? <ChevronDown className="h-2.5 w-2.5 shrink-0 text-slate-400" />
-                                    : <ChevronRight className="h-2.5 w-2.5 shrink-0 text-slate-400" />}
+                                    ? <ChevronDown className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
+                                    : <ChevronRight className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />}
                                 </button>
 
                                 {/* Questions */}
@@ -181,11 +181,11 @@ export default function StackHierarchyNav({
                                           className={cn(
                                             "flex items-start gap-2 pl-3 pr-2 py-1.5 text-[11px] transition-colors",
                                             isActiveQ
-                                              ? "bg-blue-600 text-primary-foreground dark:text-foreground font-bold"
-                                              : "text-secondary hover:bg-blue-50 hover:text-blue-700"
+                                              ? "bg-blue-600 text-white font-bold"
+                                              : "text-muted-foreground hover:bg-blue-50 dark:bg-blue-500/10 hover:text-blue-700 dark:text-blue-400"
                                           )}
                                         >
-                                          <span className={cn("shrink-0 mt-0.5", isActiveQ ? "text-blue-200" : "text-slate-300")}>
+                                          <span className={cn("shrink-0 mt-0.5", isActiveQ ? "text-blue-200 dark:text-blue-300" : "text-muted-foreground")}>
                                             {isActiveQ
                                               ? <CheckCircle2 className="h-3 w-3" />
                                               : <Circle className="h-3 w-3" />}

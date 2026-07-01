@@ -43,17 +43,17 @@ export function ArchitectureMapLayout({
     <div className="space-y-8">
       {/* Quick context */}
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
 
       {/* Architecture Diagram */}
       {diagram && (
-        <div className="rounded-xl border-2 border-border bg-slate-950 overflow-hidden">
+        <div className="rounded-xl border-2 border-border bg-slate-950 dark:bg-slate-800 overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 border-b border-border">
-            <Network className="h-4 w-4 text-slate-400" />
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-wide">Architecture Diagram</span>
+            <Network className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Architecture Diagram</span>
           </div>
           <div className="px-5 py-5 font-mono">
             <MarkdownContent content={diagram.content} stripTopHeading />
@@ -75,8 +75,8 @@ export function ArchitectureMapLayout({
 
       {/* Deep Explanation */}
       {deepExplanation && !overview && (
-        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-blue-50 border-b border-blue-200">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-blue-200 dark:border-blue-500/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Deep Dive</span>
           </div>
           <div className="px-5 py-5">
@@ -91,7 +91,7 @@ export function ArchitectureMapLayout({
           <div className="px-5 py-3 bg-surface border-b border-border">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Component Deep Dives</span>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {components.map((comp, i) => (
               <div key={i}>
                 <button
@@ -102,8 +102,8 @@ export function ArchitectureMapLayout({
                     {comp.sectionTitle || `Component ${i + 1}`}
                   </span>
                   {expandedComponents.has(i)
-                    ? <ChevronUp className="h-4 w-4 text-slate-400" />
-                    : <ChevronDown className="h-4 w-4 text-slate-400" />
+                    ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                    : <ChevronDown className="h-4 w-4 text-muted-foreground" />
                   }
                 </button>
                 {expandedComponents.has(i) && (
@@ -121,7 +121,7 @@ export function ArchitectureMapLayout({
       {tradeoffs && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-50 to-orange-50 border-b border-border">
-            <Scale className="h-4 w-4 text-orange-600" />
+            <Scale className="h-4 w-4 text-orange-600 dark:text-orange-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Trade-offs</span>
           </div>
           <div className="px-5 py-4">
@@ -132,9 +132,9 @@ export function ArchitectureMapLayout({
 
       {/* Error Mapping */}
       {errorMapping && (
-        <div className="rounded-xl border border-red-200 bg-red-50/40 overflow-hidden">
-          <div className="px-5 py-3 bg-red-100/50 border-b border-red-200">
-            <span className="text-xs font-bold text-red-800 uppercase tracking-wide">Common Errors & What Causes Them</span>
+        <div className="rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 dark:bg-red-950/20/40 overflow-hidden">
+          <div className="px-5 py-3 bg-red-100 dark:bg-red-950/20/50 border-b border-red-200 dark:border-red-500/20">
+            <span className="text-xs font-bold text-red-800 dark:text-red-400 uppercase tracking-wide">Common Errors & What Causes Them</span>
           </div>
           <div className="px-5 py-4">
             <MarkdownContent content={errorMapping.content} stripTopHeading />
@@ -144,10 +144,10 @@ export function ArchitectureMapLayout({
 
       {/* Interview Talking Points */}
       {talkingPoints && (
-        <div className="rounded-xl border border-violet-200 bg-violet-50/40 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-violet-100/50 border-b border-violet-200">
-            <CheckSquare className="h-4 w-4 text-violet-700" />
-            <span className="text-xs font-bold text-violet-800 uppercase tracking-wide">Interview Talking Points</span>
+        <div className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-violet-50/40 dark:bg-violet-500/10 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-violet-100 dark:bg-violet-950/20/50 border-b border-violet-200 dark:border-violet-500/20">
+            <CheckSquare className="h-4 w-4 text-violet-700 dark:text-violet-400" />
+            <span className="text-xs font-bold text-violet-800 dark:text-violet-400 uppercase tracking-wide">Interview Talking Points</span>
           </div>
           <div className="px-5 py-4">
             <MarkdownContent content={talkingPoints.content} stripTopHeading />
@@ -157,8 +157,8 @@ export function ArchitectureMapLayout({
 
       {/* Speakable */}
       {speakable && (
-        <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
+        <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-500/30 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

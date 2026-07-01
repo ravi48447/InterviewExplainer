@@ -17,9 +17,9 @@ export interface ProblemRow {
 }
 
 const DIFF = {
-  easy:   { dot: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Easy" },
-  medium: { dot: "bg-amber-500",   badge: "bg-amber-50 text-amber-700 border-amber-200",       label: "Medium" },
-  hard:   { dot: "bg-red-500",     badge: "bg-red-50 text-red-700 border-red-200",             label: "Hard" },
+  easy:   { dot: "bg-emerald-500", badge: "bg-emerald-50 dark:bg-emerald-500/10 text-white dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20", label: "Easy" },
+  medium: { dot: "bg-amber-500",   badge: "bg-amber-50 dark:bg-amber-500/10 text-amber-950 dark:text-amber-400 border-amber-200 dark:border-amber-500/20",       label: "Medium" },
+  hard:   { dot: "bg-red-500",     badge: "bg-red-50 dark:bg-red-500/10 text-white dark:text-red-400 border-red-200 dark:border-red-500/20",             label: "Hard" },
 };
 
 export function DSAProblemExplorer({
@@ -65,10 +65,10 @@ export function DSAProblemExplorer({
               onClick={() => setDiff(d)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
                 diff === d
-                  ? d === "all"    ? "dark:bg-surface text-primary-foreground dark:text-foreground border-slate-900"
-                  : d === "easy"   ? "bg-emerald-600 text-primary-foreground dark:text-foreground border-emerald-600"
-                  : d === "medium" ? "bg-amber-500 text-primary-foreground dark:text-foreground border-amber-500"
-                  :                  "bg-red-600 text-primary-foreground dark:text-foreground border-red-600"
+                  ? d === "all"    ? "dark:bg-surface text-primary-foreground dark:text-foreground border-slate-900 dark:border-slate-700"
+                  : d === "easy"   ? "bg-emerald-600 dark:bg-emerald-800 text-primary-foreground dark:text-foreground border-emerald-600 dark:border-emerald-700"
+                  : d === "medium" ? "bg-amber-500 dark:bg-amber-800 text-primary-foreground dark:text-foreground border-amber-500 dark:border-amber-700"
+                  :                  "bg-red-600 dark:bg-red-800 text-primary-foreground dark:text-foreground border-red-600 dark:border-red-700"
                   : "bg-background text-secondary border-border hover:border-border hover:bg-surface"
               }`}
             >
@@ -83,7 +83,7 @@ export function DSAProblemExplorer({
         <select
           value={module}
           onChange={(e) => setModule(e.target.value)}
-          className="ml-1 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-secondary bg-background focus:outline-none focus:border-violet-400 hover:border-border transition-colors"
+          className="ml-1 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-secondary bg-background focus:outline-none focus:border-violet-400 dark:border-violet-700 hover:border-border transition-colors"
         >
           <option value="all">All Modules</option>
           {moduleMap.map((m) => (
@@ -92,18 +92,18 @@ export function DSAProblemExplorer({
         </select>
 
         {/* Search */}
-        <div className="relative ml-auto">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+        <div className="relative ml-auto shrink-0 w-48 lg:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 dark:text-slate-400 pointer-events-none" />
           <input
-            type="text"
+            type="search"
             placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 pr-3 py-1.5 rounded-lg border border-border text-xs text-foreground bg-background focus:outline-none focus:border-violet-400 w-40 transition-colors"
+            className="w-full rounded-2xl border border-slate-200 dark:border-white/20 bg-slate-50 dark:bg-white/5 py-2 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-100 shadow-sm dark:shadow-md placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-slate-400 dark:focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:focus:ring-white/10 transition-all"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-secondary">
-              <X className="h-3 w-3" />
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+              <X className="h-4 w-4" />
             </button>
           )}
         </div>
@@ -111,7 +111,7 @@ export function DSAProblemExplorer({
         {hasFilter && (
           <button
             onClick={() => { setDiff("all"); setModule("all"); setSearch(""); }}
-            className="text-xs text-violet-600 font-semibold hover:text-violet-800 transition-colors"
+            className="text-xs text-violet-600 dark:text-violet-400 font-semibold hover:text-violet-800 dark:text-violet-400 transition-colors"
           >
             Reset
           </button>
@@ -119,12 +119,12 @@ export function DSAProblemExplorer({
       </div>
 
       {/* ── Result count ── */}
-      <div className="text-xs text-slate-400 mb-2 font-medium">
+      <div className="text-xs text-slate-400 dark:text-slate-300 mb-2 font-medium">
         {filtered.length} problem{filtered.length !== 1 ? "s" : ""}
       </div>
 
       {/* ── Table header ── */}
-      <div className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 px-3 py-2 border-b border-slate-100 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+      <div className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-300">
         <span>#</span>
         <span>Problem</span>
         <span>Difficulty</span>
@@ -142,11 +142,11 @@ export function DSAProblemExplorer({
                 key={p.slug}
                 className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 items-center px-3 py-2.5 opacity-40 cursor-not-allowed"
               >
-                <span className="text-[11px] text-slate-300 font-mono tabular-nums">{i + 1}</span>
+                <span className="text-[11px] text-slate-300 dark:text-slate-300 font-mono tabular-nums">{i + 1}</span>
                 <span className="text-sm text-muted-foreground truncate">{p.title}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border w-fit ${d.badge}`}>{d.label}</span>
-                <span className="text-xs text-slate-400 hidden sm:block truncate">{p.moduleTitle}</span>
-                <span className="text-[10px] font-bold text-slate-400 border border-border px-1.5 py-0.5 rounded">Soon</span>
+                <span className="text-xs text-slate-400 dark:text-slate-300 hidden sm:block truncate">{p.moduleTitle}</span>
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-300 border border-border px-1.5 py-0.5 rounded">Soon</span>
               </div>
             );
           }
@@ -154,22 +154,22 @@ export function DSAProblemExplorer({
             <Link
               key={p.slug}
               href={`/dsa/problem/${p.slug}`}
-              className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 items-center px-3 py-2.5 hover:bg-violet-50 group transition-colors"
+              className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 items-center px-3 py-2.5 hover:bg-violet-50 dark:bg-violet-500/10 group transition-colors"
             >
-              <span className="text-[11px] text-slate-300 font-mono tabular-nums">{i + 1}</span>
-              <span className="text-sm font-medium text-foreground group-hover:text-violet-700 transition-colors truncate">{p.title}</span>
+              <span className="text-[11px] text-slate-300 dark:text-slate-300 font-mono tabular-nums">{i + 1}</span>
+              <span className="text-sm font-medium text-foreground group-hover:text-violet-700 dark:text-violet-400 transition-colors truncate">{p.title}</span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border w-fit ${d.badge}`}>{d.label}</span>
-              <span className="text-xs text-slate-400 hidden sm:block truncate">{p.moduleTitle}</span>
-              <ArrowRight className="h-3.5 w-3.5 text-slate-200 group-hover:text-violet-400 transition-colors" />
+              <span className="text-xs text-slate-400 dark:text-slate-300 hidden sm:block truncate">{p.moduleTitle}</span>
+              <ArrowRight className="h-3.5 w-3.5 text-slate-200 dark:text-slate-300 group-hover:text-violet-400 dark:text-violet-300 transition-colors" />
             </Link>
           );
         })}
       </div>
 
       {filtered.length === 0 && (
-        <div className="text-center py-12 text-slate-400 text-sm">
+        <div className="text-center py-12 text-slate-400 dark:text-slate-300 text-sm">
           No problems match your filters.{" "}
-          <button onClick={() => { setDiff("all"); setModule("all"); setSearch(""); }} className="text-violet-600 font-semibold hover:underline">
+          <button onClick={() => { setDiff("all"); setModule("all"); setSearch(""); }} className="text-violet-600 dark:text-violet-400 font-semibold hover:underline">
             Clear filters
           </button>
         </div>

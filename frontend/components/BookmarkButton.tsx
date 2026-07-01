@@ -61,8 +61,8 @@ export default function BookmarkButton({ questionId }: BookmarkButtonProps) {
         disabled={loading}
         className={`p-3 rounded-2xl border transition-all flex items-center gap-2 group ${
           isBookmarked 
-            ? "bg-rose-500/10 border-rose-500/30 text-rose-500" 
-            : "bg-background/[0.02] border-white/10 text-muted-foreground hover:border-white/20 hover:text-primary-foreground dark:text-foreground"
+            ? "bg-rose-500 dark:bg-rose-800/10 border-rose-500 dark:border-rose-700/30 text-white dark:text-rose-400" 
+            : "bg-background/[0.02] border-white/10 text-muted-foreground hover:border-white/20 hover:text-white"
         }`}
         aria-label={isBookmarked ? "Remove Bookmark" : "Add Bookmark"}
       >

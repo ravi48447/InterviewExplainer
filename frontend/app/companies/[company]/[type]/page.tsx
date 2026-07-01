@@ -98,10 +98,10 @@ export default async function CompanyTypePage({
 
         <header className="mb-10">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
-              <Icon className="h-5 w-5 text-orange-600" />
+            <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/20 flex items-center justify-center">
+              <Icon className="h-5 w-5 text-orange-600 dark:text-orange-400" />
             </div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-orange-100 text-orange-700 rounded-full text-xs font-bold uppercase tracking-wider">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-orange-100 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400 rounded-full text-xs font-bold uppercase tracking-wider">
               {companyName} · {label}
             </div>
           </div>
@@ -109,7 +109,7 @@ export default async function CompanyTypePage({
             {companyName} {label}
           </h1>
           {typeMeta?.desc && (
-            <p className="text-lg text-secondary max-w-3xl leading-relaxed">{typeMeta.desc}</p>
+            <p className="text-lg text-muted-foreground max-w-3xl leading-relaxed">{typeMeta.desc}</p>
           )}
         </header>
 
@@ -121,8 +121,8 @@ export default async function CompanyTypePage({
               href={`/companies/${company}/${t}`}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                 t === type
-                  ? "bg-orange-600 text-primary-foreground dark:text-foreground border-orange-600"
-                  : "bg-background text-secondary border-border hover:border-orange-400 hover:text-orange-600"
+                  ? "bg-orange-600 dark:bg-orange-800 text-white border-orange-600 dark:border-orange-700"
+                  : "bg-background text-muted-foreground border-border hover:border-orange-400 dark:border-orange-700 hover:text-orange-600 dark:text-orange-400"
               }`}
             >
               {TYPE_META[t]?.label ?? toTitle(t)}
@@ -133,22 +133,22 @@ export default async function CompanyTypePage({
         {/* Content */}
         {content ? (
           <div className="space-y-6">
-            <pre className="dark:bg-surface text-green-400 text-xs p-4 rounded-xl overflow-auto">
+            <pre className="dark:bg-surface text-green-400 dark:text-green-300 text-xs p-4 rounded-xl overflow-auto">
               {JSON.stringify(content, null, 2)}
             </pre>
           </div>
         ) : (
-          <div className="rounded-2xl border border-orange-200 bg-background p-8 text-center">
+          <div className="rounded-2xl border border-orange-200 dark:border-orange-500/20 bg-background p-8 text-center">
             <div className="text-4xl mb-4">🚧</div>
             <h2 className="text-xl font-black text-foreground mb-2">{companyName} {label} — Coming Soon</h2>
-            <p className="text-secondary text-sm mb-6">
+            <p className="text-muted-foreground text-sm mb-6">
               We&apos;re writing company-specific content based on real interview reports and patterns.
             </p>
             <div className="flex flex-wrap gap-3 justify-center">
-              <Link href={`/companies/${company}`} className="px-4 py-2 bg-orange-600 text-primary-foreground dark:text-foreground rounded-lg text-sm font-bold hover:bg-orange-700 transition-colors">
+              <Link href={`/companies/${company}`} className="px-4 py-2 bg-orange-600 dark:bg-orange-800 text-white rounded-lg text-sm font-bold hover:bg-orange-700 dark:bg-orange-800 transition-colors">
                 ← {companyName} Overview
               </Link>
-              <Link href="/dsa" className="px-4 py-2 bg-purple-600 text-primary-foreground dark:text-foreground rounded-lg text-sm font-bold hover:bg-purple-700 transition-colors">
+              <Link href="/dsa" className="px-4 py-2 bg-purple-600 dark:bg-purple-800 text-white rounded-lg text-sm font-bold hover:bg-purple-700 dark:bg-purple-800 transition-colors">
                 Practice DSA Problems
               </Link>
             </div>

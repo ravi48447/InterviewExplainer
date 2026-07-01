@@ -89,13 +89,13 @@ export default function ExperienceLevelSwitcher({
         {selected !== currentLevel && (
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-primary-foreground dark:text-foreground rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-800 text-white rounded-lg text-sm font-bold hover:bg-blue-700 dark:bg-blue-800 transition-colors"
           >
             {saved ? <><CheckCircle className="h-4 w-4" /> Saved!</> : "Save Preference"}
           </button>
         )}
 
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-muted-foreground">
           This applies to your entire session. All question pages will serve{" "}
           <strong>{EXPERIENCE_LEVELS[selected].label}</strong> answers.
         </p>
@@ -137,7 +137,7 @@ export default function ExperienceLevelSwitcher({
               <ul className="space-y-1.5 mb-4">
                 {details.bullets.map((b, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-foreground">
-                    <span className="mt-0.5 shrink-0 text-slate-400">→</span>
+                    <span className="mt-0.5 shrink-0 text-muted-foreground">→</span>
                     {b}
                   </li>
                 ))}
@@ -158,8 +158,8 @@ export default function ExperienceLevelSwitcher({
           disabled={saved}
           className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${
             saved
-              ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-              : "bg-blue-600 text-primary-foreground dark:text-foreground hover:bg-blue-700 shadow-md hover:shadow-lg"
+              ? "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
+              : "bg-blue-600 dark:bg-blue-800 text-white hover:bg-blue-700 dark:bg-blue-800 shadow-md hover:shadow-lg"
           }`}
         >
           {saved ? <><CheckCircle className="h-4 w-4" /> Saved!</> : "Save My Level"}

@@ -189,7 +189,7 @@ export default function CodeLanguageTabs({
     return (
       <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-[#1f2330]">
         <div className="flex items-center justify-between gap-3 px-4 py-1.5 dark:bg-surface border-b border-border">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             {displayName(active)}
             {(activeLabel || title) && (
               <span className="text-muted-foreground font-medium normal-case tracking-normal ml-2">
@@ -210,11 +210,11 @@ export default function CodeLanguageTabs({
       <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-[#1f2330]">
         <div className="flex items-center justify-between gap-3 px-4 py-2 dark:bg-surface text-xs border-b border-border">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-slate-200 font-bold uppercase tracking-wider text-[11px] shrink-0">
+            <span className="text-muted-foreground font-bold uppercase tracking-wider text-[11px] shrink-0">
               {displayName(lang)}
             </span>
             {(labels?.[lang] || title) && (
-              <span className="text-slate-400 font-medium truncate text-[11px]">
+              <span className="text-muted-foreground font-medium truncate text-[11px]">
                 {labels?.[lang] ?? title}
               </span>
             )}
@@ -237,8 +237,8 @@ export default function CodeLanguageTabs({
               className={cn(
                 "px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider transition-colors whitespace-nowrap border-b-2",
                 active === lang
-                  ? "text-primary-foreground dark:text-foreground border-blue-400 bg-slate-700/80"
-                  : "text-slate-400 border-transparent hover:text-slate-200 hover:dark:bg-surface/50",
+                  ? "text-white border-blue-400 dark:border-blue-700 bg-slate-700/80"
+                  : "text-muted-foreground border-transparent hover:text-muted-foreground hover:dark:bg-surface/50",
               )}
               aria-pressed={active === lang}
               aria-label={`Show ${displayName(lang)} code`}
@@ -249,7 +249,7 @@ export default function CodeLanguageTabs({
         </div>
         <div className="flex items-center gap-3 px-3 shrink-0">
           {(activeLabel || title) && (
-            <span className="hidden sm:inline text-[11px] text-slate-300 font-medium truncate max-w-[260px]">
+            <span className="hidden sm:inline text-[11px] text-muted-foreground font-medium truncate max-w-[260px]">
               {activeLabel ?? title}
             </span>
           )}

@@ -74,7 +74,7 @@ export function DSAModuleTOC({ items, meta }: DSAModuleTOCProps) {
       {meta && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-border">
-            <Zap className="h-3.5 w-3.5 text-blue-600" />
+            <Zap className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
             <span className="text-[11px] font-black uppercase tracking-widest text-foreground">
               Overview
             </span>
@@ -99,7 +99,7 @@ export function DSAModuleTOC({ items, meta }: DSAModuleTOCProps) {
             {typeof meta.theoryCount === "number" && (
               <div className="flex items-center justify-between gap-3">
                 <dt className="text-muted-foreground font-medium flex items-center gap-1.5">
-                  <BookOpen className="h-3 w-3 text-blue-400" />
+                  <BookOpen className="h-3 w-3 text-blue-400 dark:text-blue-300" />
                   Theory sections
                 </dt>
                 <dd className="font-bold text-foreground tabular-nums">
@@ -110,7 +110,7 @@ export function DSAModuleTOC({ items, meta }: DSAModuleTOCProps) {
             {typeof meta.problemCount === "number" && (
               <div className="flex items-center justify-between gap-3">
                 <dt className="text-muted-foreground font-medium flex items-center gap-1.5">
-                  <Target className="h-3 w-3 text-violet-400" />
+                  <Target className="h-3 w-3 text-violet-400 dark:text-violet-300" />
                   Practice problems
                 </dt>
                 <dd className="font-bold text-foreground tabular-nums">
@@ -140,7 +140,7 @@ export function DSAModuleTOC({ items, meta }: DSAModuleTOCProps) {
                 className={cn(
                   "block pl-4 pr-3 py-1.5 text-[12.5px] leading-snug border-l-2 transition-colors",
                   active === it.id
-                    ? "border-violet-500 bg-violet-50/60 text-violet-900 font-bold"
+                    ? "border-violet-500 dark:border-violet-500/50 bg-violet-50/60 dark:bg-violet-500/10 text-violet-900 dark:text-violet-400 font-bold"
                     : "border-transparent text-secondary hover:text-foreground hover:border-border hover:bg-surface",
                 )}
               >

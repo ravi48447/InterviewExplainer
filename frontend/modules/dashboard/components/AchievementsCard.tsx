@@ -53,7 +53,7 @@ export function AchievementsCard({ achievements, earnedCount }: AchievementsCard
                 )}
               </div>
               {a.earned && (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" aria-hidden="true" />
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0" aria-hidden="true" />
               )}
             </div>
           );

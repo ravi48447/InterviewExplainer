@@ -41,9 +41,9 @@ export function ProgressSection({ stacks, continueHref }: ProgressSectionProps) 
                   <span className="text-xs text-muted-foreground tabular-nums">{s.solved}/{s.total}</span>
                   <span className={cn(
                     "text-[10px] font-bold px-2 py-0.5 rounded-md tabular-nums uppercase tracking-wider",
-                    s.pct >= 70 ? "text-emerald-500 bg-emerald-500/10 border border-emerald-500/20" :
-                    s.pct >= 40 ? "text-amber-500 bg-amber-500/10 border border-amber-500/20" :
-                    "text-blue-500 bg-blue-500/10 border border-blue-500/20",
+                    s.pct >= 70 ? "text-emerald-500 dark:text-emerald-400 bg-emerald-500 dark:bg-emerald-800/10 border border-emerald-500 dark:border-emerald-700/20" :
+                    s.pct >= 40 ? "text-amber-500 dark:text-amber-400 bg-amber-500 dark:bg-amber-800/10 border border-amber-500 dark:border-amber-700/20" :
+                    "text-blue-500 dark:text-blue-400 bg-blue-500 dark:bg-blue-800/10 border border-blue-500 dark:border-blue-700/20",
                   )}>{s.pct}%</span>
                 </div>
               </div>
@@ -52,8 +52,8 @@ export function ProgressSection({ stacks, continueHref }: ProgressSectionProps) 
                 aria-label={`${s.name}: ${s.pct}% complete, ${s.solved} of ${s.total} solved`}>
                 <div className={cn(
                   "h-full rounded-full transition-all duration-750",
-                  s.pct >= 70 ? "bg-emerald-500" :
-                  s.pct >= 40 ? "bg-amber-500" :
+                  s.pct >= 70 ? "bg-emerald-500 dark:bg-emerald-800" :
+                  s.pct >= 40 ? "bg-amber-500 dark:bg-amber-800" :
                   "bg-primary",
                 )} style={{ width: `${s.pct}%` }} />
               </div>

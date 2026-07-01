@@ -45,10 +45,10 @@ function ReadinessGauge({ value, size = 120, strokeWidth = 10 }: { value: number
   const gradId = 'gauge-grad-radial';
   const tier = value >= 70 ? 'Strong' : value >= 40 ? 'Building' : value > 0 ? 'Getting Started' : 'Not Started';
   const colors = value >= 70
-    ? { from: '#22c55e', to: '#16a34a', text: 'text-emerald-500' }
+    ? { from: '#22c55e', to: '#16a34a', text: 'text-emerald-500 dark:text-emerald-400' }
     : value >= 40
-      ? { from: '#f59e0b', to: '#d97706', text: 'text-amber-500' }
-      : { from: '#3b82f6', to: '#6366f1', text: 'text-blue-500' };
+      ? { from: '#f59e0b', to: '#d97706', text: 'text-amber-500 dark:text-amber-400' }
+      : { from: '#3b82f6', to: '#6366f1', text: 'text-blue-500 dark:text-blue-400' };
 
   return (
     <div

@@ -52,7 +52,7 @@ export function ComparisonArenaLayout({
         <div className="rounded-xl border border-border bg-background px-5 py-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <Swords className="h-4 w-4 text-muted-foreground" />
-            <span className="text-[11px] font-bold text-secondary uppercase tracking-widest">The Core Difference</span>
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">The Core Difference</span>
           </div>
           <p className="text-base text-foreground">{directAnswer}</p>
         </div>
@@ -72,8 +72,8 @@ export function ComparisonArenaLayout({
 
       {/* Technical Explanation */}
       {deepExplanation && (
-        <div className="rounded-xl border border-blue-200 bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 dark:border-blue-500/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Technical Deep Dive</span>
           </div>
           <div className="px-5 py-5">
@@ -93,7 +93,7 @@ export function ComparisonArenaLayout({
                   key={i}
                   onClick={() => setActiveCode(i)}
                   className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                    activeCode === i ? "bg-background shadow-sm text-blue-700" : "text-muted-foreground hover:text-foreground"
+                    activeCode === i ? "bg-background shadow-sm text-blue-700 dark:text-blue-400" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {opt.sectionTitle || `Option ${i + 1}`}
@@ -103,7 +103,7 @@ export function ComparisonArenaLayout({
                 <button
                   onClick={() => setActiveCode(-1)}
                   className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                    activeCode === -1 ? "bg-background shadow-sm text-blue-700" : "text-muted-foreground hover:text-foreground"
+                    activeCode === -1 ? "bg-background shadow-sm text-blue-700 dark:text-blue-400" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   Side by Side
@@ -130,9 +130,9 @@ export function ComparisonArenaLayout({
 
       {/* Decision Guide */}
       {decisionGuide && (
-        <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-emerald-200 bg-emerald-100/50">
-            <Compass className="h-4 w-4 text-emerald-700" />
+        <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-emerald-200 dark:border-emerald-500/20 bg-emerald-100 dark:bg-emerald-950/20/50">
+            <Compass className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">When to Use Each</span>
           </div>
           <div className="px-5 py-4">
@@ -155,9 +155,9 @@ export function ComparisonArenaLayout({
 
       {/* Interview Line */}
       {interviewLine && (
-        <div className="rounded-xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-teal-50 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-emerald-100 border-b-2 border-emerald-200">
-            <Mic className="h-4 w-4 text-emerald-700" />
+        <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-500/30 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60">
+            <Mic className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

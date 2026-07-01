@@ -446,9 +446,9 @@ function AudioMockInterviewContent() {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8 text-center"
         >
-          <Loader2 className="h-12 w-12 text-purple-600 animate-spin mx-auto mb-4" />
+          <Loader2 className="h-12 w-12 text-purple-600 dark:text-purple-400 animate-spin mx-auto mb-4" />
           <h2 className="text-2xl font-black text-foreground mb-2">Loading Questions...</h2>
-          <p className="text-secondary">Preparing your domain-specific interview</p>
+          <p className="text-muted-foreground">Preparing your domain-specific interview</p>
         </motion.div>
       </div>
     );
@@ -462,9 +462,9 @@ function AudioMockInterviewContent() {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8 text-center"
         >
-          <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+          <AlertCircle className="h-12 w-12 text-red-600 dark:text-red-400 mx-auto mb-4" />
           <h2 className="text-2xl font-black text-foreground mb-2">Error</h2>
-          <p className="text-secondary mb-6">{error || 'No domain selected'}</p>
+          <p className="text-muted-foreground mb-6">{error || 'No domain selected'}</p>
           <Button onClick={() => router.push('/mock-interviews')} variant="outline">
             Go Back
           </Button>
@@ -483,19 +483,19 @@ function AudioMockInterviewContent() {
         >
           <div className="text-center mb-8">
             <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Radio className="h-10 w-10 text-primary-foreground dark:text-foreground" />
+              <Radio className="h-10 w-10 text-white" />
             </div>
             <h1 className="text-3xl font-black text-foreground mb-2">
               AI Voice Mock Interview
             </h1>
-            <p className="text-secondary">
+            <p className="text-muted-foreground">
               Real-time conversation with AI interviewer • {questions.length} domain-specific questions
             </p>
           </div>
 
           <div className="space-y-4 mb-8">
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-purple-50 border border-purple-200">
-              <Sparkles className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-500/20">
+              <Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-bold text-foreground mb-1">How It Works</h3>
                 <ul className="text-sm text-foreground space-y-1">
@@ -507,8 +507,8 @@ function AudioMockInterviewContent() {
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 border border-blue-200">
-              <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20">
+              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-bold text-foreground mb-1">Requirements</h3>
                 <ul className="text-sm text-foreground space-y-1">
@@ -523,13 +523,13 @@ function AudioMockInterviewContent() {
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 rounded-xl bg-surface border border-border text-center">
                 <p className="text-2xl font-black text-foreground mb-1">{questions.length}</p>
-                <p className="text-xs font-bold text-secondary">Questions</p>
+                <p className="text-xs font-bold text-muted-foreground">Questions</p>
               </div>
               <div className="p-4 rounded-xl bg-surface border border-border text-center">
                 <p className="text-2xl font-black text-foreground mb-1">
                   ~{Math.floor(questions.reduce((acc, q) => acc + q.timeLimit, 0) / 60)} min
                 </p>
-                <p className="text-xs font-bold text-secondary">Total Duration</p>
+                <p className="text-xs font-bold text-muted-foreground">Total Duration</p>
               </div>
             </div>
           </div>
@@ -555,7 +555,7 @@ function AudioMockInterviewContent() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
-                  <span className="text-primary-foreground dark:text-foreground text-sm font-black">{currentQuestionIndex + 1}</span>
+                  <span className="text-white text-sm font-black">{currentQuestionIndex + 1}</span>
                 </div>
                 <div>
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -569,9 +569,9 @@ function AudioMockInterviewContent() {
             {isRecording && (
               <div className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-lg font-bold",
-                timeRemaining < 30 ? "bg-red-100 text-red-700 animate-pulse" :
-                timeRemaining < 60 ? "bg-orange-100 text-orange-700" :
-                "bg-blue-100 text-blue-700"
+                timeRemaining < 30 ? "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400 animate-pulse" :
+                timeRemaining < 60 ? "bg-orange-100 dark:bg-orange-950/20 text-orange-700" :
+                "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400"
               )}>
                 <Clock className="h-5 w-5" />
                 {formatTime(timeRemaining)}
@@ -580,7 +580,7 @@ function AudioMockInterviewContent() {
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+          <div className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
@@ -607,11 +607,11 @@ function AudioMockInterviewContent() {
                 ? "bg-gradient-to-br from-purple-500 to-pink-600 scale-110 animate-pulse"
                 : "bg-gradient-to-br from-purple-500 to-pink-600"
             )}>
-              <Bot className="h-7 w-7 text-primary-foreground dark:text-foreground" />
+              <Bot className="h-7 w-7 text-white" />
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <p className="text-xs font-bold text-purple-600 uppercase tracking-wider">
+                <p className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
                   AI Interviewer
                 </p>
                 {isAIPlaying && (
@@ -620,9 +620,9 @@ function AudioMockInterviewContent() {
                     transition={{ duration: 1.5, repeat: Infinity }}
                     className="flex items-center gap-1"
                   >
-                    <div className="w-1 h-1 bg-purple-600 rounded-full" />
-                    <div className="w-1 h-1 bg-purple-600 rounded-full" />
-                    <div className="w-1 h-1 bg-purple-600 rounded-full" />
+                    <div className="w-1 h-1 bg-purple-600 dark:bg-purple-800 rounded-full" />
+                    <div className="w-1 h-1 bg-purple-600 dark:bg-purple-800 rounded-full" />
+                    <div className="w-1 h-1 bg-purple-600 dark:bg-purple-800 rounded-full" />
                   </motion.div>
                 )}
               </div>
@@ -645,7 +645,7 @@ function AudioMockInterviewContent() {
                     onClick={stopSpeaking}
                     variant="outline"
                     size="sm"
-                    className="font-semibold text-red-600"
+                    className="font-semibold text-red-600 dark:text-red-400"
                   >
                     <Square className="h-4 w-4 mr-2" />
                     Stop
@@ -669,7 +669,7 @@ function AudioMockInterviewContent() {
                 ) : null}
               </div>
               {speechError && (
-                <p className="mt-3 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <p className="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg px-3 py-2">
                   {speechError}
                 </p>
               )}
@@ -677,10 +677,10 @@ function AudioMockInterviewContent() {
           </div>
 
           <div className="p-4 rounded-xl bg-surface border border-border flex items-center justify-between">
-            <div className="text-sm text-secondary">
+            <div className="text-sm text-muted-foreground">
               <span className="font-bold">Time Limit:</span> {Math.floor(currentQuestion.timeLimit / 60)} min {currentQuestion.timeLimit % 60} sec
             </div>
-            <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-3 py-1 rounded-full bg-slate-200">
+            <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-3 py-1 rounded-full bg-slate-200 dark:bg-slate-800">
               {currentQuestion.difficulty}
             </div>
           </div>
@@ -696,7 +696,7 @@ function AudioMockInterviewContent() {
                   ? "bg-gradient-to-br from-red-500 to-rose-600 animate-pulse"
                   : "bg-gradient-to-br from-blue-500 to-cyan-600"
               )}>
-                <User className="h-6 w-6 text-primary-foreground dark:text-foreground" />
+                <User className="h-6 w-6 text-white" />
               </div>
               <div>
                 <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Your Answer</p>
@@ -770,12 +770,12 @@ function AudioMockInterviewContent() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-secondary" />
+                <FileText className="h-4 w-4 text-muted-foreground" />
                 <h3 className="text-sm font-black text-foreground">Live Transcription</h3>
               </div>
               <button
                 onClick={() => setShowTranscript(!showTranscript)}
-                className="text-xs font-bold text-blue-600 hover:text-blue-700"
+                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:text-blue-400"
               >
                 {showTranscript ? 'Hide' : 'Show'}
               </button>
@@ -795,7 +795,7 @@ function AudioMockInterviewContent() {
                         {transcription}
                       </p>
                     ) : (
-                      <p className="text-sm text-slate-400 italic">
+                      <p className="text-sm text-muted-foreground italic">
                         {isRecording ? 'Listening... Start speaking' : 'Your speech will appear here'}
                       </p>
                     )}
@@ -844,17 +844,17 @@ function AudioMockInterviewContent() {
                   idx === currentQuestionIndex
                     ? "bg-purple-50 border-purple-500"
                     : answers[idx]
-                    ? "bg-emerald-50 border-emerald-300"
+                    ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30"
                     : "bg-surface border-border"
                 )}
               >
                 <div className={cn(
                   "w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2",
                   idx === currentQuestionIndex
-                    ? "bg-gradient-to-br from-purple-500 to-pink-600 text-primary-foreground dark:text-foreground"
+                    ? "bg-gradient-to-br from-purple-500 to-pink-600 text-white"
                     : answers[idx]
-                    ? "bg-gradient-to-br from-emerald-500 to-green-600 text-primary-foreground dark:text-foreground"
-                    : "bg-slate-200 text-secondary"
+                    ? "bg-gradient-to-br from-emerald-500 to-green-600 text-white"
+                    : "bg-slate-200 dark:bg-slate-800 text-muted-foreground"
                 )}>
                   {answers[idx] ? (
                     <CheckCircle2 className="h-4 w-4" />
@@ -862,7 +862,7 @@ function AudioMockInterviewContent() {
                     <span className="text-sm font-black">{idx + 1}</span>
                   )}
                 </div>
-                <p className="text-xs font-bold text-secondary capitalize truncate">{q.difficulty}</p>
+                <p className="text-xs font-bold text-muted-foreground capitalize truncate">{q.difficulty}</p>
               </div>
             ))}
           </div>

@@ -84,7 +84,7 @@ function CodeBlockGroup({
       {(before || after) && (
         <p
           className={`text-[11px] font-bold uppercase tracking-widest mb-3 ${
-            d ? "text-muted-foreground" : "text-slate-400"
+            d ? "text-muted-foreground" : "text-muted-foreground"
           }`}
         >
           In code — see the difference:
@@ -108,14 +108,14 @@ function CodeBlockGroup({
                     d ? "dark:bg-surface" : "bg-surface"
                   }`}
                 >
-                  <span className="h-2 w-2 rounded-full bg-red-400 shrink-0" />
-                  <span className="text-[11px] font-bold text-red-400 uppercase tracking-wider">
+                  <span className="h-2 w-2 rounded-full bg-red-400 dark:bg-red-800 shrink-0" />
+                  <span className="text-[11px] font-bold text-red-400 dark:text-red-300 uppercase tracking-wider">
                     Without
                   </span>
                   {before.sectionTitle && (
                     <span
                       className={`text-[11px] ml-1 ${
-                        d ? "text-slate-400" : "text-muted-foreground"
+                        d ? "text-muted-foreground" : "text-muted-foreground"
                       }`}
                     >
                       — {before.sectionTitle}
@@ -129,7 +129,7 @@ function CodeBlockGroup({
               {beforeNote && (
                 <div
                   className={`text-[13px] italic leading-relaxed mt-2 ${
-                    d ? "text-slate-400" : "text-muted-foreground"
+                    d ? "text-muted-foreground" : "text-muted-foreground"
                   }`}
                 >
                   <MarkdownContent content={beforeNote} />
@@ -142,17 +142,17 @@ function CodeBlockGroup({
       {before && after && (
         <div className="flex items-center gap-2 py-1">
           <div
-            className={`h-px flex-1 ${d ? "bg-slate-700/60" : "bg-slate-200"}`}
+            className={`h-px flex-1 ${d ? "bg-slate-700/60" : "bg-slate-200 dark:bg-slate-800"}`}
           />
           <span
             className={`text-[10px] font-bold uppercase tracking-widest ${
-              d ? "text-muted-foreground" : "text-slate-400"
+              d ? "text-muted-foreground" : "text-muted-foreground"
             }`}
           >
             vs
           </span>
           <div
-            className={`h-px flex-1 ${d ? "bg-slate-700/60" : "bg-slate-200"}`}
+            className={`h-px flex-1 ${d ? "bg-slate-700/60" : "bg-slate-200 dark:bg-slate-800"}`}
           />
         </div>
       )}
@@ -174,14 +174,14 @@ function CodeBlockGroup({
                     d ? "dark:bg-surface" : "bg-surface"
                   }`}
                 >
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
-                  <span className="text-[11px] font-bold text-emerald-500 uppercase tracking-wider">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 dark:bg-emerald-800 shrink-0" />
+                  <span className="text-[11px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">
                     With
                   </span>
                   {after.sectionTitle && (
                     <span
                       className={`text-[11px] ml-1 ${
-                        d ? "text-slate-400" : "text-muted-foreground"
+                        d ? "text-muted-foreground" : "text-muted-foreground"
                       }`}
                     >
                       — {after.sectionTitle}
@@ -195,7 +195,7 @@ function CodeBlockGroup({
               {afterNote && (
                 <div
                   className={`text-[13px] leading-relaxed mt-2 ${
-                    d ? "text-slate-400" : "text-muted-foreground"
+                    d ? "text-muted-foreground" : "text-muted-foreground"
                   }`}
                 >
                   <MarkdownContent content={afterNote} />
@@ -249,11 +249,11 @@ export function DetailedExplanation({
         }`}
       >
         <BookOpen
-          className={`h-3.5 w-3.5 ${d ? "text-slate-300" : "text-muted-foreground"}`}
+          className={`h-3.5 w-3.5 ${d ? "text-muted-foreground" : "text-muted-foreground"}`}
         />
         <span
           className={`text-[11px] font-bold uppercase tracking-widest ${
-            d ? "text-slate-300" : "text-muted-foreground"
+            d ? "text-muted-foreground" : "text-muted-foreground"
           }`}
         >
           Under the Hood
@@ -291,10 +291,10 @@ export function DetailedExplanation({
           }`}
         >
           <div className="flex items-center gap-2 mb-4">
-            <MessageCircle className="h-3.5 w-3.5 text-indigo-400" />
+            <MessageCircle className="h-3.5 w-3.5 text-indigo-400 dark:text-indigo-300" />
             <span
               className={`text-[11px] font-bold uppercase tracking-widest ${
-                d ? "text-slate-300" : "text-muted-foreground"
+                d ? "text-muted-foreground" : "text-muted-foreground"
               }`}
             >
               Follow-up Questions
@@ -306,15 +306,15 @@ export function DetailedExplanation({
                 <span
                   className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
                     d
-                      ? "bg-indigo-800 text-indigo-200"
-                      : "bg-indigo-100 text-indigo-700"
+                      ? "bg-indigo-800 dark:bg-indigo-800 text-indigo-200"
+                      : "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400"
                   }`}
                 >
                   {i + 1}
                 </span>
                 <span
                   className={`text-[15px] leading-relaxed ${
-                    d ? "text-slate-100" : "text-foreground"
+                    d ? "text-muted-foreground" : "text-foreground"
                   }`}
                 >
                   {q}
@@ -343,10 +343,10 @@ function SectionRenderer({
   const title = section.sectionTitle || "";
 
   const bodyText = d
-    ? "text-[15.5px] leading-[1.78] text-slate-100"
+    ? "text-[15.5px] leading-[1.78] text-muted-foreground"
     : "text-[15.5px] leading-[1.78] text-foreground";
   const headingText = d
-    ? "text-[18px] font-bold text-slate-100 tracking-tight"
+    ? "text-[18px] font-bold text-muted-foreground tracking-tight"
     : "text-[18px] font-bold text-foreground tracking-tight";
 
   /* ── Overview / plain explanation ── */
@@ -374,8 +374,8 @@ function SectionRenderer({
           <h3 className={`flex items-center gap-2.5 ${headingText} mb-4 leading-snug`}>
             {phaseIndex !== undefined && (
               <span
-                className={`flex h-6 w-6 items-center justify-center rounded-md text-primary-foreground dark:text-foreground text-[11px] font-bold shrink-0 ${
-                  d ? "bg-slate-600" : "bg-slate-700"
+                className={`flex h-6 w-6 items-center justify-center rounded-md text-white text-[11px] font-bold shrink-0 ${
+                  d ? "bg-slate-600 dark:bg-slate-800" : "bg-slate-700 dark:bg-slate-800"
                 }`}
               >
                 {phaseIndex}
@@ -396,10 +396,10 @@ function SectionRenderer({
     return (
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <BookOpen className="h-3.5 w-3.5 text-blue-400" />
+          <BookOpen className="h-3.5 w-3.5 text-blue-400 dark:text-blue-300" />
           <span
             className={`text-[13px] font-bold ${
-              d ? "text-blue-300" : "text-blue-700"
+              d ? "text-blue-300" : "text-blue-700 dark:text-blue-400"
             }`}
           >
             {title || "Code Example"}
@@ -424,10 +424,10 @@ function SectionRenderer({
       <div>
         {title && (
           <div className="flex items-center gap-2 mb-3">
-            <Layers className="h-3.5 w-3.5 text-blue-400" />
+            <Layers className="h-3.5 w-3.5 text-blue-400 dark:text-blue-300" />
             <h3
               className={`text-[13px] font-bold ${
-                d ? "text-slate-200" : "text-foreground"
+                d ? "text-muted-foreground" : "text-foreground"
               }`}
             >
               {title}
@@ -445,10 +445,10 @@ function SectionRenderer({
       <div>
         {title && (
           <div className="flex items-center gap-2 mb-2">
-            <Layers className="h-3.5 w-3.5 text-indigo-400" />
+            <Layers className="h-3.5 w-3.5 text-indigo-400 dark:text-indigo-300" />
             <h3
               className={`text-[13px] font-bold ${
-                d ? "text-slate-300" : "text-secondary"
+                d ? "text-muted-foreground" : "text-muted-foreground"
               }`}
             >
               {title}
@@ -458,8 +458,8 @@ function SectionRenderer({
         <div
           className={`rounded-xl px-5 py-5 overflow-x-auto border ${
             d
-              ? "bg-slate-950 text-slate-200 border-border/50"
-              : "dark:bg-surface text-slate-200 border-border/50"
+              ? "bg-slate-950 text-muted-foreground border-border/50"
+              : "dark:bg-surface text-muted-foreground border-border/50"
           }`}
         >
           <pre className="text-[12.5px] leading-relaxed font-mono whitespace-pre max-w-full">
@@ -476,13 +476,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#101a2a] border-blue-700/60"
-            : "bg-blue-50/60 border-blue-200/70"
+            ? "bg-[#101a2a] border-blue-700 dark:border-blue-700/60"
+            : "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 border-blue-200 dark:border-blue-500/20/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Zap className="h-3.5 w-3.5 text-blue-400" />
-          <span className="text-[11px] font-bold text-blue-500 uppercase tracking-wide">
+          <Zap className="h-3.5 w-3.5 text-blue-400 dark:text-blue-300" />
+          <span className="text-[11px] font-bold text-blue-500 dark:text-blue-400 uppercase tracking-wide">
             {title || "Key Points"}
           </span>
         </div>
@@ -503,13 +503,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#0d1c14] border-emerald-700/50"
-            : "bg-emerald-50/60 border-emerald-200/70"
+            ? "bg-[#0d1c14] border-emerald-700 dark:border-emerald-700/50"
+            : "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 border-emerald-200 dark:border-emerald-500/20/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
-          <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wide">
+          <CheckCircle className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
             {title || "Best Practices"}
           </span>
         </div>
@@ -531,13 +531,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#1a1408] border-amber-700/50"
-            : "bg-amber-50/60 border-amber-200/70"
+            ? "bg-[#1a1408] border-amber-700 dark:border-amber-700/50"
+            : "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 border-amber-200 dark:border-amber-500/20/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-          <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wide">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
             {title || "Watch Out"}
           </span>
         </div>
@@ -554,13 +554,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#10102a] border-indigo-700/50"
-            : "bg-indigo-50/60 border-indigo-200/70"
+            ? "bg-[#10102a] border-indigo-700 dark:border-indigo-700/50"
+            : "bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/60 border-indigo-200 dark:border-indigo-500/20/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Layers className="h-3.5 w-3.5 text-indigo-500" />
-          <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wide">
+          <Layers className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
+          <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
             {title || "Real World"}
           </span>
         </div>
@@ -577,8 +577,8 @@ function SectionRenderer({
       <div>
         {title && (
           <div className="flex items-center gap-2 mb-3">
-            <ClipboardList className={`h-3.5 w-3.5 ${d ? "text-indigo-400" : "text-indigo-500"}`} />
-            <h3 className={`text-[13px] font-bold ${d ? "text-indigo-300" : "text-indigo-700"}`}>
+            <ClipboardList className={`h-3.5 w-3.5 ${d ? "text-indigo-400 dark:text-indigo-300" : "text-indigo-500 dark:text-indigo-400"}`} />
+            <h3 className={`text-[13px] font-bold ${d ? "text-indigo-300" : "text-indigo-700 dark:text-indigo-400"}`}>
               {title}
             </h3>
           </div>
@@ -596,16 +596,16 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#10102a] border-indigo-700/50"
-            : "bg-indigo-50/60 border-indigo-200/70"
+            ? "bg-[#10102a] border-indigo-700 dark:border-indigo-700/50"
+            : "bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/60 border-indigo-200 dark:border-indigo-500/20/70"
         }`}
       >
         {title && (
           <div className="flex items-center gap-1.5 mb-2">
-            <Layers className="h-3.5 w-3.5 text-indigo-500" />
+            <Layers className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
             <h3
               className={`text-[13px] font-bold ${
-                d ? "text-indigo-300" : "text-indigo-700"
+                d ? "text-indigo-300" : "text-indigo-700 dark:text-indigo-400"
               }`}
             >
               {title}
@@ -625,17 +625,17 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#272727] border-slate-600/60"
+            ? "bg-[#272727] border-slate-600 dark:border-slate-700/60"
             : "bg-surface border-border/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
           <ClipboardList
-            className={`h-3.5 w-3.5 ${d ? "text-slate-400" : "text-muted-foreground"}`}
+            className={`h-3.5 w-3.5 ${d ? "text-muted-foreground" : "text-muted-foreground"}`}
           />
           <span
             className={`text-[11px] font-bold uppercase tracking-wide ${
-              d ? "text-slate-400" : "text-muted-foreground"
+              d ? "text-muted-foreground" : "text-muted-foreground"
             }`}
           >
             {title || "Requirements"}
@@ -654,13 +654,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#1a1408] border-amber-700/50"
-            : "bg-amber-50/60 border-amber-200/70"
+            ? "bg-[#1a1408] border-amber-700 dark:border-amber-700/50"
+            : "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 border-amber-200 dark:border-amber-500/20/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
-          <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wide">
+          <Lightbulb className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
             {title || "Approach"}
           </span>
         </div>
@@ -677,13 +677,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#1c0e0e] border-red-700/50"
-            : "bg-red-50/60 border-red-200/70"
+            ? "bg-[#1c0e0e] border-red-700 dark:border-red-700/50"
+            : "bg-red-50 dark:bg-red-500/10 dark:bg-red-950/20/60 border-red-200 dark:border-red-500/20/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Bug className="h-3.5 w-3.5 text-red-500" />
-          <span className="text-[11px] font-bold text-red-600 uppercase tracking-wide">
+          <Bug className="h-3.5 w-3.5 text-red-500 dark:text-red-400" />
+          <span className="text-[11px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wide">
             {title || "The Problem"}
           </span>
         </div>
@@ -700,13 +700,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#1a1408] border-amber-700/50"
-            : "bg-amber-50/60 border-amber-200/70"
+            ? "bg-[#1a1408] border-amber-700 dark:border-amber-700/50"
+            : "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 border-amber-200 dark:border-amber-500/20/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Search className="h-3.5 w-3.5 text-amber-500" />
-          <span className="text-[11px] font-bold text-amber-600 uppercase tracking-wide">
+          <Search className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
             {title || "Diagnosis"}
           </span>
         </div>
@@ -723,14 +723,14 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#272727] border-slate-600/60"
+            ? "bg-[#272727] border-slate-600 dark:border-slate-700/60"
             : "bg-surface border-border/70"
         }`}
       >
         {title && (
           <h3
             className={`text-[13px] font-bold mb-1.5 ${
-              d ? "text-slate-300" : "text-secondary"
+              d ? "text-muted-foreground" : "text-muted-foreground"
             }`}
           >
             {title}
@@ -749,17 +749,17 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#272727] border-slate-600/60"
+            ? "bg-[#272727] border-slate-600 dark:border-slate-700/60"
             : "bg-surface border-border/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
           <List
-            className={`h-3.5 w-3.5 ${d ? "text-slate-400" : "text-muted-foreground"}`}
+            className={`h-3.5 w-3.5 ${d ? "text-muted-foreground" : "text-muted-foreground"}`}
           />
           <span
             className={`text-[11px] font-bold uppercase tracking-wide ${
-              d ? "text-slate-400" : "text-muted-foreground"
+              d ? "text-muted-foreground" : "text-muted-foreground"
             }`}
           >
             {title || "Reference"}
@@ -778,13 +778,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#0d1c14] border-emerald-700/50"
-            : "bg-emerald-50/60 border-emerald-200/70"
+            ? "bg-[#0d1c14] border-emerald-700 dark:border-emerald-700/50"
+            : "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 border-emerald-200 dark:border-emerald-500/20/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Wrench className="h-3.5 w-3.5 text-emerald-500" />
-          <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wide">
+          <Wrench className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
             {title || "When to Use"}
           </span>
         </div>
@@ -801,13 +801,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#150f24] border-purple-700/50"
-            : "bg-purple-50/60 border-purple-200/70"
+            ? "bg-[#150f24] border-purple-700 dark:border-purple-700/50"
+            : "bg-purple-50 dark:bg-purple-950/20/60 border-purple-200 dark:border-purple-500/20/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Target className="h-3.5 w-3.5 text-purple-500" />
-          <span className="text-[11px] font-bold text-purple-600 uppercase tracking-wide">
+          <Target className="h-3.5 w-3.5 text-purple-500 dark:text-purple-400" />
+          <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
             {title || "Practice"}
           </span>
         </div>
@@ -824,10 +824,10 @@ function SectionRenderer({
     return (
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <MessageCircle className="h-3.5 w-3.5 text-indigo-400" />
+          <MessageCircle className="h-3.5 w-3.5 text-indigo-400 dark:text-indigo-300" />
           <span
             className={`text-[11px] font-bold uppercase tracking-wide ${
-              d ? "text-slate-400" : "text-muted-foreground"
+              d ? "text-muted-foreground" : "text-muted-foreground"
             }`}
           >
             Follow-up Questions
@@ -851,17 +851,17 @@ function SectionRenderer({
       <div
         className={`rounded-lg border ${
           d
-            ? "bg-[#0e1a10] border-emerald-800/50"
-            : "bg-emerald-50/70 border-emerald-200/80"
+            ? "bg-[#0e1a10] border-emerald-800 dark:border-emerald-700/50"
+            : "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/70 border-emerald-200 dark:border-emerald-500/20/80"
         }`}
       >
         <div
           className={`flex items-center gap-2 px-4 py-2.5 border-b ${
-            d ? "border-emerald-800/40" : "border-emerald-200/60"
+            d ? "border-emerald-800 dark:border-emerald-700/40" : "border-emerald-200 dark:border-emerald-500/20/60"
           }`}
         >
-          <MessageCircle className="h-3.5 w-3.5 text-emerald-500" />
-          <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wide">
+          <MessageCircle className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
             {title || "How to Answer in Interview"}
           </span>
         </div>
@@ -878,13 +878,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#10102a] border-indigo-700/50"
-            : "bg-indigo-50/60 border-indigo-200/70"
+            ? "bg-[#10102a] border-indigo-700 dark:border-indigo-700/50"
+            : "bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/60 border-indigo-200 dark:border-indigo-500/20/70"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Layers className="h-3.5 w-3.5 text-indigo-500" />
-          <span className="text-[11px] font-bold text-indigo-600 uppercase tracking-wide">
+          <Layers className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
+          <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
             {title || "Trade-offs"}
           </span>
         </div>

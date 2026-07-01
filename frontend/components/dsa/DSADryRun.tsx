@@ -13,12 +13,12 @@ import type { DSADryRun } from "@/lib/contentV2-types";
  */
 export function DSADryRun({ run }: { run: DSADryRun }) {
   return (
-    <figure className="my-4 rounded-lg border border-indigo-200 bg-background overflow-hidden">
-      <figcaption className="px-4 py-2 bg-indigo-50 border-b border-indigo-200 flex items-center justify-between gap-3 flex-wrap">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-700">
+    <figure className="my-4 rounded-lg border border-indigo-200 dark:border-indigo-500/20 bg-background overflow-hidden">
+      <figcaption className="px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 border-b border-indigo-200 dark:border-indigo-500/20 flex items-center justify-between gap-3 flex-wrap">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-400">
           Dry-run on paper
         </span>
-        <code className="text-[11px] font-mono text-foreground bg-background border border-indigo-100 rounded px-2 py-0.5">
+        <code className="text-[11px] font-mono text-foreground bg-background border border-indigo-100 dark:border-indigo-500/20 rounded px-2 py-0.5">
           {run.input}
         </code>
       </figcaption>
@@ -40,11 +40,11 @@ export function DSADryRun({ run }: { run: DSADryRun }) {
               <th className="px-3 py-1.5 text-left font-bold">State after</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {run.steps.map((s, i) => (
               <tr
                 key={i}
-                className={s.note ? "bg-emerald-50/50" : "hover:bg-surface/50"}
+                className={s.note ? "bg-emerald-50/50 dark:bg-emerald-500/10" : "hover:bg-surface/50"}
               >
                 <td className="px-3 py-2 align-top">
                   <code className="font-mono text-foreground text-[11.5px]">
@@ -54,14 +54,14 @@ export function DSADryRun({ run }: { run: DSADryRun }) {
                 <td className="px-3 py-2 align-top text-foreground leading-relaxed">
                   {s.action}
                   {s.note && (
-                    <div className="mt-1 text-[11px] text-emerald-700 font-semibold flex items-start gap-1">
+                    <div className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold flex items-start gap-1">
                       <span aria-hidden="true">→</span>
                       <span>{s.note}</span>
                     </div>
                   )}
                 </td>
                 <td className="px-3 py-2 align-top">
-                  <code className="font-mono text-[11.5px] text-foreground bg-surface border border-slate-100 rounded px-1.5 py-0.5 inline-block break-all">
+                  <code className="font-mono text-[11.5px] text-foreground bg-surface border border-slate-100 dark:border-slate-800/60 rounded px-1.5 py-0.5 inline-block break-all">
                     {s.state}
                   </code>
                 </td>
@@ -71,8 +71,8 @@ export function DSADryRun({ run }: { run: DSADryRun }) {
         </table>
       </div>
 
-      <div className="px-4 py-2.5 bg-emerald-50 border-t border-emerald-200 flex items-baseline gap-2 flex-wrap">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">
+      <div className="px-4 py-2.5 bg-emerald-50 dark:bg-emerald-500/10 border-t border-emerald-200 dark:border-emerald-500/20 flex items-baseline gap-2 flex-wrap">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
           Result
         </span>
         <code className="font-mono text-[12px] text-foreground">

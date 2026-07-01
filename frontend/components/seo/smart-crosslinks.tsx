@@ -64,9 +64,9 @@ export function SmartCrosslinks({
       className="mb-8 rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
     >
       {/* Header */}
-      <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-blue-50 to-white">
+      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-indigo-50 via-blue-50 to-white">
         <div className="flex items-center gap-2 mb-1">
-          <Sparkles className="h-4 w-4 text-indigo-600" />
+          <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           <h2
             id="smart-crosslinks-heading"
             className="text-[13px] font-black uppercase tracking-widest text-foreground"
@@ -74,7 +74,7 @@ export function SmartCrosslinks({
             Continue your prep
           </h2>
         </div>
-        <p className="text-[12px] text-secondary leading-snug">
+        <p className="text-[12px] text-muted-foreground leading-snug">
           Interviewers rarely ask {moduleTitle} in isolation. These are the
           modules that most often come up in the same loop.
         </p>
@@ -86,15 +86,15 @@ export function SmartCrosslinks({
           {/* Primary next-up card */}
           <Link
             href={`/${primary.seoSlug}`}
-            className="group block rounded-xl border-2 border-border bg-gradient-to-br from-white to-indigo-50/30 p-4 hover:border-indigo-400 hover:shadow-md transition-all"
+            className="group block rounded-xl border-2 border-border bg-gradient-to-br from-white to-indigo-50/30 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-4 hover:border-indigo-400 dark:border-indigo-700 hover:shadow-md transition-all"
           >
             <div className="flex items-start gap-4">
               <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
-                <GitBranch className="h-5 w-5 text-primary-foreground dark:text-foreground" />
+                <GitBranch className="h-5 w-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
                     Most relevant next step
                   </span>
                   {primary.questionCount > 0 && (
@@ -103,15 +103,15 @@ export function SmartCrosslinks({
                     </span>
                   )}
                 </div>
-                <div className="text-base font-black text-foreground group-hover:text-indigo-700 transition-colors leading-tight">
+                <div className="text-base font-black text-foreground group-hover:text-indigo-700 dark:text-indigo-400 transition-colors leading-tight">
                   {primary.title} Interview Questions
                 </div>
                 {primary.intro && (
-                  <div className="mt-1 text-[12px] text-secondary leading-snug line-clamp-2">
+                  <div className="mt-1 text-[12px] text-muted-foreground leading-snug line-clamp-2">
                     {primary.intro}
                   </div>
                 )}
-                <div className="mt-2 inline-flex items-center gap-1 text-[12px] font-bold text-indigo-600 group-hover:gap-2 transition-all">
+                <div className="mt-2 inline-flex items-center gap-1 text-[12px] font-bold text-indigo-600 dark:text-indigo-400 group-hover:gap-2 transition-all">
                   Open module
                   <ArrowRight className="h-3.5 w-3.5" />
                 </div>
@@ -126,10 +126,10 @@ export function SmartCrosslinks({
                 <Link
                   key={m.seoSlug}
                   href={`/${m.seoSlug}`}
-                  className="group block rounded-lg border border-border bg-background px-3.5 py-3 hover:border-blue-300 hover:bg-blue-50/40 transition-colors"
+                  className="group block rounded-lg border border-border bg-background px-3.5 py-3 hover:border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40 transition-colors"
                 >
                   <div className="flex items-baseline justify-between gap-2 mb-1">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                       Also useful
                     </span>
                     {m.questionCount > 0 && (
@@ -138,7 +138,7 @@ export function SmartCrosslinks({
                       </span>
                     )}
                   </div>
-                  <div className="text-[13px] font-black text-foreground group-hover:text-blue-700 transition-colors leading-snug line-clamp-2">
+                  <div className="text-[13px] font-black text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors leading-snug line-clamp-2">
                     {m.title}
                   </div>
                 </Link>
@@ -149,22 +149,22 @@ export function SmartCrosslinks({
       )}
 
       {/* Pillar link + complete track — unified footer tree */}
-      <div className="px-5 py-4 border-t border-slate-100 bg-surface/60 space-y-2.5">
+      <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/60 bg-surface/60 space-y-2.5">
         {pillar && (
           <Link
             href={`/${pillar.pillarSlug}`}
-            className="group flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border border-border hover:border-indigo-300 hover:shadow-sm transition-all"
+            className="group flex items-center gap-3 px-3 py-2.5 rounded-lg bg-background border border-border hover:border-indigo-300 dark:border-indigo-700 hover:shadow-sm transition-all"
           >
-            <Library className="h-4 w-4 text-indigo-500 shrink-0" />
+            <Library className="h-4 w-4 text-indigo-500 dark:text-indigo-400 shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 leading-none mb-0.5">
+              <div className="text-[11px] font-black uppercase tracking-widest text-muted-foreground leading-none mb-0.5">
                 Browse the pillar
               </div>
-              <div className="text-[13px] font-bold text-foreground group-hover:text-indigo-700 leading-snug truncate">
+              <div className="text-[13px] font-bold text-foreground group-hover:text-indigo-700 dark:text-indigo-400 leading-snug truncate">
                 Every {pillarTitle} module
               </div>
             </div>
-            <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+            <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-indigo-500 dark:text-indigo-400 group-hover:translate-x-0.5 transition-all shrink-0" />
           </Link>
         )}
 
@@ -172,16 +172,16 @@ export function SmartCrosslinks({
           href={completeTrack.href}
           className="group flex items-center gap-3 px-3 py-2.5 rounded-lg dark:bg-surface hover:dark:bg-surface transition-colors"
         >
-          <Compass className="h-4 w-4 text-indigo-300 shrink-0" />
+          <Compass className="h-4 w-4 text-indigo-300 dark:text-indigo-300 shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-black uppercase tracking-widest text-indigo-300 leading-none mb-0.5">
+            <div className="text-[11px] font-black uppercase tracking-widest text-indigo-300 dark:text-indigo-300 leading-none mb-0.5">
               Full roadmap
             </div>
-            <div className="text-[13px] font-bold text-primary-foreground dark:text-foreground leading-snug truncate">
+            <div className="text-[13px] font-bold text-white leading-snug truncate">
               {completeTrack.title}
             </div>
           </div>
-          <ArrowRight className="h-4 w-4 text-indigo-300 group-hover:translate-x-0.5 transition-all shrink-0" />
+          <ArrowRight className="h-4 w-4 text-indigo-300 dark:text-indigo-300 group-hover:translate-x-0.5 transition-all shrink-0" />
         </Link>
 
         <div className="flex justify-end">

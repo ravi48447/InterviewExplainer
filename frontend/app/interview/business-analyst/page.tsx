@@ -32,13 +32,13 @@ export default function BusinessAnalystPage() {
         </nav>
 
         <header className="mb-10">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-100 text-amber-700 rounded-full text-xs font-bold mb-4 uppercase tracking-wider">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 rounded-full text-xs font-bold mb-4 uppercase tracking-wider">
             <Briefcase className="h-3.5 w-3.5" /> Business Analyst Interview Prep
           </div>
           <h1 className="text-4xl font-black tracking-tight text-foreground mb-3">
             Business Analyst Interview Questions
           </h1>
-          <p className="text-lg text-secondary max-w-3xl leading-relaxed">
+          <p className="text-lg text-muted-foreground max-w-3xl leading-relaxed">
             Requirements gathering, stakeholder management, Agile, SQL basics, process mapping,
             and STAR behavioral questions — the complete BA prep guide. Coming soon.
           </p>
@@ -46,16 +46,16 @@ export default function BusinessAnalystPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {TOPICS.map(topic => (
-            <div key={topic.name} className="rounded-xl border border-amber-200 bg-background p-5 opacity-70">
+            <div key={topic.name} className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-background p-5 opacity-70">
               <div className="text-2xl mb-3">{topic.emoji}</div>
               <h3 className="font-black text-foreground mb-2">{topic.name}</h3>
-              <p className="text-xs text-secondary leading-relaxed">{topic.desc}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{topic.desc}</p>
               <div className="mt-3 text-[10px] font-bold px-2 py-1 bg-surface text-muted-foreground rounded-full inline-block">Coming Soon</div>
             </div>
           ))}
         </div>
 
-        <Link href="/interview" className="px-4 py-2 dark:bg-surface text-primary-foreground dark:text-foreground rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors">
+        <Link href="/interview" className="px-4 py-2 dark:bg-surface text-white rounded-lg text-sm font-bold hover:bg-slate-700 dark:bg-slate-800 transition-colors">
           ← Browse All Roles
         </Link>
       </div>

@@ -37,8 +37,8 @@ function ResetForm() {
   if (!token) {
     return (
       <div className="text-center space-y-4 py-4">
-        <p className="text-sm text-secondary">This reset link is missing or invalid.</p>
-        <Link href="/forgot-password" className="text-sm font-semibold text-blue-600 hover:underline">
+        <p className="text-sm text-muted-foreground">This reset link is missing or invalid.</p>
+        <Link href="/forgot-password" className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">
           Request a new link
         </Link>
       </div>
@@ -48,17 +48,17 @@ function ResetForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       {error && (
-        <div className="rounded-lg border border-red-100 bg-red-50 p-2.5 text-sm font-medium text-red-600">{error}</div>
+        <div className="rounded-lg border border-red-100 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 p-2.5 text-sm font-medium text-red-600 dark:text-red-400">{error}</div>
       )}
       <div className="space-y-2">
         <Label htmlFor="password">New password</Label>
         <div className="relative">
-          <KeyRound className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+          <KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
             id="password" type={show ? 'text' : 'password'} placeholder="At least 6 characters"
             value={password} onChange={(e) => setPassword(e.target.value)} className="pl-10 pr-10" autoFocus required minLength={6}
           />
-          <button type="button" onClick={() => setShow((s) => !s)} className="absolute right-3 top-3 text-slate-400 hover:text-secondary" tabIndex={-1} aria-label="Toggle password">
+          <button type="button" onClick={() => setShow((s) => !s)} className="absolute right-3 top-3 text-muted-foreground hover:text-muted-foreground" tabIndex={-1} aria-label="Toggle password">
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
@@ -66,14 +66,14 @@ function ResetForm() {
       <div className="space-y-2">
         <Label htmlFor="confirm">Confirm password</Label>
         <div className="relative">
-          <KeyRound className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+          <KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
             id="confirm" type={show ? 'text' : 'password'} placeholder="Re-enter password"
             value={confirm} onChange={(e) => setConfirm(e.target.value)} className="pl-10" required minLength={6}
           />
         </div>
       </div>
-      <Button type="submit" disabled={busy} className="w-full py-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-primary-foreground dark:text-foreground font-semibold">
+      <Button type="submit" disabled={busy} className="w-full py-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold">
         {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
         Reset password & sign in
       </Button>
@@ -87,7 +87,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md animate-fade-in-up">
         <Card className="border-border dark:border-border shadow-xl shadow-slate-200/50 dark:shadow-none">
           <CardHeader className="space-y-1 text-center">
-            <CardTitle className="text-2xl font-bold tracking-tight text-foreground dark:text-primary-foreground dark:text-foreground">
+            <CardTitle className="text-2xl font-bold tracking-tight text-foreground dark:text-white">
               Choose a new password
             </CardTitle>
             <CardDescription className="text-muted-foreground">
@@ -95,7 +95,7 @@ export default function ResetPasswordPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Suspense fallback={<div className="py-6 text-center text-sm text-slate-400">Loading…</div>}>
+            <Suspense fallback={<div className="py-6 text-center text-sm text-muted-foreground">Loading…</div>}>
               <ResetForm />
             </Suspense>
             <Link href="/login" className="mt-4 flex items-center justify-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">

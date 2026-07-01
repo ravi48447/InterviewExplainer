@@ -6,18 +6,18 @@ interface CompanyTagsBadgesProps {
 }
 
 const COMPANY_COLORS: Record<string, string> = {
-  amazon: "bg-orange-100 text-orange-700 border-orange-200",
-  google: "bg-blue-100 text-blue-700 border-blue-200",
-  meta: "bg-indigo-100 text-indigo-700 border-indigo-200",
-  microsoft: "bg-cyan-100 text-cyan-700 border-cyan-200",
-  netflix: "bg-red-100 text-red-700 border-red-200",
+  amazon: "bg-orange-100 dark:bg-orange-950/20 text-orange-700 border-orange-200",
+  google: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 border-blue-200",
+  meta: "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20",
+  microsoft: "bg-cyan-100 dark:bg-cyan-950/20 text-cyan-700 border-cyan-200",
+  netflix: "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/20",
   apple: "bg-surface text-foreground border-border",
-  stripe: "bg-violet-100 text-violet-700 border-violet-200",
+  stripe: "bg-violet-100 dark:bg-violet-950/20 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-500/20",
   uber: "bg-surface text-foreground border-border",
-  airbnb: "bg-rose-100 text-rose-700 border-rose-200",
-  linkedin: "bg-blue-100 text-blue-700 border-blue-200",
-  shopify: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  confluent: "bg-teal-100 text-teal-700 border-teal-200",
+  airbnb: "bg-rose-100 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20",
+  linkedin: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 border-blue-200",
+  shopify: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20",
+  confluent: "bg-teal-100 dark:bg-teal-950/20 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-500/20",
 };
 
 export function CompanyTagsBadges({ companyTags }: CompanyTagsBadgesProps) {
@@ -25,13 +25,13 @@ export function CompanyTagsBadges({ companyTags }: CompanyTagsBadgesProps) {
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+      <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       {companyTags.map(company => (
         <Link
           key={company}
           href={`/companies/${company}`}
           className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all hover:shadow-sm hover:scale-105 ${
-            COMPANY_COLORS[company] ?? "bg-surface text-secondary border-border"
+            COMPANY_COLORS[company] ?? "bg-surface text-muted-foreground border-border"
           }`}
         >
           {company.charAt(0).toUpperCase() + company.slice(1)}

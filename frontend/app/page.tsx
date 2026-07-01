@@ -25,12 +25,19 @@ import {
   type HomeStandoutPick,
 } from "@/components/landing/home-priority-grid";
 import {
+  FeatureCard,
+  FeatureCardIcon,
+  FeatureCardHeader,
+  FeatureCardDescription,
+  FeatureCardFooter,
+} from "@/components/landing/feature-card";
+import {
   ENABLED_LANGUAGES,
   LAUNCH_QUICK_PATHS,
   isHubEnabled,
 } from "@/lib/launch-config";
 import { getSubcategoriesWithQuestions } from "@/lib/content-reader";
-import { AuthRedirect } from "@/components/landing/auth-redirect";
+
 
 // Every language we intend to support, ever. `available` is derived from
 // launch-config so the ROADMAP and UI can't drift apart.
@@ -266,7 +273,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AuthRedirect />
+
       {/* ── Hero ── */}
       <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-surface">
         <div className="absolute inset-0">
@@ -278,9 +285,9 @@ export default function HomePage() {
           <div className="w-full min-w-0">
             <div className="grid lg:grid-cols-2 gap-16 items-center">
               <div className="animate-fade-in-left">
-                <div className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary/10 border border-primary/20 rounded-full mb-8 shadow-sm animate-fade-in-up anim-delay-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  <span className="text-sm font-bold text-primary">Built for developers, by developers</span>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-full mb-8 shadow-sm animate-fade-in-up anim-delay-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <span className="text-xs font-bold text-primary">Built for developers, by developers</span>
                 </div>
 
                 <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black text-foreground mb-6 leading-[1.05] animate-fade-in-up anim-delay-3">
@@ -300,10 +307,10 @@ export default function HomePage() {
                   <HeroActions />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-8 animate-fade-in-up anim-delay-6">
+                <div className="flex flex-wrap items-center gap-4 animate-fade-in-up anim-delay-6">
                   {["100% Free to Browse", `${(ENABLED_LANGUAGES as readonly string[]).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' & ')} Content Live`, "Sign up to track progress"].map((text, idx) => (
                     <div key={idx} className="flex items-center gap-2 text-muted-foreground">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
                       <span className="font-semibold">{text}</span>
                     </div>
                   ))}
@@ -317,8 +324,6 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-
-      {standoutPicks.length > 0 && <HomeStandoutPicks picks={standoutPicks} />}
 
       {/* ── Pillars (only shown if we've enabled more than Interview Q&A) ── */}
       {PILLARS.length > 1 && (
@@ -339,26 +344,51 @@ export default function HomePage() {
               </div>
 
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {PILLARS.map((pillar) => (
-                  <Link href={pillar.href} key={pillar.title}>
-                    <div className="group h-full relative bg-card border border-border rounded-xl p-6 hover:shadow-xl hover:border-primary/30 hover:-translate-y-1 transition-all duration-300">
-                      <div className={`w-12 h-12 bg-gradient-to-br ${pillar.gradient} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-all duration-300`}>
-                        <pillar.icon className="h-6 w-6 text-white" />
-                      </div>
-                      <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-primary transition-colors">{pillar.title}</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed mb-4">{pillar.desc}</p>
-                      <div className="flex items-center justify-between pt-3 border-t border-border">
-                        <span className="text-xs font-bold text-primary">{pillar.stat}</span>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                {/* 1. DSA Problems */}
+                <FeatureCard href="/dsa">
+                  <FeatureCardIcon
+                    icon={<Code2 className="h-6 w-6 text-white" />}
+                    gradient="from-violet-500 to-purple-600"
+                  />
+                  <FeatureCardHeader>DSA Problems</FeatureCardHeader>
+                  <FeatureCardDescription>
+                    Pattern-based coding practice organized by core patterns — two pointers, sliding window, DP, graphs.
+                  </FeatureCardDescription>
+                  <FeatureCardFooter stat="450+ Problems" />
+                </FeatureCard>
+
+                {/* 2. Java Learning Paths */}
+                <FeatureCard href="/java">
+                  <FeatureCardIcon
+                    icon={<TechIcon name="java" className="h-6 w-6 brightness-0 invert" />}
+                    gradient="from-orange-500 to-red-600"
+                  />
+                  <FeatureCardHeader>Java Learning Paths</FeatureCardHeader>
+                  <FeatureCardDescription>
+                    Structured roadmaps covering Core Java, Backend Development, Spring Boot, System Design, Microservices, and Full Stack preparation.
+                  </FeatureCardDescription>
+                  <FeatureCardFooter stat="4 Learning Paths" />
+                </FeatureCard>
+
+                {/* 3. Interview Q&A */}
+                <FeatureCard href="/domains">
+                  <FeatureCardIcon
+                    icon={<BookOpen className="h-6 w-6 text-white" />}
+                    gradient="from-blue-500 to-indigo-600"
+                  />
+                  <FeatureCardHeader>Interview Q&A</FeatureCardHeader>
+                  <FeatureCardDescription>
+                    Domain-specific questions tailored to your language, track, and experience level.
+                  </FeatureCardDescription>
+                  <FeatureCardFooter stat="400+ Questions" />
+                </FeatureCard>
               </div>
             </div>
           </div>
         </section>
       )}
+
+      {standoutPicks.length > 0 && <HomeStandoutPicks picks={standoutPicks} />}
 
       {/* ── Choose Language ── */}
       <section className="py-20 bg-surface">
@@ -448,7 +478,7 @@ export default function HomePage() {
             </div>
 
             <div className="text-center mt-12">
-              <Link href="/domains" className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-white font-bold text-lg rounded-xl hover:shadow-xl hover:opacity-90 transition-all">
+              <Link href="/domains" className="inline-flex items-center gap-2 px-8 py-4 bg-primary text-primary-foreground font-bold text-lg rounded-xl hover:shadow-xl hover:opacity-90 transition-all">
                 Browse All Career Paths
                 <ArrowRight className="h-5 w-5" />
               </Link>
@@ -497,9 +527,9 @@ export default function HomePage() {
                 { value: "∞", label: "Free Forever", Icon: Star },
               ].map((stat) => (
                 <div key={stat.label}>
-                  <stat.Icon className="h-10 w-10 text-white/60 mx-auto mb-4" />
-                  <div className="text-5xl font-black text-white mb-2">{stat.value}</div>
-                  <div className="text-base text-white/80 font-semibold">{stat.label}</div>
+                  <stat.Icon className="h-10 w-10 text-primary-foreground/60 mx-auto mb-4" />
+                  <div className="text-5xl font-black text-primary-foreground mb-2">{stat.value}</div>
+                  <div className="text-base text-primary-foreground/80 font-semibold">{stat.label}</div>
                 </div>
               ))}
             </div>

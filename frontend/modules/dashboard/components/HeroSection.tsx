@@ -49,7 +49,7 @@ export function HeroSection({
   initialsOf,
 }: HeroSectionProps) {
   return (
-    <div className="relative bg-foreground dark:bg-background text-primary-foreground dark:text-foreground border-b border-default">
+    <div className="dark relative bg-background text-foreground border-b border-default">
       <div aria-hidden className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff02_1px,transparent_1px),linear-gradient(to_bottom,#ffffff02_1px,transparent_1px)] bg-[size:3.5rem_3.5rem]" />
       </div>

@@ -93,7 +93,7 @@ export default function QuestionSidebar({
               className={`flex items-center justify-between px-3 py-2 rounded-md cursor-pointer transition-colors list-none select-none mb-1 shadow-sm ${
                 isActive
                   ? 'bg-primary text-primary-foreground hover:bg-primary/90 font-medium'
-                  : 'text-secondary hover:bg-surface font-semibold'
+                  : 'text-muted-foreground hover:bg-surface font-semibold'
               }`}
             >
               <span className="text-[13px] truncate pr-2">{stack.name}</span>
@@ -102,7 +102,7 @@ export default function QuestionSidebar({
                 {isActive ? (
                   <ChevronDown className="h-3.5 w-3.5" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-slate-400 group-open:rotate-90 transition-transform" />
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-open:rotate-90 transition-transform" />
                 )}
               </span>
             </summary>
@@ -158,11 +158,11 @@ function SubcategoryGroup({
   return (
     <details open={hasCurrentQuestion} className="mb-1">
       <summary className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer list-none select-none hover:bg-surface transition-colors group/sub">
-        <FolderOpen className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-        <span className="flex-1 text-[11px] font-bold text-secondary group-open/sub:text-blue-700 truncate">
+        <FolderOpen className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 shrink-0" />
+        <span className="flex-1 text-[11px] font-bold text-muted-foreground group-open/sub:text-blue-700 dark:text-blue-400 truncate">
           {group.name}
         </span>
-        <span className="text-[11px] text-slate-400 font-medium shrink-0">
+        <span className="text-[11px] text-muted-foreground font-medium shrink-0">
           {group.questions.length}
         </span>
       </summary>
@@ -204,13 +204,13 @@ function QuestionLink({
       scroll={false}
       className={`flex items-start gap-2.5 py-1.5 pl-3 pr-3 text-[12px] leading-snug rounded-lg transition-all ${
         isCurrent
-          ? 'text-foreground font-bold bg-blue-50 border-l-4 border-blue-600'
+          ? 'text-foreground font-bold bg-blue-50 dark:bg-blue-500/10 border-l-4 border-blue-600 dark:border-blue-700'
           : 'text-foreground hover:text-foreground hover:bg-surface outline-none focus:ring-2 focus:ring-blue-200'
       }`}
     >
       <span
         className={`text-[11px] font-bold min-w-[24px] h-[17px] rounded px-1.5 flex items-center justify-center shrink-0 mt-[2px] ${
-          isCurrent ? 'bg-blue-600 text-primary-foreground dark:text-foreground' : 'bg-slate-300 text-foreground'
+          isCurrent ? 'bg-blue-600 dark:bg-blue-800 text-white' : 'bg-slate-300 dark:bg-slate-800 text-foreground'
         }`}
       >
         Q{number}

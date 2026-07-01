@@ -12,7 +12,7 @@ const buttonVariants = cva(
         default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm',
         accent: 'bg-accent text-accent-foreground hover:bg-accent/80 border border-border',
         success: 'bg-success text-white hover:bg-success/90 shadow-sm',
-        premium: 'bg-gradient-to-r from-primary via-indigo-500 to-purple-600 text-white hover:opacity-95 shadow-md border border-primary/20',
+        premium: 'bg-gradient-to-br from-blue-600 to-blue-700 text-white hover:opacity-95 shadow-sm border border-blue-500 dark:border-blue-700/20',
         destructive:
           'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm',
         outline:

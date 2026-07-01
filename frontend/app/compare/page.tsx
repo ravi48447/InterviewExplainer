@@ -208,56 +208,56 @@ const COMPARISONS = [
 ];
 
 const TAG_COLORS: Record<string, string> = {
-  Messaging: "bg-amber-100 text-amber-700",
-  Databases: "bg-emerald-100 text-emerald-700",
-  Infrastructure: "bg-blue-100 text-blue-700",
-  Caching: "bg-red-100 text-red-700",
-  APIs: "bg-cyan-100 text-cyan-700",
-  Architecture: "bg-purple-100 text-purple-700",
-  Cloud: "bg-orange-100 text-orange-700",
-  Java: "bg-rose-100 text-rose-700",
-  Python: "bg-indigo-100 text-indigo-700",
+  Messaging: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400",
+  Databases: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400",
+  Infrastructure: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
+  Caching: "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400",
+  APIs: "bg-cyan-100 dark:bg-cyan-950/20 text-cyan-700",
+  Architecture: "bg-purple-100 dark:bg-purple-950/20 text-purple-700",
+  Cloud: "bg-orange-100 dark:bg-orange-950/20 text-orange-700",
+  Java: "bg-rose-100 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400",
+  Python: "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400",
   "Build Tools": "bg-surface text-foreground",
-  Frontend: "bg-pink-100 text-pink-700",
-  Security: "bg-yellow-100 text-yellow-700",
-  Concurrency: "bg-teal-100 text-teal-700",
-  IaC: "bg-lime-100 text-lime-700",
-  Testing: "bg-violet-100 text-violet-700",
+  Frontend: "bg-pink-100 dark:bg-pink-950/20 text-pink-700",
+  Security: "bg-yellow-100 dark:bg-yellow-950/20 text-yellow-700",
+  Concurrency: "bg-teal-100 dark:bg-teal-950/20 text-teal-700",
+  IaC: "bg-lime-100 dark:bg-lime-950/20 text-lime-700",
+  Testing: "bg-violet-100 dark:bg-violet-950/20 text-violet-700 dark:text-violet-400",
 };
 
 const allTags = [...new Set(COMPARISONS.map((c) => c.tag))];
 
 export default function ComparePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-blue-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20 font-sans text-foreground selection:bg-blue-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
+        <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
           <Link
             href="/"
-            className="hover:text-secondary flex items-center gap-1"
+            className="hover:text-muted-foreground flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-secondary font-medium">
+          <span className="text-muted-foreground font-medium">
             Compare (X vs Y)
           </span>
         </nav>
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20">
             <div className="flex items-center gap-2 mb-3">
-              <ArrowLeftRight className="h-5 w-5 text-blue-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600">
+              <ArrowLeftRight className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400">
                 Head-to-Head Analysis
               </span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               X vs Y — Interview-Ready Comparisons
             </h1>
-            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-3xl">
               &quot;When would you use Kafka over RabbitMQ?&quot; — Every
               interviewer loves comparison questions. These aren&apos;t generic
               articles. Each comparison is framed for the interview: key
@@ -265,11 +265,11 @@ export default function ComparePage() {
               say. Includes real-world use cases and architecture implications.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <ArrowLeftRight className="h-5 w-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center">
+                  <ArrowLeftRight className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -280,10 +280,10 @@ export default function ComparePage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200" />
+              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
-                  <Layers className="h-5 w-5 text-indigo-600" />
+                <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-950/20 flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -294,10 +294,10 @@ export default function ComparePage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200" />
+              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                  <TrendingUp className="h-5 w-5 text-purple-600" />
+                <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-950/20 flex items-center justify-center">
+                  <TrendingUp className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -317,7 +317,7 @@ export default function ComparePage() {
           {allTags.map((tag) => (
             <span
               key={tag}
-              className={`text-xs font-bold px-3 py-1.5 rounded-full ${TAG_COLORS[tag] ?? "bg-surface text-secondary"}`}
+              className={`text-xs font-bold px-3 py-1.5 rounded-full ${TAG_COLORS[tag] ?? "bg-surface text-muted-foreground"}`}
             >
               {tag} ({COMPARISONS.filter((c) => c.tag === tag).length})
             </span>
@@ -327,7 +327,7 @@ export default function ComparePage() {
         {/* Most Popular */}
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="h-5 w-5 text-blue-600" />
+            <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             <h2 className="text-xl font-black text-foreground">
               Most Searched Comparisons
             </h2>
@@ -344,38 +344,38 @@ export default function ComparePage() {
               <Link
                 key={c.slug}
                 href={`/compare/${c.slug}`}
-                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-blue-300 transition-all p-5"
+                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-blue-300 dark:border-blue-700 transition-all p-5"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TAG_COLORS[c.tag] ?? "bg-surface text-secondary"}`}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TAG_COLORS[c.tag] ?? "bg-surface text-muted-foreground"}`}
                     >
                       {c.tag}
                     </span>
-                    <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
+                    <span className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
                       <TrendingUp className="h-3 w-3" />
                       {c.search}
                     </span>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 group-hover:translate-x-1 transition-all" />
                 </div>
 
-                <h3 className="text-[15px] font-bold text-foreground group-hover:text-blue-600 transition-colors mb-2">
+                <h3 className="text-[15px] font-bold text-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors mb-2">
                   {c.title}
                 </h3>
 
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-2 py-0.5 rounded">
                     {c.left}
                   </span>
-                  <ArrowLeftRight className="h-3 w-3 text-slate-400" />
-                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
+                  <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded">
                     {c.right}
                   </span>
                 </div>
 
-                <p className="text-xs text-muted-foreground leading-relaxed pt-3 border-t border-slate-100">
+                <p className="text-xs text-muted-foreground leading-relaxed pt-3 border-t border-slate-100 dark:border-slate-800/60">
                   <span className="font-semibold text-foreground">
                     Quick verdict:
                   </span>{" "}
@@ -389,7 +389,7 @@ export default function ComparePage() {
         {/* All Comparisons */}
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-2">
-            <BookOpen className="h-5 w-5 text-indigo-600" />
+            <BookOpen className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
             <h2 className="text-xl font-black text-foreground">
               All Comparisons
             </h2>
@@ -404,18 +404,18 @@ export default function ComparePage() {
               <Link
                 key={c.slug}
                 href={`/compare/${c.slug}`}
-                className="group flex items-center gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-blue-300 transition-all p-4"
+                className="group flex items-center gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-blue-300 dark:border-blue-700 transition-all p-4"
               >
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center shrink-0">
-                  <ArrowLeftRight className="h-5 w-5 text-blue-600" />
+                  <ArrowLeftRight className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                    <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 transition-colors">
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors">
                       {c.title}
                     </h3>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TAG_COLORS[c.tag] ?? "bg-surface text-secondary"}`}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${TAG_COLORS[c.tag] ?? "bg-surface text-muted-foreground"}`}
                     >
                       {c.tag}
                     </span>
@@ -424,28 +424,28 @@ export default function ComparePage() {
                     {c.verdict}
                   </p>
                 </div>
-                <span className="text-[10px] font-medium text-slate-400 shrink-0">
+                <span className="text-[10px] font-medium text-muted-foreground shrink-0">
                   {c.search}
                 </span>
-                <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all shrink-0" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 group-hover:translate-x-1 transition-all shrink-0" />
               </Link>
             ))}
           </div>
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-8 text-center mb-12">
+        <section className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 p-8 text-center mb-12">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Comparisons in Your Interview Prep
           </h2>
-          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-muted-foreground mb-6 max-w-xl mx-auto">
             These comparisons appear as interview questions in your domain
             prep. Select your path and get them mapped alongside Q&A, system
             design, DSA, and behavioral.
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

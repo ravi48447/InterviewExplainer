@@ -58,7 +58,7 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
@@ -77,7 +77,7 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
           <h1 className="text-4xl font-black tracking-tight text-foreground mb-3">
             {langTitle} {trackTitle} Interview Questions
           </h1>
-          <p className="text-lg text-secondary max-w-3xl leading-relaxed">
+          <p className="text-lg text-muted-foreground max-w-3xl leading-relaxed">
             Complete interview preparation for {langTitle} {trackTitle} engineers — three experience levels,
             each with genuinely different answers, production examples, and what interviewers actually want to hear.
           </p>
@@ -96,7 +96,7 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
                 <span className={`px-3 py-1.5 rounded-full text-xs font-black border ${meta.colorClass}`}>
                   {meta.label} · {meta.range}
                 </span>
-                <TrendingUp className="h-5 w-5 text-slate-300 group-hover:text-blue-400 transition-colors" />
+                <TrendingUp className="h-5 w-5 text-muted-foreground group-hover:text-blue-400 dark:text-blue-300 transition-colors" />
               </div>
 
               <div className="mb-4">
@@ -107,12 +107,12 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
               {stacks.length > 0 && (
                 <div className="flex flex-wrap gap-1 mb-4">
                   {stacks.slice(0, 5).map(s => (
-                    <span key={s} className="text-[10px] px-2 py-0.5 bg-surface text-secondary rounded-md font-medium">
+                    <span key={s} className="text-[10px] px-2 py-0.5 bg-surface text-muted-foreground rounded-md font-medium">
                       {toTitle(s)}
                     </span>
                   ))}
                   {stacks.length > 5 && (
-                    <span className="text-[10px] px-2 py-0.5 bg-surface text-slate-400 rounded-md">
+                    <span className="text-[10px] px-2 py-0.5 bg-surface text-muted-foreground rounded-md">
                       +{stacks.length - 5} more
                     </span>
                   )}
@@ -135,12 +135,12 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left py-3 pr-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Aspect</th>
-                  <th className="text-left py-3 px-4 text-xs font-bold text-emerald-600 uppercase tracking-wider">Beginner</th>
-                  <th className="text-left py-3 px-4 text-xs font-bold text-amber-600 uppercase tracking-wider">Intermediate</th>
-                  <th className="text-left py-3 px-4 text-xs font-bold text-red-600 uppercase tracking-wider">Advanced</th>
+                  <th className="text-left py-3 px-4 text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Beginner</th>
+                  <th className="text-left py-3 px-4 text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Intermediate</th>
+                  <th className="text-left py-3 px-4 text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">Advanced</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                 {[
                   ["Focus", "What & Why", "How it works + trade-offs", "Architecture decisions + failure modes"],
                   ["Code examples", "5–10 line snippets", "Real Spring Boot patterns", "Full system snippets"],
@@ -148,10 +148,10 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
                   ["Answer length", "~250 words", "~300–350 words", "~350–400 words"],
                 ].map(([aspect, beg, inter, adv]) => (
                   <tr key={aspect}>
-                    <td className="py-3 pr-4 text-xs font-bold text-secondary">{aspect}</td>
-                    <td className="py-3 px-4 text-xs text-secondary">{beg}</td>
-                    <td className="py-3 px-4 text-xs text-secondary">{inter}</td>
-                    <td className="py-3 px-4 text-xs text-secondary">{adv}</td>
+                    <td className="py-3 pr-4 text-xs font-bold text-muted-foreground">{aspect}</td>
+                    <td className="py-3 px-4 text-xs text-muted-foreground">{beg}</td>
+                    <td className="py-3 px-4 text-xs text-muted-foreground">{inter}</td>
+                    <td className="py-3 px-4 text-xs text-muted-foreground">{adv}</td>
                   </tr>
                 ))}
               </tbody>
@@ -161,25 +161,25 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
 
         {/* CTA */}
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Link href={`/dsa`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-purple-50 to-violet-50 rounded-2xl border border-purple-200 hover:shadow-lg transition-all group">
-            <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
-              <BookOpen className="h-5 w-5 text-purple-600" />
+          <Link href={`/dsa`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-purple-50 to-violet-50 rounded-2xl border border-purple-200 dark:border-purple-500/20 hover:shadow-lg transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/20 flex items-center justify-center">
+              <BookOpen className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             </div>
             <div>
-              <div className="font-black text-foreground group-hover:text-purple-600 transition-colors">DSA Problems</div>
+              <div className="font-black text-foreground group-hover:text-purple-600 dark:text-purple-400 transition-colors">DSA Problems</div>
               <div className="text-xs text-muted-foreground">Line-by-line explanations — beats LeetCode</div>
             </div>
-            <ChevronRight className="h-5 w-5 text-slate-300 ml-auto group-hover:translate-x-0.5 transition-transform" />
+            <ChevronRight className="h-5 w-5 text-muted-foreground ml-auto group-hover:translate-x-0.5 transition-transform" />
           </Link>
-          <Link href={`/companies`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl border border-orange-200 hover:shadow-lg transition-all group">
-            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
-              <Users className="h-5 w-5 text-orange-600" />
+          <Link href={`/companies`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl border border-orange-200 dark:border-orange-500/20 hover:shadow-lg transition-all group">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/20 flex items-center justify-center">
+              <Users className="h-5 w-5 text-orange-600 dark:text-orange-400" />
             </div>
             <div>
-              <div className="font-black text-foreground group-hover:text-orange-600 transition-colors">Company Prep</div>
+              <div className="font-black text-foreground group-hover:text-orange-600 dark:text-orange-400 transition-colors">Company Prep</div>
               <div className="text-xs text-muted-foreground">Amazon, Google, Microsoft, Meta</div>
             </div>
-            <ChevronRight className="h-5 w-5 text-slate-300 ml-auto group-hover:translate-x-0.5 transition-transform" />
+            <ChevronRight className="h-5 w-5 text-muted-foreground ml-auto group-hover:translate-x-0.5 transition-transform" />
           </Link>
         </section>
       </div>

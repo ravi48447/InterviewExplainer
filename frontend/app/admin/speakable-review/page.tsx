@@ -180,12 +180,12 @@ export default function SpeakableReviewPage() {
             /admin/speakable-review
           </p>
           <h1 className="text-2xl font-bold mb-3">Admin key required</h1>
-          <p className="text-secondary text-sm leading-relaxed">
+          <p className="text-muted-foreground text-sm leading-relaxed">
             Append <code className="bg-surface px-1 rounded">?key=YOUR_KEY</code> to the URL where{" "}
             <code className="bg-surface px-1 rounded">YOUR_KEY</code> matches the
             server-side env var <code className="bg-surface px-1 rounded">SPEAKABLE_ADMIN_KEY</code>.
           </p>
-          <p className="mt-4 text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+          <p className="mt-4 text-[12px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded px-3 py-2">
             <strong>Dev-only:</strong> this gate is not production-grade. See HUMAN-REVIEW-QUEUE.md AUTH-1.
           </p>
         </div>
@@ -202,14 +202,14 @@ export default function SpeakableReviewPage() {
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
           Speakable v2 — review queue
         </h1>
-        <p className="text-secondary text-sm">
+        <p className="text-muted-foreground text-sm">
           Approve <code className="bg-surface px-1 rounded">pending_review</code> to flip{" "}
           <code className="bg-surface px-1 rounded">speakable_status</code> to{" "}
           <code className="bg-surface px-1 rounded">approved</code>. Mutations write to{" "}
           <code className="bg-surface px-1 rounded">complete-qa.json</code> on disk.
         </p>
         {listError && (
-          <p className="mt-3 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+          <p className="mt-3 text-[12px] text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded px-3 py-2">
             Failed to load queue: {listError}
           </p>
         )}
@@ -221,9 +221,9 @@ export default function SpeakableReviewPage() {
                 className={
                   "px-2.5 py-1 rounded-full border font-semibold " +
                   (k === "pending_review"
-                    ? "border-amber-300 bg-amber-50 text-amber-800"
+                    ? "border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400"
                     : k === "approved"
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                      ? "border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400"
                       : "border-border bg-background text-foreground")
                 }
               >
@@ -261,7 +261,7 @@ export default function SpeakableReviewPage() {
                             className={
                               "w-full text-left px-2 py-1.5 rounded text-[13px] " +
                               (activeSlug === q.slug
-                                ? "dark:bg-surface text-primary-foreground dark:text-foreground"
+                                ? "dark:bg-surface text-white"
                                 : "hover:bg-surface text-foreground")
                             }
                           >
@@ -269,7 +269,7 @@ export default function SpeakableReviewPage() {
                             <span
                               className={
                                 "block text-[10.5px] " +
-                                (activeSlug === q.slug ? "text-slate-300" : "text-muted-foreground")
+                                (activeSlug === q.slug ? "text-muted-foreground" : "text-muted-foreground")
                               }
                             >
                               {q.archetype ?? "?"} · {q.slug}
@@ -291,8 +291,8 @@ export default function SpeakableReviewPage() {
             </div>
           )}
           {activeSlug && detailError && (
-            <div className="bg-background rounded-xl border border-red-200 p-6 shadow-sm">
-              <p className="text-red-700 text-sm">Failed to load detail: {detailError}</p>
+            <div className="bg-background rounded-xl border border-red-200 dark:border-red-500/20 p-6 shadow-sm">
+              <p className="text-red-700 dark:text-red-400 text-sm">Failed to load detail: {detailError}</p>
             </div>
           )}
           {activeSlug && detail && (
@@ -302,17 +302,17 @@ export default function SpeakableReviewPage() {
                   {detail.file}
                 </p>
                 <h2 className="text-xl font-bold text-foreground mb-2">{detail.title}</h2>
-                <div className="flex flex-wrap items-center gap-3 text-[12px] text-secondary mb-3">
+                <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground mb-3">
                   <span className="px-2 py-0.5 rounded bg-surface font-mono">{detail.slug}</span>
                   {lint?.result && (
                     <span
                       className={
                         "px-2 py-0.5 rounded font-semibold " +
                         (lint.result.status === "fail"
-                          ? "bg-red-100 text-red-800"
+                          ? "bg-red-100 dark:bg-red-950/20 text-red-800 dark:text-red-400"
                           : lint.result.status === "warn"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-emerald-100 text-emerald-800")
+                            ? "bg-amber-100 dark:bg-amber-950/20 text-amber-800 dark:text-amber-400"
+                            : "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400")
                       }
                     >
                       lint: {lint.result.status} · {lint.result.score}/100
@@ -338,7 +338,7 @@ export default function SpeakableReviewPage() {
                           <span
                             className={
                               "font-mono mr-2 text-[10.5px] " +
-                              (v.severity === "fail" ? "text-red-700" : "text-amber-700")
+                              (v.severity === "fail" ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400")
                             }
                           >
                             {v.rule}
@@ -361,8 +361,8 @@ export default function SpeakableReviewPage() {
                     legacyVariant="preview"
                   />
                 </div>
-                <div className="bg-background rounded-xl border border-emerald-200 p-5 shadow-sm">
-                  <p className="text-[11px] uppercase tracking-[0.15em] text-emerald-700 mb-3 font-semibold">
+                <div className="bg-background rounded-xl border border-emerald-200 dark:border-emerald-500/20 p-5 shadow-sm">
+                  <p className="text-[11px] uppercase tracking-[0.15em] text-emerald-700 dark:text-emerald-400 mb-3 font-semibold">
                     v2 (forced render)
                   </p>
                   {detail.v2 ? (
@@ -394,7 +394,7 @@ export default function SpeakableReviewPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => submitDecision("approve")}
-                    className="px-4 py-2 rounded-md bg-emerald-600 text-primary-foreground dark:text-foreground font-semibold text-[13px] hover:bg-emerald-700 disabled:opacity-50"
+                    className="px-4 py-2 rounded-md bg-emerald-600 dark:bg-emerald-800 text-white font-semibold text-[13px] hover:bg-emerald-700 dark:bg-emerald-800 disabled:opacity-50"
                   >
                     Approve
                   </button>
@@ -402,7 +402,7 @@ export default function SpeakableReviewPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => submitDecision("reject")}
-                    className="px-4 py-2 rounded-md bg-red-600 text-primary-foreground dark:text-foreground font-semibold text-[13px] hover:bg-red-700 disabled:opacity-50"
+                    className="px-4 py-2 rounded-md bg-red-600 dark:bg-red-800 text-white font-semibold text-[13px] hover:bg-red-700 dark:bg-red-800 disabled:opacity-50"
                   >
                     Reject
                   </button>
@@ -410,7 +410,7 @@ export default function SpeakableReviewPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => submitDecision("send_back")}
-                    className="px-4 py-2 rounded-md bg-slate-700 text-primary-foreground dark:text-foreground font-semibold text-[13px] hover:dark:bg-surface disabled:opacity-50"
+                    className="px-4 py-2 rounded-md bg-slate-700 text-white font-semibold text-[13px] hover:dark:bg-surface disabled:opacity-50"
                   >
                     Send back to agent
                   </button>
@@ -419,7 +419,7 @@ export default function SpeakableReviewPage() {
                   <p
                     className={
                       "mt-3 text-[12px] " +
-                      (actionMsg.startsWith("Done") ? "text-emerald-700" : "text-red-700")
+                      (actionMsg.startsWith("Done") ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400")
                     }
                   >
                     {actionMsg}

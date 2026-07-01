@@ -35,12 +35,12 @@ function difficultyColour(d?: string) {
   switch ((d || "").toLowerCase()) {
     case "beginner":
     case "easy":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      return "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20";
     case "advanced":
     case "hard":
-      return "bg-rose-50 text-rose-700 border-rose-200";
+      return "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20";
     default:
-      return "bg-amber-50 text-amber-700 border-amber-200";
+      return "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20";
   }
 }
 
@@ -132,34 +132,34 @@ const ALERT_THEME: Record<
   }
 > = {
   warning: {
-    border: "border-amber-200",
-    bg: "bg-amber-50/60",
-    accentLine: "bg-amber-400",
-    iconCls: "text-amber-600",
+    border: "border-amber-200 dark:border-amber-500/20",
+    bg: "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60",
+    accentLine: "bg-amber-400 dark:bg-amber-800",
+    iconCls: "text-amber-600 dark:text-amber-400",
     icon: AlertTriangle,
     label: "Watch out",
   },
   tip: {
-    border: "border-emerald-200",
-    bg: "bg-emerald-50/60",
-    accentLine: "bg-emerald-400",
-    iconCls: "text-emerald-600",
+    border: "border-emerald-200 dark:border-emerald-500/20",
+    bg: "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60",
+    accentLine: "bg-emerald-400 dark:bg-emerald-800",
+    iconCls: "text-emerald-600 dark:text-emerald-400",
     icon: Lightbulb,
     label: "Tip",
   },
   note: {
     border: "border-blue-200",
-    bg: "bg-blue-50/60",
-    accentLine: "bg-blue-400",
-    iconCls: "text-blue-600",
+    bg: "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60",
+    accentLine: "bg-blue-400 dark:bg-blue-800",
+    iconCls: "text-blue-600 dark:text-blue-400",
     icon: Info,
     label: "Note",
   },
   info: {
-    border: "border-indigo-200",
-    bg: "bg-indigo-50/60",
-    accentLine: "bg-indigo-400",
-    iconCls: "text-indigo-600",
+    border: "border-indigo-200 dark:border-indigo-500/20",
+    bg: "bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/60",
+    accentLine: "bg-indigo-400 dark:bg-indigo-800",
+    iconCls: "text-indigo-600 dark:text-indigo-400",
     icon: Info,
     label: "Heads up",
   },
@@ -324,33 +324,33 @@ function CodeBlock({
   const accent =
     flavour === "bad"
       ? {
-          ring: "border-rose-200",
+          ring: "border-rose-200 dark:border-rose-500/20",
           headerBg: "bg-gradient-to-r from-rose-50 to-rose-50/60",
-          headerText: "text-rose-700",
+          headerText: "text-rose-700 dark:text-rose-400",
           iconCls: "text-rose-500",
           IconCmp: XCircle,
-          dotCls: "bg-rose-400",
+          dotCls: "bg-rose-400 dark:bg-rose-800",
           tag: "Anti-pattern",
-          tagCls: "bg-rose-100 text-rose-700 border-rose-200",
+          tagCls: "bg-rose-100 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20",
         }
       : flavour === "good"
       ? {
-          ring: "border-emerald-200",
+          ring: "border-emerald-200 dark:border-emerald-500/20",
           headerBg: "bg-gradient-to-r from-emerald-50 to-emerald-50/60",
-          headerText: "text-emerald-700",
+          headerText: "text-emerald-700 dark:text-emerald-400",
           iconCls: "text-emerald-500",
           IconCmp: CheckCircle2,
-          dotCls: "bg-emerald-400",
+          dotCls: "bg-emerald-400 dark:bg-emerald-800",
           tag: "Recommended",
-          tagCls: "bg-emerald-100 text-emerald-700 border-emerald-200",
+          tagCls: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20",
         }
       : {
           ring: "border-border",
           headerBg: "bg-surface",
-          headerText: "text-secondary",
-          iconCls: "text-slate-400",
+          headerText: "text-muted-foreground",
+          iconCls: "text-muted-foreground",
           IconCmp: FileCode2,
-          dotCls: "bg-slate-300",
+          dotCls: "bg-slate-300 dark:bg-slate-800",
           tag: "",
           tagCls: "",
         };
@@ -370,7 +370,7 @@ function CodeBlock({
     <div
       className={`group not-prose my-8 rounded-xl border ${accent.ring} bg-background overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)] transition-shadow code-pair-item`}
     >
-      <div className={`flex items-center gap-2.5 px-4 py-2 border-b border-slate-100 ${accent.headerBg}`}>
+      <div className={`flex items-center gap-2.5 px-4 py-2 border-b border-slate-100 dark:border-slate-800/60 ${accent.headerBg}`}>
         <div className="flex items-center gap-1 shrink-0">
           <span className={`h-2 w-2 rounded-full ${accent.dotCls}/70`} />
           <span className={`h-2 w-2 rounded-full ${accent.dotCls}/40`} />
@@ -383,7 +383,7 @@ function CodeBlock({
           </span>
         </div>
         {title && (
-          <span className="text-[12px] text-secondary font-medium truncate flex-1">
+          <span className="text-[12px] text-muted-foreground font-medium truncate flex-1">
             {title}
           </span>
         )}
@@ -403,7 +403,7 @@ function CodeBlock({
         </button>
       </div>
 
-      <pre className="m-0 overflow-x-auto bg-[#0f172a] text-slate-100 text-[13px] leading-[1.65] px-5 py-4">
+      <pre className="m-0 overflow-x-auto bg-[#0f172a] text-muted-foreground text-[13px] leading-[1.65] px-5 py-4">
         <code
           className={`hljs language-${language || "plaintext"} font-mono whitespace-pre`}
           dangerouslySetInnerHTML={{ __html: codeHtml }}
@@ -524,7 +524,7 @@ export const baseComponents = {
     return (
       <h3
         id={id}
-        className="preview-display text-[20px] font-bold text-foreground tracking-[-0.005em] mt-12 mb-3 first:mt-0 scroll-mt-24 relative pl-4 before:content-[''] before:absolute before:left-0 before:top-[8px] before:bottom-[8px] before:w-[3px] before:rounded-full before:bg-slate-200"
+        className="preview-display text-[20px] font-bold text-foreground tracking-[-0.005em] mt-12 mb-3 first:mt-0 scroll-mt-24 relative pl-4 before:content-[''] before:absolute before:left-0 before:top-[8px] before:bottom-[8px] before:w-[3px] before:rounded-full before:bg-slate-200 dark:bg-slate-800"
       >
         {children}
       </h3>
@@ -542,7 +542,7 @@ export const baseComponents = {
   },
   ol({ children }: { children?: React.ReactNode }) {
     return (
-      <ol className="my-5 space-y-2 list-decimal pl-6 marker:text-slate-400 marker:font-semibold">
+      <ol className="my-5 space-y-2 list-decimal pl-6 marker:text-muted-foreground marker:font-semibold">
         {children}
       </ol>
     );
@@ -550,7 +550,7 @@ export const baseComponents = {
   li({ children }: { children?: React.ReactNode }) {
     return (
       <li className="flex items-start gap-3 text-[15.5px] leading-[1.72] text-foreground">
-        <span className="mt-[9px] h-1 w-1 rounded-full bg-slate-400 shrink-0" />
+        <span className="mt-[9px] h-1 w-1 rounded-full bg-slate-400 dark:bg-slate-800 shrink-0" />
         <span className="flex-1 [&>p]:m-0">{children}</span>
       </li>
     );
@@ -559,7 +559,7 @@ export const baseComponents = {
     return <strong className="font-semibold text-foreground">{children}</strong>;
   },
   em({ children }: { children?: React.ReactNode }) {
-    return <em className="italic text-secondary">{children}</em>;
+    return <em className="italic text-muted-foreground">{children}</em>;
   },
   code: MarkdownCode,
   pre: MarkdownPre,
@@ -576,14 +576,14 @@ export const baseComponents = {
   },
   th({ children }: { children?: React.ReactNode }) {
     return (
-      <th className="px-4 py-2.5 text-left text-[11px] font-bold text-secondary uppercase tracking-[0.08em] border-b border-border">
+      <th className="px-4 py-2.5 text-left text-[11px] font-bold text-muted-foreground uppercase tracking-[0.08em] border-b border-border">
         {children}
       </th>
     );
   },
   td({ children }: { children?: React.ReactNode }) {
     return (
-      <td className="px-4 py-3 text-foreground align-top border-b border-slate-100 leading-[1.6] [&_code]:text-[12.5px] [&_strong]:text-foreground">
+      <td className="px-4 py-3 text-foreground align-top border-b border-slate-100 dark:border-slate-800/60 leading-[1.6] [&_code]:text-[12.5px] [&_strong]:text-foreground">
         {children}
       </td>
     );
@@ -615,7 +615,7 @@ export const baseComponents = {
       );
     }
     return (
-      <blockquote className="my-6 border-l-[3px] border-border pl-4 py-1 italic text-secondary [&>p]:my-1.5">
+      <blockquote className="my-6 border-l-[3px] border-border pl-4 py-1 italic text-muted-foreground [&>p]:my-1.5">
         {children}
       </blockquote>
     );
@@ -626,7 +626,7 @@ export const baseComponents = {
         href={href}
         target={href?.startsWith("http") ? "_blank" : undefined}
         rel="noopener noreferrer"
-        className="text-blue-600 underline underline-offset-[3px] decoration-blue-200 hover:decoration-blue-500 hover:text-blue-700 font-medium transition-colors"
+        className="text-blue-600 dark:text-blue-400 underline underline-offset-[3px] decoration-blue-200 hover:decoration-blue-500 hover:text-blue-700 dark:text-blue-400 font-medium transition-colors"
       >
         {children}
       </a>
@@ -635,9 +635,9 @@ export const baseComponents = {
   hr() {
     return (
       <div className="my-10 flex items-center justify-center gap-2">
-        <span className="h-px w-12 bg-slate-200" />
-        <span className="text-slate-300 text-xs tracking-[0.3em] select-none">◇</span>
-        <span className="h-px w-12 bg-slate-200" />
+        <span className="h-px w-12 bg-slate-200 dark:bg-slate-800" />
+        <span className="text-muted-foreground text-xs tracking-[0.3em] select-none">◇</span>
+        <span className="h-px w-12 bg-slate-200 dark:bg-slate-800" />
       </div>
     );
   },
@@ -714,7 +714,7 @@ const quickComponents = {
   ...baseComponents,
   p({ children }: { children?: React.ReactNode }) {
     return (
-      <p className="text-[14px] leading-[1.65] text-secondary my-2.5 first:mt-0 italic">
+      <p className="text-[14px] leading-[1.65] text-muted-foreground my-2.5 first:mt-0 italic">
         {children}
       </p>
     );
@@ -725,7 +725,7 @@ const quickComponents = {
   li({ children }: { children?: React.ReactNode }) {
     return (
       <li className="flex items-start gap-3 text-[15.5px] leading-[1.65] text-foreground quick-li">
-        <span className="mt-[8px] h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0 ring-[3px] ring-amber-100" />
+        <span className="mt-[8px] h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-800 shrink-0 ring-[3px] ring-amber-100" />
         <span className="flex-1 [&>p]:m-0">{children}</span>
       </li>
     );
@@ -762,7 +762,7 @@ export function TableOfContents({ items }: { items: TocItem[] }) {
   if (items.length === 0) return null;
   return (
     <nav className="hidden lg:block sticky top-8 self-start w-[240px] xl:w-[260px] 2xl:w-[280px] shrink-0">
-      <div className="text-[10.5px] font-black uppercase tracking-[0.2em] text-slate-400 mb-3">
+      <div className="text-[10.5px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-3">
         On this page
       </div>
       <ul className="space-y-1.5 border-l border-border pl-3">
@@ -792,30 +792,30 @@ function ZoneRail({
 }) {
   const items: Array<{ id: string; label: string; sub: string; accent: string }> = [];
   if (zones.quick)
-    items.push({ id: "zone-quick", label: "01", sub: "At a glance", accent: "bg-amber-500" });
+    items.push({ id: "zone-quick", label: "01", sub: "At a glance", accent: "bg-amber-500 dark:bg-amber-800" });
   if (zones.speakable)
-    items.push({ id: "zone-speakable", label: "02", sub: "Interview answer", accent: "bg-emerald-500" });
+    items.push({ id: "zone-speakable", label: "02", sub: "Interview answer", accent: "bg-emerald-500 dark:bg-emerald-800" });
   if (zones.deepDive)
-    items.push({ id: "zone-deep", label: "03", sub: "Deep dive", accent: "bg-slate-700" });
+    items.push({ id: "zone-deep", label: "03", sub: "Deep dive", accent: "bg-slate-700 dark:bg-slate-800" });
 
   return (
     <nav className="hidden xl:flex sticky top-8 self-start flex-col gap-3 w-[140px] 2xl:w-[160px] shrink-0">
-      <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 mb-1">
+      <div className="text-[10px] font-black uppercase tracking-[0.22em] text-muted-foreground mb-1">
         Zones
       </div>
       {items.map((it) => (
         <a
           key={it.id}
           href={`#${it.id}`}
-          className="group block py-2 pl-3 border-l-2 border-border hover:border-slate-900 transition-colors"
+          className="group block py-2 pl-3 border-l-2 border-border hover:border-slate-900 dark:border-slate-700 transition-colors"
         >
           <div className="flex items-center gap-2">
             <span className={`h-1.5 w-1.5 rounded-full ${it.accent}`} />
-            <span className="text-[10px] font-black tracking-[0.18em] text-slate-400 group-hover:text-foreground">
+            <span className="text-[10px] font-black tracking-[0.18em] text-muted-foreground group-hover:text-foreground">
               {it.label}
             </span>
           </div>
-          <span className="block mt-0.5 text-[11.5px] font-semibold text-secondary group-hover:text-foreground leading-tight">
+          <span className="block mt-0.5 text-[11.5px] font-semibold text-muted-foreground group-hover:text-foreground leading-tight">
             {it.sub}
           </span>
         </a>
@@ -982,8 +982,8 @@ export default function PreviewArticle({ article }: Props) {
               <div className="flex items-center gap-2 mb-4 text-[10.5px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
                 <Compass className="h-3 w-3" />
                 <span>Interview Answer</span>
-                <span className="text-slate-300">/</span>
-                <span className="text-slate-400">Java OOP</span>
+                <span className="text-muted-foreground">/</span>
+                <span className="text-muted-foreground">Java OOP</span>
               </div>
 
               <h1 className="preview-display text-[32px] sm:text-[38px] lg:text-[44px] font-black leading-[1.1] tracking-[-0.015em] text-foreground mb-4">
@@ -1006,25 +1006,25 @@ export default function PreviewArticle({ article }: Props) {
                   </span>
                 )}
                 {meta.reading_time_minutes && (
-                  <span className="px-2.5 py-[3px] rounded-md bg-surface border border-border text-secondary font-semibold flex items-center gap-1 text-[11.5px]">
+                  <span className="px-2.5 py-[3px] rounded-md bg-surface border border-border text-muted-foreground font-semibold flex items-center gap-1 text-[11.5px]">
                     <Clock className="h-3 w-3" />
                     {meta.reading_time_minutes} min read
                   </span>
                 )}
                 {meta.last_updated && (
-                  <span className="text-slate-400 text-[11.5px]">Updated {meta.last_updated}</span>
+                  <span className="text-muted-foreground text-[11.5px]">Updated {meta.last_updated}</span>
                 )}
               </div>
 
               {meta.company_tags && meta.company_tags.length > 0 && (
                 <div className="mt-4 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 mr-1">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground mr-1">
                     Asked at
                   </span>
                   {meta.company_tags.map((tag) => (
                     <span
                       key={tag}
-                      className="px-2 py-[2px] rounded bg-surface border border-border/80 text-[11px] text-secondary font-medium capitalize"
+                      className="px-2 py-[2px] rounded bg-surface border border-border/80 text-[11px] text-muted-foreground font-medium capitalize"
                     >
                       {tag}
                     </span>
@@ -1043,7 +1043,7 @@ export default function PreviewArticle({ article }: Props) {
                   icon={Sparkles}
                   accent="amber"
                 />
-                <div className="quick-prose relative rounded-2xl border border-amber-200/60 bg-gradient-to-br from-amber-50/60 via-white to-white px-6 py-6 sm:px-8 sm:py-7 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
+                <div className="quick-prose relative rounded-2xl border border-amber-200 dark:border-amber-500/20/60 bg-gradient-to-br from-amber-50/60 via-white to-white dark:from-amber-950/20 dark:via-zinc-900 dark:to-zinc-900 px-6 py-6 sm:px-8 sm:py-7 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
                   <span className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-amber-300" />
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={quickComponents as never}>
                     {zones.quick}
@@ -1080,9 +1080,9 @@ export default function PreviewArticle({ article }: Props) {
                     }}
                     legacyVariant="preview"
                   />
-                  <div className="mt-8 pt-5 border-t border-slate-100 flex items-center gap-2.5">
-                    <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-emerald-50 text-emerald-600">
-                      <Star className="h-3 w-3 fill-emerald-500 text-emerald-500" />
+                  <div className="mt-8 pt-5 border-t border-slate-100 dark:border-slate-800/60 flex items-center gap-2.5">
+                    <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <Star className="h-3 w-3 fill-emerald-500 text-emerald-500 dark:text-emerald-400" />
                     </span>
                     <span className="text-[12.5px] text-muted-foreground italic">
                       Read aloud — aim for a calm 2-3 minute delivery, not a checklist.
@@ -1130,7 +1130,7 @@ export default function PreviewArticle({ article }: Props) {
                 <ol className="rounded-2xl border border-border/80 bg-background px-6 py-6 sm:px-8 sm:py-7 space-y-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                   {meta.followup_questions.map((q, i) => (
                     <li key={i} className="flex items-start gap-3.5 group">
-                      <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 text-[11px] font-black border border-indigo-100">
+                      <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-black border border-indigo-100 dark:border-indigo-500/20">
                         {i + 1}
                       </span>
                       <span className="text-[15.5px] leading-[1.65] text-foreground pt-[1px]">{q}</span>
@@ -1141,12 +1141,12 @@ export default function PreviewArticle({ article }: Props) {
             )}
 
             {/* ── Footer meta ────────────────────────────────────────────── */}
-            <footer className="mt-14 pt-6 border-t border-border/70 text-[11.5px] text-slate-400 flex flex-wrap items-center justify-between gap-3">
+            <footer className="mt-14 pt-6 border-t border-border/70 text-[11.5px] text-muted-foreground flex flex-wrap items-center justify-between gap-3">
               <span className="flex items-center gap-2">
-                <span className="inline-block h-1 w-1 rounded-full bg-slate-300" />
+                <span className="inline-block h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-800" />
                 Hand-crafted answer · {meta.last_updated}
               </span>
-              <span className="font-mono text-[10.5px] text-slate-400">{meta.slug}</span>
+              <span className="font-mono text-[10.5px] text-muted-foreground">{meta.slug}</span>
             </footer>
           </article>
 
@@ -1177,24 +1177,24 @@ export function ZoneHeader({
 }) {
   const accentMap: Record<string, { text: string; bg: string; iconBg: string }> = {
     amber: {
-      text: "text-amber-600",
-      bg: "bg-amber-50",
-      iconBg: "bg-amber-100/80 text-amber-600",
+      text: "text-amber-600 dark:text-amber-400",
+      bg: "bg-amber-50 dark:bg-amber-500/10",
+      iconBg: "bg-amber-100/80 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400",
     },
     emerald: {
-      text: "text-emerald-600",
-      bg: "bg-emerald-50",
-      iconBg: "bg-emerald-100/80 text-emerald-600",
+      text: "text-emerald-600 dark:text-emerald-400",
+      bg: "bg-emerald-50 dark:bg-emerald-500/10",
+      iconBg: "bg-emerald-100/80 text-emerald-600 dark:text-emerald-400",
     },
     slate: {
-      text: "text-secondary",
+      text: "text-muted-foreground",
       bg: "bg-surface",
-      iconBg: "bg-surface text-secondary",
+      iconBg: "bg-surface text-muted-foreground",
     },
     indigo: {
-      text: "text-indigo-600",
-      bg: "bg-indigo-50",
-      iconBg: "bg-indigo-100/80 text-indigo-600",
+      text: "text-indigo-600 dark:text-indigo-400",
+      bg: "bg-indigo-50 dark:bg-indigo-500/10",
+      iconBg: "bg-indigo-100 dark:bg-indigo-950/20/80 text-indigo-600 dark:text-indigo-400",
     },
   };
   const a = accentMap[accent];
@@ -1214,7 +1214,7 @@ export function ZoneHeader({
         </div>
       </div>
       {subtitle && (
-        <span className="text-[11.5px] text-slate-400 font-medium italic shrink-0 hidden sm:block pb-0.5">
+        <span className="text-[11.5px] text-muted-foreground font-medium italic shrink-0 hidden sm:block pb-0.5">
           {subtitle}
         </span>
       )}

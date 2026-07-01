@@ -3,7 +3,6 @@
 import { Marked } from 'marked';
 import MermaidDiagram from './MermaidDiagram';
 import CodeLanguageTabs from './CodeLanguageTabs';
-import { useContentTheme } from './question/ThemeContext';
 
 // Syntax highlighting intentionally runs on the CLIENT, not here.
 //
@@ -180,9 +179,7 @@ function stripTopH1(content: string): string {
 // `this` in renderer methods refers to the Marked parser context; TypeScript
 // requires it to be the first (phantom) parameter.
 
-function buildRendererOptions(theme: 'dark' | 'light') {
-  const d = theme === 'dark';
-
+function buildRendererOptions() {
   return {
     gfm: true,
     breaks: false,
@@ -191,37 +188,26 @@ function buildRendererOptions(theme: 'dark' | 'light') {
         const { tokens, depth } = token;
         const text = this.parser.parseInline(tokens);
         const tag = `h${depth}`;
-        const cls: Record<number, string> = d
-          ? {
-              1: 'text-[22px] font-black text-slate-100 mt-8 mb-4 first:mt-0 pb-2.5 border-b border-border/60 tracking-tight leading-tight',
-              2: 'text-[19px] font-bold text-slate-100 mt-8 mb-3 first:mt-0 pb-1.5 border-b border-border/40 tracking-tight leading-snug',
-              3: 'text-[16.5px] font-bold text-slate-100 mt-7 mb-2.5 first:mt-0 leading-snug pl-3 border-l-[3px] border-blue-500/60',
-              4: 'text-[12.5px] font-bold text-slate-400 uppercase tracking-[0.12em] mt-5 mb-1.5',
-            }
-          : {
-              1: 'text-[22px] font-black text-foreground mt-8 mb-4 first:mt-0 pb-2.5 border-b border-border tracking-tight leading-tight',
-              2: 'text-[19px] font-bold text-foreground mt-8 mb-3 first:mt-0 pb-1.5 border-b border-border tracking-tight leading-snug',
-              3: 'text-[16.5px] font-bold text-foreground mt-7 mb-2.5 first:mt-0 leading-snug pl-3 border-l-[3px] border-blue-500/70',
-              4: 'text-[12.5px] font-bold text-muted-foreground uppercase tracking-[0.12em] mt-5 mb-1.5',
-            };
+        const cls: Record<number, string> = {
+          1: 'text-[22px] font-black text-foreground dark:text-muted-foreground mt-8 mb-4 first:mt-0 pb-2.5 border-b border-border dark:border-border/60 tracking-tight leading-tight',
+          2: 'text-[19px] font-bold text-foreground dark:text-muted-foreground mt-8 mb-3 first:mt-0 pb-1.5 border-b border-border dark:border-border/40 tracking-tight leading-snug',
+          3: 'text-[16.5px] font-bold text-foreground dark:text-muted-foreground mt-7 mb-2.5 first:mt-0 leading-snug pl-3 border-l-[3px] border-blue-500/70 dark:border-blue-500/60',
+          4: 'text-[12.5px] font-bold text-muted-foreground uppercase tracking-[0.12em] mt-5 mb-1.5',
+        };
         return `<${tag} class="${cls[depth] ?? ''}">${text}</${tag}>`;
       },
 
       paragraph(this: any, token: any) {
         const { tokens } = token;
         const text = this.parser.parseInline(tokens);
-        const cls = d
-          ? 'text-[15.5px] leading-[1.78] text-slate-200 mb-5 last:mb-0'
-          : 'text-[15.5px] leading-[1.78] text-foreground mb-5 last:mb-0';
+        const cls = 'text-[15.5px] leading-[1.78] text-foreground dark:text-muted-foreground mb-5 last:mb-0';
         return `<p class="${cls}">${text}</p>`;
       },
 
       blockquote(this: any, token: any) {
         const { tokens } = token;
         const body = this.parser.parse(tokens);
-        const cls = d
-          ? 'border-l-4 border-blue-500/60 pl-4 py-2 my-4 bg-blue-950/30 rounded-r-lg text-slate-300 italic'
-          : 'border-l-4 border-blue-400/60 pl-4 py-2 my-4 bg-blue-50 rounded-r-lg text-secondary italic';
+        const cls = 'border-l-4 border-blue-400/60 dark:border-blue-500/60 pl-4 py-2 my-4 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/30 rounded-r-lg text-muted-foreground italic';
         return `<blockquote class="${cls}">${body}</blockquote>`;
       },
 
@@ -235,20 +221,12 @@ function buildRendererOptions(theme: 'dark' | 'light') {
             const body = this.parser.parse(item.tokens);
             if (ordered) {
               const num = counter++;
-              const badgeCls = d
-                ? 'mt-[3px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-slate-700/70 text-[11px] font-bold text-slate-200 border border-slate-600/60'
-                : 'mt-[3px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-surface text-[11px] font-bold text-foreground border border-border';
-              const textCls = d
-                ? 'flex-1 text-[15.5px] leading-[1.78] text-slate-200 min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0'
-                : 'flex-1 text-[15.5px] leading-[1.78] text-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
+              const badgeCls = 'mt-[3px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-surface dark:bg-slate-700/70 text-[11px] font-bold text-foreground dark:text-muted-foreground border border-border dark:border-slate-600/60';
+              const textCls = 'flex-1 text-[15.5px] leading-[1.78] text-foreground dark:text-muted-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
               return `<li class="flex items-start gap-3"><span class="${badgeCls}">${num}</span><div class="${textCls}">${body}</div></li>`;
             }
-            const dotCls = d
-              ? 'mt-[9px] h-[7px] w-[7px] rounded-full bg-blue-400 shrink-0'
-              : 'mt-[9px] h-[7px] w-[7px] rounded-full bg-blue-500 shrink-0';
-            const textCls = d
-              ? 'flex-1 text-[15.5px] leading-[1.78] text-slate-200 min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0'
-              : 'flex-1 text-[15.5px] leading-[1.78] text-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
+            const dotCls = 'mt-[9px] h-[7px] w-[7px] rounded-full bg-blue-500 dark:bg-blue-400 shrink-0';
+            const textCls = 'flex-1 text-[15.5px] leading-[1.78] text-foreground dark:text-muted-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
             return `<li class="flex items-start gap-3"><span class="${dotCls}"></span><div class="${textCls}">${body}</div></li>`;
           })
           .join('');
@@ -257,21 +235,19 @@ function buildRendererOptions(theme: 'dark' | 'light') {
 
       strong(token: any) {
         const { text } = token;
-        const cls = d ? 'font-bold text-primary-foreground dark:text-foreground' : 'font-bold text-foreground';
+        const cls = 'font-bold text-foreground dark:text-white';
         return `<strong class="${cls}">${text}</strong>`;
       },
 
       em(token: any) {
         const { text } = token;
-        const cls = d ? 'italic text-slate-300' : 'italic text-secondary';
+        const cls = 'italic text-muted-foreground';
         return `<em class="${cls}">${text}</em>`;
       },
 
       codespan(token: any) {
         const { text } = token;
-        const cls = d
-          ? 'bg-blue-950/60 text-blue-200 rounded px-[6px] py-[2px] text-[0.86em] font-mono font-medium border border-blue-800/50'
-          : 'bg-blue-50 text-blue-700 rounded px-[6px] py-[2px] text-[0.86em] font-mono font-medium border border-blue-200/70';
+        const cls = 'bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 dark:text-blue-200 rounded px-[6px] py-[2px] text-[0.86em] font-mono font-medium border border-blue-200/70 dark:border-blue-800/50';
         return `<code class="${cls}">${text}</code>`;
       },
 
@@ -283,32 +259,32 @@ function buildRendererOptions(theme: 'dark' | 'light') {
         return `<pre class="rounded-lg overflow-x-auto max-w-full my-5 text-[13.5px] leading-[1.7] p-0"><code class="hljs language-${language} text-[13.5px] font-mono whitespace-pre block px-4 py-4 rounded-lg">${safe}</code></pre>`;
       },
 
+      del(token: any) {
+        const { text } = token;
+        const cls = 'line-through text-slate-400 dark:text-slate-500';
+        return `<del class="${cls}">${text}</del>`;
+      },
+
       hr() {
-        const cls = d ? 'border-border/60 my-6' : 'border-border my-6';
+        const cls = 'border-border dark:border-border/60 my-6';
         return `<hr class="${cls}" />`;
       },
 
       link(token: any) {
         const { href, text } = token;
-        const cls = d
-          ? 'text-blue-400 hover:text-blue-300 underline underline-offset-2 font-medium'
-          : 'text-blue-600 hover:text-blue-700 underline underline-offset-2 font-medium';
-        return `<a href="${href ?? ''}" target="_blank" rel="noopener noreferrer" class="${cls}">${text}</a>`;
+        const isExternal = href.startsWith('http');
+        const target = isExternal ? ' target="_blank" rel="noopener noreferrer"' : '';
+        const cls = 'text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline underline-offset-4 decoration-blue-600/30 dark:decoration-blue-400/30 hover:decoration-blue-700 dark:hover:decoration-blue-300 transition-colors';
+        return `<a href="${href}"${target} class="${cls}">${text}</a>`;
       },
 
       table(this: any, token: any) {
         const { header, rows } = token;
-        const thCls = d
-          ? 'px-4 py-3 dark:bg-surface font-bold text-slate-200 border-b border-border/60 text-left text-[11.5px] uppercase tracking-[0.08em]'
-          : 'px-4 py-3 bg-surface font-bold text-foreground border-b border-border text-left text-[11.5px] uppercase tracking-[0.08em]';
-        const tdCls = d
-          ? 'px-4 py-3 border-b border-border/40 text-slate-300 text-[14px] leading-[1.6] align-top'
-          : 'px-4 py-3 border-b border-slate-100 text-foreground text-[14px] leading-[1.6] align-top';
-        const trEvenCls = d ? 'dark:bg-surface/30' : 'bg-surface/50';
-        const containerCls = d
-          ? 'overflow-x-auto my-6 rounded-lg border border-border/60'
-          : 'overflow-x-auto my-6 rounded-lg border border-border';
-        const theadCls = d ? 'dark:bg-surface' : 'bg-surface';
+        const thCls = 'px-4 py-3 bg-surface dark:bg-surface font-bold text-foreground dark:text-muted-foreground border-b border-border dark:border-border/60 text-left text-[11.5px] uppercase tracking-[0.08em]';
+        const tdCls = 'px-4 py-3 border-b border-slate-100 dark:border-slate-800/60 dark:border-border/40 text-foreground dark:text-muted-foreground text-[14px] leading-[1.6] align-top';
+        const trEvenCls = 'bg-surface/50 dark:bg-surface/30';
+        const containerCls = 'overflow-x-auto my-6 rounded-lg border border-border dark:border-border/60';
+        const theadCls = 'bg-surface dark:bg-surface';
 
         const headerCells = (header as any[])
           .map((cell: any) => `<th class="${thCls}">${this.parser.parseInline(cell.tokens)}</th>`)
@@ -329,12 +305,9 @@ function buildRendererOptions(theme: 'dark' | 'light') {
   };
 }
 
-// Two module-level instances — one per theme. Created once, never recreated.
-const markedDark = new Marked();
-markedDark.use(buildRendererOptions('dark') as any);
-
-const markedLight = new Marked();
-markedLight.use(buildRendererOptions('light') as any);
+// A single module-level instance. Created once, never recreated.
+const markedInstance = new Marked();
+markedInstance.use(buildRendererOptions() as any);
 
 export default function MarkdownContent({
   content,
@@ -342,9 +315,7 @@ export default function MarkdownContent({
   className = '',
   inline = false,
 }: MarkdownContentProps) {
-  // Falls back to "dark" when used outside a ContentThemeProvider.
-  const { theme } = useContentTheme();
-  const instance = theme === 'light' ? markedLight : markedDark;
+  const instance = markedInstance;
 
   const raw = content ?? '';
   const text = stripTopHeading ? stripTopH1(raw) : raw;

@@ -153,7 +153,7 @@ function buildAnnotatedSource(
  * it the tokens get colored by atom-one-dark but the rest of the text
  * inherits the page's slate-800 body color — on a near-black panel
  * that renders as invisible. We set a light slate fallback
- * (`text-slate-100`) + apply `hljs` at the wrapper so the theme's
+ * (`text-slate-100 dark:text-slate-300`) + apply `hljs` at the wrapper so the theme's
  * background/foreground defaults kick in.
  */
 export function CodeWalkthrough({
@@ -220,23 +220,23 @@ export function CodeWalkthrough({
       <div className="flex items-stretch justify-between bg-[#21252b] border-b border-[#181a1f]">
         <div className="flex items-stretch">
           {/* Filename tab */}
-          <div className="flex items-center gap-2 px-4 py-2 bg-[#282c34] text-slate-200 border-r border-[#181a1f] border-t-2 border-t-sky-500">
-            <span className="text-[11px] font-mono text-slate-300">
+          <div className="flex items-center gap-2 px-4 py-2 bg-[#282c34] text-slate-200 dark:text-slate-300 border-r border-[#181a1f] border-t-2 border-t-sky-500">
+            <span className="text-[11px] font-mono text-slate-300 dark:text-slate-300">
               {fileBase}.{fileExt}
             </span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider dark:bg-surface text-sky-300 border border-border">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider dark:bg-surface text-sky-300 dark:text-sky-300 border border-border">
               {LANG_DISPLAY[active] ?? active}
             </span>
           </div>
           {/* Title / role hint */}
-          <div className="hidden sm:flex items-center px-3 text-[11px] text-slate-400 italic">
+          <div className="hidden sm:flex items-center px-3 text-[11px] text-slate-400 dark:text-slate-300 italic">
             {title}
           </div>
         </div>
         <div className="flex items-center gap-2 px-3">
           {annotationCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider bg-amber-400/10 text-amber-300 border border-amber-400/30">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider bg-amber-400 dark:bg-amber-800/10 text-amber-950 dark:text-amber-300 border border-amber-400 dark:border-amber-700/30">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400 dark:bg-amber-800" />
               {annotationCount} teaching {annotationCount === 1 ? "note" : "notes"}
             </span>
           )}
@@ -245,10 +245,10 @@ export function CodeWalkthrough({
       </div>
 
       {/* Code area — apply `hljs` class so atom-one-dark's `.hljs`
-          background + default text color kick in, then pin text-slate-100
+          background + default text color kick in, then pin text-slate-100 dark:text-slate-300
           as a safety floor. */}
       {built.source ? (
-        <div className="hljs overflow-x-auto bg-[#282c34] text-slate-100">
+        <div className="hljs overflow-x-auto bg-[#282c34] text-slate-100 dark:text-slate-300">
           <div
             className="grid grid-cols-[auto_1fr] text-[13.5px] leading-[1.7] font-mono min-w-max"
             style={{
@@ -268,9 +268,9 @@ export function CodeWalkthrough({
                     className={cn(
                       "select-none tabular-nums text-right py-[1px] px-3 border-r",
                       isAnnotation
-                        ? "text-amber-300/90 bg-amber-400/10 border-amber-500/40 font-bold"
+                        ? "text-amber-300 dark:text-amber-300/90 bg-amber-400 dark:bg-amber-800/10 border-amber-500 dark:border-amber-700/40 font-bold"
                         : isExplained
-                          ? "text-amber-200 bg-amber-400/20 border-amber-400/60 font-black"
+                          ? "text-amber-200 dark:text-amber-300 bg-amber-400 dark:bg-amber-800/20 border-amber-400 dark:border-amber-700/60 font-black"
                           : "text-muted-foreground border-border/60 bg-[#21252b]",
                     )}
                     style={{ minWidth: `${gutterWidth + 2}ch` }}
@@ -280,8 +280,8 @@ export function CodeWalkthrough({
                   <div
                     className={cn(
                       "py-[1px] px-4 whitespace-pre",
-                      isAnnotation && "bg-amber-400/10",
-                      isExplained && "bg-amber-400/20",
+                      isAnnotation && "bg-amber-400 dark:bg-amber-800/10",
+                      isExplained && "bg-amber-400 dark:bg-amber-800/20",
                     )}
                   >
                     {html != null ? (
@@ -292,8 +292,8 @@ export function CodeWalkthrough({
                         // let hljs colors win.
                         className={cn(
                           isAnnotation
-                            ? "[&_*]:!text-amber-300 text-amber-300 not-italic font-medium"
-                            : "text-slate-100",
+                            ? "[&_*]:!text-amber-300 dark:text-amber-300 text-amber-300 dark:text-amber-300 not-italic font-medium"
+                            : "text-slate-100 dark:text-slate-300",
                         )}
                         dangerouslySetInnerHTML={{
                           __html: html.length > 0 ? html : "&nbsp;",
@@ -303,8 +303,8 @@ export function CodeWalkthrough({
                       <span
                         className={cn(
                           isAnnotation
-                            ? "text-amber-300 font-medium"
-                            : "text-slate-100",
+                            ? "text-amber-300 dark:text-amber-300 font-medium"
+                            : "text-slate-100 dark:text-slate-300",
                         )}
                       >
                         {plainLine.length > 0 ? plainLine : "\u00A0"}
@@ -317,7 +317,7 @@ export function CodeWalkthrough({
           </div>
         </div>
       ) : (
-        <p className="px-4 py-6 text-[13px] text-slate-300 italic bg-[#282c34]">
+        <p className="px-4 py-6 text-[13px] text-slate-300 dark:text-slate-300 italic bg-[#282c34]">
           Code coming soon for {LANG_DISPLAY[active] ?? active}.
         </p>
       )}
@@ -325,9 +325,9 @@ export function CodeWalkthrough({
       {/* Footer — status-bar-like strip, tells the reader what the
           yellow rows mean without a second section. */}
       {annotationCount > 0 && built.source && (
-        <div className="px-4 py-1.5 bg-[#21252b] border-t border-[#181a1f] text-[11px] text-slate-400 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <div className="px-4 py-1.5 bg-[#21252b] border-t border-[#181a1f] text-[11px] text-slate-400 dark:text-slate-300 flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-4 bg-amber-400/30 border border-amber-400/60 rounded-sm" />
+            <span className="inline-block h-2.5 w-4 bg-amber-400 dark:bg-amber-800/30 border border-amber-400 dark:border-amber-700/60 rounded-sm" />
             <span>
               Yellow row = the algorithm's core logic. Amber `{commentPrefix}`
               lines above it = what you'd say out loud.

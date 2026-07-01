@@ -85,27 +85,27 @@ function LegacyQuestionCard({
       <div
         className={`rounded-xl overflow-hidden shadow-lg ${
           d
-            ? "border border-emerald-600/50 bg-[#0d1c15] shadow-black/40"
-            : "border border-emerald-200/70 bg-emerald-50/60 shadow-emerald-100/60"
+            ? "border border-emerald-600 dark:border-emerald-700/50 bg-[#0d1c15] shadow-black/40"
+            : "border border-emerald-200 dark:border-emerald-500/20/70 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 shadow-emerald-100/60"
         }`}
       >
         <div
           className={`flex items-center gap-2 px-5 py-2.5 border-b ${
             d
-              ? "border-emerald-700/50 bg-emerald-900/30"
-              : "border-emerald-200/60 bg-emerald-100/40"
+              ? "border-emerald-700 dark:border-emerald-700/50 bg-emerald-900 dark:bg-emerald-800/30"
+              : "border-emerald-200 dark:border-emerald-500/20/60 bg-emerald-100 dark:bg-emerald-950/20/40"
           }`}
         >
           <Star
             className={`h-3.5 w-3.5 ${
               d
                 ? "text-emerald-400 fill-emerald-400"
-                : "text-emerald-600 fill-emerald-600"
+                : "text-emerald-600 dark:text-emerald-400 fill-emerald-600"
             }`}
           />
           <span
             className={`text-[11px] font-bold uppercase tracking-widest ${
-              d ? "text-emerald-300" : "text-emerald-700"
+              d ? "text-emerald-300" : "text-emerald-700 dark:text-emerald-400"
             }`}
           >
             Interview Answer
@@ -113,7 +113,7 @@ function LegacyQuestionCard({
           <div className="ml-auto flex items-center gap-3">
             <span
               className={`text-[11px] ${
-                d ? "text-emerald-500" : "text-emerald-600"
+                d ? "text-emerald-500" : "text-emerald-600 dark:text-emerald-400"
               }`}
             >
               {readTime}–{Math.min(readTime + 1, 5)} min
@@ -126,8 +126,8 @@ function LegacyQuestionCard({
             <p
               className={`text-[17px] leading-[1.6] font-medium mb-5 pb-5 border-b border-dashed ${
                 d
-                  ? "text-primary-foreground dark:text-foreground border-emerald-800/60"
-                  : "text-foreground border-emerald-200/60"
+                  ? "text-white border-emerald-800 dark:border-emerald-700/60"
+                  : "text-foreground border-emerald-200 dark:border-emerald-500/20/60"
               }`}
             >
               <MarkdownContent content={lede} inline />
@@ -135,7 +135,7 @@ function LegacyQuestionCard({
           )}
           <div
             className={`interview-answer-body text-[15.5px] leading-[1.78] [&_p]:mb-4 [&_p:last-child]:mb-0 ${
-              d ? "text-slate-200" : "text-foreground"
+              d ? "text-muted-foreground" : "text-foreground"
             }`}
           >
             <MarkdownContent content={lede ? rest : speakableText} />
@@ -143,7 +143,7 @@ function LegacyQuestionCard({
           {questionId !== undefined && (
             <div
               className={`mt-5 pt-4 border-t ${
-                d ? "border-emerald-900/50" : "border-emerald-200/50"
+                d ? "border-emerald-900 dark:border-emerald-700/50" : "border-emerald-200 dark:border-emerald-500/20/50"
               }`}
             >
               <MarkCompleteButton questionId={Number(questionId)} />

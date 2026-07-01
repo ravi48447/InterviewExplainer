@@ -61,10 +61,10 @@ export function ModuleRevisionPanel({
   if (!revision?.sections?.length) return null;
 
   return (
-    <div className={cn("bg-background text-foreground [&_a]:text-blue-700", className)}>
+    <div className={cn("bg-background text-foreground [&_a]:text-blue-700 dark:text-blue-400", className)}>
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">
+          <p className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400">
             Revision sheet
           </p>
           <h3 className="mt-1 text-base font-black leading-tight text-foreground">
@@ -83,17 +83,17 @@ export function ModuleRevisionPanel({
         <button
           type="button"
           onClick={() => openRevisionPdfWindow(stackLabel, revision)}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-[11px] font-bold text-foreground shadow-sm transition-colors hover:border-slate-400 hover:bg-surface"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-[11px] font-bold text-foreground shadow-sm transition-colors hover:border-slate-400 dark:border-slate-700 hover:bg-surface"
         >
           <Printer className="h-3.5 w-3.5" />
           Print / PDF
         </button>
       </div>
-      <div className="divide-y divide-slate-100">
+      <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
         {revision.sections.map((sec, idx) => (
           <div key={sec.id} className="px-5 py-5">
             <div className="mb-2 flex items-baseline gap-2">
-              <span className="font-mono text-[10px] font-bold tabular-nums text-slate-400">
+              <span className="font-mono text-[10px] font-bold tabular-nums text-muted-foreground">
                 {String(idx + 1).padStart(2, "0")}
               </span>
               <h4 className="m-0 text-[13px] font-black text-foreground">{sec.title}</h4>

@@ -100,7 +100,10 @@ function MermaidDiagram({ diagram }: { diagram: DSAMermaidDiagram }) {
           securityLevel: "strict",
           fontFamily:
             'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-          flowchart: { htmlLabels: true, curve: "basis", padding: 12 },
+          themeVariables: {
+            fontSize: "24px",
+          },
+          flowchart: { htmlLabels: true, curve: "basis", padding: 24 },
         });
         const { svg: rendered } = await mermaid.render(id, diagram.source);
         if (!cancelled) setSvg(rendered);
@@ -118,21 +121,25 @@ function MermaidDiagram({ diagram }: { diagram: DSAMermaidDiagram }) {
     <DiagramShell
       title={diagram.title}
       caption={diagram.caption}
-      toneClass="border-indigo-200"
-      headerClass="bg-indigo-50 border-indigo-200 text-indigo-700"
+      toneClass="border-indigo-200 dark:border-indigo-500/20"
+      headerClass="bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-400"
     >
       {error ? (
-        <pre className="text-[11px] text-red-600 whitespace-pre-wrap break-words">
+        <pre className="text-[11px] text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">
           Could not render diagram: {error}
         </pre>
       ) : svg ? (
-        <div
-          ref={containerRef}
-          className="overflow-x-auto flex justify-center [&>svg]:max-w-full [&>svg]:h-auto"
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
+        <div ref={containerRef} className="overflow-x-auto py-4 flex justify-center">
+          {/* Using CSS zoom scales the diagram exactly 3.5x its natural size, 
+              preserving aspect ratio without breaking layout or causing empty space. */}
+          <div 
+            dangerouslySetInnerHTML={{ __html: svg }} 
+            className="inline-block"
+            style={{ zoom: 3.5 } as React.CSSProperties}
+          />
+        </div>
       ) : (
-        <div className="h-32 flex items-center justify-center text-[11px] text-slate-400">
+        <div className="h-32 flex items-center justify-center text-[11px] text-slate-400 dark:text-slate-300">
           Rendering diagram…
         </div>
       )}
@@ -152,8 +159,8 @@ function HashmapStateDiagram({
       title={diagram.title}
       caption={diagram.caption}
       input={diagram.input}
-      toneClass="border-violet-200"
-      headerClass="bg-violet-50 border-violet-200 text-violet-700"
+      toneClass="border-violet-200 dark:border-violet-500/20"
+      headerClass="bg-violet-50 dark:bg-violet-500/10 border-violet-200 dark:border-violet-500/20 text-violet-700 dark:text-violet-400"
     >
       <ol className="space-y-3">
         {diagram.frames.map((f, i) => (
@@ -172,7 +179,7 @@ function HashmapStateDiagram({
 
             <div className="rounded-md border border-border bg-surface/60 p-2">
               {f.entries.length === 0 ? (
-                <div className="px-3 py-2 text-[11.5px] font-mono text-slate-400 italic">
+                <div className="px-3 py-2 text-[11.5px] font-mono text-slate-400 dark:text-slate-300 italic">
                   map = {`{}`} (empty)
                 </div>
               ) : (
@@ -186,11 +193,11 @@ function HashmapStateDiagram({
                         className={cn(
                           "inline-flex items-stretch rounded-md border-2 overflow-hidden font-mono text-[11.5px] transition-colors",
                           isLookup && f.found
-                            ? "border-emerald-500 shadow-sm shadow-emerald-200"
+                            ? "border-emerald-500 dark:border-emerald-500/50 shadow-sm shadow-emerald-200"
                             : isLookup
                               ? "border-amber-500"
                               : isHighlighted
-                                ? "border-violet-500 bg-violet-50"
+                                ? "border-violet-500 dark:border-violet-500/50 bg-violet-50 dark:bg-violet-500/10"
                                 : "border-border bg-background",
                         )}
                       >
@@ -198,11 +205,11 @@ function HashmapStateDiagram({
                           className={cn(
                             "px-2 py-1 font-bold",
                             isLookup && f.found
-                              ? "bg-emerald-500 text-primary-foreground dark:text-foreground"
+                              ? "bg-emerald-500 dark:bg-emerald-800 text-primary-foreground dark:text-foreground"
                               : isLookup
-                                ? "bg-amber-500 text-primary-foreground dark:text-foreground"
+                                ? "bg-amber-500 dark:bg-amber-800 text-primary-foreground dark:text-foreground"
                                 : isHighlighted
-                                  ? "bg-violet-500 text-primary-foreground dark:text-foreground"
+                                  ? "bg-violet-500 dark:bg-violet-800 text-primary-foreground dark:text-foreground"
                                   : "bg-surface text-foreground",
                           )}
                         >
@@ -217,17 +224,17 @@ function HashmapStateDiagram({
                 </div>
               )}
               {f.lookupKey && !f.entries.some((e) => e.key === f.lookupKey) && (
-                <div className="mt-2 text-[11px] text-amber-700 font-medium flex items-center gap-1.5">
+                <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1.5">
                   <span aria-hidden="true">🔍</span>
                   Looked up{" "}
-                  <code className="font-mono bg-amber-50 border border-amber-200 px-1 rounded">
+                  <code className="font-mono bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 px-1 rounded">
                     {f.lookupKey}
                   </code>{" "}
                   — not in map.
                 </div>
               )}
               {f.found && (
-                <div className="mt-2 text-[11px] text-emerald-700 font-bold flex items-center gap-1.5">
+                <div className="mt-2 text-[11px] text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-1.5">
                   <span aria-hidden="true">✓</span> Match found.
                 </div>
               )}
@@ -236,10 +243,10 @@ function HashmapStateDiagram({
         ))}
       </ol>
 
-      <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-3 text-[10.5px] text-muted-foreground">
-        <Legend swatch="bg-violet-500" label="Just inserted / updated" />
-        <Legend swatch="bg-amber-500" label="Looking up" />
-        <Legend swatch="bg-emerald-500" label="Match" />
+      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex flex-wrap gap-3 text-[10.5px] text-muted-foreground">
+        <Legend swatch="bg-violet-500 dark:bg-violet-800" label="Just inserted / updated" />
+        <Legend swatch="bg-amber-500 dark:bg-amber-800" label="Looking up" />
+        <Legend swatch="bg-emerald-500 dark:bg-emerald-800" label="Match" />
       </div>
     </DiagramShell>
   );
@@ -253,8 +260,8 @@ function ArrayStateDiagram({ diagram }: { diagram: DSAArrayStateDiagram }) {
       title={diagram.title}
       caption={diagram.caption}
       input={diagram.input}
-      toneClass="border-sky-200"
-      headerClass="bg-sky-50 border-sky-200 text-sky-700"
+      toneClass="border-sky-200 dark:border-sky-500/20"
+      headerClass="bg-sky-50 dark:bg-sky-500/10 border-sky-200 dark:border-sky-500/20 text-sky-700 dark:text-sky-400"
     >
       <ol className="space-y-3">
         {diagram.frames.map((f, i) => {
@@ -299,7 +306,7 @@ function ArrayStateDiagram({ diagram }: { diagram: DSAArrayStateDiagram }) {
                           {ptrs.map((p) => (
                             <span
                               key={p}
-                              className="text-[10px] font-bold font-mono text-sky-700 bg-sky-100 border border-sky-300 px-1 rounded leading-none py-0.5"
+                              className="text-[10px] font-bold font-mono text-sky-700 dark:text-sky-400 bg-sky-100 dark:bg-sky-500/20 border border-sky-300 dark:border-sky-500/30 px-1 rounded leading-none py-0.5"
                             >
                               {p}↓
                             </span>
@@ -309,15 +316,15 @@ function ArrayStateDiagram({ diagram }: { diagram: DSAArrayStateDiagram }) {
                           className={cn(
                             "w-full px-2 py-2 rounded-md border-2 text-center font-mono text-[12.5px] transition-colors",
                             isH
-                              ? "border-emerald-500 bg-emerald-50 text-emerald-900 font-bold"
+                              ? "border-emerald-500 dark:border-emerald-500/50 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400 font-bold"
                               : isD
-                                ? "border-border bg-surface text-slate-400"
+                                ? "border-border bg-surface text-slate-400 dark:text-slate-300"
                                 : "border-border bg-background text-foreground",
                           )}
                         >
                           {v}
                         </div>
-                        <div className="text-[9.5px] text-slate-400 font-mono mt-0.5">
+                        <div className="text-[9.5px] text-slate-400 dark:text-slate-300 font-mono mt-0.5">
                           [{idx}]
                         </div>
                       </div>

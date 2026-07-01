@@ -27,14 +27,14 @@ export const EXPERIENCE_LEVELS: Record<ExperienceLevelKey, ExperienceLevelMeta> 
     range: '0–2 yrs',
     legacyDirs: ['beginner', '1-3', '0-1'],
     color: '#22c55e',
-    colorClass: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    colorClass: 'bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20',
   },
   intermediate: {
     label: 'Intermediate',
     range: '2–5 yrs',
     legacyDirs: ['intermediate', '3-5'],
     color: '#f59e0b',
-    colorClass: 'bg-amber-100 text-amber-700 border-amber-200',
+    colorClass: 'bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20',
   },
 };
 

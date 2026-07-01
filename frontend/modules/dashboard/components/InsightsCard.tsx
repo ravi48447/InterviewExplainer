@@ -121,14 +121,14 @@ export function InsightsCard({
         {diffTotal > 0 ? (
           <div className="flex flex-col flex-1 justify-center">
             <div className="h-3.5 rounded-full overflow-hidden flex mb-4 bg-surface border border-default/50">
-              <div className="bg-emerald-500 transition-all duration-750" style={{ width: `${ePct}%` }} />
-              <div className="bg-amber-500 transition-all duration-750" style={{ width: `${mPct}%` }} />
+              <div className="bg-emerald-500 dark:bg-emerald-800 transition-all duration-750" style={{ width: `${ePct}%` }} />
+              <div className="bg-amber-500 dark:bg-amber-800 transition-all duration-750" style={{ width: `${mPct}%` }} />
               <div className="bg-destructive transition-all duration-750" style={{ width: `${hPct}%` }} />
             </div>
             <div className="space-y-2.5">
               {[
-                { label: 'Easy', count: easy, pct: ePct, dot: 'bg-emerald-500' },
-                { label: 'Medium', count: med, pct: mPct, dot: 'bg-amber-500' },
+                { label: 'Easy', count: easy, pct: ePct, dot: 'bg-emerald-500 dark:bg-emerald-800' },
+                { label: 'Medium', count: med, pct: mPct, dot: 'bg-amber-500 dark:bg-amber-800' },
                 { label: 'Hard', count: hard, pct: hPct, dot: 'bg-destructive' },
               ].map(r => (
                 <div key={r.label} className="flex items-center justify-between">

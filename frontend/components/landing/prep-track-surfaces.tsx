@@ -7,7 +7,7 @@ function TrackIcon({ icon }: { icon: (typeof STANDALONE_PREP_TRACKS)[number]["ic
   if (icon === "network") {
     return (
       <div className="shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
-        <Network className="h-5 w-5 text-primary-foreground dark:text-foreground" aria-hidden />
+        <Network className="h-5 w-5 text-white" aria-hidden />
       </div>
     );
   }
@@ -36,7 +36,7 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
       className={
         isPrep
           ? "mb-10 rounded-2xl border border-border bg-background p-5 sm:p-6 shadow-sm"
-          : "py-12 sm:py-14 bg-background border-y border-slate-100"
+          : "py-12 sm:py-14 bg-background border-y border-slate-100 dark:border-slate-800/60"
       }
     >
       <div className={isPrep ? "" : "w-full px-6 sm:px-12 lg:px-20"}>
@@ -56,7 +56,7 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
                 : "Independent tracks — not one Java-only funnel"}
             </h2>
             <p
-              className={`mt-2 text-secondary max-w-2xl mx-auto ${
+              className={`mt-2 text-muted-foreground max-w-2xl mx-auto ${
                 isPrep ? "text-sm" : "text-sm sm:text-base"
               }`}
             >
@@ -70,21 +70,21 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
             {STANDALONE_PREP_TRACKS.map((t) => (
               <div
                 key={t.id}
-                className="flex flex-col gap-2 rounded-xl border border-border bg-surface/60 p-4 sm:p-5 hover:border-indigo-200 hover:bg-background transition-colors text-left"
+                className="flex flex-col gap-2 rounded-xl border border-border bg-surface/60 p-4 sm:p-5 hover:border-indigo-200 dark:border-indigo-500/20 hover:bg-background transition-colors text-left"
               >
                 <div className="flex gap-4">
                   <TrackIcon icon={t.icon} />
                   <div className="flex-1 min-w-0">
                     <h3 className="text-base font-bold text-foreground">{t.title}</h3>
-                    <p className="mt-1 text-xs sm:text-sm text-secondary leading-snug">
+                    <p className="mt-1 text-xs sm:text-sm text-muted-foreground leading-snug">
                       {t.description}
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 mt-1">
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 mt-1">
                   <Link
                     href={t.href}
-                    className="inline-flex items-center gap-1.5 rounded-lg dark:bg-surface px-3 py-1.5 text-xs font-semibold text-primary-foreground dark:text-foreground hover:dark:bg-surface transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-lg dark:bg-surface px-3 py-1.5 text-xs font-semibold text-white hover:dark:bg-surface transition-colors"
                   >
                     Open track
                     <ArrowRight className="h-3.5 w-3.5" />
@@ -92,7 +92,7 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
                   {isPrep && t.prepHash && (
                     <Link
                       href={`/prep${t.prepHash}`}
-                      className="text-xs font-semibold text-indigo-600 hover:underline"
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
                     >
                       Related section on this page ↓
                     </Link>

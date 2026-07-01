@@ -59,22 +59,22 @@ function RoadStop({ n, expanded, compact }: { n: number; expanded: boolean; comp
       {/* outer glow ring — only when expanded */}
       {expanded && (
         <div className={cn(
-          "absolute rounded-2xl bg-amber-400/20 blur-[6px]",
+          "absolute rounded-2xl bg-amber-400 dark:bg-amber-800/20 blur-[6px]",
           compact ? "inset-[-4px]" : "inset-[-5px]",
         )} aria-hidden />
       )}
       <div
         className={cn(
-          "relative flex shrink-0 items-center justify-center rounded-2xl border-2 font-black text-primary-foreground dark:text-foreground transition-all duration-300",
+          "relative flex shrink-0 items-center justify-center rounded-2xl border-2 font-black text-white transition-all duration-300",
           compact ? "h-10 w-10 text-xs" : "h-12 w-12 text-sm lg:h-[3.25rem] lg:w-[3.25rem] lg:text-base",
           expanded
-            ? "border-amber-300/80 bg-gradient-to-br from-amber-400 via-orange-400 to-amber-500 shadow-lg shadow-amber-900/40"
-            : "border-slate-600/70 bg-gradient-to-br from-slate-600 to-slate-800 shadow-md shadow-black/30",
+            ? "border-amber-300 dark:border-amber-500/30 dark:border-amber-700/80 bg-gradient-to-br from-amber-400 via-orange-400 to-amber-500 shadow-lg shadow-amber-900/40"
+            : "border-slate-600 dark:border-slate-700/70 bg-gradient-to-br from-slate-600 to-slate-800 shadow-md shadow-black/30",
         )}
       >
         {n}
       </div>
-      {!compact ? <div className="mt-1 h-1.5 w-0.5 rounded-full bg-amber-300/25" aria-hidden /> : null}
+      {!compact ? <div className="mt-1 h-1.5 w-0.5 rounded-full bg-amber-300 dark:bg-amber-800/25" aria-hidden /> : null}
     </div>
   );
 }
@@ -95,9 +95,9 @@ function MobileLaneHaze({ toStop }: { toStop: "left" | "right" }) {
             : "from-slate-600/55 via-violet-200/35 to-slate-200/0",
         )}
       />
-      <div className="h-2.5 w-7 shrink-0 overflow-hidden rounded-sm border border-slate-500/25 shadow-inner">
+      <div className="h-2.5 w-7 shrink-0 overflow-hidden rounded-sm border border-slate-500 dark:border-slate-700/25 shadow-inner">
         <div className="h-1.5 w-full bg-gradient-to-b from-slate-500 to-slate-800" />
-        <div className="h-0.5 w-full bg-amber-200/45" />
+        <div className="h-0.5 w-full bg-amber-200 dark:bg-amber-900/40/45" />
       </div>
       <div
         className={cn(

@@ -227,14 +227,14 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                 className="relative w-full max-w-4xl glass-strong border-white/10 rounded-[2rem] sm:rounded-[3rem] p-5 sm:p-8 md:p-14 shadow-[0_50px_100px_rgba(0,0,0,0.6)] overflow-hidden"
             >
                 <div className="bg-blob bg-primary/10 top-[-30%] left-[-30%] scale-[2] blur-[120px]" />
-                <div className="bg-blob bg-purple-500/10 bottom-[-30%] right-[-30%] scale-[2] blur-[120px]" />
+                <div className="bg-blob bg-purple-500 dark:bg-purple-800/10 bottom-[-30%] right-[-30%] scale-[2] blur-[120px]" />
 
                 {onClose && (
                     <button
                         onClick={onClose}
                         className="absolute top-4 right-4 sm:top-10 sm:right-10 p-2 sm:p-4 rounded-2xl glass hover:bg-background/10 transition-all z-20 group"
                     >
-                        <X className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground group-hover:text-primary-foreground dark:text-foreground transition-colors" />
+                        <X className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground group-hover:text-white transition-colors" />
                     </button>
                 )}
 
@@ -247,7 +247,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                     className={cn(
                                         "w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all duration-700 font-bold text-xs sm:text-sm",
                                         step === i ? "bg-primary text-foreground scale-110 shadow-[0_0_30px_rgba(0,242,254,0.4)]" :
-                                            step > i ? "bg-background/20 text-primary-foreground dark:text-foreground" : "bg-background/5 text-muted-foreground border border-white/5"
+                                            step > i ? "bg-background/20 text-white" : "bg-background/5 text-muted-foreground border border-white/5"
                                     )}
                                 >
                                     {step > i ? <Check className="h-4 w-4 sm:h-5 sm:w-5" /> : i + 1}
@@ -340,7 +340,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                                 </div>
                                                 <span className={cn(
                                                     "text-[10px] font-bold tracking-tight uppercase transition-colors",
-                                                    selections.languageSlug === opt.slug ? "text-primary" : "text-muted-foreground group-hover:text-primary-foreground dark:text-foreground"
+                                                    selections.languageSlug === opt.slug ? "text-primary" : "text-muted-foreground group-hover:text-white"
                                                 )}>
                                                     {opt.name}
                                                 </span>

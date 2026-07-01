@@ -227,20 +227,20 @@ export default function PillarTreeNav({
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header — crumbs-style so "you are here" is explicit: Pillar ▸ Module. */}
       <div className="px-4 pt-3 pb-2.5 border-b border-border shrink-0 bg-background">
-        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+        <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">
           You are here
         </div>
         <Link
           href={`/${pillarSlug}`}
-          className="flex items-center gap-1.5 text-[13px] font-bold text-foreground hover:text-blue-600 transition-colors truncate"
+          className="flex items-center gap-1.5 text-[13px] font-bold text-foreground hover:text-blue-600 dark:text-blue-400 transition-colors truncate"
         >
           <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{cleanPillar}</span>
         </Link>
         {activeModuleTitle && (
           <div className="mt-1 flex items-center gap-1 text-[12px] text-muted-foreground pl-5">
-            <ChevronRight className="h-3 w-3 shrink-0 text-slate-300" />
-            <span className="font-bold text-blue-700 truncate">
+            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <span className="font-bold text-blue-700 dark:text-blue-400 truncate">
               {activeModuleTitle}
             </span>
           </div>
@@ -251,12 +251,12 @@ export default function PillarTreeNav({
       <div className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
           <div className="flex items-center justify-between gap-1.5 px-2 mb-2">
             <div className="flex items-center gap-1.5">
-              <Layers className="h-3.5 w-3.5 text-slate-400" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+              <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                 Modules in {cleanPillar}
               </span>
             </div>
-            <span className="text-[10px] font-bold text-slate-400">
+            <span className="text-[10px] font-bold text-muted-foreground">
               {modules.length}
             </span>
           </div>
@@ -274,7 +274,7 @@ export default function PillarTreeNav({
                   className={cn(
                     "flex items-center rounded-lg border-l-2 transition-all",
                     isActiveModule
-                      ? "border-blue-500 bg-blue-50/60"
+                      ? "border-blue-500 dark:border-blue-700 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60"
                       : "border-transparent hover:border-border hover:bg-surface",
                   )}
                 >
@@ -286,14 +286,14 @@ export default function PillarTreeNav({
                     <BookOpen
                       className={cn(
                         "h-3.5 w-3.5 shrink-0",
-                        isActiveModule ? "text-blue-500" : "text-slate-400",
+                        isActiveModule ? "text-blue-500 dark:text-blue-400" : "text-muted-foreground",
                       )}
                     />
                     <span
                       className={cn(
                         "flex-1 text-[13px] leading-tight truncate",
                         isActiveModule
-                          ? "font-bold text-blue-700"
+                          ? "font-bold text-blue-700 dark:text-blue-400"
                           : "font-semibold text-foreground",
                       )}
                     >
@@ -306,16 +306,16 @@ export default function PillarTreeNav({
                     aria-label={isExpanded ? "Collapse module" : "Expand module"}
                   >
                     {totalQ > 0 && (
-                      <span className="text-[11px] text-slate-400 mr-1.5">
+                      <span className="text-[11px] text-muted-foreground mr-1.5">
                         {totalQ}
                       </span>
                     )}
                     {isLoading ? (
-                      <Loader2 className="h-3 w-3 text-blue-400 animate-spin inline" />
+                      <Loader2 className="h-3 w-3 text-blue-400 dark:text-blue-300 animate-spin inline" />
                     ) : (
                       <ChevronRight
                         className={cn(
-                          "h-3 w-3 text-slate-400 transition-transform inline",
+                          "h-3 w-3 text-muted-foreground transition-transform inline",
                           isExpanded && "rotate-90",
                         )}
                       />
@@ -348,16 +348,16 @@ export default function PillarTreeNav({
                                   className={cn(
                                     "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs leading-snug transition-all",
                                     isActiveQ
-                                      ? "bg-blue-600 text-primary-foreground dark:text-foreground font-bold shadow-sm"
-                                      : "text-secondary hover:bg-blue-50 hover:text-blue-700",
+                                      ? "bg-blue-600 text-white font-bold shadow-sm"
+                                      : "text-muted-foreground hover:bg-blue-50 dark:bg-blue-500/10 hover:text-blue-700 dark:text-blue-400",
                                   )}
                                 >
                                   <span
                                     className={cn(
                                       "mt-0.5 shrink-0",
                                       isActiveQ
-                                        ? "text-blue-200"
-                                        : "text-slate-300",
+                                        ? "text-blue-200 dark:text-blue-300"
+                                        : "text-muted-foreground",
                                     )}
                                   >
                                     {isActiveQ ? (
@@ -383,24 +383,24 @@ export default function PillarTreeNav({
                             className={cn(
                               "w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs transition-colors",
                               hasActiveQ
-                                ? "bg-indigo-50 text-indigo-700 font-bold"
-                                : "text-secondary hover:bg-surface font-semibold",
+                                ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-bold"
+                                : "text-muted-foreground hover:bg-surface font-semibold",
                             )}
                           >
                             {isExpSub ? (
-                              <FolderOpen className="h-3 w-3 shrink-0 text-blue-400" />
+                              <FolderOpen className="h-3 w-3 shrink-0 text-blue-400 dark:text-blue-300" />
                             ) : (
-                              <Folder className="h-3 w-3 shrink-0 text-slate-400" />
+                              <Folder className="h-3 w-3 shrink-0 text-muted-foreground" />
                             )}
                             <span className="flex-1 text-left truncate">
                               {sc.name}
                             </span>
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 shrink-0">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 shrink-0">
                               {sc.questionCount}
                             </span>
                             <ChevronRight
                               className={cn(
-                                "h-2.5 w-2.5 text-slate-400 transition-transform shrink-0",
+                                "h-2.5 w-2.5 text-muted-foreground transition-transform shrink-0",
                                 isExpSub && "rotate-90",
                               )}
                             />
@@ -419,16 +419,16 @@ export default function PillarTreeNav({
                                     className={cn(
                                       "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs leading-snug transition-all",
                                       isActiveQ
-                                        ? "bg-blue-600 text-primary-foreground dark:text-foreground font-bold shadow-sm"
-                                        : "text-secondary hover:bg-blue-50 hover:text-blue-700",
+                                        ? "bg-blue-600 text-white font-bold shadow-sm"
+                                        : "text-muted-foreground hover:bg-blue-50 dark:bg-blue-500/10 hover:text-blue-700 dark:text-blue-400",
                                     )}
                                   >
                                     <span
                                       className={cn(
                                         "mt-0.5 shrink-0",
                                         isActiveQ
-                                          ? "text-blue-200"
-                                          : "text-slate-300",
+                                          ? "text-blue-200 dark:text-blue-300"
+                                          : "text-muted-foreground",
                                       )}
                                     >
                                       {isActiveQ ? (
@@ -477,22 +477,22 @@ export default function PillarTreeNav({
             onClick={() => setMobileOpen(false)}
             className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-background hover:shadow-sm transition-all"
           >
-            <Compass className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
-            <span className="flex-1 text-[12px] font-bold text-foreground group-hover:text-indigo-700 leading-tight">
+            <Compass className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
+            <span className="flex-1 text-[12px] font-bold text-foreground group-hover:text-indigo-700 dark:text-indigo-400 leading-tight">
               {structuredTrackCtaLabel}
             </span>
-            <ArrowRight className="h-3 w-3 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
+            <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-indigo-400 dark:text-indigo-300 group-hover:translate-x-0.5 transition-all" />
           </Link>
           <Link
             href="/prep"
             onClick={() => setMobileOpen(false)}
             className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-background hover:shadow-sm transition-all"
           >
-            <Grid3x3 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-            <span className="flex-1 text-[12px] font-bold text-foreground group-hover:text-blue-700 leading-tight">
+            <Grid3x3 className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 shrink-0" />
+            <span className="flex-1 text-[12px] font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400 leading-tight">
               Browse all categories
             </span>
-            <ArrowRight className="h-3 w-3 text-slate-300 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
+            <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-blue-400 dark:text-blue-300 group-hover:translate-x-0.5 transition-all" />
           </Link>
         </div>
     </div>
@@ -511,7 +511,7 @@ export default function PillarTreeNav({
       {/* Mobile FAB */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed bottom-6 left-4 z-40 w-12 h-12 rounded-full bg-blue-600 text-primary-foreground dark:text-foreground shadow-xl flex items-center justify-center hover:bg-blue-700 active:scale-95 transition-all"
+        className="lg:hidden fixed bottom-6 left-4 z-40 w-12 h-12 rounded-full bg-blue-600 dark:bg-blue-800 text-white shadow-xl flex items-center justify-center hover:bg-blue-700 dark:bg-blue-800 active:scale-95 transition-all"
         aria-label="Open navigation"
       >
         <Menu className="h-5 w-5" />

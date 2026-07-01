@@ -19,7 +19,7 @@ const mockTypes = [
     difficulty: 'All Levels',
     sections: ['Timed questions', 'Self-review against sample answers', 'Domain-specific content'],
     gradient: 'from-purple-500 to-pink-600',
-    bgGradient: 'from-purple-50 to-pink-50',
+    bgGradient: 'from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20',
     recommended: true,
     badge: 'POPULAR',
   },
@@ -105,7 +105,7 @@ function MockInterviewsContent() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
 
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-primary-foreground dark:text-foreground">
+      <div className="bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white">
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -154,7 +154,7 @@ function MockInterviewsContent() {
               >
                 {mock.recommended && (
                   <div className="absolute top-4 right-4">
-                    <div className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-600 text-primary-foreground dark:text-foreground text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                    <div className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1">
                       <Star className="h-3 w-3 fill-current" />
                       {mock.badge || 'Recommended'}
                     </div>
@@ -162,11 +162,11 @@ function MockInterviewsContent() {
                 )}
 
                 <div className={cn("w-16 h-16 rounded-2xl bg-gradient-to-br flex items-center justify-center mb-6", mock.gradient)}>
-                  <mock.icon className="h-8 w-8 text-primary-foreground dark:text-foreground" />
+                  <mock.icon className="h-8 w-8 text-white" />
                 </div>
 
                 <h3 className="text-2xl font-black text-foreground mb-2">{mock.title}</h3>
-                <p className="text-sm text-secondary mb-6">{mock.description}</p>
+                <p className="text-sm text-muted-foreground mb-6">{mock.description}</p>
 
                 <div className="flex items-center gap-4 mb-6 text-xs font-bold text-muted-foreground">
                   <div className="flex items-center gap-1">
@@ -182,14 +182,14 @@ function MockInterviewsContent() {
                 <div className="space-y-2 mb-6">
                   {mock.sections.map((section, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm text-foreground">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                       <span>{section}</span>
                     </div>
                   ))}
                 </div>
 
                 <div className={cn(
-                  "w-full py-3 rounded-xl bg-gradient-to-r text-primary-foreground dark:text-foreground font-bold text-sm flex items-center justify-center gap-2 group-hover:scale-105 transition-transform shadow-lg",
+                  "w-full py-3 rounded-xl bg-gradient-to-r text-white font-bold text-sm flex items-center justify-center gap-2 group-hover:scale-105 transition-transform shadow-lg",
                   mock.gradient
                 )}>
                   <Play className="h-4 w-4" />
@@ -213,10 +213,10 @@ function MockInterviewsContent() {
                 className="text-center"
               >
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mx-auto mb-4">
-                  <feature.icon className="h-7 w-7 text-blue-600" />
+                  <feature.icon className="h-7 w-7 text-blue-600 dark:text-blue-400" />
                 </div>
                 <h3 className="text-sm font-black text-foreground mb-2">{feature.title}</h3>
-                <p className="text-xs text-secondary">{feature.description}</p>
+                <p className="text-xs text-muted-foreground">{feature.description}</p>
               </motion.div>
             ))}
           </div>
@@ -227,22 +227,22 @@ function MockInterviewsContent() {
           <Link href="/mock-interviews/history">
             <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 border border-border hover:shadow-lg transition-all group">
               <div className="flex items-start justify-between mb-4">
-                <FileText className="h-8 w-8 text-blue-600" />
-                <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-all" />
               </div>
               <h3 className="text-lg font-black text-foreground mb-2">View Mock History</h3>
-              <p className="text-sm text-secondary">Review past interviews and track your progress over time</p>
+              <p className="text-sm text-muted-foreground">Review past interviews and track your progress over time</p>
             </div>
           </Link>
 
           <Link href="/dashboard">
-            <div className="p-6 rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 hover:shadow-lg transition-all group">
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 border border-purple-200 dark:border-purple-500/20 hover:shadow-lg transition-all group">
               <div className="flex items-start justify-between mb-4">
-                <Zap className="h-8 w-8 text-purple-600" />
-                <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-purple-600 group-hover:translate-x-1 transition-all" />
+                <Zap className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-purple-600 dark:text-purple-400 group-hover:translate-x-1 transition-all" />
               </div>
               <h3 className="text-lg font-black text-foreground mb-2">Performance Analytics</h3>
-              <p className="text-sm text-secondary">Detailed insights and recommendations on your dashboard</p>
+              <p className="text-sm text-muted-foreground">Detailed insights and recommendations on your dashboard</p>
             </div>
           </Link>
         </div>

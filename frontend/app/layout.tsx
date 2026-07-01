@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AuthProvider } from "@/context/auth-context";
+import { GlobalLoginPrompt } from "@/components/global-login-prompt";
 import "./globals.css";
 import "highlight.js/styles/atom-one-dark.css";
 
@@ -124,6 +125,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
+            <GlobalLoginPrompt />
             <a
               href="#main-content"
               className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-primary-foreground px-4 py-2 rounded-md z-50 font-medium transition-all"

@@ -29,13 +29,13 @@ function ProfileContent() {
     }
 
     return (
-        <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 py-12 px-4">
+        <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20 py-12 px-4">
             <div className="w-full min-w-0 animate-fade-in-up">
                 {/* Profile card */}
                 <div className="bg-background rounded-3xl border border-border shadow-sm p-8 md:p-12 mb-8">
                     <div className="flex flex-col md:flex-row items-center gap-8 mb-10">
                         <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                            <User className="h-12 w-12 text-primary-foreground dark:text-foreground" />
+                            <User className="h-12 w-12 text-white" />
                         </div>
                         <div className="text-center md:text-left">
                             <h1 className="text-3xl md:text-4xl font-black tracking-tight text-foreground mb-1">{user?.name}</h1>
@@ -43,7 +43,7 @@ function ProfileContent() {
                                 <Mail className="h-4 w-4" /> {user?.email}
                             </p>
                             {stats?.primaryDomainName && (
-                                <p className="text-sm text-blue-600 font-semibold mt-1">
+                                <p className="text-sm text-blue-600 dark:text-blue-400 font-semibold mt-1">
                                     {stats.primaryDomainName}
                                 </p>
                             )}
@@ -53,22 +53,22 @@ function ProfileContent() {
                     {/* Stats row */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="p-5 rounded-2xl bg-surface border border-border text-center">
-                            <Shield className="h-5 w-5 text-blue-600 mx-auto mb-2" />
+                            <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400 mx-auto mb-2" />
                             <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Status</div>
                             <div className="text-sm font-black text-foreground">Beta User</div>
                         </div>
                         <div className="p-5 rounded-2xl bg-surface border border-border text-center">
-                            <Zap className="h-5 w-5 text-yellow-500 mx-auto mb-2" />
+                            <Zap className="h-5 w-5 text-yellow-500 dark:text-yellow-400 mx-auto mb-2" />
                             <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1">XP Points</div>
                             <div className="text-sm font-black text-foreground">{(stats?.completedQuestions ?? 0) * 50} XP</div>
                         </div>
                         <div className="p-5 rounded-2xl bg-surface border border-border text-center">
-                            <Target className="h-5 w-5 text-purple-600 mx-auto mb-2" />
+                            <Target className="h-5 w-5 text-purple-600 dark:text-purple-400 mx-auto mb-2" />
                             <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Completed</div>
                             <div className="text-sm font-black text-foreground">{stats?.completedQuestions ?? 0}</div>
                         </div>
                         <div className="p-5 rounded-2xl bg-surface border border-border text-center">
-                            <Flame className="h-5 w-5 text-orange-500 mx-auto mb-2" />
+                            <Flame className="h-5 w-5 text-orange-500 dark:text-orange-400 mx-auto mb-2" />
                             <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Streak</div>
                             <div className="text-sm font-black text-foreground">{stats?.currentStreak ?? 0} days</div>
                         </div>
@@ -80,7 +80,7 @@ function ProfileContent() {
                     {/* Stack performance */}
                     <div className="bg-background rounded-2xl border border-border shadow-sm p-6">
                         <h2 className="text-lg font-black text-foreground mb-4 flex items-center gap-2">
-                            <BookOpen className="h-5 w-5 text-blue-600" />
+                            <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                             Stack Progress
                         </h2>
                         {stats?.stackPerformance && stats.stackPerformance.length > 0 ? (
@@ -103,7 +103,7 @@ function ProfileContent() {
                         ) : (
                             <p className="text-sm text-muted-foreground py-4 text-center">
                                 No progress yet.{" "}
-                                <Link href="/domains" className="text-blue-600 font-semibold hover:underline">Start learning</Link>
+                                <Link href="/domains" className="text-blue-600 dark:text-blue-400 font-semibold hover:underline">Start learning</Link>
                             </p>
                         )}
                     </div>
@@ -113,12 +113,12 @@ function ProfileContent() {
                         <h2 className="text-lg font-black text-foreground mb-4">Account Settings</h2>
                         <div className="space-y-3">
                             {/* ── Experience Level — the most important profile setting ── */}
-                            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                            <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 p-4">
                                 <div className="flex items-center gap-2 mb-3">
-                                    <GraduationCap className="h-4 w-4 text-blue-600" />
+                                    <GraduationCap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                                     <span className="text-sm font-black text-foreground">Experience Level</span>
                                 </div>
-                                <p className="text-xs text-secondary mb-3 leading-relaxed">
+                                <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
                                     Every question answer is tuned to this level.
                                     Changing it redirects all content pages to your chosen depth.
                                 </p>
@@ -145,14 +145,14 @@ function ProfileContent() {
                                 {selectedLevel !== getSavedLevel() ? (
                                     <button
                                         onClick={() => handleLevelSave(selectedLevel)}
-                                        className="w-full py-2 bg-blue-600 text-primary-foreground dark:text-foreground rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
+                                        className="w-full py-2 bg-blue-600 dark:bg-blue-800 text-white rounded-lg text-xs font-bold hover:bg-blue-700 dark:bg-blue-800 transition-colors"
                                     >
                                         Save — Apply to All Content
                                     </button>
                                 ) : levelSaved ? (
-                                    <div className="text-center text-xs text-emerald-600 font-bold py-1">✓ Saved! Content will now serve {EXPERIENCE_LEVELS[selectedLevel].label} answers.</div>
+                                    <div className="text-center text-xs text-emerald-600 dark:text-emerald-400 font-bold py-1">✓ Saved! Content will now serve {EXPERIENCE_LEVELS[selectedLevel].label} answers.</div>
                                 ) : (
-                                    <div className="text-center text-xs text-slate-400 py-1">
+                                    <div className="text-center text-xs text-muted-foreground py-1">
                                         Current level: <strong>{EXPERIENCE_LEVELS[selectedLevel].label}</strong>
                                     </div>
                                 )}
@@ -172,7 +172,7 @@ function ProfileContent() {
                             </a>
                             <Link
                                 href="/domains"
-                                className="block px-4 py-3 rounded-xl bg-blue-50 border border-blue-200 text-sm font-bold text-blue-700 hover:bg-blue-100 transition-colors"
+                                className="block px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-sm font-bold text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:bg-blue-950/20 transition-colors"
                             >
                                 Browse Learning Paths →
                             </Link>

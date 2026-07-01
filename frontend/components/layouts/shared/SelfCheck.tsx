@@ -18,13 +18,13 @@ export function SelfCheck({ questions }: SelfCheckProps) {
           <HelpCircle className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs font-bold text-foreground uppercase tracking-wide">Quick Self-Check</span>
         </div>
-        {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-2">
           {questions.map((q, i) => (
-            <div key={i} className="text-sm text-secondary flex items-start gap-2">
-              <span className="text-slate-400 mt-0.5">○</span>
+            <div key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+              <span className="text-muted-foreground mt-0.5">○</span>
               <span>{q}</span>
             </div>
           ))}

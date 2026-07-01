@@ -324,7 +324,7 @@ export default function DashboardPage() {
             <AlertTriangle className="h-7 w-7 text-destructive" aria-hidden="true" />
           </div>
           <h1 className="text-lg font-semibold text-primary mb-1.5">Couldn’t load your dashboard</h1>
-          <p className="text-sm text-secondary mb-6 leading-relaxed">
+          <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
             We hit a problem fetching your progress. Check your connection and try again.
           </p>
           <button
@@ -388,7 +388,7 @@ export default function DashboardPage() {
                   <h2 className="text-lg font-bold tracking-tight">
                     {activeSlug ? "Let's solve your first question" : 'Pick a focus domain to begin'}
                   </h2>
-                  <p className="text-sm text-secondary mt-1 max-w-xl leading-relaxed">
+                  <p className="text-sm text-muted-foreground mt-1 max-w-xl leading-relaxed">
                     {activeSlug
                       ? 'Your dashboard fills with real progress, streaks, and insights as you complete questions. Start with your first one now.'
                       : 'Choose a learning path and your dashboard will track completions, streaks, strengths and weak spots automatically.'}
@@ -422,7 +422,7 @@ export default function DashboardPage() {
             {user?.plan === 'pro' || (!PAYMENTS_ENABLED && hasProAccess(user?.plan)) ? (
               <div className="flex items-center gap-3 rounded-xl border border-default bg-surface px-4 py-3 text-sm">
                 <Crown className="h-4.5 w-4.5 text-primary shrink-0" aria-hidden="true" />
-                <span className="text-secondary">
+                <span className="text-muted-foreground">
                   {user?.plan === 'pro'
                     ? 'Pro unlocked — your full personalized dashboard is active.'
                     : `Pro (normally ${PRO_PRICE_LABEL}) is free during beta — full dashboard unlocked.`}
@@ -434,7 +434,7 @@ export default function DashboardPage() {
             ) : (
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-default bg-card px-5 py-4">
                 <Crown className="h-5 w-5 text-primary shrink-0" aria-hidden="true" />
-                <p className="text-sm text-secondary flex-1">
+                <p className="text-sm text-muted-foreground flex-1">
                   Unlock the full personalized dashboard, multi-domain switching and progress tracking with{' '}
                   <span className="font-bold text-primary">Pro — {PRO_PRICE_LABEL}</span>.
                 </p>
@@ -465,7 +465,7 @@ export default function DashboardPage() {
                       ? 'Your interview is today — you’ve got this!'
                       : 'Interview date passed — set a new goal anytime'}
               </p>
-              <p className="text-xs text-secondary mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {interviewCountdown.role ? `Targeting: ${interviewCountdown.role}. ` : ''}
                 {interviewCountdown.days > 0
                   ? 'Keep your streak going — finish today’s focus questions below.'
@@ -508,16 +508,16 @@ export default function DashboardPage() {
                   {d.currentStreak || 0}
                   <span className="text-sm font-semibold text-muted-foreground ml-1.5 uppercase tracking-wider">day{(d.currentStreak ?? 0) === 1 ? '' : 's'}</span>
                 </p>
-                <p className="text-xs text-secondary mt-2">current streak</p>
+                <p className="text-xs text-muted-foreground mt-2">current streak</p>
               </div>
               <div className="grid grid-cols-2 gap-2.5 mt-5">
                 <div className="text-center p-3 rounded-xl bg-surface border border-default">
                   <p className="text-lg font-bold text-primary leading-none tabular-nums">{d.longestStreak || 0}</p>
-                  <p className="text-[10px] font-medium text-secondary mt-1">Longest streak</p>
+                  <p className="text-[10px] font-medium text-muted-foreground mt-1">Longest streak</p>
                 </div>
                 <div className="text-center p-3 rounded-xl bg-surface border border-default">
                   <p className="text-lg font-bold text-primary leading-none tabular-nums">{actStats.active}</p>
-                  <p className="text-[10px] font-medium text-secondary mt-1">Active days</p>
+                  <p className="text-[10px] font-medium text-muted-foreground mt-1">Active days</p>
                 </div>
               </div>
             </Card>
@@ -584,7 +584,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-base font-bold text-primary leading-none tabular-nums">{s.val}</p>
-                      <p className="text-[10px] text-secondary leading-tight mt-1">{s.label} · {s.unit}</p>
+                      <p className="text-[10px] text-muted-foreground leading-tight mt-1">{s.label} · {s.unit}</p>
                     </div>
                   </div>
                 ))}
@@ -625,7 +625,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h2 className="text-lg font-bold tracking-tight">Ready for a Mock Interview?</h2>
-                <p className="text-sm text-secondary mt-1 max-w-xl leading-relaxed">
+                <p className="text-sm text-muted-foreground mt-1 max-w-xl leading-relaxed">
                   Simulate real interview conditions with timed questions and get structured feedback comparing your answers against expert solutions.
                 </p>
               </div>
@@ -651,7 +651,7 @@ export default function DashboardPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-primary transition-colors">{title}</p>
-                <p className="text-xs text-secondary mt-0.5">{desc}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform shrink-0" aria-hidden="true" />
             </Link>
@@ -664,7 +664,7 @@ export default function DashboardPage() {
             <div className="relative z-10 max-w-2xl mx-auto text-center">
               <Sparkles className="h-9 w-9 text-muted-foreground mx-auto mb-4" />
               <h2 className="text-2xl lg:text-3xl font-bold tracking-tight mb-3">Your personal dashboard awaits</h2>
-              <p className="text-secondary mb-6 leading-relaxed">
+              <p className="text-muted-foreground mb-6 leading-relaxed">
                 Everything above is sample data. Create a free account to track real progress, earn achievements, and get personalised insights.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">

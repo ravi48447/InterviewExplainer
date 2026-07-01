@@ -134,9 +134,9 @@ function SelectDomainContent() {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8 text-center"
         >
-          <Loader2 className="h-12 w-12 text-purple-600 animate-spin mx-auto mb-4" />
+          <Loader2 className="h-12 w-12 text-purple-600 dark:text-purple-400 animate-spin mx-auto mb-4" />
           <h2 className="text-2xl font-black text-foreground mb-2">Loading Domains...</h2>
-          <p className="text-secondary">Fetching available interview topics</p>
+          <p className="text-muted-foreground">Fetching available interview topics</p>
         </motion.div>
       </div>
     );
@@ -150,9 +150,9 @@ function SelectDomainContent() {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8 text-center"
         >
-          <Boxes className="h-12 w-12 text-red-600 mx-auto mb-4" />
+          <Boxes className="h-12 w-12 text-red-600 dark:text-red-400 mx-auto mb-4" />
           <h2 className="text-2xl font-black text-foreground mb-2">Error Loading Domains</h2>
-          <p className="text-secondary mb-6">{error}</p>
+          <p className="text-muted-foreground mb-6">{error}</p>
           <Button onClick={() => router.push('/mock-interviews')} variant="outline">
             Go Back
           </Button>
@@ -169,9 +169,9 @@ function SelectDomainContent() {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8 text-center"
         >
-          <Boxes className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+          <Boxes className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h2 className="text-2xl font-black text-foreground mb-2">No Domains Available</h2>
-          <p className="text-secondary mb-6">No interview domains found in the system</p>
+          <p className="text-muted-foreground mb-6">No interview domains found in the system</p>
           <Button onClick={() => router.push('/mock-interviews')} variant="outline">
             Go Back
           </Button>
@@ -183,7 +183,7 @@ function SelectDomainContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-primary-foreground dark:text-foreground">
+      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white">
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -228,7 +228,7 @@ function SelectDomainContent() {
           className="bg-background rounded-2xl border-2 border-border shadow-lg p-8 mb-6"
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-primary-foreground dark:text-foreground font-black">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black">
               1
             </div>
             <h2 className="text-2xl font-black text-foreground">Select Your Domain</h2>
@@ -245,22 +245,22 @@ function SelectDomainContent() {
                 className={cn(
                   "relative text-left p-6 rounded-2xl border-2 transition-all hover:scale-[1.02]",
                   selectedDomain === domain.slug
-                    ? "bg-gradient-to-br " + domain.bgColor + " border-blue-500 ring-2 ring-blue-500"
+                    ? "bg-gradient-to-br " + domain.bgColor + " border-blue-500 dark:border-blue-700 ring-2 ring-blue-500"
                     : "bg-background border-border hover:border-border"
                 )}
               >
                 {selectedDomain === domain.slug && (
                   <div className="absolute top-4 right-4">
-                    <CheckCircle2 className="h-6 w-6 text-blue-600" />
+                    <CheckCircle2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                   </div>
                 )}
 
                 <div className={cn("w-12 h-12 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4", domain.color)}>
-                  <domain.icon className="h-6 w-6 text-primary-foreground dark:text-foreground" />
+                  <domain.icon className="h-6 w-6 text-white" />
                 </div>
 
                 <h3 className="text-lg font-black text-foreground mb-2">{domain.name}</h3>
-                <p className="text-sm text-secondary mb-4">
+                <p className="text-sm text-muted-foreground mb-4">
                   {domain.questionCount > 0 ? `${domain.questionCount} questions` : 'Multiple questions'} • {domain.difficulty}
                 </p>
 
@@ -292,7 +292,7 @@ function SelectDomainContent() {
           className="bg-background rounded-2xl border-2 border-border shadow-lg p-8 mb-6"
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center text-primary-foreground dark:text-foreground font-black">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center text-white font-black">
               2
             </div>
             <h2 className="text-2xl font-black text-foreground">Select Question Difficulty</h2>
@@ -304,19 +304,19 @@ function SelectDomainContent() {
               className={cn(
                 "p-6 rounded-2xl border-2 transition-all text-left",
                 difficulty === 'medium'
-                  ? "bg-gradient-to-br from-green-50 to-emerald-50 border-green-500 ring-2 ring-green-500"
+                  ? "bg-gradient-to-br from-green-50 to-emerald-50 border-green-500 dark:border-green-700 ring-2 ring-green-500"
                   : "bg-background border-border hover:border-border"
               )}
             >
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xl font-black text-foreground">Medium</h3>
-                {difficulty === 'medium' && <CheckCircle2 className="h-6 w-6 text-green-600" />}
+                {difficulty === 'medium' && <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />}
               </div>
-              <p className="text-sm text-secondary mb-3">
+              <p className="text-sm text-muted-foreground mb-3">
                 Solid understanding required, practical scenarios
               </p>
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                   <div className="h-full w-2/3 bg-gradient-to-r from-green-500 to-emerald-600" />
                 </div>
                 <span className="text-xs font-bold text-muted-foreground">5-7 questions</span>
@@ -328,19 +328,19 @@ function SelectDomainContent() {
               className={cn(
                 "p-6 rounded-2xl border-2 transition-all text-left",
                 difficulty === 'high'
-                  ? "bg-gradient-to-br from-red-50 to-rose-50 border-red-500 ring-2 ring-red-500"
+                  ? "bg-gradient-to-br from-red-50 to-rose-50 border-red-500 dark:border-red-700 ring-2 ring-red-500"
                   : "bg-background border-border hover:border-border"
               )}
             >
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xl font-black text-foreground">High</h3>
-                {difficulty === 'high' && <CheckCircle2 className="h-6 w-6 text-red-600" />}
+                {difficulty === 'high' && <CheckCircle2 className="h-6 w-6 text-red-600 dark:text-red-400" />}
               </div>
-              <p className="text-sm text-secondary mb-3">
+              <p className="text-sm text-muted-foreground mb-3">
                 Advanced topics, complex problem-solving required
               </p>
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                   <div className="h-full w-full bg-gradient-to-r from-red-500 to-rose-600" />
                 </div>
                 <span className="text-xs font-bold text-muted-foreground">5-7 questions</span>
@@ -352,19 +352,19 @@ function SelectDomainContent() {
               className={cn(
                 "p-6 rounded-2xl border-2 transition-all text-left",
                 difficulty === 'mixed'
-                  ? "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-500 ring-2 ring-blue-500"
+                  ? "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-500 dark:border-blue-700 ring-2 ring-blue-500"
                   : "bg-background border-border hover:border-border"
               )}
             >
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xl font-black text-foreground">Mixed</h3>
-                {difficulty === 'mixed' && <CheckCircle2 className="h-6 w-6 text-blue-600" />}
+                {difficulty === 'mixed' && <CheckCircle2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />}
               </div>
-              <p className="text-sm text-secondary mb-3">
+              <p className="text-sm text-muted-foreground mb-3">
                 Combination of medium and high difficulty questions
               </p>
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                   <div className="h-full w-5/6 bg-gradient-to-r from-blue-500 to-indigo-600" />
                 </div>
                 <span className="text-xs font-bold text-muted-foreground">5-7 questions</span>
@@ -378,7 +378,7 @@ function SelectDomainContent() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-2 border-purple-200 shadow-lg p-8"
+          className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 rounded-2xl border-2 border-purple-200 dark:border-purple-500/20 shadow-lg p-8"
         >
           <div className="flex items-start justify-between gap-6">
             <div className="flex-1">
@@ -386,26 +386,26 @@ function SelectDomainContent() {
               {selectedDomain ? (
                 <div className="space-y-2 text-sm text-foreground">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     <span className="font-semibold">
                       Domain: {domains.find(d => d.slug === selectedDomain)?.name}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     <span className="font-semibold">
                       Difficulty: {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     <span className="font-semibold">
                       Questions: 5-7 random questions from selected domain
                     </span>
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-secondary">
+                <p className="text-sm text-muted-foreground">
                   Select a domain to continue
                 </p>
               )}

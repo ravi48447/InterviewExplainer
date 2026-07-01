@@ -130,10 +130,10 @@ function MockInterviewResultsContent() {
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-emerald-600';
-    if (score >= 70) return 'text-blue-600';
-    if (score >= 60) return 'text-orange-600';
-    return 'text-red-600';
+    if (score >= 80) return 'text-emerald-600 dark:text-emerald-400';
+    if (score >= 70) return 'text-blue-600 dark:text-blue-400';
+    if (score >= 60) return 'text-orange-600 dark:text-orange-400';
+    return 'text-red-600 dark:text-red-400';
   };
 
   const getScoreGradient = (score: number) => {
@@ -153,7 +153,7 @@ function MockInterviewResultsContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
       {/* Hero Section */}
-      <div className={cn("bg-gradient-to-r", getScoreGradient(mockData.overallScore), "text-primary-foreground dark:text-foreground")}>
+      <div className={cn("bg-gradient-to-r", getScoreGradient(mockData.overallScore), "text-white")}>
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -191,7 +191,7 @@ function MockInterviewResultsContent() {
                       animate={{ scale: 1, rotate: 0 }}
                       transition={{ delay: 0.4, type: 'spring' }}
                     >
-                      <CheckCircle2 className="h-12 w-12 text-primary-foreground dark:text-foreground" />
+                      <CheckCircle2 className="h-12 w-12 text-white" />
                     </motion.div>
                   )}
                 </div>
@@ -295,22 +295,22 @@ function MockInterviewResultsContent() {
                       q.type === 'system-design' && "bg-gradient-to-br from-purple-500 to-indigo-600",
                       q.type === 'behavioral' && "bg-gradient-to-br from-orange-500 to-amber-600"
                     )}>
-                      {q.type === 'coding' && <Code2 className="h-6 w-6 text-primary-foreground dark:text-foreground" />}
-                      {q.type === 'system-design' && <GitBranch className="h-6 w-6 text-primary-foreground dark:text-foreground" />}
-                      {q.type === 'behavioral' && <MessageSquare className="h-6 w-6 text-primary-foreground dark:text-foreground" />}
+                      {q.type === 'coding' && <Code2 className="h-6 w-6 text-white" />}
+                      {q.type === 'system-design' && <GitBranch className="h-6 w-6 text-white" />}
+                      {q.type === 'behavioral' && <MessageSquare className="h-6 w-6 text-white" />}
                     </div>
                     <div className="flex-1">
                       <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
                         Question {idx + 1} • {q.type?.replace('-', ' ') || 'technical'}
                       </p>
                       <h3 className="text-xl font-black text-foreground mb-2">{q.question || q.title}</h3>
-                      <p className="text-sm text-secondary">Time spent: {q.timeSpent || 'N/A'}</p>
+                      <p className="text-sm text-muted-foreground">Time spent: {q.timeSpent || 'N/A'}</p>
 
                       {/* Link to review full answer if available */}
                       {q.reviewUrl && q.score < 80 && (
                         <Link
                           href={q.reviewUrl}
-                          className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold hover:bg-blue-100 transition-colors"
+                          className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-bold hover:bg-blue-100 dark:bg-blue-950/20 transition-colors"
                         >
                           <BookOpen className="h-3 w-3" />
                           Review Full Answer & Explanation
@@ -329,15 +329,15 @@ function MockInterviewResultsContent() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Strengths */}
-                  <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
                     <div className="flex items-center gap-2 mb-3">
-                      <ThumbsUp className="h-5 w-5 text-emerald-600" />
-                      <h4 className="text-sm font-black text-emerald-900">What Went Well</h4>
+                      <ThumbsUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                      <h4 className="text-sm font-black text-emerald-900 dark:text-emerald-400">What Went Well</h4>
                     </div>
                     <ul className="space-y-2">
                       {q.strengths.map((strength: string, i: number) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-emerald-800">
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <li key={i} className="flex items-start gap-2 text-sm text-emerald-800 dark:text-emerald-400">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                           <span>{strength}</span>
                         </li>
                       ))}
@@ -345,15 +345,15 @@ function MockInterviewResultsContent() {
                   </div>
 
                   {/* Improvements */}
-                  <div className="p-4 rounded-xl bg-orange-50 border border-orange-200">
+                  <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20">
                     <div className="flex items-center gap-2 mb-3">
-                      <Lightbulb className="h-5 w-5 text-orange-600" />
-                      <h4 className="text-sm font-black text-orange-900">Areas to Improve</h4>
+                      <Lightbulb className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                      <h4 className="text-sm font-black text-orange-900 dark:text-orange-400">Areas to Improve</h4>
                     </div>
                     <ul className="space-y-2">
                       {q.improvements.map((improvement: string, i: number) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-orange-800">
-                          <AlertCircle className="h-4 w-4 text-orange-600 shrink-0 mt-0.5" />
+                        <li key={i} className="flex items-start gap-2 text-sm text-orange-800 dark:text-orange-400">
+                          <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
                           <span>{improvement}</span>
                         </li>
                       ))}
@@ -379,9 +379,9 @@ function MockInterviewResultsContent() {
                   <div key={category}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        {category === 'coding' && <Code2 className="h-4 w-4 text-blue-600" />}
-                        {category === 'systemDesign' && <GitBranch className="h-4 w-4 text-purple-600" />}
-                        {category === 'behavioral' && <MessageSquare className="h-4 w-4 text-orange-600" />}
+                        {category === 'coding' && <Code2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
+                        {category === 'systemDesign' && <GitBranch className="h-4 w-4 text-purple-600 dark:text-purple-400" />}
+                        {category === 'behavioral' && <MessageSquare className="h-4 w-4 text-orange-600 dark:text-orange-400" />}
                         <span className="text-sm font-bold text-foreground capitalize">
                           {category.replace(/([A-Z])/g, ' $1')}
                         </span>
@@ -398,7 +398,7 @@ function MockInterviewResultsContent() {
                         className={cn("h-full bg-gradient-to-r", getScoreGradient(data.score))}
                       />
                     </div>
-                    <p className="text-xs text-secondary">{data.feedback}</p>
+                    <p className="text-xs text-muted-foreground">{data.feedback}</p>
                   </div>
                 ))}
               </div>
@@ -419,9 +419,9 @@ function MockInterviewResultsContent() {
                     href="/domains"
                     className={cn(
                       "flex items-center justify-between p-4 rounded-xl border-2 transition-all hover:scale-[1.02] group",
-                      rec.priority === 'high' && "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 hover:border-red-400",
-                      rec.priority === 'medium' && "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 hover:border-orange-400",
-                      rec.priority === 'low' && "bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200 hover:border-blue-400"
+                      rec.priority === 'high' && "bg-gradient-to-r from-red-50 to-rose-50 border-red-200 dark:border-red-500/20 hover:border-red-400 dark:border-red-700",
+                      rec.priority === 'medium' && "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200 dark:border-orange-500/20 hover:border-orange-400 dark:border-orange-700",
+                      rec.priority === 'low' && "bg-gradient-to-r from-blue-50 to-cyan-50 border-blue-200 dark:border-blue-500/20 hover:border-blue-400 dark:border-blue-700"
                     )}
                   >
                     <div className="flex items-center gap-3">
@@ -431,14 +431,14 @@ function MockInterviewResultsContent() {
                         rec.priority === 'medium' && "bg-gradient-to-br from-orange-500 to-amber-600",
                         rec.priority === 'low' && "bg-gradient-to-br from-blue-500 to-cyan-600"
                       )}>
-                        <rec.icon className="h-5 w-5 text-primary-foreground dark:text-foreground" />
+                        <rec.icon className="h-5 w-5 text-white" />
                       </div>
                       <div>
                         <p className="text-sm font-bold text-foreground">{rec.title}</p>
-                        <p className="text-xs text-secondary capitalize">{rec.priority} priority</p>
+                        <p className="text-xs text-muted-foreground capitalize">{rec.priority} priority</p>
                       </div>
                     </div>
-                    <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                    <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
                   </Link>
                 ))}
               </div>
@@ -449,11 +449,11 @@ function MockInterviewResultsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
-              className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-2 border-purple-200 shadow-lg p-6"
+              className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 rounded-2xl border-2 border-purple-200 dark:border-purple-500/20 shadow-lg p-6"
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
-                  <Award className="h-5 w-5 text-primary-foreground dark:text-foreground" />
+                  <Award className="h-5 w-5 text-white" />
                 </div>
                 <h3 className="text-lg font-black text-foreground">Keep Going!</h3>
               </div>

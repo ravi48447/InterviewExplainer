@@ -33,7 +33,7 @@ export function SiteFooter() {
           <div className="col-span-1 md:col-span-2">
             <div className="flex items-center gap-2 mb-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shadow-md">
-                <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-white">
+                <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5 text-primary-foreground">
                   <path d="M8 4L2 12L8 20M16 4L22 12L16 20M14 2L10 22" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
@@ -87,7 +87,7 @@ export function SiteFooter() {
                 >
                   <span>{link.label}</span>
                   {link.href === "/mock-interviews" && (
-                    <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 whitespace-nowrap">Soon</span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-indigo-500 dark:bg-indigo-800/10 text-white dark:text-indigo-400 border border-indigo-500 dark:border-indigo-700/20 whitespace-nowrap">Soon</span>
                   )}
                 </Link>
               ))}
@@ -131,7 +131,7 @@ export function SiteFooter() {
         <div className="pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground flex items-center gap-1">
             &copy; {new Date().getFullYear()} InterviewExplainer. Made with{" "}
-            <Heart className="h-3 w-3 text-red-500 fill-red-500 mx-0.5" /> for developers.
+            <Heart className="h-3 w-3 text-red-500 dark:text-red-400 fill-red-500 mx-0.5" /> for developers.
           </p>
           <p className="text-xs text-muted-foreground/60">
             Content-first interview prep platform

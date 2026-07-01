@@ -20,58 +20,58 @@ const colorMap: Record<
   }
 > = {
   amber: {
-    border: "border-amber-200",
+    border: "border-amber-200 dark:border-amber-500/20",
     bg: "bg-amber-50/30",
-    headerBg: "bg-amber-50",
-    headerBorder: "border-amber-200",
+    headerBg: "bg-amber-50 dark:bg-amber-500/10",
+    headerBorder: "border-amber-200 dark:border-amber-500/20",
     headerText: "text-amber-800",
     dot: "bg-amber-400",
-    number: "bg-amber-100 text-amber-700",
+    number: "bg-amber-100 text-amber-700 dark:text-amber-400",
   },
   blue: {
     border: "border-blue-200",
     bg: "bg-blue-50/30",
-    headerBg: "bg-blue-50",
+    headerBg: "bg-blue-50 dark:bg-blue-500/10",
     headerBorder: "border-blue-200",
     headerText: "text-blue-800",
     dot: "bg-blue-400",
-    number: "bg-blue-100 text-blue-700",
+    number: "bg-blue-100 text-blue-700 dark:text-blue-400",
   },
   emerald: {
-    border: "border-emerald-200",
+    border: "border-emerald-200 dark:border-emerald-500/20",
     bg: "bg-emerald-50/30",
-    headerBg: "bg-emerald-50",
-    headerBorder: "border-emerald-200",
+    headerBg: "bg-emerald-50 dark:bg-emerald-500/10",
+    headerBorder: "border-emerald-200 dark:border-emerald-500/20",
     headerText: "text-emerald-800",
     dot: "bg-emerald-400",
-    number: "bg-emerald-100 text-emerald-700",
+    number: "bg-emerald-100 text-emerald-700 dark:text-emerald-400",
   },
   violet: {
-    border: "border-violet-200",
+    border: "border-violet-200 dark:border-violet-500/20",
     bg: "bg-violet-50/30",
-    headerBg: "bg-violet-50",
-    headerBorder: "border-violet-200",
+    headerBg: "bg-violet-50 dark:bg-violet-500/10",
+    headerBorder: "border-violet-200 dark:border-violet-500/20",
     headerText: "text-violet-800",
     dot: "bg-violet-400",
-    number: "bg-violet-100 text-violet-700",
+    number: "bg-violet-100 text-violet-700 dark:text-violet-400",
   },
   indigo: {
-    border: "border-indigo-200",
+    border: "border-indigo-200 dark:border-indigo-500/20",
     bg: "bg-indigo-50/30",
-    headerBg: "bg-indigo-50",
-    headerBorder: "border-indigo-200",
+    headerBg: "bg-indigo-50 dark:bg-indigo-500/10",
+    headerBorder: "border-indigo-200 dark:border-indigo-500/20",
     headerText: "text-indigo-800",
     dot: "bg-indigo-400",
-    number: "bg-indigo-100 text-indigo-700",
+    number: "bg-indigo-100 text-indigo-700 dark:text-indigo-400",
   },
   rose: {
-    border: "border-rose-200",
+    border: "border-rose-200 dark:border-rose-500/20",
     bg: "bg-rose-50/30",
-    headerBg: "bg-rose-50",
-    headerBorder: "border-rose-200",
+    headerBg: "bg-rose-50 dark:bg-rose-500/10",
+    headerBorder: "border-rose-200 dark:border-rose-500/20",
     headerText: "text-rose-800",
-    dot: "bg-rose-400",
-    number: "bg-rose-100 text-rose-700",
+    dot: "bg-rose-400 dark:bg-rose-800",
+    number: "bg-rose-100 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400",
   },
   slate: {
     border: "border-border",
@@ -79,8 +79,8 @@ const colorMap: Record<
     headerBg: "bg-surface",
     headerBorder: "border-border",
     headerText: "text-foreground",
-    dot: "bg-slate-400",
-    number: "bg-surface text-secondary",
+    dot: "bg-slate-400 dark:bg-slate-800",
+    number: "bg-surface text-muted-foreground",
   },
 };
 
@@ -138,7 +138,7 @@ export function ConceptMap({
     <div className="my-6 not-prose">
       {title && (
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+          <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
             {title}
           </span>
           <div className="flex-1 h-px bg-surface" />

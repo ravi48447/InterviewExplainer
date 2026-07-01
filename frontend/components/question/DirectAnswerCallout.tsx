@@ -8,9 +8,9 @@ export function DirectAnswerCallout({ directAnswer }: DirectAnswerCalloutProps) 
   if (!directAnswer) return null;
 
   return (
-    <div className="mb-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 overflow-hidden">
-      <div className="flex items-center gap-2 px-5 py-3 border-b border-blue-200 bg-blue-100/50">
-        <Zap className="h-4 w-4 text-blue-600" />
+    <div className="mb-10 rounded-xl bg-blue-500 dark:bg-blue-800/5 border border-blue-500 dark:border-blue-700/20 overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-blue-500 dark:border-blue-700/20 bg-blue-500/10 dark:bg-blue-500/20">
+        <Zap className="h-4 w-4 text-blue-600 dark:text-blue-400 dark:text-blue-500" />
         <h2 className="text-xs font-bold text-foreground uppercase tracking-wide">Quick Answer</h2>
       </div>
       <div className="px-5 py-4">

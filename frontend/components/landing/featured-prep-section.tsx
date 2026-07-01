@@ -84,13 +84,13 @@ function renderPillarCard(p: FeaturedPillarCard) {
     <Link
       key={p.pillarSlug}
       href={`/${p.pillarSlug}`}
-      className="group relative flex items-center gap-3 px-4 py-3 rounded-lg border border-border bg-background hover:border-indigo-300 hover:shadow-md transition-all duration-200"
+      className="group relative flex items-center gap-3 px-4 py-3 rounded-lg border border-border bg-background hover:border-indigo-300 dark:border-indigo-700 hover:shadow-md transition-all duration-200"
     >
       <div className="shrink-0 w-9 h-9 rounded-md bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
-        <Icon className="h-4 w-4 text-primary-foreground dark:text-foreground" />
+        <Icon className="h-4 w-4 text-white" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-black text-foreground group-hover:text-indigo-600 transition-colors leading-tight truncate">
+        <div className="text-sm font-black text-foreground group-hover:text-indigo-600 dark:text-indigo-400 transition-colors leading-tight truncate">
           {p.title}
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground leading-snug line-clamp-2">
@@ -109,7 +109,7 @@ function renderPillarCard(p: FeaturedPillarCard) {
           </span>
         </div>
       </div>
-      <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+      <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-indigo-500 dark:text-indigo-400 group-hover:translate-x-0.5 transition-all shrink-0" />
     </Link>
   );
 }
@@ -136,9 +136,9 @@ export function FeaturedPrepSection({
       <div className="w-full px-6 sm:px-12 lg:px-20">
         <div className="w-full min-w-0">
           <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-100 border-2 border-indigo-300 rounded-full mb-6">
-              <Compass className="h-5 w-5 text-indigo-600" />
-              <span className="text-sm font-bold text-indigo-700">
+            <div className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-100 dark:bg-indigo-950/20 border-2 border-indigo-300 dark:border-indigo-700 rounded-full mb-6">
+              <Compass className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <span className="text-sm font-bold text-indigo-700 dark:text-indigo-400">
                 Standalone topic hubs
               </span>
             </div>
@@ -148,7 +148,7 @@ export function FeaturedPrepSection({
             >
               Every Interview Round, One Hub Away
             </h2>
-            <p className="text-lg text-secondary max-w-3xl mx-auto">
+            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
               Every prep category below is a self-contained, standalone
               question set. Pick your interview round, pick your hub, drill
               the modules.
@@ -163,7 +163,7 @@ export function FeaturedPrepSection({
                     key={tier.title}
                     className="rounded-2xl border border-border bg-background p-5 shadow-sm"
                   >
-                    <div className="mb-4 pb-4 border-b border-slate-100">
+                    <div className="mb-4 pb-4 border-b border-slate-100 dark:border-slate-800/60">
                       <h3 className="text-lg font-black text-foreground leading-tight">
                         {tier.title}
                       </h3>
@@ -181,7 +181,7 @@ export function FeaturedPrepSection({
               <div className="mt-10 flex justify-center">
                 <Link
                   href={indexHref}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-primary-foreground dark:text-foreground font-bold text-sm hover:from-indigo-700 hover:to-blue-700 shadow-sm transition-colors"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-bold text-sm hover:from-indigo-700 hover:to-blue-700 shadow-sm transition-colors"
                 >
                   Browse the full prep index
                   <ArrowRight className="h-4 w-4" />
@@ -202,7 +202,7 @@ export function FeaturedPrepSection({
                     type="button"
                     onClick={() => setExpanded((v) => !v)}
                     aria-expanded={expanded}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-background border-2 border-indigo-200 text-indigo-700 font-bold text-sm hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-background border-2 border-indigo-200 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-400 font-bold text-sm hover:bg-indigo-50 dark:bg-indigo-500/10 hover:border-indigo-300 dark:border-indigo-700 transition-colors"
                   >
                     {expanded ? (
                       <>
@@ -220,7 +220,7 @@ export function FeaturedPrepSection({
                 )}
                 <Link
                   href={indexHref}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 text-primary-foreground dark:text-foreground font-bold text-sm hover:from-indigo-700 hover:to-blue-700 shadow-sm transition-colors"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-bold text-sm hover:from-indigo-700 hover:to-blue-700 shadow-sm transition-colors"
                 >
                   Browse the full prep index
                   <ArrowRight className="h-4 w-4" />

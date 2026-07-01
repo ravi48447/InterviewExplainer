@@ -197,7 +197,7 @@ function FormField({
     <div className="flex flex-col gap-1.5">
       <label className="text-sm font-medium text-foreground">
         {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
+        {required && <span className="text-red-500 dark:text-red-400 ml-1">*</span>}
       </label>
       {children}
     </div>

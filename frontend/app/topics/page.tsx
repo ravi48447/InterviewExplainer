@@ -44,7 +44,7 @@ const CATEGORIES = [
         slug: "system-design",
         name: "System Design",
         icon: Network,
-        color: "text-emerald-600",
+        color: "text-emerald-600 dark:text-emerald-400",
         bg: "bg-emerald-100",
         desc: "Scalability, availability, consistency, load balancing, databases at scale",
         subtopics: ["Horizontal scaling", "CAP trade-offs", "Database sharding", "Caching layers"],
@@ -54,7 +54,7 @@ const CATEGORIES = [
         slug: "microservices",
         name: "Microservices",
         icon: Layers,
-        color: "text-violet-600",
+        color: "text-violet-600 dark:text-violet-400",
         bg: "bg-violet-100",
         desc: "Service decomposition, communication patterns, sagas, service mesh",
         subtopics: ["Service discovery", "API gateway", "Saga pattern", "Circuit breaker"],
@@ -64,7 +64,7 @@ const CATEGORIES = [
         slug: "distributed-systems",
         name: "Distributed Systems",
         icon: GitBranch,
-        color: "text-blue-600",
+        color: "text-blue-600 dark:text-blue-400",
         bg: "bg-blue-100",
         desc: "CAP theorem, consensus, replication, fault tolerance, CRDTs",
         subtopics: ["Raft consensus", "Leader election", "Replication strategies", "Partition handling"],
@@ -74,7 +74,7 @@ const CATEGORIES = [
         slug: "event-driven-architecture",
         name: "Event-Driven Architecture",
         icon: Radio,
-        color: "text-amber-600",
+        color: "text-amber-600 dark:text-amber-400",
         bg: "bg-amber-100",
         desc: "Events, commands, CQRS, event sourcing, outbox pattern",
         subtopics: ["Event sourcing", "CQRS", "Outbox pattern", "Idempotency"],
@@ -94,7 +94,7 @@ const CATEGORIES = [
         slug: "domain-driven-design",
         name: "Domain-Driven Design",
         icon: Target,
-        color: "text-rose-600",
+        color: "text-rose-600 dark:text-rose-400",
         bg: "bg-rose-100",
         desc: "Entities, value objects, aggregates, bounded contexts, ubiquitous language",
         subtopics: ["Aggregates", "Bounded contexts", "Domain events", "Anti-corruption layer"],
@@ -110,7 +110,7 @@ const CATEGORIES = [
         slug: "databases",
         name: "Databases",
         icon: Database,
-        color: "text-emerald-600",
+        color: "text-emerald-600 dark:text-emerald-400",
         bg: "bg-emerald-100",
         desc: "ACID, indexes, query optimization, sharding, replication",
         subtopics: ["B-tree indexes", "Query planning", "Normalization", "Transactions"],
@@ -120,7 +120,7 @@ const CATEGORIES = [
         slug: "caching",
         name: "Caching",
         icon: Cpu,
-        color: "text-amber-600",
+        color: "text-amber-600 dark:text-amber-400",
         bg: "bg-amber-100",
         desc: "Cache strategies, eviction policies, invalidation, distributed caching",
         subtopics: ["Write-through", "Cache-aside", "TTL strategies", "Cache stampede"],
@@ -130,7 +130,7 @@ const CATEGORIES = [
         slug: "cap-theorem",
         name: "CAP Theorem",
         icon: GitBranch,
-        color: "text-violet-600",
+        color: "text-violet-600 dark:text-violet-400",
         bg: "bg-violet-100",
         desc: "Consistency, availability, partition tolerance — trade-offs explained with real systems",
         subtopics: ["CP systems", "AP systems", "PACELC", "Eventual consistency"],
@@ -156,7 +156,7 @@ const CATEGORIES = [
         slug: "concurrency",
         name: "Concurrency",
         icon: Workflow,
-        color: "text-blue-600",
+        color: "text-blue-600 dark:text-blue-400",
         bg: "bg-blue-100",
         desc: "Threads, async/await, locks, deadlocks, actors, reactive programming",
         subtopics: ["Thread pools", "Lock-free structures", "Deadlock detection", "Async patterns"],
@@ -182,7 +182,7 @@ const CATEGORIES = [
         slug: "observability",
         name: "Observability",
         icon: Eye,
-        color: "text-secondary",
+        color: "text-muted-foreground",
         bg: "bg-surface",
         desc: "Metrics, logs, traces, alerting, OpenTelemetry, dashboards",
         subtopics: ["Three pillars", "Distributed tracing", "SLI/SLO/SLA", "Alerting strategies"],
@@ -198,8 +198,8 @@ const CATEGORIES = [
         slug: "devops",
         name: "DevOps",
         icon: Terminal,
-        color: "text-secondary",
-        bg: "bg-slate-200",
+        color: "text-muted-foreground",
+        bg: "bg-slate-200 dark:bg-slate-800",
         desc: "CI/CD, infrastructure as code, monitoring, SRE, on-call practices",
         subtopics: ["CI/CD pipelines", "GitOps", "Blue-green deploys", "Canary releases"],
         frequency: "High",
@@ -209,7 +209,7 @@ const CATEGORIES = [
         name: "Testing",
         icon: CheckCircle2,
         color: "text-teal-600",
-        bg: "bg-teal-100",
+        bg: "bg-teal-100 dark:bg-teal-950/20",
         desc: "Unit, integration, contract, e2e, TDD, test pyramids",
         subtopics: ["Test pyramid", "Mocking strategies", "Contract testing", "TDD workflow"],
         frequency: "High",
@@ -218,8 +218,8 @@ const CATEGORIES = [
         slug: "performance",
         name: "Performance",
         icon: Gauge,
-        color: "text-orange-600",
-        bg: "bg-orange-100",
+        color: "text-orange-600 dark:text-orange-400",
+        bg: "bg-orange-100 dark:bg-orange-950/20",
         desc: "Profiling, bottlenecks, JVM tuning, async patterns, batching",
         subtopics: ["Flame graphs", "Connection pooling", "N+1 queries", "Lazy loading"],
         frequency: "Medium",
@@ -229,9 +229,9 @@ const CATEGORIES = [
 ];
 
 const FREQUENCY_COLORS: Record<string, string> = {
-  "Very High": "bg-red-100 text-red-700",
-  High: "bg-amber-100 text-amber-700",
-  Medium: "bg-blue-100 text-blue-700",
+  "Very High": "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400",
+  High: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400",
+  Medium: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
 };
 
 const totalTopics = CATEGORIES.reduce(
@@ -244,30 +244,30 @@ export default function TopicsPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-violet-200">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-8">
+        <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
           <Link
             href="/"
-            className="hover:text-secondary flex items-center gap-1"
+            className="hover:text-muted-foreground flex items-center gap-1"
           >
             <Home className="h-3 w-3" /> Home
           </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-secondary font-medium">Topics & Concepts</span>
+          <span className="text-muted-foreground font-medium">Topics & Concepts</span>
         </nav>
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
           <div className="relative px-8 py-8 bg-gradient-to-br from-violet-50 via-purple-50 to-indigo-50">
             <div className="flex items-center gap-2 mb-3">
-              <BookOpen className="h-5 w-5 text-violet-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-violet-600">
+              <BookOpen className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-violet-600 dark:text-violet-400">
                 Cross-Language Concepts
               </span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-foreground mb-3">
               Topics & Technical Concepts
             </h1>
-            <p className="text-sm sm:text-base text-secondary leading-relaxed max-w-3xl">
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-3xl">
               Core technical concepts that come up in every interview, across
               all languages and tracks. Each topic aggregates questions from
               every relevant domain — so whether you&apos;re a Java backend
@@ -275,11 +275,11 @@ export default function TopicsPage() {
               that transfers everywhere.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white border-t border-border">
+          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
-                  <Layers className="h-5 w-5 text-violet-600" />
+                <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-950/20 flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-violet-600 dark:text-violet-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -290,10 +290,10 @@ export default function TopicsPage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200" />
+              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                  <BookOpen className="h-5 w-5 text-purple-600" />
+                <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-950/20 flex items-center justify-center">
+                  <BookOpen className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -304,10 +304,10 @@ export default function TopicsPage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200" />
+              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
-                  <Globe className="h-5 w-5 text-indigo-600" />
+                <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-950/20 flex items-center justify-center">
+                  <Globe className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -335,7 +335,7 @@ export default function TopicsPage() {
                 <Link
                   key={topic.slug}
                   href={`/topics/${topic.slug}`}
-                  className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-violet-300 transition-all p-5"
+                  className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-violet-300 dark:border-violet-500/30 transition-all p-5"
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div
@@ -349,18 +349,18 @@ export default function TopicsPage() {
                       >
                         {topic.frequency}
                       </span>
-                      <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-violet-500 group-hover:translate-x-1 transition-all" />
+                      <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-violet-500 dark:text-violet-400 group-hover:translate-x-1 transition-all" />
                     </div>
                   </div>
 
-                  <h3 className="text-[15px] font-bold text-foreground group-hover:text-violet-600 transition-colors mb-1.5">
+                  <h3 className="text-[15px] font-bold text-foreground group-hover:text-violet-600 dark:text-violet-400 transition-colors mb-1.5">
                     {topic.name}
                   </h3>
                   <p className="text-xs text-muted-foreground leading-relaxed mb-3">
                     {topic.desc}
                   </p>
 
-                  <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100">
+                  <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100 dark:border-slate-800/60">
                     {topic.subtopics.map((sub) => (
                       <span
                         key={sub}
@@ -377,11 +377,11 @@ export default function TopicsPage() {
         ))}
 
         {/* Cross-reference CTA */}
-        <section className="rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-purple-50 p-8 text-center mb-12">
+        <section className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-gradient-to-r from-violet-50 to-purple-50 p-8 text-center mb-12">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Learn Concepts in Context
           </h2>
-          <p className="text-sm text-secondary mb-6 max-w-xl mx-auto">
+          <p className="text-sm text-muted-foreground mb-6 max-w-xl mx-auto">
             Every topic appears in your domain prep dashboard. Select your tech
             stack and get these concepts mapped to your interview path — with
             progress tracking and related Q&A.
@@ -389,14 +389,14 @@ export default function TopicsPage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
               href="/domains"
-              className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-primary-foreground dark:text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+              className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
             >
               Select Your Domain
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
               href="/system-design"
-              className="inline-flex items-center gap-2 px-8 py-3 bg-background border border-border text-foreground font-bold rounded-xl hover:shadow-md hover:border-violet-300 transition-all"
+              className="inline-flex items-center gap-2 px-8 py-3 bg-background border border-border text-foreground font-bold rounded-xl hover:shadow-md hover:border-violet-300 dark:border-violet-500/30 transition-all"
             >
               System Design Problems
               <ArrowRight className="h-4 w-4" />

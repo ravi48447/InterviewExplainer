@@ -5,7 +5,7 @@ export default function SelectPage() {
         <div className="relative min-h-screen overflow-hidden bg-background">
             {/* Background Blobs */}
             <div className="bg-blob bg-primary/10 top-[20%] right-[-5%]" />
-            <div className="bg-blob bg-blue-500/10 bottom-[10%] left-[-5%] delay-700" />
+            <div className="bg-blob bg-blue-500/10 dark:bg-blue-500/20 bottom-[10%] left-[-5%] delay-700" />
 
             {/* Grid Pattern */}
             <div className="absolute inset-0 bg-cyber-grid pointer-events-none opacity-20" />

@@ -25,9 +25,9 @@ interface SearchResult {
 }
 
 const DIFFICULTY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  easy:   { label: "Easy",   color: "text-emerald-700", bg: "bg-emerald-50",  border: "border-emerald-200" },
-  medium: { label: "Medium", color: "text-amber-700",   bg: "bg-amber-50",    border: "border-amber-200" },
-  hard:   { label: "Hard",   color: "text-red-700",     bg: "bg-red-50",      border: "border-red-200" },
+  easy:   { label: "Easy",   color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10",  border: "border-emerald-200 dark:border-emerald-500/20" },
+  medium: { label: "Medium", color: "text-amber-700 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10",    border: "border-amber-200 dark:border-amber-500/20" },
+  hard:   { label: "Hard",   color: "text-red-700 dark:text-red-400",     bg: "bg-red-50 dark:bg-red-500/10",      border: "border-red-200 dark:border-red-500/20" },
 };
 
 const POPULAR_SEARCHES = [
@@ -123,11 +123,11 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20">
       <main className="w-full min-w-0 px-6 pt-12 pb-32">
         {/* Header */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full mb-4 uppercase tracking-widest">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 text-xs font-bold rounded-full mb-4 uppercase tracking-widest">
             <Search className="h-3.5 w-3.5" />
             Search
           </div>
@@ -145,7 +145,7 @@ export default function SearchPage() {
 
         {/* Search Input */}
         <div className="relative mb-6">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <input
             ref={inputRef}
             type="text"
@@ -153,17 +153,17 @@ export default function SearchPage() {
             onChange={(e) => handleInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") doSearch(query); }}
             placeholder="Search questions... (e.g. HashMap, Spring Boot, Docker)"
-            className="w-full pl-14 pr-14 py-5 rounded-2xl bg-background border border-border focus:border-blue-400 focus:ring-4 focus:ring-blue-100 focus:outline-none text-foreground placeholder:text-slate-400 text-base font-medium transition-all shadow-lg shadow-slate-200/50"
+            className="w-full pl-14 pr-14 py-5 rounded-2xl bg-background border border-border focus:border-blue-400 dark:border-blue-700 focus:ring-4 focus:ring-blue-100 focus:outline-none text-foreground placeholder:text-muted-foreground text-base font-medium transition-all shadow-lg shadow-slate-200/50"
           />
           {loading && (
-            <Loader2 className="absolute right-14 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600 animate-spin" />
+            <Loader2 className="absolute right-14 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
           )}
           {query && (
             <button
               onClick={clearSearch}
               className="absolute right-5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-surface transition-colors"
             >
-              <X className="h-4 w-4 text-slate-400" />
+              <X className="h-4 w-4 text-muted-foreground" />
             </button>
           )}
         </div>
@@ -172,7 +172,7 @@ export default function SearchPage() {
         {!searched && (
           <div className="mb-10 animate-fade-in-up">
             <div className="flex items-center gap-2 mb-3">
-              <TrendingUp className="h-4 w-4 text-slate-400" />
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 Popular Searches
               </span>
@@ -182,7 +182,7 @@ export default function SearchPage() {
                 <button
                   key={term}
                   onClick={() => handlePopularClick(term)}
-                  className="px-4 py-2 rounded-xl bg-background border border-border text-sm font-semibold text-foreground hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all shadow-sm"
+                  className="px-4 py-2 rounded-xl bg-background border border-border text-sm font-semibold text-foreground hover:border-blue-300 dark:border-blue-700 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-blue-500/10 transition-all shadow-sm"
                 >
                   {term}
                 </button>
@@ -195,7 +195,7 @@ export default function SearchPage() {
         {searched && results.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 mb-6 animate-fade-in-up" style={{ animationDuration: '0.2s' }}>
             <div className="flex items-center gap-1.5 mr-2">
-              <Filter className="h-3.5 w-3.5 text-slate-400" />
+              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Filter</span>
             </div>
 
@@ -207,15 +207,15 @@ export default function SearchPage() {
                 className={cn(
                   "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
                   activeCategory === cat.value
-                    ? "bg-blue-600 text-primary-foreground dark:text-foreground border-blue-600"
-                    : "bg-background text-secondary border-border hover:border-blue-300",
+                    ? "bg-blue-600 dark:bg-blue-800 text-white border-blue-600 dark:border-blue-700"
+                    : "bg-background text-muted-foreground border-border hover:border-blue-300 dark:border-blue-700",
                 )}
               >
                 {cat.label}
               </button>
             ))}
 
-            <div className="w-px h-5 bg-slate-200 mx-1" />
+            <div className="w-px h-5 bg-slate-200 dark:bg-slate-800 mx-1" />
 
             {/* Difficulty filters */}
             {(["easy", "medium", "hard"] as const).map((d) => {
@@ -228,7 +228,7 @@ export default function SearchPage() {
                     "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
                     activeDifficulty === d
                       ? `${cfg.bg} ${cfg.color} ${cfg.border}`
-                      : "bg-background text-secondary border-border hover:border-border",
+                      : "bg-background text-muted-foreground border-border hover:border-border",
                   )}
                 >
                   {cfg.label}
@@ -243,7 +243,7 @@ export default function SearchPage() {
             <div className="animate-fade-in-up" style={{ animationDuration: '0.2s' }}>
               {results.length === 0 ? (
                 <div className="text-center py-20 bg-background rounded-2xl border border-border shadow-sm">
-                  <Search className="h-12 w-12 mx-auto mb-4 text-slate-200" />
+                  <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <h3 className="text-lg font-bold text-foreground mb-2">
                     No results for &ldquo;{query}&rdquo;
                   </h3>
@@ -253,7 +253,7 @@ export default function SearchPage() {
                   <div className="flex items-center justify-center gap-3">
                     <Link
                       href="/domains"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-primary-foreground dark:text-foreground text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 dark:bg-blue-800 text-white text-sm font-bold rounded-xl hover:bg-blue-700 dark:bg-blue-800 transition-colors"
                     >
                       <Layers className="h-4 w-4" />
                       Browse Domains
@@ -276,22 +276,22 @@ export default function SearchPage() {
                         {stats.total} result{stats.total !== 1 ? "s" : ""}
                       </span>
                       {stats.total < results.length && (
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-muted-foreground">
                           (filtered from {results.length})
                         </span>
                       )}
                     </div>
                     <div className="hidden sm:flex items-center gap-3 text-xs">
-                      <span className="flex items-center gap-1 text-emerald-600 font-bold">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-800" />
                         {stats.easy} Easy
                       </span>
-                      <span className="flex items-center gap-1 text-amber-600 font-bold">
-                        <span className="w-2 h-2 rounded-full bg-amber-500" />
+                      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-800" />
                         {stats.medium} Medium
                       </span>
-                      <span className="flex items-center gap-1 text-red-600 font-bold">
-                        <span className="w-2 h-2 rounded-full bg-red-500" />
+                      <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-red-500 dark:bg-red-800" />
                         {stats.hard} Hard
                       </span>
                     </div>
@@ -305,10 +305,10 @@ export default function SearchPage() {
                         <div key={`${r.domainSlug}-${r.stackSlug}-${r.slug}`}>
                           <Link
                             href={getHref(r)}
-                            className="group flex items-center justify-between p-4 sm:p-5 rounded-xl bg-background border border-border hover:border-blue-300 hover:shadow-md transition-all"
+                            className="group flex items-center justify-between p-4 sm:p-5 rounded-xl bg-background border border-border hover:border-blue-300 dark:border-blue-700 hover:shadow-md transition-all"
                           >
                             <div className="flex-1 min-w-0 mr-4">
-                              <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 transition-colors line-clamp-1 mb-1.5">
+                              <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors line-clamp-1 mb-1.5">
                                 {r.title}
                               </h3>
                               <div className="flex flex-wrap items-center gap-2">
@@ -318,27 +318,27 @@ export default function SearchPage() {
                                 )}>
                                   {diff.label}
                                 </span>
-                                <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
                                   <Clock className="h-2.5 w-2.5" />
                                   {r.readingTime}m
                                 </span>
-                                <span className="hidden sm:inline text-[11px] text-slate-400 flex items-center gap-1">
+                                <span className="hidden sm:inline text-[11px] text-muted-foreground flex items-center gap-1">
                                   <Code2 className="h-2.5 w-2.5" />
                                   {r.stack}
                                 </span>
                                 {r.type === "interview" && (
-                                  <span className="hidden md:inline text-[10px] text-slate-400 font-medium">
+                                  <span className="hidden md:inline text-[10px] text-muted-foreground font-medium">
                                     {r.language} · {r.track} · {r.level}
                                   </span>
                                 )}
                                 {r.type === "tool" && (
-                                  <span className="text-[10px] text-blue-500 font-bold uppercase bg-blue-50 px-1.5 py-0.5 rounded">
+                                  <span className="text-[10px] text-blue-500 dark:text-blue-400 font-bold uppercase bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded">
                                     Tool
                                   </span>
                                 )}
                               </div>
                             </div>
-                            <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all shrink-0" />
+                            <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 group-hover:translate-x-1 transition-all shrink-0" />
                           </Link>
                         </div>
                       );
@@ -347,13 +347,13 @@ export default function SearchPage() {
 
                   {filteredResults.length === 0 && results.length > 0 && (
                     <div className="text-center py-12 bg-background rounded-2xl border border-border">
-                      <Filter className="h-8 w-8 mx-auto mb-3 text-slate-200" />
-                      <p className="text-sm font-semibold text-secondary mb-2">
+                      <Filter className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+                      <p className="text-sm font-semibold text-muted-foreground mb-2">
                         No results match your filters
                       </p>
                       <button
                         onClick={() => { setActiveCategory(""); setActiveDifficulty(""); }}
-                        className="text-xs font-bold text-blue-600 hover:underline"
+                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
                       >
                         Clear all filters
                       </button>
@@ -368,7 +368,7 @@ export default function SearchPage() {
         {!searched && (
           <div className="animate-fade-in-up anim-delay-2">
             <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="h-4 w-4 text-slate-400" />
+              <Sparkles className="h-4 w-4 text-muted-foreground" />
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 Quick Links
               </span>
@@ -383,16 +383,16 @@ export default function SearchPage() {
                 <Link
                   key={href}
                   href={href}
-                  className="group flex items-center gap-4 p-5 rounded-xl bg-background border border-border hover:border-blue-300 hover:shadow-md transition-all"
+                  className="group flex items-center gap-4 p-5 rounded-xl bg-background border border-border hover:border-blue-300 dark:border-blue-700 hover:shadow-md transition-all"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0 group-hover:bg-blue-100 transition-colors">
-                    <Icon className="h-5 w-5 text-blue-600" />
+                  <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center shrink-0 group-hover:bg-blue-100 dark:bg-blue-950/20 transition-colors">
+                    <Icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 transition-colors">{title}</h3>
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors">{title}</h3>
                     <p className="text-xs text-muted-foreground">{desc}</p>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all shrink-0" />
+                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 group-hover:translate-x-1 transition-all shrink-0" />
                 </Link>
               ))}
             </div>

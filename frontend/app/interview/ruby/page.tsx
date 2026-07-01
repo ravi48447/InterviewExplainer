@@ -46,7 +46,7 @@ export default function RubyHubPage() {
           <h1 className="text-4xl font-black tracking-tight text-foreground mb-3">
             Ruby Interview Questions
           </h1>
-          <p className="text-lg text-secondary max-w-3xl leading-relaxed">
+          <p className="text-lg text-muted-foreground max-w-3xl leading-relaxed">
             Ruby on Rails, Sidekiq, ActiveRecord, RSpec, REST APIs — all interview questions for Ruby engineers.
             Content launching soon.
           </p>
@@ -55,11 +55,11 @@ export default function RubyHubPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
           {TRACKS.map(track => (
             <div key={track.slug}
-              className="relative rounded-2xl border border-red-200 bg-gradient-to-br from-red-50 to-rose-50 p-6 opacity-70">
-              <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-1 bg-slate-200 text-secondary rounded-full">Coming Soon</span>
+              className="relative rounded-2xl border border-red-200 dark:border-red-500/20 bg-gradient-to-br from-red-50 to-rose-50 p-6 opacity-70">
+              <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-1 bg-slate-200 dark:bg-slate-800 text-muted-foreground rounded-full">Coming Soon</span>
               <div className="text-2xl mb-3">{track.emoji}</div>
               <h2 className="text-xl font-black text-foreground mb-2">{track.name}</h2>
-              <p className="text-sm text-secondary mb-3">{track.desc}</p>
+              <p className="text-sm text-muted-foreground mb-3">{track.desc}</p>
               <div className="flex flex-wrap gap-1">
                 {track.stacks.map(s => (
                   <span key={s} className="text-[10px] px-2 py-0.5 bg-background/70 rounded-full border border-border text-muted-foreground">{s}</span>
@@ -70,7 +70,7 @@ export default function RubyHubPage() {
         </div>
 
         <div className="flex gap-3">
-          <Link href="/interview" className="px-4 py-2 dark:bg-surface text-primary-foreground dark:text-foreground rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors">
+          <Link href="/interview" className="px-4 py-2 dark:bg-surface text-white rounded-lg text-sm font-bold hover:bg-slate-700 dark:bg-slate-800 transition-colors">
             ← Browse All Languages
           </Link>
           <Link href="/interview/python/backend/intermediate" className="px-4 py-2 border border-border text-foreground rounded-lg text-sm font-bold hover:bg-surface transition-colors">
