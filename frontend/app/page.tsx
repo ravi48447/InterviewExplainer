@@ -317,7 +317,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="animate-fade-in-scale anim-delay-3">
+              <div className="hidden lg:block animate-fade-in-scale anim-delay-3">
                 <HeroDashboardVisual />
               </div>
             </div>
