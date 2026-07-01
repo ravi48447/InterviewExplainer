@@ -112,7 +112,7 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
         </section>
 
         {/* Quick links to levels */}
-        <section className="rounded-2xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 to-purple-50 p-6">
+        <section className="rounded-2xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 to-purple-50 p-6 dark:from-background dark:to-background/50">
           <h2 className="text-lg font-black text-foreground mb-4">Jump Directly to a Level</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[

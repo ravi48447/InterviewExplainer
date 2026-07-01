@@ -68,7 +68,7 @@ export default async function TopicHubPage({ params }: { params: Promise<{ conce
   const name = meta?.name ?? toTitle(concept);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/20 to-indigo-50/20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/20 to-indigo-50/20 dark:from-background dark:to-background/50 dark:via-background/80">
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
         <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
           <Link href="/" className="hover:text-foreground">Home</Link>

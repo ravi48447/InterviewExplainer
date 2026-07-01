@@ -44,7 +44,7 @@ export function DesignWhiteboardLayout({
 
       {/* Requirements Board */}
       {requirements && (
-        <div className="rounded-xl border-2 border-blue-200 dark:border-blue-500/20 bg-gradient-to-br from-blue-50 to-indigo-50 overflow-hidden">
+        <div className="rounded-xl border-2 border-blue-200 dark:border-blue-500/20 bg-gradient-to-br from-blue-50 to-indigo-50 overflow-hidden dark:from-background dark:to-background/50">
           <div className="flex items-center gap-2 px-5 py-3 bg-blue-100 dark:bg-blue-950/20 border-b-2 border-blue-200 dark:border-blue-500/20">
             <Pin className="h-4 w-4 text-blue-700 dark:text-blue-400" />
             <span className="text-xs font-bold text-blue-800 dark:text-blue-400 uppercase tracking-widest">Requirements & Constraints</span>
@@ -70,7 +70,7 @@ export function DesignWhiteboardLayout({
       {/* Algorithm/Approach Options (tabbed) */}
       {approaches.length > 0 && (
         <div className="rounded-xl border border-border overflow-hidden">
-          <div className="flex items-center gap-1 px-4 py-2 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border">
+          <div className="flex items-center gap-1 px-4 py-2 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border dark:from-background dark:to-background/50">
             <Layers className="h-4 w-4 text-muted-foreground mr-1" />
             <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide mr-2">Approaches:</span>
             {approaches.map((a, i) => (

@@ -53,7 +53,7 @@ export function ReferenceCardsLayout({
   return (
     <div className="space-y-6">
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 dark:from-background dark:to-background/50">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}

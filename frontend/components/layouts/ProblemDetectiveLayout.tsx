@@ -37,7 +37,7 @@ export function ProblemDetectiveLayout({
     <div className="space-y-8">
       {/* Problem Statement */}
       {(problemStatement || directAnswer) && (
-        <div className="rounded-xl border-2 border-red-200 dark:border-red-500/20 bg-gradient-to-r from-red-50 to-rose-50 overflow-hidden">
+        <div className="rounded-xl border-2 border-red-200 dark:border-red-500/20 bg-gradient-to-r from-red-50 to-rose-50 overflow-hidden dark:from-background dark:to-background/50">
           <div className="flex items-center gap-2 px-5 py-3 bg-red-100 dark:bg-red-950/20 border-b-2 border-red-200 dark:border-red-500/20">
             <AlertOctagon className="h-4 w-4 text-red-600 dark:text-red-400" />
             <span className="text-xs font-bold text-red-800 dark:text-red-400 uppercase tracking-widest">The Problem</span>

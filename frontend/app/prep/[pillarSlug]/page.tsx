@@ -484,7 +484,7 @@ export default async function PillarHubPage({
                   aria-labelledby="start-here-heading"
                   className="mb-6 rounded-xl border border-border bg-background shadow-sm overflow-hidden"
                 >
-                  <div className="px-5 py-3 bg-gradient-to-r from-amber-50 via-orange-50 to-white border-b border-border flex items-center gap-2">
+                  <div className="px-5 py-3 bg-gradient-to-r from-amber-50 via-orange-50 to-white border-b border-border flex items-center gap-2 dark:from-background dark:to-background/50 dark:via-background/80">
                     <Flame className="h-4 w-4 text-amber-500 dark:text-amber-400" />
                     <h2
                       id="start-here-heading"

@@ -783,7 +783,7 @@ export default async function DSAProblemPage({
                         <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x divide-slate-700 border-t border-rose-200 dark:border-rose-500/20">
                           {m.bad && (
                             <div>
-                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-rose-50 dark:text-rose-300 bg-gradient-to-r from-rose-700 to-rose-800 flex items-center gap-1.5">
+                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-rose-50 dark:text-rose-300 bg-gradient-to-r from-rose-700 to-rose-800 flex items-center gap-1.5 dark:from-background dark:to-background/50">
                                 <XCircle className="h-3.5 w-3.5" />
                                 Don't write this
                               </p>
@@ -796,7 +796,7 @@ export default async function DSAProblemPage({
                           )}
                           {m.good && (
                             <div>
-                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-emerald-50 dark:text-emerald-300 bg-gradient-to-r from-emerald-700 to-emerald-800 flex items-center gap-1.5">
+                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-emerald-50 dark:text-emerald-300 bg-gradient-to-r from-emerald-700 to-emerald-800 flex items-center gap-1.5 dark:from-background dark:to-background/50">
                                 <CheckCircle2 className="h-3.5 w-3.5" />
                                 Write this instead
                               </p>

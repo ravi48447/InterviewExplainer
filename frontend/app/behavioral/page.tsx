@@ -200,7 +200,7 @@ const totalQuestions = CATEGORIES.reduce((sum, c) => sum + c.count, 0);
 
 export default function BehavioralPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50/20 to-orange-50/20 font-sans text-foreground selection:bg-amber-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50/20 to-orange-50/20 font-sans text-foreground selection:bg-amber-200 dark:from-background dark:to-background/50 dark:via-background/80">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -218,7 +218,7 @@ export default function BehavioralPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 dark:from-background dark:to-background/50 dark:via-background/80">
             <div className="flex items-center gap-2 mb-3">
               <Brain className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
@@ -407,7 +407,7 @@ export default function BehavioralPage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-r from-amber-50 to-orange-50 p-8 text-center mb-12">
+        <section className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-r from-amber-50 to-orange-50 p-8 text-center mb-12 dark:from-background dark:to-background/50">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Behavioral Prep Is Part of Every Interview Domain
           </h2>

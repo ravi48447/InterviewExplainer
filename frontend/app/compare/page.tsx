@@ -434,7 +434,7 @@ export default function ComparePage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 p-8 text-center mb-12">
+        <section className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 p-8 text-center mb-12 dark:from-background dark:to-background/50">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Comparisons in Your Interview Prep
           </h2>

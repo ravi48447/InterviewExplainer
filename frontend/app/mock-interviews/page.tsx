@@ -102,7 +102,7 @@ function MockInterviewsContent() {
   const startHref = (mockId: string) => `/mock-interviews/select-domain?type=${mockId}`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:from-background dark:to-background/50 dark:via-background/80">
 
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white">
@@ -225,7 +225,7 @@ function MockInterviewsContent() {
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Link href="/mock-interviews/history">
-            <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 border border-border hover:shadow-lg transition-all group">
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 border border-border hover:shadow-lg transition-all group dark:from-background dark:to-background/50">
               <div className="flex items-start justify-between mb-4">
                 <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                 <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-all" />

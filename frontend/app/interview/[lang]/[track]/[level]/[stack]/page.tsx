@@ -256,7 +256,7 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
               </div>
             </div>
 
-            <div className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-br from-teal-50 to-cyan-50 shadow-sm p-4">
+            <div className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-br from-teal-50 to-cyan-50 shadow-sm p-4 dark:from-background dark:to-background/50">
               <div className="flex items-center gap-2 mb-3">
                 <Target className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">What You'll Learn</h3>

@@ -183,7 +183,7 @@ const TIMELINE_PLANS = [
 
 export default function RoadmapsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50/20 to-emerald-50/20 font-sans text-foreground selection:bg-green-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50/20 to-emerald-50/20 font-sans text-foreground selection:bg-green-200 dark:from-background dark:to-background/50 dark:via-background/80">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -201,7 +201,7 @@ export default function RoadmapsPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-background dark:to-background/50 dark:via-background/80">
             <div className="flex items-center gap-2 mb-3">
               <Map className="h-5 w-5 text-green-600 dark:text-green-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-green-600 dark:text-green-400">
@@ -416,7 +416,7 @@ export default function RoadmapsPage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-green-200 dark:border-green-500/20 bg-gradient-to-r from-green-50 to-emerald-50 p-8 text-center mb-12">
+        <section className="rounded-xl border border-green-200 dark:border-green-500/20 bg-gradient-to-r from-green-50 to-emerald-50 p-8 text-center mb-12 dark:from-background dark:to-background/50">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Get a Personalized Roadmap for Your Domain
           </h2>

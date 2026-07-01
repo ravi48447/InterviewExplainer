@@ -289,7 +289,7 @@ const totalCompanies =
 
 export default function CompaniesPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/20 to-amber-50/20 font-sans text-foreground selection:bg-orange-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/20 to-amber-50/20 font-sans text-foreground selection:bg-orange-200 dark:from-background dark:to-background/50 dark:via-background/80">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -305,7 +305,7 @@ export default function CompaniesPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-background dark:to-background/50 dark:via-background/80">
             <div className="flex items-center gap-2 mb-3">
               <Building2 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400">
@@ -482,7 +482,7 @@ export default function CompaniesPage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-gradient-to-r from-orange-50 to-amber-50 p-8 text-center mb-12">
+        <section className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-gradient-to-r from-orange-50 to-amber-50 p-8 text-center mb-12 dark:from-background dark:to-background/50">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Company Prep Is Part of Your Domain Dashboard
           </h2>

@@ -123,7 +123,7 @@ export function PillarCurveCard({
             <div className={cn(
               "max-h-[min(65vh,26rem)] overflow-y-auto border-t px-4 py-4 sm:px-5",
               expanded ? "border-amber-100 dark:border-amber-500/20" : "border-transparent",
-              "bg-gradient-to-b from-amber-50/40 to-white",
+              "bg-gradient-to-b dark:from-background dark:to-background/50 from-amber-50/40 to-white",
             )}>
               {stacks.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border bg-surface/50 px-3 py-6 text-center text-[11px] text-muted-foreground">

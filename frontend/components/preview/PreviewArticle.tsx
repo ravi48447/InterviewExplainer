@@ -325,7 +325,7 @@ function CodeBlock({
     flavour === "bad"
       ? {
           ring: "border-rose-200 dark:border-rose-500/20",
-          headerBg: "bg-gradient-to-r from-rose-50 to-rose-50/60",
+          headerBg: "bg-gradient-to-r dark:from-background dark:to-background/50 from-rose-50 to-rose-50/60",
           headerText: "text-rose-700 dark:text-rose-400",
           iconCls: "text-rose-500",
           IconCmp: XCircle,
@@ -336,7 +336,7 @@ function CodeBlock({
       : flavour === "good"
       ? {
           ring: "border-emerald-200 dark:border-emerald-500/20",
-          headerBg: "bg-gradient-to-r from-emerald-50 to-emerald-50/60",
+          headerBg: "bg-gradient-to-r dark:from-background dark:to-background/50 from-emerald-50 to-emerald-50/60",
           headerText: "text-emerald-700 dark:text-emerald-400",
           iconCls: "text-emerald-500",
           IconCmp: CheckCircle2,

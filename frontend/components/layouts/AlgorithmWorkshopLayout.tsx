@@ -45,7 +45,7 @@ export function AlgorithmWorkshopLayout({
     <div className="space-y-8">
       {/* Problem + constraints */}
       <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
-        <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border flex items-center justify-between">
+        <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border flex items-center justify-between dark:from-background dark:to-background/50">
           <span className="text-xs font-bold text-foreground uppercase tracking-wide">Problem</span>
           {patternBadge && (
             <span className="flex items-center gap-1 px-2.5 py-1 bg-violet-100 dark:bg-violet-950/20 text-violet-700 dark:text-violet-400 rounded-full text-[11px] font-bold border border-violet-200 dark:border-violet-500/20">

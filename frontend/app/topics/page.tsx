@@ -241,7 +241,7 @@ const totalTopics = CATEGORIES.reduce(
 
 export default function TopicsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-violet-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-violet-200 dark:from-background dark:to-background/50 dark:via-background/80">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -257,7 +257,7 @@ export default function TopicsPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-violet-50 via-purple-50 to-indigo-50">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-violet-50 via-purple-50 to-indigo-50 dark:from-background dark:to-background/50 dark:via-background/80">
             <div className="flex items-center gap-2 mb-3">
               <BookOpen className="h-5 w-5 text-violet-600 dark:text-violet-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-violet-600 dark:text-violet-400">
@@ -377,7 +377,7 @@ export default function TopicsPage() {
         ))}
 
         {/* Cross-reference CTA */}
-        <section className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-gradient-to-r from-violet-50 to-purple-50 p-8 text-center mb-12">
+        <section className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-gradient-to-r from-violet-50 to-purple-50 p-8 text-center mb-12 dark:from-background dark:to-background/50">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Learn Concepts in Context
           </h2>

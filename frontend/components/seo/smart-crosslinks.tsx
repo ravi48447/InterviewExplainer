@@ -64,7 +64,7 @@ export function SmartCrosslinks({
       className="mb-8 rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
     >
       {/* Header */}
-      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-indigo-50 via-blue-50 to-white">
+      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-indigo-50 via-blue-50 to-white dark:from-background dark:to-background/50 dark:via-background/80">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           <h2
