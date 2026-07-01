@@ -99,7 +99,7 @@ export function HeroDashboardVisual() {
                                                     initial={{ height: 0 }}
                                                     animate={{ height: `${h}%` }}
                                                     transition={{ delay: 0.5 + i * 0.02, duration: 0.4 }}
-                                                    className="flex-1 bg-gradient-to-t from-indigo-600 to-indigo-500 rounded-t hover:from-indigo-500 hover:to-indigo-400 transition-all"
+                                                    className="flex-1 bg-gradient-to-t from-indigo-600 to-indigo-50 dark:to-indigo-950/400 rounded-t hover:from-indigo-50 dark:from-indigo-950/400 hover:to-indigo-400 transition-all"
                                                 />
                                             ))}
                                         </div>
@@ -152,11 +152,11 @@ export function HeroDashboardVisual() {
                                         </div>
                                         <div className="space-y-2">
                                             {[
-                                                { name: 'Spring Boot', domain: 'Framework', score: 92, color: 'from-green-500 to-emerald-600' },
-                                                { name: 'Microservices', domain: 'Architecture', score: 88, color: 'from-blue-500 to-cyan-600' },
-                                                { name: 'PostgreSQL', domain: 'Database', score: 85, color: 'from-purple-500 to-pink-600' },
-                                                { name: 'Docker', domain: 'DevOps', score: 78, color: 'from-indigo-500 to-blue-600' },
-                                                { name: 'AWS', domain: 'Cloud', score: 72, color: 'from-orange-500 to-red-600' }
+                                                { name: 'Spring Boot', domain: 'Framework', score: 92, color: 'from-green-50 dark:from-green-950/400 to-emerald-600' },
+                                                { name: 'Microservices', domain: 'Architecture', score: 88, color: 'from-blue-50 dark:from-blue-950/400 to-cyan-600' },
+                                                { name: 'PostgreSQL', domain: 'Database', score: 85, color: 'from-purple-50 dark:from-purple-950/400 to-pink-600' },
+                                                { name: 'Docker', domain: 'DevOps', score: 78, color: 'from-indigo-50 dark:from-indigo-950/400 to-blue-600' },
+                                                { name: 'AWS', domain: 'Cloud', score: 72, color: 'from-orange-50 dark:from-orange-950/400 to-red-600' }
                                             ].map((skill, i) => (
                                                 <div key={skill.name}>
                                                     <div className="flex justify-between text-[9px] mb-0.5">

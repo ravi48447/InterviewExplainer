@@ -18,7 +18,7 @@ const mockTypes = [
     duration: '15–20 min',
     difficulty: 'All Levels',
     sections: ['Timed questions', 'Self-review against sample answers', 'Domain-specific content'],
-    gradient: 'from-purple-500 to-pink-600',
+    gradient: 'from-purple-50 dark:from-purple-950/400 to-pink-600',
     bgGradient: 'from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20',
     recommended: true,
     badge: 'POPULAR',
@@ -31,8 +31,8 @@ const mockTypes = [
     duration: '40–60 min',
     difficulty: 'All Levels',
     sections: ['Multiple topic areas', 'Timed per question', 'End-of-session review'],
-    gradient: 'from-pink-500 to-rose-600',
-    bgGradient: 'from-pink-50 to-rose-50',
+    gradient: 'from-pink-50 dark:from-pink-950/400 to-rose-600',
+    bgGradient: 'from-pink-50 dark:from-pink-950/40 to-rose-50 dark:to-rose-950/40',
   },
   {
     id: 'coding-mock',
@@ -42,8 +42,8 @@ const mockTypes = [
     duration: '20–30 min',
     difficulty: 'Easy to Hard',
     sections: ['Core technical questions', 'Concept-focused', 'Compare with expert answers'],
-    gradient: 'from-blue-500 to-cyan-600',
-    bgGradient: 'from-blue-50 to-cyan-50',
+    gradient: 'from-blue-50 dark:from-blue-950/400 to-cyan-600',
+    bgGradient: 'from-blue-50 dark:from-blue-950/40 to-cyan-50 dark:to-cyan-950/40',
   },
   {
     id: 'system-design-mock',
@@ -53,8 +53,8 @@ const mockTypes = [
     duration: '25–40 min',
     difficulty: 'Mid to Senior',
     sections: ['Architecture questions', 'Scalability scenarios', 'Guided review'],
-    gradient: 'from-purple-500 to-indigo-600',
-    bgGradient: 'from-purple-50 to-indigo-50',
+    gradient: 'from-purple-50 dark:from-purple-950/400 to-indigo-600',
+    bgGradient: 'from-purple-50 dark:from-purple-950/40 to-indigo-50 dark:to-indigo-950/40',
   },
   {
     id: 'behavioral-mock',
@@ -64,8 +64,8 @@ const mockTypes = [
     duration: '15–25 min',
     difficulty: 'All Levels',
     sections: ['STAR framework prompts', 'Leadership & conflict scenarios', 'Self-review checklist'],
-    gradient: 'from-orange-500 to-amber-600',
-    bgGradient: 'from-orange-50 to-amber-50',
+    gradient: 'from-orange-50 dark:from-orange-950/400 to-amber-600',
+    bgGradient: 'from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40',
   },
 ];
 
@@ -102,7 +102,7 @@ function MockInterviewsContent() {
   const startHref = (mockId: string) => `/mock-interviews/select-domain?type=${mockId}`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40  ">
 
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white">
@@ -154,7 +154,7 @@ function MockInterviewsContent() {
               >
                 {mock.recommended && (
                   <div className="absolute top-4 right-4">
-                    <div className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                    <div className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-50 dark:from-purple-950/400 to-pink-600 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1">
                       <Star className="h-3 w-3 fill-current" />
                       {mock.badge || 'Recommended'}
                     </div>
@@ -212,7 +212,7 @@ function MockInterviewsContent() {
                 transition={{ delay: 0.5 + index * 0.1 }}
                 className="text-center"
               >
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mx-auto mb-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-100 dark:from-blue-950/50 to-indigo-100 dark:to-indigo-950/50 flex items-center justify-center mx-auto mb-4">
                   <feature.icon className="h-7 w-7 text-blue-600 dark:text-blue-400" />
                 </div>
                 <h3 className="text-sm font-black text-foreground mb-2">{feature.title}</h3>
@@ -225,7 +225,7 @@ function MockInterviewsContent() {
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Link href="/mock-interviews/history">
-            <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50 border border-border hover:shadow-lg transition-all group dark:bg-none dark:bg-background">
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 dark:from-slate-950/40 to-blue-50 dark:to-blue-950/40 border border-border hover:shadow-lg transition-all group  ">
               <div className="flex items-start justify-between mb-4">
                 <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                 <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-all" />

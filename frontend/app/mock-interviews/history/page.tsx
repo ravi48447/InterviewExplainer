@@ -153,17 +153,17 @@ function MockInterviewHistoryContent() {
   };
 
   const getScoreGradient = (score: number) => {
-    if (score >= 80) return 'from-emerald-500 to-green-600';
-    if (score >= 70) return 'from-blue-500 to-cyan-600';
-    if (score >= 60) return 'from-orange-500 to-amber-600';
-    return 'from-red-500 to-rose-600';
+    if (score >= 80) return 'from-emerald-50 dark:from-emerald-950/400 to-green-600';
+    if (score >= 70) return 'from-blue-50 dark:from-blue-950/400 to-cyan-600';
+    if (score >= 60) return 'from-orange-50 dark:from-orange-950/400 to-amber-600';
+    return 'from-red-50 dark:from-red-950/400 to-rose-600';
   };
 
   const getScoreBg = (score: number) => {
-    if (score >= 80) return 'from-emerald-50 to-green-50';
-    if (score >= 70) return 'from-blue-50 to-cyan-50';
-    if (score >= 60) return 'from-orange-50 to-amber-50';
-    return 'from-red-50 to-rose-50';
+    if (score >= 80) return 'from-emerald-50 dark:from-emerald-950/40 to-green-50 dark:to-green-950/40';
+    if (score >= 70) return 'from-blue-50 dark:from-blue-950/40 to-cyan-50 dark:to-cyan-950/40';
+    if (score >= 60) return 'from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40';
+    return 'from-red-50 dark:from-red-950/40 to-rose-50 dark:to-rose-950/40';
   };
 
   const getTypeIcon = (type: string) => {
@@ -184,20 +184,20 @@ function MockInterviewHistoryContent() {
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'coding-mock':
-        return 'from-blue-500 to-cyan-600';
+        return 'from-blue-50 dark:from-blue-950/400 to-cyan-600';
       case 'system-design-mock':
-        return 'from-purple-500 to-indigo-600';
+        return 'from-purple-50 dark:from-purple-950/400 to-indigo-600';
       case 'behavioral-mock':
-        return 'from-orange-500 to-amber-600';
+        return 'from-orange-50 dark:from-orange-950/400 to-amber-600';
       case 'full-mock':
-        return 'from-pink-500 to-rose-600';
+        return 'from-pink-50 dark:from-pink-950/400 to-rose-600';
       default:
-        return 'from-slate-500 to-slate-600';
+        return 'from-slate-50 dark:from-slate-950/400 to-slate-600';
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40  ">
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white">
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
@@ -462,7 +462,7 @@ function MockInterviewHistoryContent() {
               className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-950/20 dark:to-orange-950/20 rounded-2xl border-2 border-yellow-400 dark:border-yellow-700 shadow-lg p-6 sticky top-6"
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center">
+                <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-50 dark:to-orange-950/400 rounded-xl flex items-center justify-center">
                   <Trophy className="h-6 w-6 text-white" />
                 </div>
                 <div>

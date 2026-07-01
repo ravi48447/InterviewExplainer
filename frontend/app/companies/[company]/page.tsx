@@ -105,7 +105,7 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/20 to-amber-50/20 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-orange-50/20 dark:via-orange-950/40 to-amber-50/20 dark:to-amber-950/40  ">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
@@ -136,7 +136,7 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
               <div className="space-y-3">
                 {meta.rounds.map((round, i) => (
                   <div key={round.name} className="flex gap-4 p-4 bg-background rounded-xl border border-border">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 text-white flex items-center justify-center text-xs font-black shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-50 dark:from-orange-950/400 to-amber-50 dark:to-amber-950/400 text-white flex items-center justify-center text-xs font-black shrink-0">
                       {i + 1}
                     </div>
                     <div>

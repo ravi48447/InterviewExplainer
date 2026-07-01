@@ -102,7 +102,7 @@ export function AnswerContent({ answer }: AnswerContentProps) {
                         </button>
                     </div>
                     <div className="relative group">
-                        <pre className="p-10 rounded-[2.5rem] bg-foreground dark:bg-background/40 border border-white/5 overflow-x-auto text-[14px] font-mono text-cyan-500 dark:text-cyan-400/80 leading-relaxed shadow-inner">
+                        <pre className="p-10 rounded-[2.5rem] bg-foreground /40 border border-white/5 overflow-x-auto text-[14px] font-mono text-cyan-500 dark:text-cyan-400/80 leading-relaxed shadow-inner">
                             <code>{answer.codeSnippet}</code>
                         </pre>
                         <div className="absolute top-6 right-8 text-[9px] font-mono text-muted-foreground/20 uppercase tracking-[0.3em]">IDE Edition</div>
@@ -128,7 +128,7 @@ export function AnswerContent({ answer }: AnswerContentProps) {
                         </div>
                     </div>
 
-                    <div className="p-8 rounded-[2rem] bg-foreground dark:bg-background/40 backdrop-blur-2xl border border-white/5 font-medium text-lg leading-relaxed text-foreground/90 italic shadow-inner">
+                    <div className="p-8 rounded-[2rem] bg-foreground /40 backdrop-blur-2xl border border-white/5 font-medium text-lg leading-relaxed text-foreground/90 italic shadow-inner">
                         "{answer.speakableAnswer}"
                     </div>
 

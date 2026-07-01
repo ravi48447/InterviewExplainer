@@ -27,14 +27,14 @@ function getDomainIcon(domainName: string) {
 // Helper function to get color based on index
 function getDomainColor(index: number) {
   const colors = [
-    { color: 'from-orange-500 to-red-600', bgColor: 'from-orange-50 to-red-50' },
-    { color: 'from-cyan-500 to-blue-600', bgColor: 'from-cyan-50 to-blue-50' },
-    { color: 'from-purple-500 to-indigo-600', bgColor: 'from-purple-50 to-indigo-50' },
-    { color: 'from-green-500 to-emerald-600', bgColor: 'from-green-50 to-emerald-50' },
-    { color: 'from-amber-500 to-orange-600', bgColor: 'from-amber-50 to-orange-50' },
-    { color: 'from-pink-500 to-rose-600', bgColor: 'from-pink-50 to-rose-50' },
-    { color: 'from-blue-500 to-indigo-600', bgColor: 'from-blue-50 to-indigo-50' },
-    { color: 'from-violet-500 to-purple-600', bgColor: 'from-violet-50 to-purple-50' },
+    { color: 'from-orange-50 dark:from-orange-950/400 to-red-600', bgColor: 'from-orange-50 dark:from-orange-950/40 to-red-50 dark:to-red-950/40' },
+    { color: 'from-cyan-50 dark:from-cyan-950/400 to-blue-600', bgColor: 'from-cyan-50 dark:from-cyan-950/40 to-blue-50 dark:to-blue-950/40' },
+    { color: 'from-purple-50 dark:from-purple-950/400 to-indigo-600', bgColor: 'from-purple-50 dark:from-purple-950/40 to-indigo-50 dark:to-indigo-950/40' },
+    { color: 'from-green-50 dark:from-green-950/400 to-emerald-600', bgColor: 'from-green-50 dark:from-green-950/40 to-emerald-50 dark:to-emerald-950/40' },
+    { color: 'from-amber-50 dark:from-amber-950/400 to-orange-600', bgColor: 'from-amber-50 dark:from-amber-950/40 to-orange-50 dark:to-orange-950/40' },
+    { color: 'from-pink-50 dark:from-pink-950/400 to-rose-600', bgColor: 'from-pink-50 dark:from-pink-950/40 to-rose-50 dark:to-rose-950/40' },
+    { color: 'from-blue-50 dark:from-blue-950/400 to-indigo-600', bgColor: 'from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40' },
+    { color: 'from-violet-50 dark:from-violet-950/400 to-purple-600', bgColor: 'from-violet-50 dark:from-violet-950/40 to-purple-50 dark:to-purple-950/40' },
   ];
   return colors[index % colors.length];
 }
@@ -128,7 +128,7 @@ function SelectDomainContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40 flex items-center justify-center p-6  ">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -144,7 +144,7 @@ function SelectDomainContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40 flex items-center justify-center p-6  ">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -163,7 +163,7 @@ function SelectDomainContent() {
 
   if (domains.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40 flex items-center justify-center p-6  ">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -181,7 +181,7 @@ function SelectDomainContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40  ">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white">
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
@@ -228,7 +228,7 @@ function SelectDomainContent() {
           className="bg-background rounded-2xl border-2 border-border shadow-lg p-8 mb-6"
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-50 dark:from-blue-950/400 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black">
               1
             </div>
             <h2 className="text-2xl font-black text-foreground">Select Your Domain</h2>
@@ -292,7 +292,7 @@ function SelectDomainContent() {
           className="bg-background rounded-2xl border-2 border-border shadow-lg p-8 mb-6"
         >
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center text-white font-black">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-pink-600 rounded-xl flex items-center justify-center text-white font-black">
               2
             </div>
             <h2 className="text-2xl font-black text-foreground">Select Question Difficulty</h2>
@@ -304,7 +304,7 @@ function SelectDomainContent() {
               className={cn(
                 "p-6 rounded-2xl border-2 transition-all text-left",
                 difficulty === 'medium'
-                  ? "bg-gradient-to-br dark:bg-none dark:bg-background from-green-50 to-emerald-50 border-green-500 dark:border-green-700 ring-2 ring-green-500"
+                  ? "bg-gradient-to-br   from-green-50 dark:from-green-950/40 to-emerald-50 dark:to-emerald-950/40 border-green-500 dark:border-green-700 ring-2 ring-green-500"
                   : "bg-background border-border hover:border-border"
               )}
             >
@@ -317,7 +317,7 @@ function SelectDomainContent() {
               </p>
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full w-2/3 bg-gradient-to-r from-green-500 to-emerald-600" />
+                  <div className="h-full w-2/3 bg-gradient-to-r from-green-50 dark:from-green-950/400 to-emerald-600" />
                 </div>
                 <span className="text-xs font-bold text-muted-foreground">5-7 questions</span>
               </div>
@@ -328,7 +328,7 @@ function SelectDomainContent() {
               className={cn(
                 "p-6 rounded-2xl border-2 transition-all text-left",
                 difficulty === 'high'
-                  ? "bg-gradient-to-br dark:bg-none dark:bg-background from-red-50 to-rose-50 border-red-500 dark:border-red-700 ring-2 ring-red-500"
+                  ? "bg-gradient-to-br   from-red-50 dark:from-red-950/40 to-rose-50 dark:to-rose-950/40 border-red-500 dark:border-red-700 ring-2 ring-red-500"
                   : "bg-background border-border hover:border-border"
               )}
             >
@@ -341,7 +341,7 @@ function SelectDomainContent() {
               </p>
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full w-full bg-gradient-to-r from-red-500 to-rose-600" />
+                  <div className="h-full w-full bg-gradient-to-r from-red-50 dark:from-red-950/400 to-rose-600" />
                 </div>
                 <span className="text-xs font-bold text-muted-foreground">5-7 questions</span>
               </div>
@@ -352,7 +352,7 @@ function SelectDomainContent() {
               className={cn(
                 "p-6 rounded-2xl border-2 transition-all text-left",
                 difficulty === 'mixed'
-                  ? "bg-gradient-to-br dark:bg-none dark:bg-background from-blue-50 to-indigo-50 border-blue-500 dark:border-blue-700 ring-2 ring-blue-500"
+                  ? "bg-gradient-to-br   from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 border-blue-500 dark:border-blue-700 ring-2 ring-blue-500"
                   : "bg-background border-border hover:border-border"
               )}
             >
@@ -365,7 +365,7 @@ function SelectDomainContent() {
               </p>
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full w-5/6 bg-gradient-to-r from-blue-500 to-indigo-600" />
+                  <div className="h-full w-5/6 bg-gradient-to-r from-blue-50 dark:from-blue-950/400 to-indigo-600" />
                 </div>
                 <span className="text-xs font-bold text-muted-foreground">5-7 questions</span>
               </div>
@@ -415,7 +415,7 @@ function SelectDomainContent() {
               onClick={handleStartMock}
               disabled={!selectedDomain}
               size="lg"
-              className="font-bold text-lg px-8 py-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 shadow-lg dark:bg-none dark:bg-background"
+              className="font-bold text-lg px-8 py-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 shadow-lg  "
             >
               Start Mock Interview
               <ChevronRight className="h-5 w-5 ml-2" />

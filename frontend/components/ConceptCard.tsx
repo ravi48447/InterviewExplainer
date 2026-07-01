@@ -20,7 +20,7 @@ export default function ConceptCard({ name, slug }: { name: string; slug: string
       </button>
       
       {expanded && (
-        <div className="p-4 pt-0 text-sm text-muted-foreground border-t border-white/5 bg-foreground dark:bg-background/20">
+        <div className="p-4 pt-0 text-sm text-muted-foreground border-t border-white/5 bg-foreground /20">
           <p className="flex items-center gap-2 mb-2 font-black uppercase text-[10px] tracking-widest text-primary/60">
             <BookOpen className="h-3 w-3" /> Concept Definition
           </p>

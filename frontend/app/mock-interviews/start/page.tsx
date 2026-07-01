@@ -137,7 +137,7 @@ function MockInterviewStartContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40 flex items-center justify-center p-6  ">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -153,7 +153,7 @@ function MockInterviewStartContent() {
 
   if (error || !domainSlug) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40 flex items-center justify-center p-6  ">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -255,14 +255,14 @@ function MockInterviewStartContent() {
 
   if (!mockStarted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40 flex items-center justify-center p-6  ">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8"
         >
           <div className="text-center mb-8">
-            <div className="w-20 h-20 bg-gradient-to-br from-pink-500 to-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <div className="w-20 h-20 bg-gradient-to-br from-pink-50 dark:from-pink-950/400 to-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
               {mockType === 'coding-mock' && <Code2 className="h-10 w-10 text-white" />}
               {mockType === 'system-design-mock' && <GitBranch className="h-10 w-10 text-white" />}
               {mockType === 'behavioral-mock' && <MessageSquare className="h-10 w-10 text-white" />}
@@ -321,14 +321,14 @@ function MockInterviewStartContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40  ">
       {/* Header with Timer and Progress */}
       <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border shadow-sm">
         <div className="w-full min-w-0 px-6 py-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-pink-50 dark:from-pink-950/400 to-rose-600 flex items-center justify-center">
                   <span className="text-white text-sm font-black">{currentQuestionIndex + 1}</span>
                 </div>
                 <div>
@@ -342,7 +342,7 @@ function MockInterviewStartContent() {
               <div className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-lg font-bold",
                 timeRemaining < 60 ? "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400 animate-pulse" :
-                timeRemaining < 300 ? "bg-orange-100 dark:bg-orange-950/20 text-orange-700" :
+                timeRemaining < 300 ? "bg-orange-100 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400" :
                 "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400"
               )}>
                 <Clock className="h-5 w-5" />
@@ -365,7 +365,7 @@ function MockInterviewStartContent() {
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.3 }}
-              className="h-full bg-gradient-to-r from-pink-500 to-rose-600"
+              className="h-full bg-gradient-to-r from-pink-50 dark:from-pink-950/400 to-rose-600"
             />
           </div>
         </div>
@@ -386,9 +386,9 @@ function MockInterviewStartContent() {
               <div className="flex items-center gap-3 mb-6">
                 <div className={cn(
                   "w-12 h-12 rounded-xl flex items-center justify-center",
-                  currentQuestion.type === 'coding' && "bg-gradient-to-br from-blue-500 to-cyan-600",
-                  currentQuestion.type === 'system-design' && "bg-gradient-to-br from-purple-500 to-indigo-600",
-                  currentQuestion.type === 'behavioral' && "bg-gradient-to-br from-orange-500 to-amber-600"
+                  currentQuestion.type === 'coding' && "bg-gradient-to-br from-blue-50 dark:from-blue-950/400 to-cyan-600",
+                  currentQuestion.type === 'system-design' && "bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-indigo-600",
+                  currentQuestion.type === 'behavioral' && "bg-gradient-to-br from-orange-50 dark:from-orange-950/400 to-amber-600"
                 )}>
                   {currentQuestion.type === 'coding' && <Code2 className="h-6 w-6 text-white" />}
                   {currentQuestion.type === 'system-design' && <GitBranch className="h-6 w-6 text-white" />}
@@ -593,7 +593,7 @@ function MockInterviewStartContent() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-foreground dark:bg-background/50 flex items-center justify-center z-50 p-6"
+            className="fixed inset-0 bg-foreground /50 flex items-center justify-center z-50 p-6"
             onClick={() => setShowSubmitConfirm(false)}
           >
             <motion.div
@@ -603,7 +603,7 @@ function MockInterviewStartContent() {
               onClick={(e) => e.stopPropagation()}
               className="bg-background rounded-2xl border-2 border-border shadow-2xl p-8 max-w-md w-full"
             >
-              <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 bg-gradient-to-br from-pink-50 dark:from-pink-950/400 to-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <Send className="h-8 w-8 text-white" />
               </div>
               <h3 className="text-2xl font-black text-foreground mb-2 text-center">Submit Mock Interview?</h3>

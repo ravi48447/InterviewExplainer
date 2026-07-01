@@ -43,7 +43,7 @@ const FAANG = [
     behavioralFocus: "Very High",
     topPatterns: ["Hash Maps", "Trees", "Graphs", "DP"],
     timeline: "4-8 weeks",
-    gradient: "from-orange-500 to-amber-600",
+    gradient: "from-orange-50 dark:from-orange-950/400 to-amber-600",
   },
   {
     slug: "google",
@@ -55,7 +55,7 @@ const FAANG = [
     behavioralFocus: "Medium",
     topPatterns: ["Graphs", "DP", "Binary Search", "Two Pointers"],
     timeline: "6-12 weeks",
-    gradient: "from-blue-500 to-indigo-600",
+    gradient: "from-blue-50 dark:from-blue-950/400 to-indigo-600",
   },
   {
     slug: "microsoft",
@@ -67,7 +67,7 @@ const FAANG = [
     behavioralFocus: "Medium",
     topPatterns: ["Arrays", "Trees", "Strings", "DP"],
     timeline: "3-6 weeks",
-    gradient: "from-emerald-500 to-teal-600",
+    gradient: "from-emerald-50 dark:from-emerald-950/400 to-teal-600",
   },
   {
     slug: "meta",
@@ -79,7 +79,7 @@ const FAANG = [
     behavioralFocus: "Medium-High",
     topPatterns: ["Arrays", "Graphs", "Strings", "BFS/DFS"],
     timeline: "4-8 weeks",
-    gradient: "from-indigo-500 to-violet-600",
+    gradient: "from-indigo-50 dark:from-indigo-950/400 to-violet-600",
   },
   {
     slug: "apple",
@@ -199,7 +199,7 @@ const FINANCE = [
 
 const DSA_LEVEL_COLORS: Record<string, string> = {
   Medium: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400",
-  "Medium-Hard": "bg-orange-100 dark:bg-orange-950/20 text-orange-700",
+  "Medium-Hard": "bg-orange-100 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400",
   Hard: "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400",
   "Very Hard": "bg-red-200 dark:bg-red-900/40 text-red-800 dark:text-red-400",
 };
@@ -289,7 +289,7 @@ const totalCompanies =
 
 export default function CompaniesPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/20 to-amber-50/20 font-sans text-foreground selection:bg-orange-200 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-orange-50/20 dark:via-orange-950/40 to-amber-50/20 dark:to-amber-950/40 font-sans text-foreground selection:bg-orange-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -305,7 +305,7 @@ export default function CompaniesPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:bg-none dark:bg-background">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-orange-50 dark:from-orange-950/40 via-amber-50 dark:via-amber-950/40 to-yellow-50 dark:to-yellow-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Building2 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400">
@@ -431,7 +431,7 @@ export default function CompaniesPage() {
             {UNICORNS.map((c) => (
               <CompanyCard
                 key={c.slug}
-                company={{ ...c, gradient: "from-violet-500 to-purple-600", behavioralFocus: "", timeline: "" }}
+                company={{ ...c, gradient: "from-violet-50 dark:from-violet-950/400 to-purple-600", behavioralFocus: "", timeline: "" }}
               />
             ))}
           </div>
@@ -453,7 +453,7 @@ export default function CompaniesPage() {
             {INDIA_TIER1.map((c) => (
               <CompanyCard
                 key={c.slug}
-                company={{ ...c, gradient: "from-emerald-500 to-teal-600", behavioralFocus: "", timeline: "" }}
+                company={{ ...c, gradient: "from-emerald-50 dark:from-emerald-950/400 to-teal-600", behavioralFocus: "", timeline: "" }}
               />
             ))}
           </div>
@@ -475,14 +475,14 @@ export default function CompaniesPage() {
             {FINANCE.map((c) => (
               <CompanyCard
                 key={c.slug}
-                company={{ ...c, gradient: "from-blue-500 to-cyan-600", behavioralFocus: "", timeline: "" }}
+                company={{ ...c, gradient: "from-blue-50 dark:from-blue-950/400 to-cyan-600", behavioralFocus: "", timeline: "" }}
               />
             ))}
           </div>
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-gradient-to-r from-orange-50 to-amber-50 p-8 text-center mb-12 dark:bg-none dark:bg-background">
+        <section className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-gradient-to-r from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40 p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Company Prep Is Part of Your Domain Dashboard
           </h2>

@@ -190,7 +190,7 @@ export default function ToolsIndexPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50/20 to-cyan-50/20 font-sans text-foreground selection:bg-teal-200 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-teal-50/20 dark:via-teal-950/40 to-cyan-50/20 dark:to-cyan-950/40 font-sans text-foreground selection:bg-teal-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -208,7 +208,7 @@ export default function ToolsIndexPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 dark:bg-none dark:bg-background">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-teal-50 dark:from-teal-950/40 via-cyan-50 dark:via-cyan-950/40 to-blue-50 dark:to-blue-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Wrench className="h-5 w-5 text-teal-600 dark:text-teal-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-teal-600 dark:text-teal-400">
@@ -377,7 +377,7 @@ export default function ToolsIndexPage() {
         )}
 
         {/* CTA */}
-        <section className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-r from-teal-50 to-cyan-50 p-8 text-center mb-12 dark:bg-none dark:bg-background">
+        <section className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-r from-teal-50 dark:from-teal-950/40 to-cyan-50 dark:to-cyan-950/40 p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Tools in Your Domain Prep
           </h2>

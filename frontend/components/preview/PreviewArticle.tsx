@@ -148,7 +148,7 @@ const ALERT_THEME: Record<
     label: "Tip",
   },
   note: {
-    border: "border-blue-200",
+    border: "border-blue-200 dark:border-blue-500/20",
     bg: "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60",
     accentLine: "bg-blue-400 dark:bg-blue-800",
     iconCls: "text-blue-600 dark:text-blue-400",
@@ -325,7 +325,7 @@ function CodeBlock({
     flavour === "bad"
       ? {
           ring: "border-rose-200 dark:border-rose-500/20",
-          headerBg: "bg-gradient-to-r dark:bg-none dark:bg-background from-rose-50 to-rose-50/60",
+          headerBg: "bg-gradient-to-r   from-rose-50 dark:from-rose-950/40 to-rose-50/60 dark:to-rose-950/40",
           headerText: "text-rose-700 dark:text-rose-400",
           iconCls: "text-rose-500",
           IconCmp: XCircle,
@@ -336,7 +336,7 @@ function CodeBlock({
       : flavour === "good"
       ? {
           ring: "border-emerald-200 dark:border-emerald-500/20",
-          headerBg: "bg-gradient-to-r dark:bg-none dark:bg-background from-emerald-50 to-emerald-50/60",
+          headerBg: "bg-gradient-to-r   from-emerald-50 dark:from-emerald-950/40 to-emerald-50/60 dark:to-emerald-950/40",
           headerText: "text-emerald-700 dark:text-emerald-400",
           iconCls: "text-emerald-500",
           IconCmp: CheckCircle2,
@@ -1184,7 +1184,7 @@ export function ZoneHeader({
     emerald: {
       text: "text-emerald-600 dark:text-emerald-400",
       bg: "bg-emerald-50 dark:bg-emerald-500/10",
-      iconBg: "bg-emerald-100/80 text-emerald-600 dark:text-emerald-400",
+      iconBg: "bg-emerald-100/80 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400",
     },
     slate: {
       text: "text-muted-foreground",

@@ -47,7 +47,7 @@ export function DSACurriculumNav({
     >
       <Link
         href="/dsa"
-        className="flex items-center gap-2 px-4 py-3 border-b border-border bg-gradient-to-r from-violet-50 via-indigo-50 to-blue-50 hover:from-violet-100/80 hover:via-indigo-100/80 hover:to-blue-100/80 transition-colors group dark:bg-none dark:bg-background"
+        className="flex items-center gap-2 px-4 py-3 border-b border-border bg-gradient-to-r from-violet-50 dark:from-violet-950/40 via-indigo-50 dark:via-indigo-950/40 to-blue-50 dark:to-blue-950/40 hover:from-violet-100/80 dark:from-violet-950/50 hover:via-indigo-100/80 hover:to-blue-100/80 dark:to-blue-950/50 transition-colors group  "
       >
         <div className="w-7 h-7 rounded-lg bg-violet-600 dark:bg-violet-800 flex items-center justify-center shrink-0">
           <GraduationCap className="h-4 w-4 text-primary-foreground dark:text-foreground" />

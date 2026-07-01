@@ -116,7 +116,7 @@ const SHEETS = [
     count: 75,
     note: "The OG FAANG list — minimum viable problem set",
     weeks: "6–8 wks",
-    color: "from-amber-500 to-orange-500",
+    color: "from-amber-50 dark:from-amber-950/400 to-orange-50 dark:to-orange-950/400",
     iconBg: "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20",
     iconColor: "text-amber-500 dark:text-amber-400",
   },
@@ -126,7 +126,7 @@ const SHEETS = [
     count: 150,
     note: "Blind 75 + 75 follow-ups — comprehensive coverage",
     weeks: "10–14 wks",
-    color: "from-violet-500 to-purple-500",
+    color: "from-violet-50 dark:from-violet-950/400 to-purple-50 dark:to-purple-950/400",
     iconBg: "bg-violet-50 dark:bg-violet-500/10 border-violet-200 dark:border-violet-500/20",
     iconColor: "text-violet-500 dark:text-violet-400",
   },
@@ -136,7 +136,7 @@ const SHEETS = [
     count: 75,
     note: "Time-aware weekly schedule by Yangshun",
     weeks: "8 wks",
-    color: "from-emerald-500 to-teal-500",
+    color: "from-emerald-50 dark:from-emerald-950/400 to-teal-50 dark:to-teal-950/400",
     iconBg: "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20",
     iconColor: "text-emerald-500 dark:text-emerald-400",
   },
@@ -146,8 +146,8 @@ const SHEETS = [
     count: 150,
     note: "LeetCode's official Top Interview 150 study plan",
     weeks: "8–12 wks",
-    color: "from-orange-500 to-amber-500",
-    iconBg: "bg-orange-50 dark:bg-orange-500/10 border-orange-200",
+    color: "from-orange-50 dark:from-orange-950/400 to-amber-50 dark:to-amber-950/400",
+    iconBg: "bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20",
     iconColor: "text-orange-500 dark:text-orange-400",
   },
   {
@@ -156,8 +156,8 @@ const SHEETS = [
     count: 150,
     note: "Interview Prep Kit + top OA problems",
     weeks: "8–10 wks",
-    color: "from-green-500 to-emerald-500",
-    iconBg: "bg-green-50 border-green-200",
+    color: "from-green-50 dark:from-green-950/400 to-emerald-50 dark:to-emerald-950/400",
+    iconBg: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-500/20",
     iconColor: "text-green-600 dark:text-green-400",
   },
   {
@@ -166,7 +166,7 @@ const SHEETS = [
     count: 150,
     note: "Campus & competitive classics — MST, segment trees, DP",
     weeks: "10–14 wks",
-    color: "from-sky-500 to-blue-500",
+    color: "from-sky-50 dark:from-sky-950/400 to-blue-50 dark:to-blue-950/400",
     iconBg: "bg-sky-50 dark:bg-sky-500/10 border-sky-200 dark:border-sky-500/20",
     iconColor: "text-sky-500 dark:text-sky-400",
   },
@@ -176,7 +176,7 @@ const SHEETS = [
     count: 50,
     note: "Curated best-of — 100% authored, zero gaps",
     weeks: "3–4 wks",
-    color: "from-fuchsia-500 to-pink-500",
+    color: "from-fuchsia-50 dark:from-fuchsia-950/400 to-pink-50 dark:to-pink-950/400",
     iconBg: "bg-fuchsia-50 dark:bg-fuchsia-950/20 border-fuchsia-200 dark:border-fuchsia-500/20",
     iconColor: "text-fuchsia-500 dark:text-fuchsia-400",
   },
@@ -242,7 +242,7 @@ const PHASE_META: Record<Phase, {
     label: "Advanced",
     description: "Trees, Graphs, DP, Backtracking — hard-medium tier that separates candidates",
     icon: Flame,
-    nodeBg: "bg-orange-500", nodeText: "text-white",
+    nodeBg: "bg-orange-50 dark:bg-orange-950/200", nodeText: "text-white",
     lineBg: "bg-orange-200",
     cardAccent: "bg-orange-500", cardNumBg: "bg-orange-50 dark:bg-orange-500/10 dark:bg-orange-950/40", cardNumText: "text-white dark:text-orange-400",
     hoverBorder: "hover:border-orange-300 dark:hover:border-orange-700/50",
@@ -382,7 +382,7 @@ export default function DSAIndexPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] dark:from-background to-[#f4f5f7] dark:to-surface dark:from-background dark:to-background">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4]  to-[#f4f5f7] dark:to-surface  dark:to-background">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       {/* ══════════════════════════════════════════════
@@ -571,7 +571,7 @@ export default function DSAIndexPage() {
               <a
                 key={p.href}
                 href={p.href}
-                className={`group relative flex flex-col rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 ${p.glow} p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg ${p.ring}`}
+                className={`group relative flex flex-col rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 ${p.glow} p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg ${p.ring}`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className={`w-11 h-11 rounded-xl border flex items-center justify-center ${p.chip}`}>

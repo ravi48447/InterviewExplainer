@@ -64,7 +64,7 @@ export function SmartCrosslinks({
       className="mb-8 rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
     >
       {/* Header */}
-      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-indigo-50 via-blue-50 to-white dark:bg-none dark:bg-background">
+      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-indigo-50 dark:from-indigo-950/40 via-blue-50 dark:via-blue-950/40 to-white  ">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           <h2
@@ -86,10 +86,10 @@ export function SmartCrosslinks({
           {/* Primary next-up card */}
           <Link
             href={`/${primary.seoSlug}`}
-            className="group block rounded-xl border-2 border-border bg-gradient-to-br from-white to-indigo-50/30 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-4 hover:border-indigo-400 dark:border-indigo-700 hover:shadow-md transition-all"
+            className="group block rounded-xl border-2 border-border bg-gradient-to-br from-white to-indigo-50/30 dark:to-indigo-950/40 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-4 hover:border-indigo-400 dark:border-indigo-700 hover:shadow-md transition-all"
           >
             <div className="flex items-start gap-4">
-              <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
+              <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-50 dark:from-indigo-950/400 to-blue-600 flex items-center justify-center">
                 <GitBranch className="h-5 w-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">

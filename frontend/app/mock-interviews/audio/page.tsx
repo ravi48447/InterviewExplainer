@@ -440,7 +440,7 @@ function AudioMockInterviewContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40 flex items-center justify-center p-6  ">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -456,7 +456,7 @@ function AudioMockInterviewContent() {
 
   if (error || !domainSlug) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40 flex items-center justify-center p-6  ">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -475,14 +475,14 @@ function AudioMockInterviewContent() {
 
   if (!interviewStarted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40 flex items-center justify-center p-6  ">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8"
         >
           <div className="text-center mb-8">
-            <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <div className="w-20 h-20 bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Radio className="h-10 w-10 text-white" />
             </div>
             <h1 className="text-3xl font-black text-foreground mb-2">
@@ -547,14 +547,14 @@ function AudioMockInterviewContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40  ">
       {/* Header */}
       <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border shadow-sm">
         <div className="w-full min-w-0 px-6 py-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-pink-600 flex items-center justify-center">
                   <span className="text-white text-sm font-black">{currentQuestionIndex + 1}</span>
                 </div>
                 <div>
@@ -570,7 +570,7 @@ function AudioMockInterviewContent() {
               <div className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-lg font-bold",
                 timeRemaining < 30 ? "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400 animate-pulse" :
-                timeRemaining < 60 ? "bg-orange-100 dark:bg-orange-950/20 text-orange-700" :
+                timeRemaining < 60 ? "bg-orange-100 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400" :
                 "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400"
               )}>
                 <Clock className="h-5 w-5" />
@@ -585,7 +585,7 @@ function AudioMockInterviewContent() {
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.3 }}
-              className="h-full bg-gradient-to-r from-purple-500 to-pink-600"
+              className="h-full bg-gradient-to-r from-purple-50 dark:from-purple-950/400 to-pink-600"
             />
           </div>
         </div>
@@ -604,8 +604,8 @@ function AudioMockInterviewContent() {
             <div className={cn(
               "w-14 h-14 rounded-xl flex items-center justify-center shrink-0 transition-all",
               isAIPlaying
-                ? "bg-gradient-to-br from-purple-500 to-pink-600 scale-110 animate-pulse"
-                : "bg-gradient-to-br from-purple-500 to-pink-600"
+                ? "bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-pink-600 scale-110 animate-pulse"
+                : "bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-pink-600"
             )}>
               <Bot className="h-7 w-7 text-white" />
             </div>
@@ -693,8 +693,8 @@ function AudioMockInterviewContent() {
               <div className={cn(
                 "w-12 h-12 rounded-xl flex items-center justify-center transition-all",
                 isRecording
-                  ? "bg-gradient-to-br from-red-500 to-rose-600 animate-pulse"
-                  : "bg-gradient-to-br from-blue-500 to-cyan-600"
+                  ? "bg-gradient-to-br from-red-50 dark:from-red-950/400 to-rose-600 animate-pulse"
+                  : "bg-gradient-to-br from-blue-50 dark:from-blue-950/400 to-cyan-600"
               )}>
                 <User className="h-6 w-6 text-white" />
               </div>
@@ -729,7 +729,7 @@ function AudioMockInterviewContent() {
                       repeat: Infinity,
                       repeatType: 'reverse',
                     }}
-                    className="w-1 bg-gradient-to-t from-purple-500 to-pink-600 rounded-full"
+                    className="w-1 bg-gradient-to-t from-purple-50 dark:from-purple-950/400 to-pink-600 rounded-full"
                   />
                 ))}
               </div>
@@ -842,7 +842,7 @@ function AudioMockInterviewContent() {
                 className={cn(
                   "p-3 rounded-xl border-2 text-center transition-all",
                   idx === currentQuestionIndex
-                    ? "bg-purple-50 border-purple-500"
+                    ? "bg-purple-50 dark:bg-purple-950/20 border-purple-500"
                     : answers[idx]
                     ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30"
                     : "bg-surface border-border"
@@ -851,9 +851,9 @@ function AudioMockInterviewContent() {
                 <div className={cn(
                   "w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2",
                   idx === currentQuestionIndex
-                    ? "bg-gradient-to-br from-purple-500 to-pink-600 text-white"
+                    ? "bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-pink-600 text-white"
                     : answers[idx]
-                    ? "bg-gradient-to-br from-emerald-500 to-green-600 text-white"
+                    ? "bg-gradient-to-br from-emerald-50 dark:from-emerald-950/400 to-green-600 text-white"
                     : "bg-slate-200 dark:bg-slate-800 text-muted-foreground"
                 )}>
                   {answers[idx] ? (

@@ -45,7 +45,7 @@ export function RecipeBuilderLayout({
   return (
     <div className="space-y-8">
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 dark:bg-none dark:bg-background">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 px-5 py-4  ">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
@@ -66,7 +66,7 @@ export function RecipeBuilderLayout({
       {hasSteps && (
         <div className="rounded-xl border border-border overflow-hidden">
           {/* Progress Bar */}
-          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border dark:bg-none dark:bg-background">
+          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 dark:from-slate-950/40 to-blue-50 dark:to-blue-950/40 border-b border-border  ">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-foreground uppercase tracking-wide">Implementation Steps</span>
               <span className="text-xs text-muted-foreground font-medium">
@@ -80,7 +80,7 @@ export function RecipeBuilderLayout({
                   key={i}
                   onClick={() => setActiveStep(i)}
                   className={`h-2 rounded-full transition-all ${
-                    i < activeStep ? "bg-emerald-500 flex-1" :
+                    i < activeStep ? "bg-emerald-50 dark:bg-emerald-950/200 flex-1" :
                     i === activeStep ? "bg-blue-600 flex-[2]" :
                     "bg-slate-200 dark:bg-slate-800 flex-1"
                   }`}

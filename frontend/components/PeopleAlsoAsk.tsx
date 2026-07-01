@@ -81,7 +81,7 @@ export default function PeopleAlsoAsk({ initialQuestions }: { initialQuestions: 
               </button>
               
               {isExpanded && (
-                <div className="px-5 pb-5 pt-2 text-sm text-muted-foreground bg-foreground dark:bg-background/20">
+                <div className="px-5 pb-5 pt-2 text-sm text-muted-foreground bg-foreground /20">
                   <p className="mb-4">This question explores concepts related to your current reading path. Click below to dive into the full answer.</p>
                   <Link 
                     href={`/${q.domainSlug || 'all'}/${q.stackSlug || 'global'}/${q.slug}`}

@@ -37,7 +37,7 @@ const DOMAIN_ROADMAPS = [
     name: "Java Backend Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "Spring Boot, Microservices, PostgreSQL, Kafka, Docker, AWS",
-    gradient: "from-orange-500 to-red-600",
+    gradient: "from-orange-50 dark:from-orange-950/400 to-red-600",
     weeks: "8-week plan per level",
   },
   {
@@ -45,7 +45,7 @@ const DOMAIN_ROADMAPS = [
     name: "Python Backend Developer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "Django, FastAPI, PostgreSQL, Redis, Celery, AWS",
-    gradient: "from-blue-500 to-cyan-600",
+    gradient: "from-blue-50 dark:from-blue-950/400 to-cyan-600",
     weeks: "8-week plan per level",
   },
   {
@@ -53,7 +53,7 @@ const DOMAIN_ROADMAPS = [
     name: "JavaScript Frontend Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "React, TypeScript, Next.js, Testing, Performance",
-    gradient: "from-yellow-400 to-orange-500",
+    gradient: "from-yellow-400 to-orange-50 dark:to-orange-950/400",
     weeks: "8-week plan per level",
   },
   {
@@ -61,7 +61,7 @@ const DOMAIN_ROADMAPS = [
     name: "Python Data Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "Spark, Airflow, Kafka, SQL, Data Modeling, dbt",
-    gradient: "from-emerald-500 to-teal-600",
+    gradient: "from-emerald-50 dark:from-emerald-950/400 to-teal-600",
     weeks: "8-week plan per level",
   },
   {
@@ -69,7 +69,7 @@ const DOMAIN_ROADMAPS = [
     name: "Python ML/AI Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "PyTorch, TensorFlow, MLOps, NLP, Computer Vision",
-    gradient: "from-violet-500 to-purple-600",
+    gradient: "from-violet-50 dark:from-violet-950/400 to-purple-600",
     weeks: "8-week plan per level",
   },
   {
@@ -77,7 +77,7 @@ const DOMAIN_ROADMAPS = [
     name: "Go Backend Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "Go, gRPC, Kubernetes, Docker, PostgreSQL",
-    gradient: "from-cyan-500 to-blue-600",
+    gradient: "from-cyan-50 dark:from-cyan-950/400 to-blue-600",
     weeks: "8-week plan per level",
   },
   {
@@ -85,7 +85,7 @@ const DOMAIN_ROADMAPS = [
     name: "DevOps / SRE Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "Kubernetes, Terraform, CI/CD, AWS, Monitoring, Linux",
-    gradient: "from-slate-500 to-slate-700",
+    gradient: "from-slate-50 dark:from-slate-950/400 to-slate-700",
     weeks: "8-week plan per level",
   },
   {
@@ -93,7 +93,7 @@ const DOMAIN_ROADMAPS = [
     name: "Full-Stack Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "React, Node.js/Spring Boot, PostgreSQL, DevOps",
-    gradient: "from-rose-500 to-pink-600",
+    gradient: "from-rose-50 dark:from-rose-950/400 to-pink-600",
     weeks: "10-week plan per level",
   },
 ];
@@ -124,7 +124,7 @@ const DSA_PLANS = [
     duration: "4-8 weeks",
     desc: "Updated Blind 75 with customizable schedule. Sorted by estimated time and difficulty. Built by the Blind 75 creator.",
     tag: "Flexible",
-    tagColor: "bg-green-100 dark:bg-green-950/20 text-green-700",
+    tagColor: "bg-green-100 dark:bg-green-950/20 text-green-700 dark:text-green-400",
   },
   {
     slug: "top-100-liked",
@@ -133,7 +133,7 @@ const DSA_PLANS = [
     duration: "6-8 weeks",
     desc: "Community-voted top problems. Good breadth across all major patterns with emphasis on frequently asked questions.",
     tag: "Community Pick",
-    tagColor: "bg-purple-100 dark:bg-purple-950/20 text-purple-700",
+    tagColor: "bg-purple-100 dark:bg-purple-950/20 text-purple-700 dark:text-purple-400",
   },
   {
     slug: "dsa-foundations",
@@ -183,7 +183,7 @@ const TIMELINE_PLANS = [
 
 export default function RoadmapsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50/20 to-emerald-50/20 font-sans text-foreground selection:bg-green-200 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-green-50/20 dark:via-green-950/40 to-emerald-50/20 dark:to-emerald-950/40 font-sans text-foreground selection:bg-green-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -201,7 +201,7 @@ export default function RoadmapsPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:bg-none dark:bg-background">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-green-50 dark:from-green-950/40 via-emerald-50 dark:via-emerald-950/40 to-teal-50 dark:to-teal-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Map className="h-5 w-5 text-green-600 dark:text-green-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-green-600 dark:text-green-400">
@@ -416,7 +416,7 @@ export default function RoadmapsPage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-green-200 dark:border-green-500/20 bg-gradient-to-r from-green-50 to-emerald-50 p-8 text-center mb-12 dark:bg-none dark:bg-background">
+        <section className="rounded-xl border border-green-200 dark:border-green-500/20 bg-gradient-to-r from-green-50 dark:from-green-950/40 to-emerald-50 dark:to-emerald-950/40 p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Get a Personalized Roadmap for Your Domain
           </h2>

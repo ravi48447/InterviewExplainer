@@ -42,13 +42,13 @@ import { getSubcategoriesWithQuestions } from "@/lib/content-reader";
 // Every language we intend to support, ever. `available` is derived from
 // launch-config so the ROADMAP and UI can't drift apart.
 const ALL_LANGUAGES = [
-  { name: "Java",       slug: "java",       icon: "java",       gradient: "from-orange-500 to-red-600" },
-  { name: "Python",     slug: "python",     icon: "python",     gradient: "from-blue-500 to-cyan-600" },
-  { name: "JavaScript", slug: "javascript", icon: "javascript", gradient: "from-yellow-400 to-orange-500" },
+  { name: "Java",       slug: "java",       icon: "java",       gradient: "from-orange-50 dark:from-orange-950/400 to-red-600" },
+  { name: "Python",     slug: "python",     icon: "python",     gradient: "from-blue-50 dark:from-blue-950/400 to-cyan-600" },
+  { name: "JavaScript", slug: "javascript", icon: "javascript", gradient: "from-yellow-400 to-orange-50 dark:to-orange-950/400" },
   { name: "TypeScript", slug: "typescript", icon: "typescript", gradient: "from-blue-600 to-indigo-700" },
-  { name: "Go",         slug: "go",         icon: "go",         gradient: "from-cyan-500 to-blue-600" },
-  { name: "Kotlin",     slug: "kotlin",     icon: "kotlin",     gradient: "from-purple-500 to-violet-600" },
-  { name: "Ruby",       slug: "ruby",       icon: "ruby",       gradient: "from-red-500 to-rose-600" },
+  { name: "Go",         slug: "go",         icon: "go",         gradient: "from-cyan-50 dark:from-cyan-950/400 to-blue-600" },
+  { name: "Kotlin",     slug: "kotlin",     icon: "kotlin",     gradient: "from-purple-50 dark:from-purple-950/400 to-violet-600" },
+  { name: "Ruby",       slug: "ruby",       icon: "ruby",       gradient: "from-red-50 dark:from-red-950/400 to-rose-600" },
   { name: "C#",         slug: "csharp",     icon: "csharp",     gradient: "from-indigo-600 to-purple-700" },
 ];
 
@@ -60,12 +60,12 @@ const LANGUAGES = ALL_LANGUAGES.map((l) => ({
 // Pillars — keep only those that point to a hub we've launched.
 // When we unlock a hub, it automatically appears here.
 const ALL_PILLARS = [
-  { key: "interviewQA",    icon: BookOpen, title: "Interview Q&A",   desc: "Domain-specific questions tailored to your language, track, and experience level.",   stat: "400+ Questions",  gradient: "from-blue-500 to-indigo-600",   href: "/domains" },
-  { key: "systemDesign",   icon: Compass,  title: "System Design",   desc: "Real interview problems with architecture, deep-dives, and scaling strategies.",       stat: "25+ Problems",    gradient: "from-emerald-500 to-teal-600",  href: "/system-design" },
-  { key: "dsa",            icon: Code2,    title: "DSA Problems",    desc: "Problems organized by pattern — two pointers, sliding window, DP, graphs.",            stat: "450+ Problems",   gradient: "from-violet-500 to-purple-600", href: "/dsa" },
-  { key: "behavioral",     icon: Brain,    title: "Behavioral Prep", desc: "STAR method with company-specific guides and Amazon Leadership Principles.",           stat: "70+ Questions",   gradient: "from-amber-500 to-orange-600",  href: "/behavioral" },
-  { key: "companies",      icon: Target,   title: "Company Prep",    desc: "FAANG, unicorns and top-tech process breakdowns.",                                     stat: "22+ Companies",   gradient: "from-orange-500 to-red-600",    href: "/companies" },
-  { key: "career",         icon: Rocket,   title: "Career Guide",    desc: "Resume optimization, salary negotiation playbook, and career transition strategies.",  stat: "42+ Articles",    gradient: "from-rose-500 to-pink-600",     href: "/career" },
+  { key: "interviewQA",    icon: BookOpen, title: "Interview Q&A",   desc: "Domain-specific questions tailored to your language, track, and experience level.",   stat: "400+ Questions",  gradient: "from-blue-50 dark:from-blue-950/400 to-indigo-600",   href: "/domains" },
+  { key: "systemDesign",   icon: Compass,  title: "System Design",   desc: "Real interview problems with architecture, deep-dives, and scaling strategies.",       stat: "25+ Problems",    gradient: "from-emerald-50 dark:from-emerald-950/400 to-teal-600",  href: "/system-design" },
+  { key: "dsa",            icon: Code2,    title: "DSA Problems",    desc: "Problems organized by pattern — two pointers, sliding window, DP, graphs.",            stat: "450+ Problems",   gradient: "from-violet-50 dark:from-violet-950/400 to-purple-600", href: "/dsa" },
+  { key: "behavioral",     icon: Brain,    title: "Behavioral Prep", desc: "STAR method with company-specific guides and Amazon Leadership Principles.",           stat: "70+ Questions",   gradient: "from-amber-50 dark:from-amber-950/400 to-orange-600",  href: "/behavioral" },
+  { key: "companies",      icon: Target,   title: "Company Prep",    desc: "FAANG, unicorns and top-tech process breakdowns.",                                     stat: "22+ Companies",   gradient: "from-orange-50 dark:from-orange-950/400 to-red-600",    href: "/companies" },
+  { key: "career",         icon: Rocket,   title: "Career Guide",    desc: "Resume optimization, salary negotiation playbook, and career transition strategies.",  stat: "42+ Articles",    gradient: "from-rose-50 dark:from-rose-950/400 to-pink-600",     href: "/career" },
 ] as const;
 
 const PILLARS = ALL_PILLARS.filter((p) => isHubEnabled(p.key));
@@ -262,10 +262,10 @@ function buildHomeStandoutPicks(): HomeStandoutPick[] {
 }
 
 const WHY_DIFFERENT = [
-  { icon: Brain,      title: "Domain-Specific Content",  desc: "Java Backend ≠ Python Backend. Every question is tailored to your exact technology stack and patterns.",                gradient: "from-blue-500 to-indigo-600" },
-  { icon: TrendingUp, title: "Experience-Level Aware",   desc: "Juniors get solid foundations with examples. Seniors get architecture patterns and scalability challenges.",            gradient: "from-purple-500 to-pink-600" },
-  { icon: Target,     title: "Real Interview Focus",     desc: "Practice questions modeled on top tech company interviews. Learn what recruiters expect at your level, not theory.",    gradient: "from-orange-500 to-red-600" },
-  { icon: Rocket,     title: "Progressive Learning",     desc: "Master basics, tackle intermediate, conquer advanced. Track your journey across every topic.",                           gradient: "from-cyan-500 to-blue-600" },
+  { icon: Brain,      title: "Domain-Specific Content",  desc: "Java Backend ≠ Python Backend. Every question is tailored to your exact technology stack and patterns.",                gradient: "from-blue-50 dark:from-blue-950/400 to-indigo-600" },
+  { icon: TrendingUp, title: "Experience-Level Aware",   desc: "Juniors get solid foundations with examples. Seniors get architecture patterns and scalability challenges.",            gradient: "from-purple-50 dark:from-purple-950/400 to-pink-600" },
+  { icon: Target,     title: "Real Interview Focus",     desc: "Practice questions modeled on top tech company interviews. Learn what recruiters expect at your level, not theory.",    gradient: "from-orange-50 dark:from-orange-950/400 to-red-600" },
+  { icon: Rocket,     title: "Progressive Learning",     desc: "Master basics, tackle intermediate, conquer advanced. Track your journey across every topic.",                           gradient: "from-cyan-50 dark:from-cyan-950/400 to-blue-600" },
 ];
 
 export default function HomePage() {
@@ -348,7 +348,7 @@ export default function HomePage() {
                 <FeatureCard href="/dsa">
                   <FeatureCardIcon
                     icon={<Code2 className="h-6 w-6 text-white" />}
-                    gradient="from-violet-500 to-purple-600"
+                    gradient="from-violet-50 dark:from-violet-950/400 to-purple-600"
                   />
                   <FeatureCardHeader>DSA Problems</FeatureCardHeader>
                   <FeatureCardDescription>
@@ -361,7 +361,7 @@ export default function HomePage() {
                 <FeatureCard href="/java-backend-intermediate">
                   <FeatureCardIcon
                     icon={<TechIcon name="java" className="h-6 w-6 brightness-0 invert" />}
-                    gradient="from-orange-500 to-red-600"
+                    gradient="from-orange-50 dark:from-orange-950/400 to-red-600"
                   />
                   <FeatureCardHeader>Java Learning Paths</FeatureCardHeader>
                   <FeatureCardDescription>
@@ -374,7 +374,7 @@ export default function HomePage() {
                 <FeatureCard href="/domains">
                   <FeatureCardIcon
                     icon={<BookOpen className="h-6 w-6 text-white" />}
-                    gradient="from-blue-500 to-indigo-600"
+                    gradient="from-blue-50 dark:from-blue-950/400 to-indigo-600"
                   />
                   <FeatureCardHeader>Interview Q&A</FeatureCardHeader>
                   <FeatureCardDescription>
@@ -554,7 +554,7 @@ export default function HomePage() {
       <section className="py-32 bg-surface">
         <div className="w-full px-6 sm:px-12 lg:px-20">
           <div className="w-full min-w-0 text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-yellow-400 to-orange-500 mb-8 shadow-xl">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-yellow-400 to-orange-50 dark:to-orange-950/400 mb-8 shadow-xl">
               <Award className="h-10 w-10 text-white" />
             </div>
             <h2 className="text-5xl sm:text-6xl font-black text-foreground mb-6">Ready to Ace Your Interview?</h2>

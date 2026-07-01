@@ -49,27 +49,27 @@ const LUCIDE_ICON_BOXES: Partial<
   Record<HomeStandoutIcon, { wrap: string; node: ReactNode }>
 > = {
   network: {
-    wrap: "bg-gradient-to-br from-emerald-500 to-teal-600",
+    wrap: "bg-gradient-to-br from-emerald-50 dark:from-emerald-950/400 to-teal-600",
     node: <Network className="h-5 w-5 text-white" aria-hidden />,
   },
   zap: {
-    wrap: "bg-gradient-to-br from-amber-500 to-orange-600",
+    wrap: "bg-gradient-to-br from-amber-50 dark:from-amber-950/400 to-orange-600",
     node: <Zap className="h-5 w-5 text-white" aria-hidden />,
   },
   layers: {
-    wrap: "bg-gradient-to-br from-indigo-500 to-blue-600",
+    wrap: "bg-gradient-to-br from-indigo-50 dark:from-indigo-950/400 to-blue-600",
     node: <Layers className="h-5 w-5 text-white" aria-hidden />,
   },
   link2: {
-    wrap: "bg-gradient-to-br from-violet-500 to-purple-600",
+    wrap: "bg-gradient-to-br from-violet-50 dark:from-violet-950/400 to-purple-600",
     node: <Link2 className="h-5 w-5 text-white" aria-hidden />,
   },
   radio: {
-    wrap: "bg-gradient-to-br from-rose-500 to-pink-600",
+    wrap: "bg-gradient-to-br from-rose-50 dark:from-rose-950/400 to-pink-600",
     node: <Radio className="h-5 w-5 text-white" aria-hidden />,
   },
   cloud: {
-    wrap: "bg-gradient-to-br from-sky-500 to-cyan-600",
+    wrap: "bg-gradient-to-br from-sky-50 dark:from-sky-950/400 to-cyan-600",
     node: <Cloud className="h-5 w-5 text-white" aria-hidden />,
   },
   layout: {
@@ -77,7 +77,7 @@ const LUCIDE_ICON_BOXES: Partial<
     node: <LayoutGrid className="h-5 w-5 text-white" aria-hidden />,
   },
   braces: {
-    wrap: "bg-gradient-to-br from-orange-500 to-amber-600",
+    wrap: "bg-gradient-to-br from-orange-50 dark:from-orange-950/400 to-amber-600",
     node: <Braces className="h-5 w-5 text-white" aria-hidden />,
   },
 };

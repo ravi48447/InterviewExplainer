@@ -59,7 +59,7 @@ const LEVEL_PILL: Record<string, string> = {
 };
 
 const FOCUS_PILL: Record<string, { label: string; className: string }> = {
-  theory: { label: "Theory", className: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200" },
+  theory: { label: "Theory", className: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" },
   practice: { label: "Practice", className: "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-500/20" },
   mixed: { label: "Mixed", className: "bg-surface text-foreground border-border" },
 };
@@ -360,7 +360,7 @@ export default async function DSAModulePage(
     // (MarkdownContent, revision panel) render the light palette rather than
     // the provider's "dark" default on these white panes.
     <ContentThemeProvider>
-    <div className="min-h-screen bg-gradient-to-b from-[#eef0f4] dark:from-background to-[#f4f5f7] dark:to-surface dark:from-background dark:to-background font-sans text-foreground">
+    <div className="min-h-screen bg-gradient-to-b from-[#eef0f4]  to-[#f4f5f7] dark:to-surface  dark:to-background font-sans text-foreground">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

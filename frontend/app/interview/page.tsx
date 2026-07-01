@@ -97,7 +97,7 @@ export default function InterviewIndexPage() {
           </div>
 
           {/* What You'll Learn */}
-          <div className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-br from-teal-50 to-cyan-50 shadow-sm p-4 dark:bg-none dark:bg-background">
+          <div className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-br from-teal-50 dark:from-teal-950/40 to-cyan-50 dark:to-cyan-950/40 shadow-sm p-4  ">
             <div className="flex items-center gap-2 mb-3">
               <Target className="h-4 w-4 text-teal-600 dark:text-teal-400" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Why InterviewExplainer</h3>
@@ -113,7 +113,7 @@ export default function InterviewIndexPage() {
           </div>
 
           {/* Study Strategy */}
-          <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm p-4 dark:bg-none dark:bg-background">
+          <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 dark:from-indigo-950/40 to-blue-50 dark:to-blue-950/40 shadow-sm p-4  ">
             <div className="flex items-center gap-2 mb-3">
               <BookMarked className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">How to Use</h3>
@@ -191,7 +191,7 @@ export default function InterviewIndexPage() {
               <section key={lang}>
                 <div className="flex items-center gap-3 mb-4 px-2">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-50 dark:from-blue-950/400 to-indigo-600 flex items-center justify-center shadow-md">
                       <span className="text-white text-xs font-bold">{lang.charAt(0).toUpperCase()}</span>
                     </div>
                     <h2 className="text-lg font-black text-foreground tracking-tight">{toDisplayName(lang)}</h2>
@@ -306,7 +306,7 @@ export default function InterviewIndexPage() {
           </div>
 
           {/* Sparkles Tip */}
-          <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 to-yellow-50 shadow-sm p-4 dark:bg-none dark:bg-background">
+          <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 dark:from-amber-950/40 to-yellow-50 dark:to-yellow-950/40 shadow-sm p-4  ">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Pro Tip</h3>

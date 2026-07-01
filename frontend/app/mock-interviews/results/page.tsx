@@ -137,21 +137,21 @@ function MockInterviewResultsContent() {
   };
 
   const getScoreGradient = (score: number) => {
-    if (score >= 80) return 'from-emerald-500 to-green-600';
-    if (score >= 70) return 'from-blue-500 to-cyan-600';
-    if (score >= 60) return 'from-orange-500 to-amber-600';
-    return 'from-red-500 to-rose-600';
+    if (score >= 80) return 'from-emerald-50 dark:from-emerald-950/400 to-green-600';
+    if (score >= 70) return 'from-blue-50 dark:from-blue-950/400 to-cyan-600';
+    if (score >= 60) return 'from-orange-50 dark:from-orange-950/400 to-amber-600';
+    return 'from-red-50 dark:from-red-950/400 to-rose-600';
   };
 
   const getScoreBg = (score: number) => {
-    if (score >= 80) return 'from-emerald-50 to-green-50';
-    if (score >= 70) return 'from-blue-50 to-cyan-50';
-    if (score >= 60) return 'from-orange-50 to-amber-50';
-    return 'from-red-50 to-rose-50';
+    if (score >= 80) return 'from-emerald-50 dark:from-emerald-950/40 to-green-50 dark:to-green-950/40';
+    if (score >= 70) return 'from-blue-50 dark:from-blue-950/40 to-cyan-50 dark:to-cyan-950/40';
+    if (score >= 60) return 'from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40';
+    return 'from-red-50 dark:from-red-950/40 to-rose-50 dark:to-rose-950/40';
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40  ">
       {/* Hero Section */}
       <div className={cn("bg-gradient-to-r", getScoreGradient(mockData.overallScore), "text-white")}>
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
@@ -291,9 +291,9 @@ function MockInterviewResultsContent() {
                   <div className="flex items-start gap-4 flex-1">
                     <div className={cn(
                       "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
-                      q.type === 'coding' && "bg-gradient-to-br from-blue-500 to-cyan-600",
-                      q.type === 'system-design' && "bg-gradient-to-br from-purple-500 to-indigo-600",
-                      q.type === 'behavioral' && "bg-gradient-to-br from-orange-500 to-amber-600"
+                      q.type === 'coding' && "bg-gradient-to-br from-blue-50 dark:from-blue-950/400 to-cyan-600",
+                      q.type === 'system-design' && "bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-indigo-600",
+                      q.type === 'behavioral' && "bg-gradient-to-br from-orange-50 dark:from-orange-950/400 to-amber-600"
                     )}>
                       {q.type === 'coding' && <Code2 className="h-6 w-6 text-white" />}
                       {q.type === 'system-design' && <GitBranch className="h-6 w-6 text-white" />}
@@ -419,17 +419,17 @@ function MockInterviewResultsContent() {
                     href="/domains"
                     className={cn(
                       "flex items-center justify-between p-4 rounded-xl border-2 transition-all hover:scale-[1.02] group",
-                      rec.priority === 'high' && "bg-gradient-to-r dark:bg-none dark:bg-background from-red-50 to-rose-50 border-red-200 dark:border-red-500/20 hover:border-red-400 dark:border-red-700",
-                      rec.priority === 'medium' && "bg-gradient-to-r dark:bg-none dark:bg-background from-orange-50 to-amber-50 border-orange-200 dark:border-orange-500/20 hover:border-orange-400 dark:border-orange-700",
-                      rec.priority === 'low' && "bg-gradient-to-r dark:bg-none dark:bg-background from-blue-50 to-cyan-50 border-blue-200 dark:border-blue-500/20 hover:border-blue-400 dark:border-blue-700"
+                      rec.priority === 'high' && "bg-gradient-to-r   from-red-50 dark:from-red-950/40 to-rose-50 dark:to-rose-950/40 border-red-200 dark:border-red-500/20 hover:border-red-400 dark:border-red-700",
+                      rec.priority === 'medium' && "bg-gradient-to-r   from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40 border-orange-200 dark:border-orange-500/20 hover:border-orange-400 dark:border-orange-700",
+                      rec.priority === 'low' && "bg-gradient-to-r   from-blue-50 dark:from-blue-950/40 to-cyan-50 dark:to-cyan-950/40 border-blue-200 dark:border-blue-500/20 hover:border-blue-400 dark:border-blue-700"
                     )}
                   >
                     <div className="flex items-center gap-3">
                       <div className={cn(
                         "w-10 h-10 rounded-lg flex items-center justify-center",
-                        rec.priority === 'high' && "bg-gradient-to-br from-red-500 to-rose-600",
-                        rec.priority === 'medium' && "bg-gradient-to-br from-orange-500 to-amber-600",
-                        rec.priority === 'low' && "bg-gradient-to-br from-blue-500 to-cyan-600"
+                        rec.priority === 'high' && "bg-gradient-to-br from-red-50 dark:from-red-950/400 to-rose-600",
+                        rec.priority === 'medium' && "bg-gradient-to-br from-orange-50 dark:from-orange-950/400 to-amber-600",
+                        rec.priority === 'low' && "bg-gradient-to-br from-blue-50 dark:from-blue-950/400 to-cyan-600"
                       )}>
                         <rec.icon className="h-5 w-5 text-white" />
                       </div>
@@ -452,7 +452,7 @@ function MockInterviewResultsContent() {
               className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 rounded-2xl border-2 border-purple-200 dark:border-purple-500/20 shadow-lg p-6"
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-pink-600 flex items-center justify-center">
                   <Award className="h-5 w-5 text-white" />
                 </div>
                 <h3 className="text-lg font-black text-foreground">Keep Going!</h3>

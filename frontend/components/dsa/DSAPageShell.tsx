@@ -43,7 +43,7 @@ export function DSAPageShell({
     (sidebar && rightRail ? "1640px" : hasSide ? "1520px" : "1200px");
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] dark:from-background to-[#f4f5f7] dark:to-surface font-sans text-foreground">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4]  to-[#f4f5f7] dark:to-surface font-sans text-foreground">
       {jsonLd && (
         <script
           type="application/ld+json"

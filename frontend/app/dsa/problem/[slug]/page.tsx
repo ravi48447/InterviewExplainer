@@ -543,7 +543,7 @@ export default async function DSAProblemPage({
                 </span>
                 <span className="text-violet-300 dark:text-violet-300">→</span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-3 w-3 rounded-sm bg-gradient-to-r from-emerald-500 to-emerald-600 border border-emerald-300 dark:border-emerald-500/30" />
+                  <span className="h-3 w-3 rounded-sm bg-gradient-to-r from-emerald-50 dark:from-emerald-950/400 to-emerald-600 border border-emerald-300 dark:border-emerald-500/30" />
                   Optimal
                 </span>
               </div>
@@ -590,7 +590,7 @@ export default async function DSAProblemPage({
                           className={cn(
                             "align-top text-sm",
                             isOptimal
-                              ? "bg-emerald-50/50 dark:bg-emerald-500/10 dark:bg-emerald-500/5 hover:bg-emerald-50 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/10"
+                              ? "bg-emerald-50/50 dark:bg-emerald-500/10 dark:bg-emerald-500/5 hover:bg-emerald-50 dark:bg-emerald-500/10 dark:hover:bg-emerald-50 dark:bg-emerald-950/200/10"
                               : "hover:bg-surface",
                           )}
                         >
@@ -783,7 +783,7 @@ export default async function DSAProblemPage({
                         <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x divide-slate-700 border-t border-rose-200 dark:border-rose-500/20">
                           {m.bad && (
                             <div>
-                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-rose-50 dark:text-rose-300 bg-gradient-to-r from-rose-700 to-rose-800 flex items-center gap-1.5 dark:bg-none dark:bg-background">
+                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-rose-50 dark:text-rose-300 bg-gradient-to-r from-rose-700 to-rose-800 flex items-center gap-1.5  ">
                                 <XCircle className="h-3.5 w-3.5" />
                                 Don't write this
                               </p>
@@ -796,7 +796,7 @@ export default async function DSAProblemPage({
                           )}
                           {m.good && (
                             <div>
-                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-emerald-50 dark:text-emerald-300 bg-gradient-to-r from-emerald-700 to-emerald-800 flex items-center gap-1.5 dark:bg-none dark:bg-background">
+                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-emerald-50 dark:text-emerald-300 bg-gradient-to-r from-emerald-700 to-emerald-800 flex items-center gap-1.5  ">
                                 <CheckCircle2 className="h-3.5 w-3.5" />
                                 Write this instead
                               </p>

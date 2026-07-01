@@ -161,7 +161,7 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
 
         {/* CTA */}
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Link href={`/dsa`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-purple-50 to-violet-50 rounded-2xl border border-purple-200 dark:border-purple-500/20 hover:shadow-lg transition-all group dark:bg-none dark:bg-background">
+          <Link href={`/dsa`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-purple-50 dark:from-purple-950/40 to-violet-50 dark:to-violet-950/40 rounded-2xl border border-purple-200 dark:border-purple-500/20 hover:shadow-lg transition-all group  ">
             <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/20 flex items-center justify-center">
               <BookOpen className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             </div>
@@ -171,7 +171,7 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
             </div>
             <ChevronRight className="h-5 w-5 text-muted-foreground ml-auto group-hover:translate-x-0.5 transition-transform" />
           </Link>
-          <Link href={`/companies`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl border border-orange-200 dark:border-orange-500/20 hover:shadow-lg transition-all group dark:bg-none dark:bg-background">
+          <Link href={`/companies`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40 rounded-2xl border border-orange-200 dark:border-orange-500/20 hover:shadow-lg transition-all group  ">
             <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/20 flex items-center justify-center">
               <Users className="h-5 w-5 text-orange-600 dark:text-orange-400" />
             </div>

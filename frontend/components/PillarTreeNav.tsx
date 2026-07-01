@@ -521,7 +521,7 @@ export default function PillarTreeNav({
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex">
           <div
-            className="absolute inset-0 bg-foreground dark:bg-background/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-foreground /40 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
           <aside className="relative z-10 w-[300px] bg-background shadow-2xl flex flex-col h-full overflow-hidden">

@@ -70,7 +70,7 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
 
           {/* Hero */}
           <header className="mb-10 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-            <div className="relative px-8 py-6 bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 dark:bg-none dark:bg-background">
+            <div className="relative px-8 py-6 bg-gradient-to-br from-teal-50 dark:from-teal-950/40 via-cyan-50 dark:via-cyan-950/40 to-blue-50 dark:to-blue-950/40  ">
               <div className="flex flex-wrap gap-2 mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-teal-100 dark:bg-teal-950/20 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-500/20 shadow-sm">
                   Tool
@@ -132,7 +132,7 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
                       const db = difficultyBadge(q.difficulty);
                       return (
                         <div key={`${idx}-${q.slug}`} className="flex items-center gap-4 px-6 py-3.5 hover:bg-surface/50 transition-colors">
-                          <div className="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-teal-100 to-cyan-100 flex items-center justify-center text-[10px] font-bold text-teal-700 dark:text-teal-400">
+                          <div className="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-teal-100 dark:from-teal-950/50 to-cyan-100 dark:to-cyan-950/50 flex items-center justify-center text-[10px] font-bold text-teal-700 dark:text-teal-400">
                             {idx + 1}
                           </div>
                           <div className="flex-1 min-w-0">

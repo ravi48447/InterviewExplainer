@@ -58,7 +58,7 @@ export function ConceptExplainerLayout({
 
       {/* One-Line Answer */}
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 dark:bg-none dark:bg-background">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 px-5 py-4  ">
           <div className="flex items-center gap-2 mb-2">
             <Lightbulb className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <span className="text-[11px] font-bold text-blue-800 dark:text-blue-400 uppercase tracking-widest">In One Line</span>
@@ -82,7 +82,7 @@ export function ConceptExplainerLayout({
       {/* Main Concept Explanation */}
       {explanation && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border dark:bg-none dark:bg-background">
+          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-50 dark:from-slate-950/40 to-blue-50 dark:to-blue-950/40 border-b border-border  ">
             <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">How It Works</span>
           </div>
@@ -95,7 +95,7 @@ export function ConceptExplainerLayout({
       {/* Phase / Lifecycle / Stage sections (numbered timeline) */}
       {phases.length > 0 && (
         <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/20 bg-background shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-200 dark:border-indigo-500/20 dark:bg-none dark:bg-background">
+          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-50 dark:from-indigo-950/40 to-purple-50 dark:to-purple-950/40 border-b border-indigo-200 dark:border-indigo-500/20  ">
             <Hash className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">
               Step-by-Step Breakdown
@@ -159,7 +159,7 @@ export function ConceptExplainerLayout({
       {/* Say This In Interview — moved last so it's the finale */}
       {interviewScript && (
         <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-500/30 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-emerald-100 to-teal-100 border-b-2 border-emerald-200 dark:border-emerald-500/20">
+          <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-emerald-100 dark:from-emerald-950/50 to-teal-100 dark:to-teal-950/50 border-b-2 border-emerald-200 dark:border-emerald-500/20">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <span className="text-xs font-bold text-foreground uppercase tracking-wide">Say This In Interview</span>

@@ -172,8 +172,8 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
           </div>
 
           {/* Filter by Category */}
-          <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm overflow-hidden dark:bg-none dark:bg-background">
-            <div className="px-4 py-3 bg-gradient-to-r from-blue-100 to-blue-50 border-b border-blue-200 dark:border-blue-500/20 dark:bg-none dark:bg-background">
+          <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-br from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 shadow-sm overflow-hidden  ">
+            <div className="px-4 py-3 bg-gradient-to-r from-blue-100 dark:from-blue-950/50 to-blue-50 dark:to-blue-950/40 border-b border-blue-200 dark:border-blue-500/20  ">
               <div className="flex items-center gap-2">
                 <Filter className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Filter Topics</h3>
@@ -222,13 +222,13 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
                 <span className="font-bold text-foreground">0/{totalStacks}</span>
               </div>
               <div className="w-full bg-emerald-100 dark:bg-emerald-950/20 rounded-full h-2 overflow-hidden">
-                <div className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full" style={{ width: '0%' }} />
+                <div className="bg-gradient-to-r from-emerald-50 dark:from-emerald-950/400 to-teal-50 dark:to-teal-950/400 h-full rounded-full" style={{ width: '0%' }} />
               </div>
             </div>
           </div>
 
           {/* Study Tips */}
-          <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 to-yellow-50 shadow-sm p-4 dark:bg-none dark:bg-background">
+          <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 dark:from-amber-950/40 to-yellow-50 dark:to-yellow-950/40 shadow-sm p-4  ">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Quick Tip</h3>
@@ -375,7 +375,7 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
           </div>
 
           {/* What You'll Learn */}
-          <div className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-br from-teal-50 to-cyan-50 shadow-sm p-4 dark:bg-none dark:bg-background">
+          <div className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-br from-teal-50 dark:from-teal-950/40 to-cyan-50 dark:to-cyan-950/40 shadow-sm p-4  ">
             <div className="flex items-center gap-2 mb-3">
               <Target className="h-4 w-4 text-teal-600 dark:text-teal-400" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">What You'll Learn</h3>
@@ -391,7 +391,7 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
           </div>
 
           {/* Study Strategy */}
-          <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm p-4 dark:bg-none dark:bg-background">
+          <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 dark:from-indigo-950/40 to-blue-50 dark:to-blue-950/40 shadow-sm p-4  ">
             <div className="flex items-center gap-2 mb-3">
               <BookMarked className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Study Strategy</h3>
@@ -431,17 +431,17 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
 }
 
 const MODULE_COLORS = [
-  'from-blue-500 to-indigo-600',
-  'from-emerald-500 to-teal-600',
-  'from-purple-500 to-violet-600',
-  'from-amber-500 to-orange-600',
-  'from-rose-500 to-pink-600',
-  'from-cyan-500 to-sky-600',
-  'from-lime-500 to-green-600',
-  'from-fuchsia-500 to-purple-600',
-  'from-red-500 to-rose-600',
-  'from-indigo-500 to-blue-600',
-  'from-teal-500 to-emerald-600',
+  'from-blue-50 dark:from-blue-950/400 to-indigo-600',
+  'from-emerald-50 dark:from-emerald-950/400 to-teal-600',
+  'from-purple-50 dark:from-purple-950/400 to-violet-600',
+  'from-amber-50 dark:from-amber-950/400 to-orange-600',
+  'from-rose-50 dark:from-rose-950/400 to-pink-600',
+  'from-cyan-50 dark:from-cyan-950/400 to-sky-600',
+  'from-lime-50 dark:from-lime-950/400 to-green-600',
+  'from-fuchsia-50 dark:from-fuchsia-950/400 to-purple-600',
+  'from-red-50 dark:from-red-950/400 to-rose-600',
+  'from-indigo-50 dark:from-indigo-950/400 to-blue-600',
+  'from-teal-50 dark:from-teal-950/400 to-emerald-600',
 ];
 
 function ModuleAccordion({ category, domainSlug, index }: { category: DomainCategory; domainSlug: string; index: number }) {

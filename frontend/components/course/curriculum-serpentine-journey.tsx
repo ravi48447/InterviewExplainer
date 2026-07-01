@@ -68,7 +68,7 @@ function RoadStop({ n, expanded, compact }: { n: number; expanded: boolean; comp
           "relative flex shrink-0 items-center justify-center rounded-2xl border-2 font-black text-white transition-all duration-300",
           compact ? "h-10 w-10 text-xs" : "h-12 w-12 text-sm lg:h-[3.25rem] lg:w-[3.25rem] lg:text-base",
           expanded
-            ? "border-amber-300 dark:border-amber-500/30 dark:border-amber-700/80 bg-gradient-to-br from-amber-400 via-orange-400 to-amber-500 shadow-lg shadow-amber-900/40"
+            ? "border-amber-300 dark:border-amber-500/30 dark:border-amber-700/80 bg-gradient-to-br from-amber-400 via-orange-400 to-amber-50 dark:to-amber-950/400 shadow-lg shadow-amber-900/40"
             : "border-slate-600 dark:border-slate-700/70 bg-gradient-to-br from-slate-600 to-slate-800 shadow-md shadow-black/30",
         )}
       >
@@ -96,7 +96,7 @@ function MobileLaneHaze({ toStop }: { toStop: "left" | "right" }) {
         )}
       />
       <div className="h-2.5 w-7 shrink-0 overflow-hidden rounded-sm border border-slate-500 dark:border-slate-700/25 shadow-inner">
-        <div className="h-1.5 w-full bg-gradient-to-b from-slate-500 to-slate-800" />
+        <div className="h-1.5 w-full bg-gradient-to-b from-slate-50 dark:from-slate-950/400 to-slate-800" />
         <div className="h-0.5 w-full bg-amber-200 dark:bg-amber-900/40/45" />
       </div>
       <div

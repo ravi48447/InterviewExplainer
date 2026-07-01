@@ -217,7 +217,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
     <div className="relative min-h-screen overflow-x-clip text-muted-foreground selection:bg-background/20">
       {/* ── FIXED PAGE BACKGROUND ── */}
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden>
-        <div className="absolute inset-0 bg-[#f4f5f7] dark:bg-background" />
+        <div className="absolute inset-0 bg-[#f4f5f7] " />
       </div>
 
       {/* ════════════════════════════════════════════════
@@ -345,7 +345,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                 {firstStackHref && (
                   <Link
                     href={firstStackHref}
-                    className="group inline-flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-7 py-3.5 text-[14px] font-black text-zinc-950 dark:text-zinc-400 shadow-[0_6px_24px_-6px_rgba(245,158,11,0.55)] transition-all hover:shadow-[0_10px_36px_-8px_rgba(245,158,11,0.65)] hover:brightness-105 active:scale-[0.98]"
+                    className="group inline-flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-50 dark:via-amber-950/400 to-orange-50 dark:to-orange-950/400 px-7 py-3.5 text-[14px] font-black text-zinc-950 dark:text-zinc-400 shadow-[0_6px_24px_-6px_rgba(245,158,11,0.55)] transition-all hover:shadow-[0_10px_36px_-8px_rgba(245,158,11,0.65)] hover:brightness-105 active:scale-[0.98]"
                   >
                     <Play className="h-4 w-4 fill-current transition-transform group-hover:scale-110" />
                     Start learning free
@@ -365,7 +365,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
             {/* ── RIGHT: course snapshot card ── */}
             <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-background/[0.05] lg:mt-6 lg:self-start">
               {/* amber top bar */}
-              <div className="h-[3px] w-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500" />
+              <div className="h-[3px] w-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-50 dark:to-amber-950/400" />
 
               {/* card header */}
               <div className="flex items-center gap-2.5 border-b border-white/[0.08] px-5 py-3.5 sm:px-6">
@@ -454,7 +454,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="flex items-center gap-3 text-2xl font-black tracking-tight text-white sm:text-[1.85rem] lg:text-[2.1rem]">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-400">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-50 dark:bg-amber-950/200/10 text-amber-400">
                   <Route className="h-5 w-5" strokeWidth={2} />
                 </span>
                 Interview Road
@@ -479,7 +479,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                 ))}
                 {expandedPillarIds.size > 0 && (
                   <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-[11px] font-medium text-slate-300">
-                    <span className="h-2 w-2 rounded-full bg-slate-500" />
+                    <span className="h-2 w-2 rounded-full bg-slate-50 dark:bg-slate-950/200" />
                     {expandedPillarIds.size} open
                   </div>
                 )}
@@ -520,7 +520,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
         <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/80 bg-background/92 p-3 backdrop-blur-xl lg:hidden">
           <Link
             href={firstStackHref}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-600 py-3.5 text-sm font-bold text-zinc-950 dark:text-zinc-400 shadow-lg shadow-amber-900/20"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-50 dark:via-amber-950/400 to-orange-600 py-3.5 text-sm font-bold text-zinc-950 dark:text-zinc-400 shadow-lg shadow-amber-900/20"
           >
             <Play className="h-4 w-4 fill-current" />
             Start learning

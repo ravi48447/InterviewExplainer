@@ -143,7 +143,7 @@ export default function ExperienceLevelSwitcher({
                 ))}
               </ul>
 
-              <div className="rounded-lg bg-foreground dark:bg-background/5 p-3">
+              <div className="rounded-lg bg-foreground /5 p-3">
                 <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Example</div>
                 <p className="text-xs text-foreground leading-relaxed">{details.example}</p>
               </div>

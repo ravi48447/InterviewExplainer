@@ -60,16 +60,16 @@ function deriveLanguagesFromDomains(domains: ContentDomain[], trackSlug?: string
 
 
 const trackTheme: Record<string, any> = {
-    frontend: { icon: Palette, color: "from-blue-500 to-cyan-400" },
-    backend: { icon: Server, color: "from-green-500 to-emerald-400" },
-    fullstack: { icon: Layout, color: "from-purple-500 to-pink-400" },
-    data: { icon: Database, color: "from-orange-500 to-yellow-400" },
+    frontend: { icon: Palette, color: "from-blue-50 dark:from-blue-950/400 to-cyan-400" },
+    backend: { icon: Server, color: "from-green-50 dark:from-green-950/400 to-emerald-400" },
+    fullstack: { icon: Layout, color: "from-purple-50 dark:from-purple-950/400 to-pink-400" },
+    data: { icon: Database, color: "from-orange-50 dark:from-orange-950/400 to-yellow-400" },
     business: { icon: Compass, color: "from-blue-600 to-indigo-400" },
 };
 
 const expTheme: Record<ExperienceLevelKey, { subtitle: string; icon: any; color: string }> = {
-    beginner:     { subtitle: "Junior Tier",  icon: Sparkles, color: "from-emerald-500 to-teal-400" },
-    intermediate: { subtitle: "Pro Tier",     icon: Trophy,   color: "from-purple-500 to-pink-400"  },
+    beginner:     { subtitle: "Junior Tier",  icon: Sparkles, color: "from-emerald-50 dark:from-emerald-950/400 to-teal-400" },
+    intermediate: { subtitle: "Pro Tier",     icon: Trophy,   color: "from-purple-50 dark:from-purple-950/400 to-pink-400"  },
 };
 
 // Hardcoded themes for visual flair, but data is dynamic
@@ -360,7 +360,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                                 : "hover:border-white/20 hover:bg-background/5"
                                         )}
                                     >
-                                        <div className={cn("inline-flex items-center justify-center p-3 rounded-2xl bg-gradient-to-br mb-4 shadow-xl group-hover:scale-110 transition-transform", opt.color || "from-blue-500 to-cyan-400")}>
+                                        <div className={cn("inline-flex items-center justify-center p-3 rounded-2xl bg-gradient-to-br mb-4 shadow-xl group-hover:scale-110 transition-transform", opt.color || "from-blue-50 dark:from-blue-950/400 to-cyan-400")}>
                                             {opt.icon ? <opt.icon className="h-6 w-6 text-foreground" /> : <Sparkles className="h-6 w-6 text-foreground" />}
                                         </div>
                                         <span className="text-2xl font-black bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent mb-1">{opt.label}</span>

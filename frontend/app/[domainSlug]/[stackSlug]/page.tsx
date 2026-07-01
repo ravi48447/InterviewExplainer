@@ -833,7 +833,7 @@ export default function StackPage({
                     {/* Left colored accent bar */}
                     <div className={cn(
                       "w-1 h-9 rounded-full shrink-0",
-                      hasQuestions ? "bg-gradient-to-b from-blue-400 to-indigo-500" : "bg-slate-600 dark:bg-slate-800"
+                      hasQuestions ? "bg-gradient-to-b from-blue-400 to-indigo-50 dark:to-indigo-950/400" : "bg-slate-600 dark:bg-slate-800"
                     )} />
 
                     <div className="flex-1 text-left min-w-0 relative z-10">
@@ -892,11 +892,11 @@ export default function StackPage({
                           {filteredQ.map((q, idx) => {
                             const rowBg =
                               q.difficulty === "easy"
-                                ? "bg-green-50/60 hover:bg-green-50 dark:bg-green-500/5 dark:hover:bg-green-500/10"
+                                ? "bg-green-50/60 hover:bg-green-50 dark:bg-green-500/5 dark:hover:bg-green-50 dark:bg-green-950/200/10"
                                 : q.difficulty === "medium"
-                                ? "bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-500/5 dark:hover:bg-amber-500/10"
+                                ? "bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-500/5 dark:hover:bg-amber-50 dark:bg-amber-950/200/10"
                                 : q.difficulty === "hard"
-                                ? "bg-red-50 dark:bg-red-500/10 hover:bg-red-50/80 dark:bg-red-500/5 dark:hover:bg-red-500/10"
+                                ? "bg-red-50 dark:bg-red-500/10 hover:bg-red-50/80 dark:bg-red-500/5 dark:hover:bg-red-50 dark:bg-red-950/200/10"
                                 : "bg-background hover:bg-surface dark:hover:bg-slate-800/50";
                             return (
                             <div key={`${idx}-${q.slug}`}>
@@ -1041,9 +1041,9 @@ export default function StackPage({
             </div>
             <div className="p-3 space-y-2.5">
               {[
-                { label: "Easy", count: easyCt, gradient: "from-green-500 to-emerald-600", color: "#22c55e" },
-                { label: "Medium", count: medCt, gradient: "from-orange-500 to-amber-600", color: "#f59e0b" },
-                { label: "Hard", count: hardCt, gradient: "from-red-500 to-rose-600", color: "#ef4444" },
+                { label: "Easy", count: easyCt, gradient: "from-green-50 dark:from-green-950/400 to-emerald-600", color: "#22c55e" },
+                { label: "Medium", count: medCt, gradient: "from-orange-50 dark:from-orange-950/400 to-amber-600", color: "#f59e0b" },
+                { label: "Hard", count: hardCt, gradient: "from-red-50 dark:from-red-950/400 to-rose-600", color: "#ef4444" },
               ].map(({ label, count, gradient, color }) => (
                 <div key={label} className="space-y-1">
                   <div className="flex justify-between text-xs">

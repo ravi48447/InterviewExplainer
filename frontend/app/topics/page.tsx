@@ -45,7 +45,7 @@ const CATEGORIES = [
         name: "System Design",
         icon: Network,
         color: "text-emerald-600 dark:text-emerald-400",
-        bg: "bg-emerald-100",
+        bg: "bg-emerald-100 dark:bg-emerald-950/30",
         desc: "Scalability, availability, consistency, load balancing, databases at scale",
         subtopics: ["Horizontal scaling", "CAP trade-offs", "Database sharding", "Caching layers"],
         frequency: "Very High",
@@ -55,7 +55,7 @@ const CATEGORIES = [
         name: "Microservices",
         icon: Layers,
         color: "text-violet-600 dark:text-violet-400",
-        bg: "bg-violet-100",
+        bg: "bg-violet-100 dark:bg-violet-950/30",
         desc: "Service decomposition, communication patterns, sagas, service mesh",
         subtopics: ["Service discovery", "API gateway", "Saga pattern", "Circuit breaker"],
         frequency: "High",
@@ -65,7 +65,7 @@ const CATEGORIES = [
         name: "Distributed Systems",
         icon: GitBranch,
         color: "text-blue-600 dark:text-blue-400",
-        bg: "bg-blue-100",
+        bg: "bg-blue-100 dark:bg-blue-950/30",
         desc: "CAP theorem, consensus, replication, fault tolerance, CRDTs",
         subtopics: ["Raft consensus", "Leader election", "Replication strategies", "Partition handling"],
         frequency: "High",
@@ -75,7 +75,7 @@ const CATEGORIES = [
         name: "Event-Driven Architecture",
         icon: Radio,
         color: "text-amber-600 dark:text-amber-400",
-        bg: "bg-amber-100",
+        bg: "bg-amber-100 dark:bg-amber-950/30",
         desc: "Events, commands, CQRS, event sourcing, outbox pattern",
         subtopics: ["Event sourcing", "CQRS", "Outbox pattern", "Idempotency"],
         frequency: "Medium",
@@ -85,7 +85,7 @@ const CATEGORIES = [
         name: "Clean Architecture",
         icon: Puzzle,
         color: "text-indigo-600",
-        bg: "bg-indigo-100",
+        bg: "bg-indigo-100 dark:bg-indigo-950/30",
         desc: "Hexagonal, onion, dependency rule, ports and adapters",
         subtopics: ["Dependency inversion", "Ports & adapters", "Domain layer", "Use cases"],
         frequency: "Medium",
@@ -95,7 +95,7 @@ const CATEGORIES = [
         name: "Domain-Driven Design",
         icon: Target,
         color: "text-rose-600 dark:text-rose-400",
-        bg: "bg-rose-100",
+        bg: "bg-rose-100 dark:bg-rose-950/30",
         desc: "Entities, value objects, aggregates, bounded contexts, ubiquitous language",
         subtopics: ["Aggregates", "Bounded contexts", "Domain events", "Anti-corruption layer"],
         frequency: "Medium",
@@ -111,7 +111,7 @@ const CATEGORIES = [
         name: "Databases",
         icon: Database,
         color: "text-emerald-600 dark:text-emerald-400",
-        bg: "bg-emerald-100",
+        bg: "bg-emerald-100 dark:bg-emerald-950/30",
         desc: "ACID, indexes, query optimization, sharding, replication",
         subtopics: ["B-tree indexes", "Query planning", "Normalization", "Transactions"],
         frequency: "Very High",
@@ -121,7 +121,7 @@ const CATEGORIES = [
         name: "Caching",
         icon: Cpu,
         color: "text-amber-600 dark:text-amber-400",
-        bg: "bg-amber-100",
+        bg: "bg-amber-100 dark:bg-amber-950/30",
         desc: "Cache strategies, eviction policies, invalidation, distributed caching",
         subtopics: ["Write-through", "Cache-aside", "TTL strategies", "Cache stampede"],
         frequency: "Very High",
@@ -131,7 +131,7 @@ const CATEGORIES = [
         name: "CAP Theorem",
         icon: GitBranch,
         color: "text-violet-600 dark:text-violet-400",
-        bg: "bg-violet-100",
+        bg: "bg-violet-100 dark:bg-violet-950/30",
         desc: "Consistency, availability, partition tolerance — trade-offs explained with real systems",
         subtopics: ["CP systems", "AP systems", "PACELC", "Eventual consistency"],
         frequency: "High",
@@ -147,7 +147,7 @@ const CATEGORIES = [
         name: "API Design",
         icon: Globe,
         color: "text-cyan-600",
-        bg: "bg-cyan-100",
+        bg: "bg-cyan-100 dark:bg-cyan-950/30",
         desc: "REST, GraphQL, gRPC, versioning, rate limiting, documentation",
         subtopics: ["REST maturity model", "GraphQL vs REST", "API versioning", "OpenAPI/Swagger"],
         frequency: "Very High",
@@ -157,7 +157,7 @@ const CATEGORIES = [
         name: "Concurrency",
         icon: Workflow,
         color: "text-blue-600 dark:text-blue-400",
-        bg: "bg-blue-100",
+        bg: "bg-blue-100 dark:bg-blue-950/30",
         desc: "Threads, async/await, locks, deadlocks, actors, reactive programming",
         subtopics: ["Thread pools", "Lock-free structures", "Deadlock detection", "Async patterns"],
         frequency: "High",
@@ -173,7 +173,7 @@ const CATEGORIES = [
         name: "Security",
         icon: Shield,
         color: "text-red-600",
-        bg: "bg-red-100",
+        bg: "bg-red-100 dark:bg-red-950/30",
         desc: "Authentication, authorization, OAuth2, JWT, HTTPS, secrets management",
         subtopics: ["OAuth2 flows", "JWT vs sessions", "CORS", "SQL injection prevention"],
         frequency: "High",
@@ -241,7 +241,7 @@ const totalTopics = CATEGORIES.reduce(
 
 export default function TopicsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50/20 to-indigo-50/20 font-sans text-foreground selection:bg-violet-200 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-violet-50/20 dark:via-violet-950/40 to-indigo-50/20 dark:to-indigo-950/40 font-sans text-foreground selection:bg-violet-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -257,7 +257,7 @@ export default function TopicsPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-violet-50 via-purple-50 to-indigo-50 dark:bg-none dark:bg-background">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-violet-50 dark:from-violet-950/40 via-purple-50 dark:via-purple-950/40 to-indigo-50 dark:to-indigo-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <BookOpen className="h-5 w-5 text-violet-600 dark:text-violet-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-violet-600 dark:text-violet-400">
@@ -377,7 +377,7 @@ export default function TopicsPage() {
         ))}
 
         {/* Cross-reference CTA */}
-        <section className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-gradient-to-r from-violet-50 to-purple-50 p-8 text-center mb-12 dark:bg-none dark:bg-background">
+        <section className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-gradient-to-r from-violet-50 dark:from-violet-950/40 to-purple-50 dark:to-purple-950/40 p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Learn Concepts in Context
           </h2>

@@ -133,7 +133,7 @@ const COMPANY_SPECIFIC = [
     count: 16,
     desc: "All 16 LPs with behavioral question mapping. Customer Obsession, Ownership, Dive Deep, and more. The most behavioral-heavy interview in tech.",
     tag: "FAANG",
-    tagColor: "bg-orange-100 dark:bg-orange-950/20 text-orange-700",
+    tagColor: "bg-orange-100 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400",
   },
   {
     slug: "google-behavioral",
@@ -174,25 +174,25 @@ const STAR_STEPS = [
     letter: "S",
     title: "Situation",
     desc: "Set the context. When and where did this happen? What was your role? Keep it concise — 2-3 sentences max.",
-    color: "from-blue-500 to-blue-600",
+    color: "from-blue-50 dark:from-blue-950/400 to-blue-600",
   },
   {
     letter: "T",
     title: "Task",
     desc: "What was your specific responsibility? What challenge or goal were you facing? What were the stakes?",
-    color: "from-indigo-500 to-indigo-600",
+    color: "from-indigo-50 dark:from-indigo-950/400 to-indigo-600",
   },
   {
     letter: "A",
     title: "Action",
     desc: "What did YOU do? Be specific about your individual contribution. This should be 60% of your answer. Use 'I', not 'we'.",
-    color: "from-violet-500 to-violet-600",
+    color: "from-violet-50 dark:from-violet-950/400 to-violet-600",
   },
   {
     letter: "R",
     title: "Result",
     desc: "What was the outcome? Quantify when possible (reduced latency by 40%, saved $50K/month). Include learnings.",
-    color: "from-purple-500 to-purple-600",
+    color: "from-purple-50 dark:from-purple-950/400 to-purple-600",
   },
 ];
 
@@ -200,7 +200,7 @@ const totalQuestions = CATEGORIES.reduce((sum, c) => sum + c.count, 0);
 
 export default function BehavioralPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-amber-50/20 to-orange-50/20 font-sans text-foreground selection:bg-amber-200 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-amber-50/20 dark:via-amber-950/40 to-orange-50/20 dark:to-orange-950/40 font-sans text-foreground selection:bg-amber-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -218,7 +218,7 @@ export default function BehavioralPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 dark:bg-none dark:bg-background">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-amber-50 dark:from-amber-950/40 via-orange-50 dark:via-orange-950/40 to-rose-50 dark:to-rose-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Brain className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
@@ -407,7 +407,7 @@ export default function BehavioralPage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-r from-amber-50 to-orange-50 p-8 text-center mb-12 dark:bg-none dark:bg-background">
+        <section className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-r from-amber-50 dark:from-amber-950/40 to-orange-50 dark:to-orange-950/40 p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Behavioral Prep Is Part of Every Interview Domain
           </h2>

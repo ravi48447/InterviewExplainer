@@ -17,7 +17,7 @@ export function ModuleReadingPathGuide({
     <section
       id="reading-path"
       aria-labelledby="reading-path-heading"
-      className="mb-8 scroll-mt-24 rounded-2xl border border-border/90 bg-gradient-to-br from-white via-slate-50/80 to-blue-50/30 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-5 sm:p-6 shadow-sm ring-1 ring-slate-900/[0.03]"
+      className="mb-8 scroll-mt-24 rounded-2xl border border-border/90 bg-gradient-to-br from-white via-slate-50/80 dark:via-slate-950/40 to-blue-50/30 dark:to-blue-950/40 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-5 sm:p-6 shadow-sm ring-1 ring-slate-900/[0.03]"
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
@@ -116,7 +116,7 @@ export function PillarReadingPathGuide({
     <section
       id="reading-path"
       aria-labelledby="pillar-reading-path-heading"
-      className="mb-8 scroll-mt-24 rounded-2xl border border-border/90 bg-gradient-to-br from-white via-slate-50/80 to-indigo-50/25 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-5 sm:p-6 shadow-sm ring-1 ring-slate-900/[0.03]"
+      className="mb-8 scroll-mt-24 rounded-2xl border border-border/90 bg-gradient-to-br from-white via-slate-50/80 dark:via-slate-950/40 to-indigo-50/25 dark:to-indigo-950/40 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-5 sm:p-6 shadow-sm ring-1 ring-slate-900/[0.03]"
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">

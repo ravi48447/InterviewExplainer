@@ -86,7 +86,7 @@ function renderPillarCard(p: FeaturedPillarCard) {
       href={`/${p.pillarSlug}`}
       className="group relative flex items-center gap-3 px-4 py-3 rounded-lg border border-border bg-background hover:border-indigo-300 dark:border-indigo-700 hover:shadow-md transition-all duration-200"
     >
-      <div className="shrink-0 w-9 h-9 rounded-md bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
+      <div className="shrink-0 w-9 h-9 rounded-md bg-gradient-to-br from-indigo-50 dark:from-indigo-950/400 to-blue-600 flex items-center justify-center">
         <Icon className="h-4 w-4 text-white" />
       </div>
       <div className="flex-1 min-w-0">
@@ -131,7 +131,7 @@ export function FeaturedPrepSection({
   return (
     <section
       aria-labelledby="featured-prep-heading"
-      className="py-20 bg-gradient-to-br from-white via-indigo-50/40 to-white dark:bg-none dark:bg-background"
+      className="py-20 bg-gradient-to-br from-white via-indigo-50/40 dark:via-indigo-950/40 to-white  "
     >
       <div className="w-full px-6 sm:px-12 lg:px-20">
         <div className="w-full min-w-0">

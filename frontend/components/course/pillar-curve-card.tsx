@@ -44,7 +44,7 @@ export function PillarCurveCard({
       >
         {/* top accent bar */}
         <div className={cn(
-          "h-[3px] w-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 transition-opacity duration-300",
+          "h-[3px] w-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-50 dark:to-amber-950/400 transition-opacity duration-300",
           expanded ? "opacity-100" : "opacity-0 group-hover:opacity-40",
         )} />
 
@@ -64,7 +64,7 @@ export function PillarCurveCard({
             className={cn(
               "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-[15px] font-black text-white shadow-md transition-all duration-200",
               expanded
-                ? "bg-gradient-to-br from-amber-400 via-orange-400 to-amber-500 shadow-amber-200/60 group-hover:scale-105"
+                ? "bg-gradient-to-br from-amber-400 via-orange-400 to-amber-50 dark:to-amber-950/400 shadow-amber-200/60 group-hover:scale-105"
                 : "bg-gradient-to-br from-slate-700 to-slate-900 group-hover:from-slate-600 group-hover:to-slate-800",
             )}
           >
@@ -123,7 +123,7 @@ export function PillarCurveCard({
             <div className={cn(
               "max-h-[min(65vh,26rem)] overflow-y-auto border-t px-4 py-4 sm:px-5",
               expanded ? "border-amber-100 dark:border-amber-500/20" : "border-transparent",
-              "bg-gradient-to-b dark:bg-none dark:bg-background from-amber-50/40 to-white",
+              "bg-gradient-to-b   from-amber-50/40 dark:from-amber-950/40 to-white",
             )}>
               {stacks.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border bg-surface/50 px-3 py-6 text-center text-[11px] text-muted-foreground">
@@ -154,7 +154,7 @@ export function PillarCurveCard({
                           <Clock className="h-3 w-3" />
                           {stack.questionCount}
                         </span>
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-200 dark:border-amber-500/20/60 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 transition-all group-hover/link:scale-110 group-hover/link:bg-amber-100">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-200 dark:border-amber-500/20/60 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 transition-all group-hover/link:scale-110 group-hover/link:bg-amber-100 dark:bg-amber-950/30">
                           <BookOpen className="h-3.5 w-3.5" strokeWidth={2} />
                         </span>
                       </Link>

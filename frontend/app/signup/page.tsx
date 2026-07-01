@@ -111,7 +111,7 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="relative min-h-[calc(100vh-80px)] w-full bg-[#000000] overflow-hidden flex items-start justify-center font-sans text-slate-200 selection:bg-blue-500/30 pt-4 lg:pt-8">
+    <div className="relative min-h-[calc(100vh-80px)] w-full bg-[#000000] overflow-hidden flex items-start justify-center font-sans text-slate-200 selection:bg-blue-50 dark:bg-blue-950/200/30 pt-4 lg:pt-8">
       {/* Decorative Background */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-white/5 blur-[120px]" />
@@ -150,21 +150,21 @@ export default function SignupPage() {
               icon: MapPinned,
               title: "Personalized Learning Roadmap",
               desc: "Generate a customized interview roadmap based on your experience, target roles, and preferred tech stack.",
-              color: "from-fuchsia-500 to-purple-500",
+              color: "from-fuchsia-50 dark:from-fuchsia-950/400 to-purple-50 dark:to-purple-950/400",
               shadow: "shadow-purple-500/20"
             },
             {
               icon: Terminal,
               title: "Tech Stack Specific Questions",
               desc: "Practice interview questions tailored for Java, Python, React, Spring Boot, DevOps, DSA, SQL, AI/ML, Cloud and more.",
-              color: "from-blue-500 to-indigo-500",
+              color: "from-blue-50 dark:from-blue-950/400 to-indigo-50 dark:to-indigo-950/400",
               shadow: "shadow-blue-500/20"
             },
             {
               icon: BarChart3,
               title: "Smart Progress Analytics",
               desc: "Track completion, weak topics, accuracy, study streaks and improve your interview readiness with powerful analytics.",
-              color: "from-emerald-400 to-teal-500",
+              color: "from-emerald-400 to-teal-50 dark:to-teal-950/400",
               shadow: "shadow-emerald-500/20"
             }
           ].map((feature, i) => (
@@ -201,8 +201,8 @@ export default function SignupPage() {
                 {/* Progress Indicator */}
                 <div className="flex flex-col items-center justify-center mb-8">
                    <div className="flex items-center gap-2 mb-3">
-                     <div className={`h-1.5 w-12 rounded-full transition-colors duration-300 ${step >= 1 ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]' : 'bg-slate-800'}`} />
-                     <div className={`h-1.5 w-12 rounded-full transition-colors duration-300 ${step >= 2 ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'bg-slate-800'}`} />
+                     <div className={`h-1.5 w-12 rounded-full transition-colors duration-300 ${step >= 1 ? 'bg-blue-50 dark:bg-blue-950/200 shadow-[0_0_8px_rgba(59,130,246,0.6)]' : 'bg-slate-800'}`} />
+                     <div className={`h-1.5 w-12 rounded-full transition-colors duration-300 ${step >= 2 ? 'bg-indigo-50 dark:bg-indigo-950/200 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'bg-slate-800'}`} />
                    </div>
                    <span className="text-[10px] font-medium tracking-widest text-zinc-400 uppercase">
                      Step {step} of 2
@@ -222,7 +222,7 @@ export default function SignupPage() {
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {error && (
-                    <div className="p-3 text-sm font-medium text-red-400 bg-red-500/10 rounded-xl border border-red-500/20">
+                    <div className="p-3 text-sm font-medium text-red-400 bg-red-50 dark:bg-red-950/200/10 rounded-xl border border-red-500/20">
                       {error}
                     </div>
                   )}
@@ -374,7 +374,7 @@ export default function SignupPage() {
                             {picked.map((p, i) => (
                               <span
                                 key={p.slug}
-                                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 pl-3 pr-1.5 py-1.5 text-xs font-semibold text-emerald-400"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-50 dark:bg-emerald-950/200/10 pl-3 pr-1.5 py-1.5 text-xs font-semibold text-emerald-400"
                               >
                                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
                                 {p.name}
@@ -382,7 +382,7 @@ export default function SignupPage() {
                                 <button
                                   type="button"
                                   onClick={() => removePicked(p.slug)}
-                                  className="ml-0.5 rounded-full p-1 hover:bg-emerald-500/20 transition-colors"
+                                  className="ml-0.5 rounded-full p-1 hover:bg-emerald-50 dark:bg-emerald-950/200/20 transition-colors"
                                   aria-label={`Remove ${p.name}`}
                                 >
                                   <X className="h-3.5 w-3.5" />
@@ -452,7 +452,7 @@ export default function SignupPage() {
                     )}
                     <Button 
                       type="submit" 
-                      className="group relative flex-1 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium transition-all duration-300 shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] overflow-hidden hover:-translate-y-0.5"
+                      className="group relative flex-1 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-50 dark:from-blue-950/400 hover:to-indigo-50 dark:to-indigo-950/400 text-white font-medium transition-all duration-300 shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] overflow-hidden hover:-translate-y-0.5"
                       disabled={isSubmitting || (step === 1 && !step1Valid)}
                     >
                       <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
@@ -518,11 +518,11 @@ export default function SignupPage() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="relative bg-[#111111]/40 backdrop-blur-md rounded-2xl p-6 border border-zinc-800/60 shadow-xl text-center overflow-hidden group"
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute inset-0 bg-gradient-to-b from-blue-50 dark:from-blue-950/400/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <motion.div 
               animate={{ y: [-4, 4, -4] }}
               transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-              className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 mb-4 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+              className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-50 dark:from-indigo-950/400/20 to-purple-50 dark:to-purple-950/400/20 border border-indigo-500/30 mb-4 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
             >
               <Rocket className="w-8 h-8 text-indigo-400" />
             </motion.div>
@@ -551,7 +551,7 @@ export default function SignupPage() {
           <div className="grid grid-cols-2 gap-3">
             {[
               { icon: FileText, num: "450+", label: "QA Pairs", color: "text-blue-400", bg: "bg-blue-500/10 dark:bg-blue-500/20", border: "border-blue-500/20" },
-              { icon: GitBranch, num: "12+", label: "Learning Paths", color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20" },
+              { icon: GitBranch, num: "12+", label: "Learning Paths", color: "text-purple-400", bg: "bg-purple-50 dark:bg-purple-950/200/10", border: "border-purple-500/20" },
             ].map((stat, i) => (
               <motion.div
                 key={i}

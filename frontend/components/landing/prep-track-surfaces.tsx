@@ -6,7 +6,7 @@ import { STANDALONE_PREP_TRACKS } from "@/lib/prep-tracks";
 function TrackIcon({ icon }: { icon: (typeof STANDALONE_PREP_TRACKS)[number]["icon"] }) {
   if (icon === "network") {
     return (
-      <div className="shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-sm">
+      <div className="shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-50 dark:from-emerald-950/400 to-teal-600 flex items-center justify-center shadow-sm">
         <Network className="h-5 w-5 text-white" aria-hidden />
       </div>
     );

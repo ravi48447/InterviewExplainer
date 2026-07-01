@@ -73,7 +73,7 @@ export function DSAModuleTOC({ items, meta }: DSAModuleTOCProps) {
     <div className="space-y-4">
       {meta && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-border dark:bg-none dark:bg-background">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 border-b border-border  ">
             <Zap className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
             <span className="text-[11px] font-black uppercase tracking-widest text-foreground">
               Overview

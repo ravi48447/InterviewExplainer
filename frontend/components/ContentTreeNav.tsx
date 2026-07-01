@@ -605,7 +605,7 @@ export default function ContentTreeNav({
             className="absolute right-0 top-0 h-full w-3 z-50 cursor-col-resize group/handle flex items-center justify-center"
           >
             {/* Hover highlight line */}
-            <div className="absolute inset-y-0 right-0 w-px bg-blue-500 dark:bg-blue-800/0 group-hover/handle:bg-blue-500/50 transition-colors duration-150" />
+            <div className="absolute inset-y-0 right-0 w-px bg-blue-500 dark:bg-blue-800/0 group-hover/handle:bg-blue-50 dark:bg-blue-950/200/50 transition-colors duration-150" />
             {/* Arrow badge — always faintly visible, bright on hover */}
             <div className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-1/2
                             flex items-center gap-0.5 px-1 py-0.5 rounded-full
@@ -633,7 +633,7 @@ export default function ContentTreeNav({
         <div className="lg:hidden fixed inset-0 z-50 flex">
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-foreground dark:bg-background/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-foreground /40 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
           {/* Drawer panel */}

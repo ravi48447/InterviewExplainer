@@ -168,7 +168,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default function CareerPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-rose-50/20 to-pink-50/20 font-sans text-foreground selection:bg-rose-200 dark:bg-none dark:bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-rose-50/20 dark:via-rose-950/40 to-pink-50/20 dark:to-pink-950/40 font-sans text-foreground selection:bg-rose-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -184,7 +184,7 @@ export default function CareerPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-rose-50 via-pink-50 to-fuchsia-50 dark:bg-none dark:bg-background">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-rose-50 dark:from-rose-950/40 via-pink-50 dark:via-pink-950/40 to-fuchsia-50 dark:to-fuchsia-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Briefcase className="h-5 w-5 text-rose-600 dark:text-rose-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-rose-600 dark:text-rose-400">
@@ -344,7 +344,7 @@ export default function CareerPage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-rose-200 dark:border-rose-500/20 bg-gradient-to-r from-rose-50 to-pink-50 p-8 text-center mb-12 dark:bg-none dark:bg-background">
+        <section className="rounded-xl border border-rose-200 dark:border-rose-500/20 bg-gradient-to-r from-rose-50 dark:from-rose-950/40 to-pink-50 dark:to-pink-950/40 p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Career Guidance + Technical Prep = Complete Package
           </h2>

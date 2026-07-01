@@ -62,7 +62,7 @@ export function DSAContentSections({
         {/* Overview prose */}
         {content.overview.length > 0 && (
           <div className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
-            <div className="px-6 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-br from-blue-50 to-blue-50/30 dark:bg-none dark:bg-background">
+            <div className="px-6 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-br from-blue-50 dark:from-blue-950/40 to-blue-50/30 dark:to-blue-950/40  ">
               <p className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
                 <BookOpen className="h-3.5 w-3.5" />
                 Overview
@@ -81,7 +81,7 @@ export function DSAContentSections({
         {/* Study playbook */}
         {content.studyTips.length > 0 && (
           <div className="rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-background shadow-sm overflow-hidden">
-            <div className="px-6 pt-5 pb-3 border-b border-violet-100 dark:border-violet-500/20 bg-gradient-to-br from-violet-50 to-violet-50/30 dark:bg-none dark:bg-background">
+            <div className="px-6 pt-5 pb-3 border-b border-violet-100 dark:border-violet-500/20 bg-gradient-to-br from-violet-50 dark:from-violet-950/40 to-violet-50/30 dark:to-violet-950/40  ">
               <p className="text-xs font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400 flex items-center gap-1.5">
                 <Compass className="h-3.5 w-3.5" />
                 Study playbook
@@ -110,7 +110,7 @@ export function DSAContentSections({
       {/* Pitfalls */}
       {content.pitfalls.length > 0 && (
         <div className="rounded-2xl border border-rose-200 dark:border-rose-500/20 bg-background shadow-sm overflow-hidden">
-          <div className="px-6 pt-5 pb-3 border-b border-rose-100 dark:border-rose-500/20 bg-gradient-to-br from-rose-50 to-rose-50/30 dark:bg-none dark:bg-background">
+          <div className="px-6 pt-5 pb-3 border-b border-rose-100 dark:border-rose-500/20 bg-gradient-to-br from-rose-50 dark:from-rose-950/40 to-rose-50/30 dark:to-rose-950/40  ">
             <p className="text-xs font-bold uppercase tracking-widest text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5" />
               Common pitfalls

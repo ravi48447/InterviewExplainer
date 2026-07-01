@@ -84,7 +84,7 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
                   href={`/interview/${lang}/${track.slug}`}
                   className="group flex items-start gap-4 p-5 bg-background rounded-2xl border border-border hover:border-blue-400 dark:border-blue-700 hover:shadow-lg transition-all"
                 >
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-50 dark:from-blue-950/400 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
                     <Icon className="h-5 w-5 text-white" />
                   </div>
                   <div className="flex-1">
@@ -112,7 +112,7 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
         </section>
 
         {/* Quick links to levels */}
-        <section className="rounded-2xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 to-purple-50 p-6 dark:bg-none dark:bg-background">
+        <section className="rounded-2xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 dark:from-indigo-950/40 to-purple-50 dark:to-purple-950/40 p-6  ">
           <h2 className="text-lg font-black text-foreground mb-4">Jump Directly to a Level</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[

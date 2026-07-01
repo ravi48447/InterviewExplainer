@@ -328,7 +328,7 @@ export default async function DSASheetPage(
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] dark:from-background to-[#f4f5f7] dark:to-surface dark:from-background dark:to-background font-sans text-foreground">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4]  to-[#f4f5f7] dark:to-surface  dark:to-background font-sans text-foreground">
       {/* Page-wide ambient light — soft coloured glows drifting across the page. */}
       <div
         aria-hidden
@@ -452,7 +452,7 @@ export default async function DSASheetPage(
                   </div>
                   <div className="h-2 bg-background/[0.08] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
+                      className="h-full bg-gradient-to-r from-violet-50 dark:from-violet-950/400 to-fuchsia-50 dark:to-fuchsia-950/400"
                       style={{ width: `${progressPercent}%` }}
                     />
                   </div>
@@ -474,7 +474,7 @@ export default async function DSASheetPage(
 
         {/* Difficulty split — slim full-width strip */}
         {diffTotal > 0 && (
-          <section className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] px-5 sm:px-6 py-4">
+          <section className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] px-5 sm:px-6 py-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
               <div className="flex shrink-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
                 <Gauge className="h-4 w-4 text-indigo-500 dark:text-indigo-400" />
@@ -504,7 +504,7 @@ export default async function DSASheetPage(
 
         {/* About this plan — balanced two-column prose fills the width comfortably */}
         {sheet.description && (
-          <section className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden">
+          <section className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden">
             <div className="px-6 sm:px-8 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-background">
               <p className="text-xs font-bold uppercase tracking-widest text-violet-600 dark:text-violet-400 flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -556,7 +556,7 @@ export default async function DSASheetPage(
           (sheet.howToUse && sheet.howToUse.length > 0)) && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {sheet.whyThisSheet && sheet.whyThisSheet.length > 0 && (
-              <section className="rounded-2xl border border-emerald-100 dark:border-emerald-500/20 bg-gradient-to-b from-white to-emerald-50/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(16,185,129,0.22)] overflow-hidden">
+              <section className="rounded-2xl border border-emerald-100 dark:border-emerald-500/20 bg-gradient-to-b from-white to-emerald-50/40 dark:to-emerald-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(16,185,129,0.22)] overflow-hidden">
                 <div className="px-6 pt-5 pb-3 bg-gradient-to-br from-emerald-50 to-emerald-50/30 dark:from-emerald-950/40 dark:to-emerald-950/10 border-b border-emerald-100 dark:border-emerald-500/20 dark:border-emerald-900/40">
                   <SectionHeading
                     icon={Award}
@@ -580,7 +580,7 @@ export default async function DSASheetPage(
             )}
 
             {sheet.howToUse && sheet.howToUse.length > 0 && (
-              <section className="rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-gradient-to-b from-white to-violet-50/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden">
+              <section className="rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-gradient-to-b from-white to-violet-50/40 dark:to-violet-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden">
                 <div className="px-6 pt-5 pb-3 bg-gradient-to-br from-violet-50 to-violet-50/30 dark:from-violet-950/40 dark:to-violet-950/10 border-b border-violet-100 dark:border-violet-500/20 dark:border-violet-900/40">
                   <SectionHeading
                     icon={Flag}
@@ -627,11 +627,11 @@ export default async function DSASheetPage(
                   <div
                     key={group.groupSlug}
                     id={`grp-${group.groupSlug}`}
-                    className="scroll-mt-24 rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden"
+                    className="scroll-mt-24 rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden"
                   >
                     <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-background dark:from-zinc-900 dark:to-zinc-950/60">
                       <h3 className="text-[15px] font-bold text-foreground capitalize flex items-center gap-2.5 tracking-tight">
-                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white text-xs font-black shadow-sm shadow-violet-200">
+                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-gradient-to-br from-violet-50 dark:from-violet-950/400 to-fuchsia-50 dark:to-fuchsia-950/400 text-white text-xs font-black shadow-sm shadow-violet-200">
                           {gi + 1}
                         </span>
                         {group.title}
@@ -660,7 +660,7 @@ export default async function DSASheetPage(
               })}
             </div>
           ) : (sheet.problemOrder ?? []).length > 0 ? (
-            <div className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] p-4">
+            <div className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {(sheet.problemOrder ?? []).map((s, i) => (
                   <ProblemRow key={s} position={i + 1} slug={s} idx={idx} />
@@ -687,9 +687,9 @@ export default async function DSASheetPage(
               <Link
                 key={s}
                 href={`/dsa/sheet/${s}`}
-                className="group rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_16px_-10px_rgba(124,58,237,0.18)] hover:border-violet-300 dark:border-violet-500/30 hover:shadow-xl hover:shadow-violet-200/50 hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col"
+                className="group rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_16px_-10px_rgba(124,58,237,0.18)] hover:border-violet-300 dark:border-violet-500/30 hover:shadow-xl hover:shadow-violet-200/50 hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col"
               >
-                <div className="h-1.5 bg-gradient-to-r from-violet-500 to-fuchsia-500" />
+                <div className="h-1.5 bg-gradient-to-r from-violet-50 dark:from-violet-950/400 to-fuchsia-50 dark:to-fuchsia-950/400" />
                 <div className="p-5 flex flex-col flex-1">
                   <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-violet-500 dark:text-violet-400 mb-2">
                     <ListChecks className="h-3.5 w-3.5" /> Study plan
@@ -712,7 +712,7 @@ export default async function DSASheetPage(
                 style={{ background: "radial-gradient(ellipse 70% 80% at 110% -10%, rgba(139,92,246,0.25) 0%, transparent 60%)" }}
                 aria-hidden
               />
-              <div className="h-1.5 bg-gradient-to-r from-violet-500 to-indigo-500" />
+              <div className="h-1.5 bg-gradient-to-r from-violet-50 dark:from-violet-950/400 to-indigo-50 dark:to-indigo-950/400" />
               <div className="relative p-5 flex flex-col flex-1 text-white">
                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-violet-300 dark:text-violet-300 mb-2">
                   <Sparkles className="h-3.5 w-3.5" /> Full hub

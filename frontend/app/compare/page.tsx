@@ -212,16 +212,16 @@ const TAG_COLORS: Record<string, string> = {
   Databases: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400",
   Infrastructure: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
   Caching: "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400",
-  APIs: "bg-cyan-100 dark:bg-cyan-950/20 text-cyan-700",
-  Architecture: "bg-purple-100 dark:bg-purple-950/20 text-purple-700",
-  Cloud: "bg-orange-100 dark:bg-orange-950/20 text-orange-700",
+  APIs: "bg-cyan-100 dark:bg-cyan-950/20 text-cyan-700 dark:text-cyan-400",
+  Architecture: "bg-purple-100 dark:bg-purple-950/20 text-purple-700 dark:text-purple-400",
+  Cloud: "bg-orange-100 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400",
   Java: "bg-rose-100 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400",
   Python: "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400",
   "Build Tools": "bg-surface text-foreground",
-  Frontend: "bg-pink-100 dark:bg-pink-950/20 text-pink-700",
-  Security: "bg-yellow-100 dark:bg-yellow-950/20 text-yellow-700",
-  Concurrency: "bg-teal-100 dark:bg-teal-950/20 text-teal-700",
-  IaC: "bg-lime-100 dark:bg-lime-950/20 text-lime-700",
+  Frontend: "bg-pink-100 dark:bg-pink-950/20 text-pink-700 dark:text-pink-400",
+  Security: "bg-yellow-100 dark:bg-yellow-950/20 text-yellow-700 dark:text-yellow-400",
+  Concurrency: "bg-teal-100 dark:bg-teal-950/20 text-teal-700 dark:text-teal-400",
+  IaC: "bg-lime-100 dark:bg-lime-950/20 text-lime-700 dark:text-lime-400",
   Testing: "bg-violet-100 dark:bg-violet-950/20 text-violet-700 dark:text-violet-400",
 };
 
@@ -406,7 +406,7 @@ export default function ComparePage() {
                 href={`/compare/${c.slug}`}
                 className="group flex items-center gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-blue-300 dark:border-blue-700 transition-all p-4"
               >
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 dark:from-blue-950/50 to-indigo-100 dark:to-indigo-950/50 flex items-center justify-center shrink-0">
                   <ArrowLeftRight className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -434,7 +434,7 @@ export default function ComparePage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 p-8 text-center mb-12 dark:bg-none dark:bg-background">
+        <section className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Comparisons in Your Interview Prep
           </h2>

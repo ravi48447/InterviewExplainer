@@ -30,7 +30,7 @@ export function FlowDiagramLayout({
   return (
     <div className="space-y-8">
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 dark:bg-none dark:bg-background">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 px-5 py-4  ">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}

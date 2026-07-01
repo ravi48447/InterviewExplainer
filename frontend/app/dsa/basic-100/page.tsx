@@ -258,7 +258,7 @@ export default function Basic100Page() {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] dark:from-background to-[#f4f5f7] dark:to-surface dark:from-background dark:to-background font-sans text-foreground">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4]  to-[#f4f5f7] dark:to-surface  dark:to-background font-sans text-foreground">
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-0"
@@ -351,7 +351,7 @@ export default function Basic100Page() {
                   </div>
                   <div className="h-2 bg-background/[0.08] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-400"
+                      className="h-full bg-gradient-to-r from-emerald-50 dark:from-emerald-950/400 to-teal-400"
                       style={{ width: `${progressPercent}%` }}
                     />
                   </div>
@@ -372,7 +372,7 @@ export default function Basic100Page() {
 
           {/* About */}
           {descParagraphs.length > 0 && (
-            <section className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(16,185,129,0.22)] overflow-hidden">
+            <section className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(16,185,129,0.22)] overflow-hidden">
               <div className="px-6 sm:px-8 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-background dark:from-zinc-900 dark:to-zinc-950/60">
                 <p className="text-xs font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                   <Baby className="h-3.5 w-3.5" />
@@ -398,7 +398,7 @@ export default function Basic100Page() {
 
           {/* How to use */}
           {catalog.howToUse && catalog.howToUse.length > 0 && (
-            <section className="rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-gradient-to-b from-white to-violet-50/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden">
+            <section className="rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-gradient-to-b from-white to-violet-50/40 dark:to-violet-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden">
               <div className="px-6 pt-5 pb-3 bg-gradient-to-br from-violet-50 to-violet-50/30 dark:from-violet-950/40 dark:to-violet-950/10 border-b border-violet-100 dark:border-violet-500/20 dark:border-violet-900/40">
                 <SectionHeading
                   icon={Flag}
@@ -441,11 +441,11 @@ export default function Basic100Page() {
                   <div
                     key={group.groupSlug}
                     id={`grp-${group.groupSlug}`}
-                    className="scroll-mt-24 rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden"
+                    className="scroll-mt-24 rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden"
                   >
                     <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-background dark:from-zinc-900 dark:to-zinc-950/60">
                       <h3 className="text-[15px] font-bold text-foreground flex items-center gap-2.5 tracking-tight">
-                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 text-white text-xs font-black shadow-sm shadow-emerald-200">
+                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-50 dark:from-emerald-950/400 to-teal-50 dark:to-teal-950/400 text-white text-xs font-black shadow-sm shadow-emerald-200">
                           {gi + 1}
                         </span>
                         {group.title}
@@ -494,9 +494,9 @@ export default function Basic100Page() {
                 <Link
                   key={c.href}
                   href={c.href}
-                  className="group rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_16px_-10px_rgba(124,58,237,0.18)] hover:border-violet-300 dark:border-violet-500/30 hover:shadow-xl hover:shadow-violet-200/50 hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col"
+                  className="group rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_16px_-10px_rgba(124,58,237,0.18)] hover:border-violet-300 dark:border-violet-500/30 hover:shadow-xl hover:shadow-violet-200/50 hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col"
                 >
-                  <div className="h-1.5 bg-gradient-to-r from-emerald-500 to-violet-500" />
+                  <div className="h-1.5 bg-gradient-to-r from-emerald-50 dark:from-emerald-950/400 to-violet-50 dark:to-violet-950/400" />
                   <div className="p-5 flex flex-col flex-1">
                     <div className="text-lg font-black text-foreground group-hover:text-violet-700 dark:text-violet-400 tracking-tight transition-colors">
                       {c.label}

@@ -80,7 +80,7 @@ export default function LoginPage() {
       title: "Personalized Roadmap",
       desc: "Get a customized learning path based on your tech stack and experience level.",
       color: "text-purple-400",
-      bg: "bg-purple-500/10",
+      bg: "bg-purple-50 dark:bg-purple-950/200/10",
       border: "border-purple-500/20"
     },
     {
@@ -96,7 +96,7 @@ export default function LoginPage() {
       title: "Track & Improve",
       desc: "Detailed analytics to track your progress and identify weak areas.",
       color: "text-emerald-400",
-      bg: "bg-emerald-500/10",
+      bg: "bg-emerald-50 dark:bg-emerald-950/200/10",
       border: "border-emerald-500/20"
     }
   ];
@@ -117,7 +117,7 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="relative min-h-[calc(100vh-80px)] w-full bg-[#000000] overflow-hidden flex items-start justify-center font-sans text-slate-200 selection:bg-blue-500/30 pt-4 lg:pt-8">
+    <div className="relative min-h-[calc(100vh-80px)] w-full bg-[#000000] overflow-hidden flex items-start justify-center font-sans text-slate-200 selection:bg-blue-50 dark:bg-blue-950/200/30 pt-4 lg:pt-8">
       {/* Decorative Background */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-white/5 blur-[120px]" />
@@ -166,12 +166,12 @@ export default function LoginPage() {
         >
           <div className="relative rounded-3xl bg-[#0A0A0A]/80 border border-white/10 p-8 sm:p-10 backdrop-blur-xl shadow-2xl shadow-black/50 overflow-hidden">
             {/* Soft inner glow */}
-            <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-b from-blue-50 dark:from-blue-950/400/5 to-transparent pointer-events-none" />
             
             <div className="relative z-10">
               <div className="flex justify-center mb-6">
                 <div className="w-12 h-12 rounded-xl bg-[#111827] border border-white/10 flex items-center justify-center shadow-lg shadow-black/40 relative group cursor-default">
-                   <div className="absolute inset-0 bg-blue-500/20 blur-md rounded-xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                   <div className="absolute inset-0 bg-blue-50 dark:bg-blue-950/200/20 blur-md rounded-xl opacity-0 group-hover:opacity-100 transition-opacity" />
                    <Code2 className="h-6 w-6 text-blue-400 relative z-10" />
                 </div>
               </div>
@@ -183,21 +183,21 @@ export default function LoginPage() {
                 <p className="text-sm text-zinc-400 mb-4 max-w-[280px] mx-auto">
                   Enter your credentials to access your personalized mastery roadmap
                 </p>
-                <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-medium text-emerald-400">
+                <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/200/10 border border-emerald-500/20 text-xs font-medium text-emerald-400">
                   <BookOpen className="h-3.5 w-3.5" />
                   Reading is 100% free — log in only to save your progress
                 </div>
               </div>
 
               {magicSent && (
-                <div className="mb-6 flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm font-medium text-emerald-400">
+                <div className="mb-6 flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/200/10 p-4 text-sm font-medium text-emerald-400">
                   <CheckCircle2 className="h-5 w-5 mt-0.5 shrink-0" />
                   Sign-in link sent to {email}. Check your inbox.
                 </div>
               )}
 
               {error && (
-                <div className="mb-6 p-4 text-sm font-medium text-red-400 bg-red-500/10 rounded-xl border border-red-500/20 flex items-start gap-2">
+                <div className="mb-6 p-4 text-sm font-medium text-red-400 bg-red-50 dark:bg-red-950/200/10 rounded-xl border border-red-500/20 flex items-start gap-2">
                   <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
                   {error}
                 </div>
@@ -359,12 +359,12 @@ export default function LoginPage() {
             className="p-6 rounded-3xl bg-gradient-to-b from-indigo-900/20 to-[#0A0A0A]/80 border border-indigo-500/20 relative overflow-hidden backdrop-blur-sm"
           >
             {/* Glowing spot */}
-            <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl" />
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-50 dark:bg-indigo-950/200/20 rounded-full blur-2xl" />
             
             <motion.div 
               animate={{ y: [0, -6, 0] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-5 relative z-10"
+              className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/200/10 border border-indigo-500/20 flex items-center justify-center mb-5 relative z-10"
             >
               <Rocket className="h-6 w-6 text-indigo-400" />
             </motion.div>

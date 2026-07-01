@@ -34,7 +34,7 @@ function ProfileContent() {
                 {/* Profile card */}
                 <div className="bg-background rounded-3xl border border-border shadow-sm p-8 md:p-12 mb-8">
                     <div className="flex flex-col md:flex-row items-center gap-8 mb-10">
-                        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                        <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-50 dark:from-blue-950/400 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
                             <User className="h-12 w-12 text-white" />
                         </div>
                         <div className="text-center md:text-left">
@@ -93,7 +93,7 @@ function ProfileContent() {
                                         </div>
                                         <div className="h-2 bg-surface rounded-full overflow-hidden">
                                             <div
-                                                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-600"
+                                                className="h-full rounded-full bg-gradient-to-r from-blue-50 dark:from-blue-950/400 to-indigo-600"
                                                 style={{ width: `${sp.progress}%` }}
                                             />
                                         </div>

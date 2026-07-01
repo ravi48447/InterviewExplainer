@@ -35,7 +35,7 @@ export function LifecycleTimelineLayout({
   return (
     <div className="space-y-8">
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 dark:bg-none dark:bg-background">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 px-5 py-4  ">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
@@ -56,7 +56,7 @@ export function LifecycleTimelineLayout({
       {/* Interactive Timeline */}
       {hasPhases && (
         <div className="rounded-xl border border-border overflow-hidden">
-          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border dark:bg-none dark:bg-background">
+          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 dark:from-slate-950/40 to-blue-50 dark:to-blue-950/40 border-b border-border  ">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Lifecycle Phases</span>
           </div>
           {/* Phase selector */}

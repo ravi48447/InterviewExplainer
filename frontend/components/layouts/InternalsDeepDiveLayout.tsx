@@ -32,7 +32,7 @@ export function InternalsDeepDiveLayout({
     <div className="space-y-8">
       {/* Quick Answer */}
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 dark:bg-none dark:bg-background">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 px-5 py-4  ">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
@@ -53,7 +53,7 @@ export function InternalsDeepDiveLayout({
       {/* Step-by-Step Internal Walkthrough */}
       {stepByStep && (
         <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/20 bg-background shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-200 dark:border-indigo-500/20 dark:bg-none dark:bg-background">
+          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-50 dark:from-indigo-950/40 to-purple-50 dark:to-purple-950/40 border-b border-indigo-200 dark:border-indigo-500/20  ">
             <ArrowRight className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Step-by-Step Internals</span>
           </div>
