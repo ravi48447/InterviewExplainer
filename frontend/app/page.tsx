@@ -358,7 +358,7 @@ export default function HomePage() {
                 </FeatureCard>
 
                 {/* 2. Java Learning Paths */}
-                <FeatureCard href="/domains?language=java">
+                <FeatureCard href="/java-backend-intermediate">
                   <FeatureCardIcon
                     icon={<TechIcon name="java" className="h-6 w-6 brightness-0 invert" />}
                     gradient="from-orange-500 to-red-600"
