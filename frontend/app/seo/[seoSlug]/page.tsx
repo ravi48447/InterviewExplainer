@@ -514,7 +514,7 @@ export default async function SeoModulePage({
                   aria-labelledby="top-asked-heading"
                   className="mb-8 rounded-2xl border border-border/90 bg-background shadow-md shadow-slate-200/30 overflow-hidden ring-1 ring-slate-900/[0.03]"
                 >
-                  <div className="px-5 py-3.5 bg-gradient-to-r from-amber-50/90 via-orange-50/50 to-white border-b border-amber-100 dark:border-amber-500/20/80 flex items-center gap-2 dark:from-background dark:to-background/50 dark:via-background/80">
+                  <div className="px-5 py-3.5 bg-gradient-to-r from-amber-50/90 via-orange-50/50 to-white border-b border-amber-100 dark:border-amber-500/20/80 flex items-center gap-2 dark:bg-none dark:bg-background">
                     <Flame className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     <h2
                       id="top-asked-heading"
@@ -756,7 +756,7 @@ export default async function SeoModulePage({
             {pillar && (
               <Link
                 href={`/${pillar.pillarSlug}`}
-                className="group rounded-xl border border-indigo-100 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 to-white p-4 hover:border-indigo-300 dark:border-indigo-700 transition-colors dark:from-background dark:to-background/50"
+                className="group rounded-xl border border-indigo-100 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 to-white p-4 hover:border-indigo-300 dark:border-indigo-700 transition-colors dark:bg-none dark:bg-background"
               >
                 <div className="text-[10px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-1">
                   Part of

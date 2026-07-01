@@ -117,9 +117,9 @@ export function DSADifficultyPage({
             hard: "bg-red-500 dark:bg-red-800",
           };
           const activeClasses: Record<string, string> = {
-            easy: "bg-gradient-to-br dark:from-background dark:to-background/50 from-emerald-50 to-white border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 shadow-sm",
-            medium: "bg-gradient-to-br dark:from-background dark:to-background/50 from-amber-50 to-white border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 shadow-sm",
-            hard: "bg-gradient-to-br dark:from-background dark:to-background/50 from-red-50 to-white border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400 shadow-sm",
+            easy: "bg-gradient-to-br dark:bg-none dark:bg-background from-emerald-50 to-white border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 shadow-sm",
+            medium: "bg-gradient-to-br dark:bg-none dark:bg-background from-amber-50 to-white border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 shadow-sm",
+            hard: "bg-gradient-to-br dark:bg-none dark:bg-background from-red-50 to-white border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400 shadow-sm",
           };
           return (
             <Link

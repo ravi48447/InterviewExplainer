@@ -70,7 +70,7 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
 
           {/* Hero */}
           <header className="mb-10 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-            <div className="relative px-8 py-6 bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 dark:from-background dark:to-background/50 dark:via-background/80">
+            <div className="relative px-8 py-6 bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 dark:bg-none dark:bg-background">
               <div className="flex flex-wrap gap-2 mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-teal-100 dark:bg-teal-950/20 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-500/20 shadow-sm">
                   Tool

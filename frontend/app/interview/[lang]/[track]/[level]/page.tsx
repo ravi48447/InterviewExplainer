@@ -147,8 +147,8 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
 
             {/* Level Switcher */}
             {availableLevels.length > 1 && (
-              <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm overflow-hidden dark:from-background dark:to-background/50">
-                <div className="px-4 py-3 bg-gradient-to-r from-blue-100 to-blue-50 border-b border-blue-200 dark:border-blue-500/20 dark:from-background dark:to-background/50">
+              <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm overflow-hidden dark:bg-none dark:bg-background">
+                <div className="px-4 py-3 bg-gradient-to-r from-blue-100 to-blue-50 border-b border-blue-200 dark:border-blue-500/20 dark:bg-none dark:bg-background">
                   <div className="flex items-center gap-2">
                     <Filter className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                     <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Experience Level</h3>
@@ -195,7 +195,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
               </div>
             </div>
 
-            <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 to-yellow-50 shadow-sm p-4 dark:from-background dark:to-background/50">
+            <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 to-yellow-50 shadow-sm p-4 dark:bg-none dark:bg-background">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Quick Tip</h3>
@@ -375,7 +375,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
               </div>
             </div>
 
-            <div className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-br from-teal-50 to-cyan-50 shadow-sm p-4 dark:from-background dark:to-background/50">
+            <div className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-br from-teal-50 to-cyan-50 shadow-sm p-4 dark:bg-none dark:bg-background">
               <div className="flex items-center gap-2 mb-3">
                 <Target className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">What You'll Learn</h3>
@@ -390,7 +390,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
               </div>
             </div>
 
-            <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm p-4 dark:from-background dark:to-background/50">
+            <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 to-blue-50 shadow-sm p-4 dark:bg-none dark:bg-background">
               <div className="flex items-center gap-2 mb-3">
                 <BookMarked className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Study Strategy</h3>

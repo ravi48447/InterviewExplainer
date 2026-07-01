@@ -31,7 +31,7 @@ const TRACKS = [
 
 export default function RubyHubPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-red-50/20 to-rose-50/20 dark:from-background dark:to-background/50 dark:via-background/80">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-red-50/20 to-rose-50/20 dark:bg-none dark:bg-background">
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
         <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
           <Link href="/" className="hover:text-foreground">Home</Link>
@@ -55,7 +55,7 @@ export default function RubyHubPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
           {TRACKS.map(track => (
             <div key={track.slug}
-              className="relative rounded-2xl border border-red-200 dark:border-red-500/20 bg-gradient-to-br from-red-50 to-rose-50 p-6 opacity-70 dark:from-background dark:to-background/50">
+              className="relative rounded-2xl border border-red-200 dark:border-red-500/20 bg-gradient-to-br from-red-50 to-rose-50 p-6 opacity-70 dark:bg-none dark:bg-background">
               <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-1 bg-slate-200 dark:bg-slate-800 text-muted-foreground rounded-full">Coming Soon</span>
               <div className="text-2xl mb-3">{track.emoji}</div>
               <h2 className="text-xl font-black text-foreground mb-2">{track.name}</h2>

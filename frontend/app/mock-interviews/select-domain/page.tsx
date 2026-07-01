@@ -128,7 +128,7 @@ function SelectDomainContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:from-background dark:to-background/50 dark:via-background/80">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -144,7 +144,7 @@ function SelectDomainContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:from-background dark:to-background/50 dark:via-background/80">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -163,7 +163,7 @@ function SelectDomainContent() {
 
   if (domains.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:from-background dark:to-background/50 dark:via-background/80">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex items-center justify-center p-6 dark:bg-none dark:bg-background">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -181,7 +181,7 @@ function SelectDomainContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:from-background dark:to-background/50 dark:via-background/80">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-none dark:bg-background">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white">
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
@@ -304,7 +304,7 @@ function SelectDomainContent() {
               className={cn(
                 "p-6 rounded-2xl border-2 transition-all text-left",
                 difficulty === 'medium'
-                  ? "bg-gradient-to-br dark:from-background dark:to-background/50 from-green-50 to-emerald-50 border-green-500 dark:border-green-700 ring-2 ring-green-500"
+                  ? "bg-gradient-to-br dark:bg-none dark:bg-background from-green-50 to-emerald-50 border-green-500 dark:border-green-700 ring-2 ring-green-500"
                   : "bg-background border-border hover:border-border"
               )}
             >
@@ -328,7 +328,7 @@ function SelectDomainContent() {
               className={cn(
                 "p-6 rounded-2xl border-2 transition-all text-left",
                 difficulty === 'high'
-                  ? "bg-gradient-to-br dark:from-background dark:to-background/50 from-red-50 to-rose-50 border-red-500 dark:border-red-700 ring-2 ring-red-500"
+                  ? "bg-gradient-to-br dark:bg-none dark:bg-background from-red-50 to-rose-50 border-red-500 dark:border-red-700 ring-2 ring-red-500"
                   : "bg-background border-border hover:border-border"
               )}
             >
@@ -352,7 +352,7 @@ function SelectDomainContent() {
               className={cn(
                 "p-6 rounded-2xl border-2 transition-all text-left",
                 difficulty === 'mixed'
-                  ? "bg-gradient-to-br dark:from-background dark:to-background/50 from-blue-50 to-indigo-50 border-blue-500 dark:border-blue-700 ring-2 ring-blue-500"
+                  ? "bg-gradient-to-br dark:bg-none dark:bg-background from-blue-50 to-indigo-50 border-blue-500 dark:border-blue-700 ring-2 ring-blue-500"
                   : "bg-background border-border hover:border-border"
               )}
             >
@@ -415,7 +415,7 @@ function SelectDomainContent() {
               onClick={handleStartMock}
               disabled={!selectedDomain}
               size="lg"
-              className="font-bold text-lg px-8 py-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 shadow-lg dark:from-background dark:to-background/50"
+              className="font-bold text-lg px-8 py-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 shadow-lg dark:bg-none dark:bg-background"
             >
               Start Mock Interview
               <ChevronRight className="h-5 w-5 ml-2" />

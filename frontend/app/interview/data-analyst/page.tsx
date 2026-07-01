@@ -21,7 +21,7 @@ const TOPIC_AREAS = [
 
 export default function DataAnalystHubPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50/20 to-emerald-50/20 dark:from-background dark:to-background/50 dark:via-background/80">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50/20 to-emerald-50/20 dark:bg-none dark:bg-background">
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
         <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
           <Link href="/" className="hover:text-foreground">Home</Link>

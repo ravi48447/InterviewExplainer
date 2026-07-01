@@ -38,7 +38,7 @@ export function ComparisonArenaLayout({
       {/* Overview / intro */}
       {overview && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border dark:from-background dark:to-background/50">
+          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border dark:bg-none dark:bg-background">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Overview</span>
           </div>
           <div className="px-5 py-5">
@@ -61,7 +61,7 @@ export function ComparisonArenaLayout({
       {/* Comparison Table */}
       {comparisonTable && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border dark:from-background dark:to-background/50">
+          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border-b border-border dark:bg-none dark:bg-background">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Feature Comparison</span>
           </div>
           <div className="px-5 py-4 overflow-x-auto">
@@ -73,7 +73,7 @@ export function ComparisonArenaLayout({
       {/* Technical Explanation */}
       {deepExplanation && (
         <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 dark:border-blue-500/20 dark:from-background dark:to-background/50">
+          <div className="px-5 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 dark:border-blue-500/20 dark:bg-none dark:bg-background">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Technical Deep Dive</span>
           </div>
           <div className="px-5 py-5">

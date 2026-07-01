@@ -43,7 +43,7 @@ export function ArchitectureMapLayout({
     <div className="space-y-8">
       {/* Quick context */}
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 dark:from-background dark:to-background/50">
+        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 to-indigo-50 px-5 py-4 dark:bg-none dark:bg-background">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
@@ -120,7 +120,7 @@ export function ArchitectureMapLayout({
       {/* Trade-offs */}
       {tradeoffs && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-50 to-orange-50 border-b border-border dark:from-background dark:to-background/50">
+          <div className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-slate-50 to-orange-50 border-b border-border dark:bg-none dark:bg-background">
             <Scale className="h-4 w-4 text-orange-600 dark:text-orange-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Trade-offs</span>
           </div>

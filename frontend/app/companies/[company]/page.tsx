@@ -105,7 +105,7 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/20 to-amber-50/20 dark:from-background dark:to-background/50 dark:via-background/80">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/20 to-amber-50/20 dark:bg-none dark:bg-background">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">

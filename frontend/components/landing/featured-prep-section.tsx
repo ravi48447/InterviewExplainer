@@ -131,7 +131,7 @@ export function FeaturedPrepSection({
   return (
     <section
       aria-labelledby="featured-prep-heading"
-      className="py-20 bg-gradient-to-br from-white via-indigo-50/40 to-white dark:from-background dark:to-background/50 dark:via-background/80"
+      className="py-20 bg-gradient-to-br from-white via-indigo-50/40 to-white dark:bg-none dark:bg-background"
     >
       <div className="w-full px-6 sm:px-12 lg:px-20">
         <div className="w-full min-w-0">

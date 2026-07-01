@@ -180,7 +180,7 @@ export default function ModuleQuestionsAccordion({
     ) : null;
 
   const groupsBlock = (
-    <div className="border-t border-slate-100 dark:border-slate-800/60 bg-gradient-to-b from-slate-50/90 to-slate-50/30 px-3 sm:px-4 py-4 space-y-2.5 dark:from-background dark:to-background/50">
+    <div className="border-t border-slate-100 dark:border-slate-800/60 bg-gradient-to-b from-slate-50/90 to-slate-50/30 px-3 sm:px-4 py-4 space-y-2.5 dark:bg-none dark:bg-background">
       {topicToolbar}
 
       {/*
@@ -199,7 +199,7 @@ export default function ModuleQuestionsAccordion({
             <button
               type="button"
               onClick={() => toggleGroup(REVISION_GROUP_SLUG)}
-              className="w-full flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50/80 via-indigo-50/40 to-white hover:from-blue-100/80 transition-colors text-left dark:from-background dark:to-background/50 dark:via-background/80"
+              className="w-full flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50/80 via-indigo-50/40 to-white hover:from-blue-100/80 transition-colors text-left dark:bg-none dark:bg-background"
             >
               <span className="text-[11px] font-black text-blue-500 dark:text-blue-400 shrink-0 tabular-nums">00</span>
               <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm font-bold text-foreground">
@@ -273,7 +273,7 @@ export default function ModuleQuestionsAccordion({
                   >
                     <Link
                       href={`/${seoSlug}/${q.slug}`}
-                      className="group flex items-center gap-3 px-4 py-2.5 hover:bg-gradient-to-r hover:from-blue-50/90 hover:to-transparent transition-colors dark:from-background dark:to-background/50"
+                      className="group flex items-center gap-3 px-4 py-2.5 hover:bg-gradient-to-r hover:from-blue-50/90 hover:to-transparent transition-colors dark:bg-none dark:bg-background"
                     >
                       {anchorsOn ? (
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg dark:bg-surface text-[11px] font-bold text-white tabular-nums shadow-sm group-hover:bg-blue-600 dark:bg-blue-800 transition-colors">
@@ -326,7 +326,7 @@ export default function ModuleQuestionsAccordion({
   if (isInline) {
     return (
       <div className="rounded-2xl border border-border/90 bg-background shadow-md shadow-slate-200/40 overflow-hidden ring-1 ring-slate-900/[0.03]">
-        <div className="px-4 sm:px-5 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-white via-slate-50/60 to-blue-50/20 flex flex-wrap items-center justify-between gap-3 dark:from-background dark:to-background/50 dark:via-background/80">
+        <div className="px-4 sm:px-5 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-white via-slate-50/60 to-blue-50/20 flex flex-wrap items-center justify-between gap-3 dark:bg-none dark:bg-background">
           <div className="min-w-0">
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400 mb-0.5">
               Full catalog · reading order

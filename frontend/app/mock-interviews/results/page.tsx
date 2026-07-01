@@ -151,7 +151,7 @@ function MockInterviewResultsContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:from-background dark:to-background/50 dark:via-background/80">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:bg-none dark:bg-background">
       {/* Hero Section */}
       <div className={cn("bg-gradient-to-r", getScoreGradient(mockData.overallScore), "text-white")}>
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
@@ -419,9 +419,9 @@ function MockInterviewResultsContent() {
                     href="/domains"
                     className={cn(
                       "flex items-center justify-between p-4 rounded-xl border-2 transition-all hover:scale-[1.02] group",
-                      rec.priority === 'high' && "bg-gradient-to-r dark:from-background dark:to-background/50 from-red-50 to-rose-50 border-red-200 dark:border-red-500/20 hover:border-red-400 dark:border-red-700",
-                      rec.priority === 'medium' && "bg-gradient-to-r dark:from-background dark:to-background/50 from-orange-50 to-amber-50 border-orange-200 dark:border-orange-500/20 hover:border-orange-400 dark:border-orange-700",
-                      rec.priority === 'low' && "bg-gradient-to-r dark:from-background dark:to-background/50 from-blue-50 to-cyan-50 border-blue-200 dark:border-blue-500/20 hover:border-blue-400 dark:border-blue-700"
+                      rec.priority === 'high' && "bg-gradient-to-r dark:bg-none dark:bg-background from-red-50 to-rose-50 border-red-200 dark:border-red-500/20 hover:border-red-400 dark:border-red-700",
+                      rec.priority === 'medium' && "bg-gradient-to-r dark:bg-none dark:bg-background from-orange-50 to-amber-50 border-orange-200 dark:border-orange-500/20 hover:border-orange-400 dark:border-orange-700",
+                      rec.priority === 'low' && "bg-gradient-to-r dark:bg-none dark:bg-background from-blue-50 to-cyan-50 border-blue-200 dark:border-blue-500/20 hover:border-blue-400 dark:border-blue-700"
                     )}
                   >
                     <div className="flex items-center gap-3">
