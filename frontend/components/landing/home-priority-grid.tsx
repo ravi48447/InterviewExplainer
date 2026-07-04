@@ -87,15 +87,15 @@ function PickIcon({ icon }: { icon: HomeStandoutIcon }) {
   if (lucide) {
     return (
       <div
-        className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${lucide.wrap}`}
+        className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center [&_svg]:size-4 ${lucide.wrap}`}
       >
         {lucide.node}
       </div>
     );
   }
   return (
-    <div className="shrink-0 w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center">
-      <TechIcon name={icon} className="h-6 w-6" />
+    <div className="shrink-0 w-8 h-8 rounded-lg bg-surface border border-border flex items-center justify-center">
+      <TechIcon name={icon} className="h-4 w-4" />
     </div>
   );
 }
@@ -136,26 +136,26 @@ export function HomeStandoutPicks({ picks }: { picks: HomeStandoutPick[] }) {
               <li key={`${p.headline}::${p.href}`}>
                 <Link
                   href={p.href}
-                  className="group flex h-full flex-col rounded-xl border border-border bg-background p-4 shadow-sm hover:border-indigo-300 dark:border-indigo-700 hover:shadow-md transition-all"
+                  className="group flex h-full flex-col rounded-xl border border-border bg-background p-3 shadow-sm hover:border-indigo-300 dark:border-indigo-700 hover:shadow-md transition-all"
                 >
-                  <div className="flex items-start gap-3 mb-3">
+                  <div className="flex items-start gap-2.5 mb-2.5">
                     <PickIcon icon={p.icon} />
                     <div className="flex-1 min-w-0 text-left">
-                      <h3 className="text-[15px] font-bold text-foreground leading-snug group-hover:text-indigo-700 dark:text-indigo-400 transition-colors">
+                      <h3 className="text-sm font-bold text-foreground leading-snug group-hover:text-indigo-700 dark:text-indigo-400 transition-colors">
                         {p.headline}
                       </h3>
-                      <p className="mt-1 text-xs text-muted-foreground leading-snug line-clamp-3">
+                      <p className="mt-1 text-[11px] text-muted-foreground leading-snug line-clamp-3">
                         {p.tagline}
                       </p>
                     </div>
                   </div>
-                  <div className="mt-auto flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60">
-                    <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">
+                  <div className="mt-auto flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/60">
+                    <span className="text-[10.5px] font-semibold tabular-nums text-muted-foreground">
                       {countLabel(p.questionCount)}
                     </span>
-                    <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                    <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
                       Open
-                      <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+                      <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
                     </span>
                   </div>
                 </Link>

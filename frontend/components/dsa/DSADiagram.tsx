@@ -130,12 +130,11 @@ function MermaidDiagram({ diagram }: { diagram: DSAMermaidDiagram }) {
         </pre>
       ) : svg ? (
         <div ref={containerRef} className="overflow-x-auto py-4 flex justify-center">
-          {/* Using CSS zoom scales the diagram exactly 3.5x its natural size, 
-              preserving aspect ratio without breaking layout or causing empty space. */}
+          {/* Using CSS zoom scales the diagram, preserving aspect ratio without breaking layout or causing empty space. */}
           <div 
             dangerouslySetInnerHTML={{ __html: svg }} 
             className="inline-block"
-            style={{ zoom: 3.5 } as React.CSSProperties}
+            style={{ zoom: 2.1 } as React.CSSProperties}
           />
         </div>
       ) : (

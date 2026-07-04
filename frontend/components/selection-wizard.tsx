@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Check,
@@ -209,14 +210,25 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
 
     const { title, subtitle, options } = currentStepData();
 
-    return (
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+        if (onClose) {
+            document.body.style.overflow = 'hidden';
+            return () => {
+                document.body.style.overflow = 'auto';
+            };
+        }
+    }, [onClose]);
+
+    const content = (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={onClose}
-                className="absolute inset-0 bg-background/80 backdrop-blur-2xl"
+                className="absolute inset-0 bg-background/95 backdrop-blur-md"
             />
 
             <motion.div
@@ -224,7 +236,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                 animate={{ scale: 1, opacity: 1, y: 0 }}
                 exit={{ scale: 0.95, opacity: 0, y: 30 }}
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="relative w-full max-w-4xl glass-strong border-white/10 rounded-[2rem] sm:rounded-[3rem] p-5 sm:p-8 md:p-14 shadow-[0_50px_100px_rgba(0,0,0,0.6)] overflow-hidden"
+                className="relative w-full max-w-4xl bg-background/95 dark:bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-[2rem] sm:rounded-[3rem] p-5 sm:p-8 md:p-14 shadow-[0_50px_100px_rgba(0,0,0,0.6)] overflow-hidden"
             >
                 <div className="bg-blob bg-primary/10 top-[-30%] left-[-30%] scale-[2] blur-[120px]" />
                 <div className="bg-blob bg-purple-500 dark:bg-purple-800/10 bottom-[-30%] right-[-30%] scale-[2] blur-[120px]" />
@@ -246,7 +258,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                 <div
                                     className={cn(
                                         "w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all duration-700 font-bold text-xs sm:text-sm",
-                                        step === i ? "bg-primary text-foreground scale-110 shadow-[0_0_30px_rgba(0,242,254,0.4)]" :
+                                        step === i ? "bg-primary text-primary-foreground scale-110 shadow-[0_0_30px_rgba(0,242,254,0.4)]" :
                                             step > i ? "bg-background/20 text-white" : "bg-background/5 text-muted-foreground border border-white/5"
                                     )}
                                 >
@@ -304,8 +316,8 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                         )}
                                     >
                                         <div className={cn(
-                                            "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300",
-                                            selections.track === track.slug ? "bg-primary text-foreground scale-110" : "bg-background/5 text-muted-foreground group-hover:scale-110"
+                                            "w-12 h-12 rounded-2xl flex items-center justify-center mb-4 transition-all duration-500",
+                                            selections.track === track.slug ? "bg-primary text-primary-foreground scale-110" : "bg-background/5 text-muted-foreground group-hover:scale-110"
                                         )}>
                                             {track.icon ? <track.icon className="h-5 w-5" /> : <Layout className="h-5 w-5" />}
                                         </div>
@@ -380,7 +392,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                 {step === 3 && selections.experienceKey && (
                                     <Button
                                         size="lg"
-                                        className="rounded-2xl h-14 px-10 bg-primary text-foreground font-black uppercase tracking-[0.15em] hover:scale-105 transition-all shadow-[0_20px_50px_rgba(0,242,254,0.4)] relative overflow-hidden group"
+                                        className="rounded-2xl h-14 px-10 bg-primary text-primary-foreground font-black uppercase tracking-[0.15em] hover:scale-105 transition-all shadow-[0_20px_50px_rgba(0,242,254,0.4)] relative overflow-hidden group"
                                         onClick={() => {
                                             const slug = `${selections.languageSlug}-${selections.track}-${selections.experienceKey}`;
                                             router.push(`/${slug}`);
@@ -400,4 +412,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
             </motion.div>
         </div>
     );
+
+    if (!mounted) return null;
+    return onClose ? createPortal(content, document.body) : content;
 }

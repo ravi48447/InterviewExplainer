@@ -357,17 +357,17 @@ export default function HomePage() {
                   <FeatureCardFooter stat="450+ Problems" />
                 </FeatureCard>
 
-                {/* 2. Java Learning Paths */}
-                <FeatureCard href="/java-backend-intermediate">
+                {/* 2. Mock Interviews */}
+                <FeatureCard href="/mock-interviews">
                   <FeatureCardIcon
-                    icon={<TechIcon name="java" className="h-6 w-6 brightness-0 invert" />}
+                    icon={<Brain className="h-6 w-6 text-white" />}
                     gradient="from-orange-50 dark:from-orange-950/400 to-red-600"
                   />
-                  <FeatureCardHeader>Java Learning Paths</FeatureCardHeader>
+                  <FeatureCardHeader>Mock Interviews</FeatureCardHeader>
                   <FeatureCardDescription>
-                    Structured roadmaps covering Core Java, Backend Development, Spring Boot, System Design, Microservices, and Full Stack preparation.
+                    Practice with AI-powered mock interviews or schedule peer-to-peer sessions to simulate real technical interviews.
                   </FeatureCardDescription>
-                  <FeatureCardFooter stat="4 Learning Paths" />
+                  <FeatureCardFooter stat="AI & Peer Modes" />
                 </FeatureCard>
 
                 {/* 3. Interview Q&A */}
@@ -387,8 +387,6 @@ export default function HomePage() {
           </div>
         </section>
       )}
-
-      {standoutPicks.length > 0 && <HomeStandoutPicks picks={standoutPicks} />}
 
       {/* ── Choose Language ── */}
       <section className="py-20 bg-surface">
@@ -486,6 +484,8 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {standoutPicks.length > 0 && <HomeStandoutPicks picks={standoutPicks} />}
 
       {/* ── Why Different ── */}
       <section className="py-20 bg-surface">

@@ -370,7 +370,20 @@ export function SiteHeader() {
             <GlobalSearch />
           </div>
 
-          {/* Theme toggle removed globally */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="h-9 w-9 text-muted-foreground hover:text-foreground hidden sm:flex"
+          >
+            {mounted && (
+              <>
+                <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                <span className="sr-only">Toggle theme</span>
+              </>
+            )}
+          </Button>
 
           {user ? (
             <DropdownMenu>
@@ -394,7 +407,7 @@ export function SiteHeader() {
                 <DropdownMenuSeparator />
                 {isHubEnabled("dashboard") && (
                   <DropdownMenuItem asChild>
-                    <Link href="/dashboard" className="cursor-pointer flex items-center">
+                    <Link href="/dashboard" className="cursor-default flex items-center">
                       <LayoutDashboard className="mr-2 h-4 w-4" />
                       <span>Dashboard</span>
                     </Link>
@@ -423,7 +436,7 @@ export function SiteHeader() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className="hidden sm:flex items-center gap-1.5 ml-2">
+            <div className="hidden sm:flex items-center gap-1">
               <Button variant="ghost" size="sm" asChild className="font-medium text-muted-foreground hover:text-foreground hover:bg-transparent px-4">
                 <Link href="/login">Log in</Link>
               </Button>
@@ -487,7 +500,7 @@ export function SiteHeader() {
                 <Button variant="outline" size="sm" asChild className="font-semibold">
                   <Link href="/login">Log in</Link>
                 </Button>
-                <Button size="sm" asChild className="font-bold bg-primary text-white">
+                <Button size="sm" asChild className="font-bold bg-primary text-primary-foreground">
                   <Link href="/signup">Sign up free</Link>
                 </Button>
               </div>

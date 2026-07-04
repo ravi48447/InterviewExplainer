@@ -328,7 +328,7 @@ export default async function DSASheetPage(
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4]  to-[#f4f5f7] dark:to-surface  dark:to-background font-sans text-foreground">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] to-[#f4f5f7] dark:from-background dark:to-background font-sans text-foreground">
       {/* Page-wide ambient light — soft coloured glows drifting across the page. */}
       <div
         aria-hidden

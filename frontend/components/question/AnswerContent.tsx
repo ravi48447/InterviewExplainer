@@ -119,7 +119,7 @@ export function AnswerContent({ answer }: AnswerContentProps) {
                     </div>
 
                     <div className="flex items-center gap-4 mb-8">
-                        <div className="p-3 rounded-2xl bg-primary text-foreground shadow-lg shadow-primary/20">
+                        <div className="p-3 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
                             <Volume2 className="h-6 w-6" />
                         </div>
                         <div>

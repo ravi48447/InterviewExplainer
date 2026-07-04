@@ -258,7 +258,7 @@ export default function Basic100Page() {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4]  to-[#f4f5f7] dark:to-surface  dark:to-background font-sans text-foreground">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] to-[#f4f5f7] dark:from-background dark:to-background font-sans text-foreground">
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-0"
