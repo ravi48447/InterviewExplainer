@@ -124,7 +124,7 @@ export default function MermaidDiagram({ chart, className = "" }: MermaidDiagram
     return (
       <div
         ref={ref}
-        className="rounded-lg border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 p-4 my-4 text-[13px] text-red-700 dark:text-red-400"
+        className="rounded-lg border border-default dark:border-default/20 bg-red-50 dark:bg-red-500/10 p-4 my-4 text-[13px] text-red-700 dark:text-red-400"
       >
         <div className="font-bold mb-1">Diagram render error</div>
         <pre className="text-[12px] whitespace-pre-wrap font-mono">{error}</pre>

@@ -38,7 +38,7 @@ function ResetForm() {
     return (
       <div className="text-center space-y-4 py-4">
         <p className="text-sm text-muted-foreground">This reset link is missing or invalid.</p>
-        <Link href="/forgot-password" className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+        <Link href="/forgot-password" className="text-sm font-semibold text-primary dark:text-primary hover:underline">
           Request a new link
         </Link>
       </div>
@@ -48,7 +48,7 @@ function ResetForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       {error && (
-        <div className="rounded-lg border border-red-100 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 p-2.5 text-sm font-medium text-red-600 dark:text-red-400">{error}</div>
+        <div className="rounded-lg border border-default dark:border-default/20 bg-red-50 dark:bg-red-500/10 p-2.5 text-sm font-medium text-red-600 dark:text-red-400">{error}</div>
       )}
       <div className="space-y-2">
         <Label htmlFor="password">New password</Label>
@@ -73,7 +73,7 @@ function ResetForm() {
           />
         </div>
       </div>
-      <Button type="submit" disabled={busy} className="w-full py-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold">
+      <Button type="submit" disabled={busy} className="w-full py-6 bg-surface border border-default text-foreground font-semibold">
         {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
         Reset password & sign in
       </Button>
@@ -87,7 +87,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md animate-fade-in-up">
         <Card className="border-border dark:border-border shadow-xl shadow-slate-200/50 dark:shadow-none">
           <CardHeader className="space-y-1 text-center">
-            <CardTitle className="text-2xl font-bold tracking-tight text-foreground dark:text-white">
+            <CardTitle className="text-2xl font-bold tracking-tight text-foreground dark:text-foreground">
               Choose a new password
             </CardTitle>
             <CardDescription className="text-muted-foreground">

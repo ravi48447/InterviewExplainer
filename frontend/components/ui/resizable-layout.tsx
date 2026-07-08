@@ -93,9 +93,9 @@ export function ResizableLayout({
  </Panel>
 
  {/* Divider / Resize Handle */}
- <PanelResizeHandle className="group relative w-1.5 bg-border/40 hover:bg-indigo-500 dark:bg-indigo-800/10 active:bg-indigo-500 dark:bg-indigo-800/20 cursor-col-resize transition-colors z-20">
+ <PanelResizeHandle className="group relative w-1.5 bg-border/40 hover:bg-blue-500 dark:bg-blue-800/10 active:bg-blue-500 dark:bg-blue-800/20 cursor-col-resize transition-colors z-20">
  {/* Visual highlight line */}
- <div className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-border/0 group-hover:bg-indigo-500 dark:bg-indigo-800 group-active:bg-indigo-600 transition-colors" />
+ <div className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-border/0 group-hover:bg-blue-500 dark:bg-blue-800 group-active:bg-blue-600 transition-colors" />
  </PanelResizeHandle>
 
  {/* Right Pane (Explanation & Code) */}

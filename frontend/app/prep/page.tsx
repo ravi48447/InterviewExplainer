@@ -139,19 +139,19 @@ function PillarHubCards({ stats }: { stats: PillarWithStats[] }) {
         <Link
           key={pillar.pillarSlug}
           href={`/${pillar.pillarSlug}`}
-          className="group block rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-blue-300 dark:border-blue-700 transition-all overflow-hidden"
+          className="group block rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-default dark:border-default transition-all overflow-hidden"
         >
           <div className="px-5 py-4">
             <div className="flex items-start gap-3 mb-2">
               <div className="flex-1 min-w-0">
-                <h3 className="text-base font-black text-foreground group-hover:text-blue-600 dark:text-blue-400 leading-snug transition-colors">
+                <h3 className="text-base font-black text-foreground group-hover:text-primary dark:group-hover:text-primary leading-snug transition-colors">
                   {pillar.title}
                 </h3>
                 <div className="mt-1 text-xs text-muted-foreground leading-snug line-clamp-2">
                   {pillar.tagline}
                 </div>
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-400 dark:text-blue-300 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
             </div>
             <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
@@ -184,7 +184,7 @@ function ModulePillarSections({ groups }: { groups: ModulePillarGroup[] }) {
           <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-b border-border flex items-baseline gap-2">
             <Zap className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400 self-center" />
             <h3 className="text-sm font-black text-foreground">{group.pillarName}</h3>
-            <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400">
+            <span className="ml-auto text-xs font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary">
               {group.modules.length}
             </span>
           </div>
@@ -196,7 +196,7 @@ function ModulePillarSections({ groups }: { groups: ModulePillarGroup[] }) {
                   className="group flex items-center gap-4 px-5 py-3 hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 transition-colors"
                 >
                   <span className="flex-1 min-w-0">
-                    <span className="block text-sm font-bold text-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors leading-snug">
+                    <span className="block text-sm font-bold text-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors leading-snug">
                       {entry.title} Interview Questions
                     </span>
                     {entry.altSlugs.length > 0 && (
@@ -216,7 +216,7 @@ function ModulePillarSections({ groups }: { groups: ModulePillarGroup[] }) {
                     <span className="font-bold text-foreground">{questionCount}</span>{" "}
                     Q&A
                   </span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-400 dark:text-blue-300 group-hover:translate-x-0.5 transition-all shrink-0" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0" />
                 </Link>
               </li>
             ))}
@@ -291,7 +291,7 @@ export default function PrepIndexPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20 font-sans text-foreground">
+      <div className="min-h-screen bg-surface border border-default dark:from-slate-950 font-sans text-foreground">
         <div className="w-full min-w-0 px-4 py-8">
           <nav
             aria-label="Breadcrumb"
@@ -308,8 +308,8 @@ export default function PrepIndexPage() {
           </nav>
 
           <header className="mb-6 rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
-            <div className="px-7 py-7 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20">
-              <div className="text-[11px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-2">
+            <div className="px-7 py-7 bg-surface border border-default dark:">
+              <div className="text-[11px] font-bold uppercase tracking-widest text-primary dark:text-primary mb-2">
                 Interview prep hub
               </div>
               <h1 className="text-3xl md:text-4xl font-black tracking-tight text-foreground mb-3 leading-tight">
@@ -325,13 +325,13 @@ export default function PrepIndexPage() {
 
             <div className="px-7 py-3 bg-background border-t border-border flex items-center gap-5 flex-wrap">
               <div className="flex items-center gap-2 text-sm">
-                <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <BookOpen className="h-4 w-4 text-primary dark:text-primary" />
                 <span className="font-bold text-foreground">{totalQuestions}+</span>
                 <span className="text-muted-foreground">questions</span>
               </div>
               <div className="h-5 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2 text-sm">
-                <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                <Layers className="h-4 w-4 text-primary dark:text-primary" />
                 <span className="font-bold text-foreground">{totalModules}</span>
                 <span className="text-muted-foreground">modules</span>
               </div>
@@ -351,8 +351,8 @@ export default function PrepIndexPage() {
             className="mb-8 rounded-xl border border-border bg-background shadow-sm overflow-hidden"
           >
             <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-              <div className="shrink-0 w-10 h-10 rounded-lg bg-indigo-600 dark:bg-indigo-800 flex items-center justify-center">
-                <Sparkles className="h-5 w-5 text-white" />
+              <div className="shrink-0 w-10 h-10 rounded-lg bg-blue-600 dark:bg-blue-800 flex items-center justify-center">
+                <Sparkles className="h-5 w-5 text-foreground" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -368,7 +368,7 @@ export default function PrepIndexPage() {
               </div>
               <Link
                 href={COMPLETE_TRACK_CTA.href}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-indigo-200 dark:border-indigo-500/20 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-800 dark:text-indigo-400 font-semibold text-sm hover:bg-indigo-100 dark:bg-indigo-950/20 transition-colors shrink-0"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary font-semibold text-sm hover:bg-blue-100 dark:bg-blue-950/20 transition-colors shrink-0"
               >
                 Java roadmap
                 <ArrowRight className="h-4 w-4" />
@@ -378,7 +378,7 @@ export default function PrepIndexPage() {
 
           <section
             id="track-architecture"
-            className="mb-10 scroll-mt-24 rounded-2xl border border-emerald-200 dark:border-emerald-500/20/80 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/20 p-5 sm:p-6"
+            className="mb-10 scroll-mt-24 rounded-2xl border border-default dark:border-default/20/80 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/20 p-5 sm:p-6"
           >
             <div className="mb-4">
               <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 mb-1">
@@ -412,7 +412,7 @@ export default function PrepIndexPage() {
             <PillarHubCards stats={javaPlatformPillars} />
           </section>
 
-          <section id="track-frontend" className="mb-10 scroll-mt-24 rounded-2xl border border-violet-200 dark:border-violet-500/20/80 bg-violet-50 dark:bg-violet-500/10 dark:bg-violet-950/20/20 p-5 sm:p-6">
+          <section id="track-frontend" className="mb-10 scroll-mt-24 rounded-2xl border border-blue-200 dark:border-blue-500/20/80 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/20 p-5 sm:p-6">
             <h2 className="text-xl font-black text-foreground">
               Frontend &amp; fullstack modules (JavaScript, TypeScript, React…)
             </h2>
@@ -420,7 +420,7 @@ export default function PrepIndexPage() {
               These SEO modules live on the{" "}
               <Link
                 href="/java-fullstack-intermediate"
-                className="font-semibold text-indigo-700 dark:text-indigo-400 hover:underline"
+                className="font-semibold text-primary dark:text-primary hover:underline"
               >
                 Java fullstack intermediate
               </Link>{" "}

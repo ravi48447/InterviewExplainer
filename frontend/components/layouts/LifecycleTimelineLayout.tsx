@@ -35,7 +35,7 @@ export function LifecycleTimelineLayout({
   return (
     <div className="space-y-8">
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 px-5 py-4  ">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-surface px-5 py-4  ">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
@@ -44,7 +44,7 @@ export function LifecycleTimelineLayout({
       {overview && (
         <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-3 bg-surface border-b border-border">
-            <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <Clock className="h-4 w-4 text-primary dark:text-primary" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Overview</span>
           </div>
           <div className="px-5 py-5">
@@ -56,7 +56,7 @@ export function LifecycleTimelineLayout({
       {/* Interactive Timeline */}
       {hasPhases && (
         <div className="rounded-xl border border-border overflow-hidden">
-          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 dark:from-slate-950/40 to-blue-50 dark:to-blue-950/40 border-b border-border  ">
+          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 dark:from-slate-950/40  border-b border-border  ">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Lifecycle Phases</span>
           </div>
           {/* Phase selector */}
@@ -67,7 +67,7 @@ export function LifecycleTimelineLayout({
                 onClick={() => setActivePhase(i)}
                 className={`flex items-center gap-2 px-4 py-3 text-xs font-medium whitespace-nowrap transition-colors border-r border-slate-100 dark:border-slate-800/60 ${
                   activePhase === i
-                    ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-b-2 border-b-blue-500"
+                    ? "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary border-b-2 border-b-blue-500"
                     : "text-muted-foreground hover:bg-surface hover:text-foreground"
                 }`}
               >
@@ -90,8 +90,8 @@ export function LifecycleTimelineLayout({
 
       {/* Deep explanation (fallback when no structured phases) */}
       {!hasPhases && deepExplain && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-blue-200 dark:border-blue-500/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Lifecycle Explained</span>
           </div>
           <div className="px-5 py-5">
@@ -126,8 +126,8 @@ export function LifecycleTimelineLayout({
 
       {/* Interview Answer */}
       {speakable && (
-        <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-500/30 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60">
+        <div className="rounded-xl border-2 border-default dark:border-default/30 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-default dark:border-default/20 dark:border-default/60">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

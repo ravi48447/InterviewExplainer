@@ -79,25 +79,25 @@ export default function LoginPage() {
       icon: Target,
       title: "Personalized Roadmap",
       desc: "Get a customized learning path based on your tech stack and experience level.",
-      color: "text-purple-400",
-      bg: "bg-purple-50 dark:bg-purple-950/200/10",
-      border: "border-purple-500/20"
+      color: "text-primary",
+      bg: "bg-blue-100 dark:bg-blue-900/30",
+      border: "border-default/20"
     },
     {
       icon: Code2,
       title: "Domain-Specific Questions",
       desc: "Practice high quality questions that actually match real interviews.",
-      color: "text-blue-400",
+      color: "text-primary",
       bg: "bg-blue-500/10 dark:bg-blue-500/20",
-      border: "border-blue-500/20"
+      border: "border-default/20"
     },
     {
       icon: LineChart,
       title: "Track & Improve",
       desc: "Detailed analytics to track your progress and identify weak areas.",
       color: "text-emerald-400",
-      bg: "bg-emerald-50 dark:bg-emerald-950/200/10",
-      border: "border-emerald-500/20"
+      bg: "bg-emerald-100 dark:bg-emerald-900/30",
+      border: "border-default/20"
     }
   ];
 
@@ -117,11 +117,11 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="relative min-h-[calc(100vh-80px)] w-full bg-[#000000] overflow-hidden flex items-start justify-center font-sans text-slate-200 selection:bg-blue-50 dark:bg-blue-950/200/30 pt-4 lg:pt-8">
+    <div className="relative min-h-[calc(100vh-80px)] w-full bg-background overflow-hidden flex items-start justify-center font-sans text-foreground selection:bg-blue-50 dark:bg-blue-950/30 pt-4 lg:pt-8">
       {/* Decorative Background */}
       <div className="absolute inset-0 pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-white/5 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-white/5 blur-[120px]" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-[120px]" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[length:32px_32px] opacity-50" />
       </div>
 
@@ -135,13 +135,13 @@ export default function LoginPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: idx * 0.15, duration: 0.5 }}
               key={idx}
-              className="group relative p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] cursor-default"
+              className="group relative p-6 rounded-2xl bg-surface/50 dark:bg-surface border-border dark:border-white/10 backdrop-blur-md hover:bg-primary/10 transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] cursor-default"
             >
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${feat.bg} ${feat.border} border group-hover:scale-110 transition-transform duration-300`}>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${feat.bg} ${feat.border} border group-hover:scale-110 transition-transform duration-200`}>
                 <feat.icon className={`h-6 w-6 ${feat.color}`} />
               </div>
-              <h3 className="text-sm font-semibold text-slate-100 mb-2">{feat.title}</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">{feat.desc}</p>
+              <h3 className="text-sm font-semibold text-foreground mb-2">{feat.title}</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{feat.desc}</p>
             </motion.div>
           ))}
           
@@ -152,8 +152,8 @@ export default function LoginPage() {
             transition={{ delay: 0.6, duration: 1 }}
             className="absolute bottom-8 left-8 hidden xl:flex gap-4 items-end pointer-events-none"
           >
-            <div className="w-24 h-6 bg-white/10 rounded-t border-t border-x border-white/20 transform -rotate-6 translate-y-2"></div>
-            <div className="w-28 h-6 bg-white/10 rounded-t border-t border-x border-white/20 transform rotate-2"></div>
+            <div className="w-24 h-6 bg-primary/10 rounded-t border-t border-x border-border transform -rotate-6 translate-y-2"></div>
+            <div className="w-28 h-6 bg-primary/10 rounded-t border-t border-x border-border transform rotate-2"></div>
           </motion.div>
         </div>
 
@@ -164,40 +164,40 @@ export default function LoginPage() {
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="col-span-1 md:max-w-md md:mx-auto lg:col-span-4 w-full"
         >
-          <div className="relative rounded-3xl bg-[#0A0A0A]/80 border border-white/10 p-8 sm:p-10 backdrop-blur-xl shadow-2xl shadow-black/50 overflow-hidden">
+          <div className="relative rounded-3xl bg-surface/80 border border-border p-8 sm:p-10 backdrop-blur-xl shadow-2xl shadow-sm overflow-hidden">
             {/* Soft inner glow */}
-            <div className="absolute inset-0 bg-gradient-to-b from-blue-50 dark:from-blue-950/400/5 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-surface /5 to-transparent pointer-events-none" />
             
             <div className="relative z-10">
               <div className="flex justify-center mb-6">
-                <div className="w-12 h-12 rounded-xl bg-[#111827] border border-white/10 flex items-center justify-center shadow-lg shadow-black/40 relative group cursor-default">
-                   <div className="absolute inset-0 bg-blue-50 dark:bg-blue-950/200/20 blur-md rounded-xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                   <Code2 className="h-6 w-6 text-blue-400 relative z-10" />
+                <div className="w-12 h-12 rounded-xl bg-card border border-border flex items-center justify-center shadow-lg shadow-sm relative group cursor-default">
+                   <div className="absolute inset-0 bg-blue-50 dark:bg-blue-950/20 blur-md rounded-xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                   <Code2 className="h-6 w-6 text-primary relative z-10" />
                 </div>
               </div>
 
               <div className="text-center mb-8">
-                <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-3">
+                <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-3">
                   Welcome Back
                 </h1>
-                <p className="text-sm text-zinc-400 mb-4 max-w-[280px] mx-auto">
+                <p className="text-sm text-muted-foreground mb-4 max-w-[280px] mx-auto">
                   Enter your credentials to access your personalized mastery roadmap
                 </p>
-                <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/200/10 border border-emerald-500/20 text-xs font-medium text-emerald-400">
+                <div className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                   <BookOpen className="h-3.5 w-3.5" />
                   Reading is 100% free — log in only to save your progress
                 </div>
               </div>
 
               {magicSent && (
-                <div className="mb-6 flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/200/10 p-4 text-sm font-medium text-emerald-400">
+                <div className="mb-6 flex items-start gap-2 rounded-xl border border-default/30 bg-emerald-100 dark:bg-emerald-900/30 p-4 text-sm font-medium text-emerald-600">
                   <CheckCircle2 className="h-5 w-5 mt-0.5 shrink-0" />
                   Sign-in link sent to {email}. Check your inbox.
                 </div>
               )}
 
               {error && (
-                <div className="mb-6 p-4 text-sm font-medium text-red-400 bg-red-50 dark:bg-red-950/200/10 rounded-xl border border-red-500/20 flex items-start gap-2">
+                <div className="mb-6 p-4 text-sm font-medium text-red-600 bg-red-50 dark:bg-red-950/10 rounded-xl border border-default/20 flex items-start gap-2">
                   <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
                   {error}
                 </div>
@@ -205,16 +205,16 @@ export default function LoginPage() {
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-xs font-medium text-slate-300">Email</Label>
+                  <Label htmlFor="email" className="text-xs font-medium text-foreground/90">Email</Label>
                   <div className="relative group">
-                    <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-500 group-focus-within:text-blue-400 transition-colors" />
+                    <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                     <Input
                       id="email"
                       type="email"
                       placeholder="name@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 h-11 bg-black/40 border-white/10 text-slate-100 placeholder:text-slate-600 focus-visible:ring-1 focus-visible:ring-blue-500/50 rounded-xl transition-all"
+                      className="pl-10 h-11 bg-surface dark:bg-surface/50 border-input dark:border-white/10 text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring/50 rounded-xl transition-all"
                       autoFocus
                       autoComplete="email"
                       required
@@ -224,13 +224,13 @@ export default function LoginPage() {
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="password" className="text-xs font-medium text-slate-300">Password</Label>
-                    <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+                    <Label htmlFor="password" className="text-xs font-medium text-foreground/90">Password</Label>
+                    <Link href="/forgot-password" className="text-xs text-primary hover:text-primary transition-colors">
                       Forgot password?
                     </Link>
                   </div>
                   <div className="relative group">
-                    <KeyRound className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-500 group-focus-within:text-blue-400 transition-colors" />
+                    <KeyRound className="absolute left-3.5 top-3.5 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
@@ -238,14 +238,14 @@ export default function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       onKeyUp={(e) => setCapsLock(e.getModifierState('CapsLock'))}
                       onKeyDown={(e) => setCapsLock(e.getModifierState('CapsLock'))}
-                      className="pl-10 pr-10 h-11 bg-black/40 border-white/10 text-slate-100 placeholder:text-slate-600 focus-visible:ring-1 focus-visible:ring-blue-500/50 rounded-xl transition-all"
+                      className="pl-10 pr-10 h-11 bg-surface dark:bg-surface/50 border-input dark:border-white/10 text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring/50 rounded-xl transition-all"
                       autoComplete="current-password"
                       required
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((s) => !s)}
-                      className="absolute right-3.5 top-3.5 text-zinc-500 hover:text-slate-300 transition-colors"
+                      className="absolute right-3.5 top-3.5 text-muted-foreground hover:text-foreground/90 transition-colors"
                       tabIndex={-1}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -260,7 +260,7 @@ export default function LoginPage() {
 
                 <Button 
                   type="submit" 
-                  className="w-full h-11 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#7C3AED] hover:from-[#1d4ed8] hover:to-[#6d28d9] text-white font-semibold transition-all duration-300 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.23)] hover:-translate-y-0.5"
+                  className="w-full h-11 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#7C3AED] hover:from-[#1d4ed8] hover:to-[#6d28d9] text-foreground font-semibold transition-all duration-200 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.23)] hover:-translate-y-0.5"
                   disabled={!canSubmit}
                 >
                   {isSubmitting ? (
@@ -280,7 +280,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={sendMagicLink}
                   disabled={magicBusy}
-                  className="flex w-full items-center justify-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-blue-400 transition-colors py-1"
+                  className="flex w-full items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary transition-colors py-1"
                 >
                   {magicBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
                   Prefer no password? Email me a sign-in link
@@ -288,21 +288,21 @@ export default function LoginPage() {
               </form>
 
               <div className="my-7 flex items-center">
-                <div className="flex-1 border-t border-white/5"></div>
-                <span className="px-4 text-[10px] uppercase tracking-wider text-zinc-500 font-medium">New to InterviewExplainer?</span>
-                <div className="flex-1 border-t border-white/5"></div>
+                <div className="flex-1 border-t border-border"></div>
+                <span className="px-4 text-[10px] uppercase tracking-wider text-muted-foreground font-medium">New to InterviewExplainer?</span>
+                <div className="flex-1 border-t border-border"></div>
               </div>
 
               <div className="space-y-4">
                 <Link href="/signup" className="block w-full">
-                  <Button variant="outline" className="w-full h-11 rounded-xl border-white/10 bg-transparent hover:bg-white/5 text-slate-200 transition-colors">
+                  <Button variant="outline" className="w-full h-11 rounded-xl border-input dark:border-white/10 bg-background hover:bg-surface text-foreground transition-colors">
                     Create an Account
                   </Button>
                 </Link>
 
                 <Link
                   href="/domains"
-                  className="group flex w-full items-center justify-center gap-2 text-xs font-medium text-zinc-400 hover:text-blue-400 transition-colors"
+                  className="group flex w-full items-center justify-center gap-2 text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
                 >
                   <Compass className="h-4 w-4" />
                   Just browsing? Explore content without an account
@@ -310,27 +310,27 @@ export default function LoginPage() {
               </div>
 
               {socialEnabled && (
-                <div className="mt-7 pt-7 border-t border-white/5">
+                <div className="mt-7 pt-7 border-t border-border">
                   <SocialButtons />
                 </div>
               )}
 
               {/* Trust Badges */}
-              <div className="mt-8 grid grid-cols-3 gap-2 p-4 rounded-xl bg-black/20 border border-white/5">
+              <div className="mt-8 grid grid-cols-3 gap-2 p-4 rounded-xl bg-surface/50 dark:bg-surface border-border dark:border-white/10">
                 <div className="flex flex-col items-center text-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-blue-400" />
-                  <span className="text-[10px] font-semibold text-slate-300 leading-tight">No Ads</span>
-                  <span className="text-[9px] text-zinc-500 leading-tight">Distraction free</span>
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  <span className="text-[10px] font-semibold text-foreground/90 leading-tight">No Ads</span>
+                  <span className="text-[9px] text-muted-foreground leading-tight">Distraction free</span>
                 </div>
                 <div className="flex flex-col items-center text-center gap-1.5">
                   <Star className="h-4 w-4 text-amber-400" />
-                  <span className="text-[10px] font-semibold text-slate-300 leading-tight">Expert Crafted</span>
-                  <span className="text-[9px] text-zinc-500 leading-tight">Curated by top engineers</span>
+                  <span className="text-[10px] font-semibold text-foreground/90 leading-tight">Expert Crafted</span>
+                  <span className="text-[9px] text-muted-foreground leading-tight">Curated by top engineers</span>
                 </div>
                 <div className="flex flex-col items-center text-center gap-1.5">
-                  <Cloud className="h-4 w-4 text-blue-400" />
-                  <span className="text-[10px] font-semibold text-slate-300 leading-tight">Save Progress</span>
-                  <span className="text-[9px] text-zinc-500 leading-tight">Pick up where you left off</span>
+                  <Cloud className="h-4 w-4 text-primary" />
+                  <span className="text-[10px] font-semibold text-foreground/90 leading-tight">Save Progress</span>
+                  <span className="text-[9px] text-muted-foreground leading-tight">Pick up where you left off</span>
                 </div>
               </div>
 
@@ -338,12 +338,12 @@ export default function LoginPage() {
           </div>
 
           {/* Footer */}
-          <div className="mt-6 text-center text-xs text-zinc-500 flex flex-col items-center gap-1.5">
+          <div className="mt-6 text-center text-xs text-muted-foreground flex flex-col items-center gap-1.5">
             <div className="flex items-center gap-1.5">
               <Shield className="h-3.5 w-3.5" />
               Your data is safe with us. We never share your information.
             </div>
-            <Link href="/privacy" className="text-blue-400 hover:underline">
+            <Link href="/privacy" className="text-primary hover:underline">
               Read our Privacy Policy
             </Link>
           </div>
@@ -356,23 +356,23 @@ export default function LoginPage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="p-6 rounded-3xl bg-gradient-to-b from-indigo-900/20 to-[#0A0A0A]/80 border border-indigo-500/20 relative overflow-hidden backdrop-blur-sm"
+            className="p-6 rounded-3xl bg-gradient-to-b from-slate-50 to-slate-200/80 dark:from-surface dark:to-[#0A0A0A]/80 border border-border dark:border-white/10 relative overflow-hidden backdrop-blur-sm"
           >
             {/* Glowing spot */}
-            <div className="absolute -top-10 -right-10 w-32 h-32 bg-indigo-50 dark:bg-indigo-950/200/20 rounded-full blur-2xl" />
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-50 dark:bg-blue-950/20 rounded-full blur-2xl" />
             
             <motion.div 
               animate={{ y: [0, -6, 0] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/200/10 border border-indigo-500/20 flex items-center justify-center mb-5 relative z-10"
+              className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 border border-default/20 flex items-center justify-center mb-5 relative z-10"
             >
-              <Rocket className="h-6 w-6 text-indigo-400" />
+              <Rocket className="h-6 w-6 text-primary" />
             </motion.div>
 
-            <h3 className="text-base font-bold text-slate-100 mb-2 relative z-10">
+            <h3 className="text-base font-bold text-foreground mb-2 relative z-10">
               Master Your<br/>Interview Preparation
             </h3>
-            <p className="text-xs text-zinc-400 leading-relaxed mb-5 relative z-10">
+            <p className="text-xs text-muted-foreground leading-relaxed mb-5 relative z-10">
               Join 50K+ developers who are preparing smarter, not harder.
             </p>
 
@@ -383,14 +383,14 @@ export default function LoginPage() {
                     key={i}
                     src={`https://api.dicebear.com/7.x/avataaars/svg?seed=dev${i}&backgroundColor=1e293b`} 
                     alt="User avatar" 
-                    className="w-6 h-6 rounded-full border border-[#000000]"
+                    className="w-6 h-6 rounded-full border border-background"
                   />
                 ))}
-                <div className="w-6 h-6 rounded-full border border-[#000000] bg-indigo-600 flex items-center justify-center text-[8px] font-bold text-white">
+                <div className="w-6 h-6 rounded-full border border-background bg-blue-600 flex items-center justify-center text-[8px] font-bold text-foreground">
                   50K+
                 </div>
               </div>
-              <span className="text-[10px] font-medium text-slate-300">Happy Developers</span>
+              <span className="text-[10px] font-medium text-foreground/90">Happy Developers</span>
             </div>
           </motion.div>
 
@@ -401,13 +401,13 @@ export default function LoginPage() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.5, delay: 0.4 + (idx * 0.15) }}
-                className={`relative p-3.5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md max-w-[260px] ${idx % 2 === 1 ? 'self-end' : 'self-start'}`}
+                className={`relative p-3.5 rounded-2xl bg-surface/50 dark:bg-surface border-border dark:border-white/10 backdrop-blur-md max-w-[260px] ${idx % 2 === 1 ? 'self-end' : 'self-start'}`}
               >
                 <div className="flex gap-0.5 mb-1.5">
                   {[1,2,3,4,5].map(i => <Star key={i} className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />)}
                 </div>
-                <p className="text-xs font-medium text-slate-200 mb-1.5 leading-relaxed">"{test.quote}"</p>
-                <p className="text-[9px] text-zinc-400">— {test.author}</p>
+                <p className="text-xs font-medium text-foreground mb-1.5 leading-relaxed">"{test.quote}"</p>
+                <p className="text-[9px] text-muted-foreground">— {test.author}</p>
               </motion.div>
             ))}
           </div>
@@ -418,7 +418,7 @@ export default function LoginPage() {
           <Button 
             variant="outline" 
             onClick={() => setShowMobileFeatures(!showMobileFeatures)}
-            className="w-full bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 rounded-xl"
+            className="w-full bg-primary/5 border-border text-foreground/90 hover:bg-primary/10 rounded-xl"
           >
             {showMobileFeatures ? 'Hide Premium Features' : 'View Premium Features'}
           </Button>
@@ -433,14 +433,14 @@ export default function LoginPage() {
               >
                 <div className="flex flex-col gap-3 mt-4">
                   {featureCards.map((feat, idx) => (
-                    <div key={idx} className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <div key={idx} className="p-4 rounded-xl bg-primary/5 border border-border">
                       <div className="flex items-center gap-3 mb-2">
                         <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${feat.bg} border ${feat.border}`}>
                           <feat.icon className={`h-4 w-4 ${feat.color}`} />
                         </div>
-                        <h3 className="text-sm font-semibold text-slate-100">{feat.title}</h3>
+                        <h3 className="text-sm font-semibold text-foreground">{feat.title}</h3>
                       </div>
-                      <p className="text-xs text-zinc-400 leading-relaxed">{feat.desc}</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{feat.desc}</p>
                     </div>
                   ))}
                 </div>

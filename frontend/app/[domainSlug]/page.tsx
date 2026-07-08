@@ -146,23 +146,23 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20 font-sans text-foreground selection:bg-blue-200">
+    <div className="min-h-screen bg-surface border border-default dark:from-slate-950 font-sans text-foreground selection:bg-blue-200">
       <div className="w-full max-w-[1600px] mx-auto min-h-screen flex gap-6 px-6 py-6">
 
         {/* ─── LEFT SIDEBAR ─── */}
         <aside className="hidden lg:flex w-[280px] shrink-0 flex-col gap-4 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
           {/* Navigation */}
           <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-900/40 dark:to-slate-900/20 border-b border-border">
+            <div className="px-4 py-3 bg-surface border border-default dark:from-slate-900/40 dark:to-slate-900/20 border-b border-border">
               <Link href="/domains"
-                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-[#2e64e5] transition-colors">
+                className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors">
                 <ArrowLeft className="h-3 w-3" />
                 All Paths
               </Link>
             </div>
             <div className="p-4">
               <div className="flex items-center gap-2 mb-2">
-                <GraduationCap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <GraduationCap className="h-4 w-4 text-primary dark:text-primary" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Study Path</h3>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
@@ -172,10 +172,10 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
           </div>
 
           {/* Filter by Category */}
-          <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-br from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 shadow-sm overflow-hidden  ">
-            <div className="px-4 py-3 bg-gradient-to-r from-blue-100 dark:from-blue-950/50 to-blue-50 dark:to-blue-950/40 border-b border-blue-200 dark:border-blue-500/20  ">
+          <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm overflow-hidden  ">
+            <div className="px-4 py-3 bg-surface border-b border-default dark:border-default/20  ">
               <div className="flex items-center gap-2">
-                <Filter className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                <Filter className="h-3.5 w-3.5 text-primary dark:text-primary" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Filter Topics</h3>
               </div>
             </div>
@@ -183,7 +183,7 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-background border border-blue-200 dark:border-blue-500/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-foreground font-medium"
+                className="w-full px-3 py-2 text-sm bg-background border border-default dark:border-default/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-ring text-foreground font-medium"
               >
                 <option value="all">All Modules ({categories.length})</option>
                 {categories.map(cat => (
@@ -193,15 +193,15 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
                 ))}
               </select>
 
-              <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-500/20">
+              <div className="mt-3 pt-3 border-t border-default dark:border-default/20">
                 <label className="flex items-center gap-2 text-xs font-medium text-foreground">
-                  <SlidersHorizontal className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                  <SlidersHorizontal className="h-3 w-3 text-primary dark:text-primary" />
                   Sort By:
                 </label>
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as "default" | "questions")}
-                  className="w-full mt-2 px-3 py-2 text-sm bg-background border border-blue-200 dark:border-blue-500/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-foreground font-medium"
+                  className="w-full mt-2 px-3 py-2 text-sm bg-background border border-default dark:border-default/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-ring text-foreground font-medium"
                 >
                   <option value="default">Default Order</option>
                   <option value="questions">Most Questions First</option>
@@ -211,7 +211,7 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
           </div>
 
           {/* Progress Tracker */}
-          <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 shadow-sm p-4">
+          <div className="rounded-xl border border-default dark:border-default/20 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
               <Award className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Your Progress</h3>
@@ -222,13 +222,13 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
                 <span className="font-bold text-foreground">0/{totalStacks}</span>
               </div>
               <div className="w-full bg-emerald-100 dark:bg-emerald-950/20 rounded-full h-2 overflow-hidden">
-                <div className="bg-gradient-to-r from-emerald-50 dark:from-emerald-950/400 to-teal-50 dark:to-teal-950/400 h-full rounded-full" style={{ width: '0%' }} />
+                <div className="bg-surface h-full rounded-full" style={{ width: '0%' }} />
               </div>
             </div>
           </div>
 
           {/* Study Tips */}
-          <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 dark:from-amber-950/40 to-yellow-50 dark:to-yellow-950/40 shadow-sm p-4  ">
+          <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm p-4  ">
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Quick Tip</h3>
@@ -244,15 +244,15 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
           {/* Domain Hero Header */}
           <header className="mb-6 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
             {/* Top Section with Gradient */}
-            <div className="relative px-6 py-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20">
+            <div className="relative px-6 py-5 bg-surface border border-default dark:">
               <div className="flex flex-wrap gap-2 mb-3">
                 {domain.language && (
-                  <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 shadow-sm">
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary border border-default dark:border-default/20 shadow-sm">
                     {domain.language}
                   </span>
                 )}
                 {domain.track && (
-                  <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-purple-100 dark:bg-purple-950/20 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20 shadow-sm">
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary border border-default dark:border-default/20 shadow-sm">
                     {domain.track}
                   </span>
                 )}
@@ -281,7 +281,7 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
                   <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center">
-                    <Layers className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <Layers className="h-5 w-5 text-primary dark:text-primary" />
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground font-medium">Topics</div>
@@ -333,25 +333,25 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
         <aside className="hidden xl:flex w-[300px] shrink-0 flex-col gap-4 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
 
           {/* Learning Stats */}
-          <div className="rounded-xl border border-purple-200 dark:border-purple-500/20 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-900/40 dark:to-pink-900/40 border-b border-purple-200 dark:border-purple-500/20">
+          <div className="rounded-xl border border-default dark:border-default/20 bg-surface border border-default shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-surface border border-default border-b border-default dark:border-default/20">
               <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <Zap className="h-4 w-4 text-primary dark:text-primary" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">At a Glance</h3>
               </div>
             </div>
             <div className="p-4">
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="bg-background rounded-lg p-3 border border-purple-200 dark:border-purple-500/20 shadow-sm">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-purple-600 dark:text-purple-400 mb-1">Stacks</div>
+                <div className="bg-background rounded-lg p-3 border border-default dark:border-default/20 shadow-sm">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-primary dark:text-primary mb-1">Stacks</div>
                   <div className="text-2xl font-black text-foreground leading-none">{totalStacks}</div>
                 </div>
-                <div className="bg-background rounded-lg p-3 border border-purple-200 dark:border-purple-500/20 shadow-sm">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-purple-600 dark:text-purple-400 mb-1">Questions</div>
+                <div className="bg-background rounded-lg p-3 border border-default dark:border-default/20 shadow-sm">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-primary dark:text-primary mb-1">Questions</div>
                   <div className="text-2xl font-black text-foreground leading-none">{totalQs}</div>
                 </div>
               </div>
-              <div className="space-y-2 pt-3 border-t border-purple-200 dark:border-purple-500/20">
+              <div className="space-y-2 pt-3 border-t border-default dark:border-default/20">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground font-medium">Level</span>
                   <span className="font-bold" style={{ color: levelMeta.color }}>
@@ -375,7 +375,7 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
           </div>
 
           {/* What You'll Learn */}
-          <div className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-br from-teal-50 dark:from-teal-950/40 to-cyan-50 dark:to-cyan-950/40 shadow-sm p-4  ">
+          <div className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-br from-teal-50 dark:from-teal-950/40  shadow-sm p-4  ">
             <div className="flex items-center gap-2 mb-3">
               <Target className="h-4 w-4 text-teal-600 dark:text-teal-400" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">What You'll Learn</h3>
@@ -391,14 +391,14 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
           </div>
 
           {/* Study Strategy */}
-          <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 dark:from-indigo-950/40 to-blue-50 dark:to-blue-950/40 shadow-sm p-4  ">
+          <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm p-4  ">
             <div className="flex items-center gap-2 mb-3">
-              <BookMarked className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              <BookMarked className="h-4 w-4 text-primary dark:text-primary" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Study Strategy</h3>
             </div>
             <div className="space-y-3">
               {tips.map((tip, i) => (
-                <div key={i} className="flex items-start gap-2 bg-background/60 rounded-lg p-2 border border-indigo-100 dark:border-indigo-500/20">
+                <div key={i} className="flex items-start gap-2 bg-background/60 rounded-lg p-2 border border-default dark:border-default/20">
                   <span className="text-sm leading-none mt-0.5">{tip.icon}</span>
                   <p className="text-xs text-foreground leading-relaxed">{tip.text}</p>
                 </div>
@@ -408,15 +408,15 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
 
           {/* Quick Actions */}
           <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-900/40 dark:to-slate-900/20 border-b border-border">
+            <div className="px-4 py-3 bg-surface border border-default dark:from-slate-900/40 dark:to-slate-900/20 border-b border-border">
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Quick Actions</h3>
             </div>
             <div className="p-3 space-y-2">
-              <Link href="/domains" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-blue-500/10 rounded-lg transition-all border border-transparent hover:border-blue-200 dark:border-blue-500/20">
+              <Link href="/domains" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-primary dark:text-primary hover:bg-blue-50 dark:bg-blue-500/10 rounded-lg transition-all border border-transparent hover:border-default dark:border-default/20">
                 <span>Browse All Paths</span>
                 <ArrowUpRight className="h-3 w-3" />
               </Link>
-              <Link href="/dashboard" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-blue-500/10 rounded-lg transition-all border border-transparent hover:border-blue-200 dark:border-blue-500/20">
+              <Link href="/dashboard" className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-primary dark:text-primary hover:bg-blue-50 dark:bg-blue-500/10 rounded-lg transition-all border border-transparent hover:border-default dark:border-default/20">
                 <span>My Dashboard</span>
                 <ArrowUpRight className="h-3 w-3" />
               </Link>
@@ -431,17 +431,17 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
 }
 
 const MODULE_COLORS = [
-  'from-blue-50 dark:from-blue-950/400 to-indigo-600',
-  'from-emerald-50 dark:from-emerald-950/400 to-teal-600',
-  'from-purple-50 dark:from-purple-950/400 to-violet-600',
-  'from-amber-50 dark:from-amber-950/400 to-orange-600',
-  'from-rose-50 dark:from-rose-950/400 to-pink-600',
-  'from-cyan-50 dark:from-cyan-950/400 to-sky-600',
-  'from-lime-50 dark:from-lime-950/400 to-green-600',
-  'from-fuchsia-50 dark:from-fuchsia-950/400 to-purple-600',
-  'from-red-50 dark:from-red-950/400 to-rose-600',
-  'from-indigo-50 dark:from-indigo-950/400 to-blue-600',
-  'from-teal-50 dark:from-teal-950/400 to-emerald-600',
+  ' ',
+  ' to-teal-600',
+  ' to-blue-600',
+  ' to-orange-600',
+  'from-rose-50 dark:from-rose-950/40 ',
+  ' to-sky-600',
+  'from-lime-50 dark:from-lime-950/40 to-green-600',
+  'from-blue-50 dark:from-blue-950/40 ',
+  ' to-rose-600',
+  ' ',
+  'from-teal-50 dark:from-teal-950/40 ',
 ];
 
 function ModuleAccordion({ category, domainSlug, index }: { category: DomainCategory; domainSlug: string; index: number }) {
@@ -451,7 +451,7 @@ function ModuleAccordion({ category, domainSlug, index }: { category: DomainCate
 
   return (
     <div className={cn(
-      "border rounded-xl transition-all duration-300 overflow-hidden",
+      "border rounded-xl transition-all duration-200 overflow-hidden",
       isOpen
         ? "border-border shadow-lg bg-background"
         : "border-border shadow-sm hover:shadow-md hover:border-border bg-background"
@@ -469,7 +469,7 @@ function ModuleAccordion({ category, domainSlug, index }: { category: DomainCate
         </div>
 
         <div className="flex-1 min-w-0">
-          <h2 className="text-[16px] font-black text-foreground tracking-tight group-hover:text-blue-700 dark:text-blue-400 transition-colors leading-tight">
+          <h2 className="text-[16px] font-black text-foreground tracking-tight group-hover:text-primary dark:group-hover:text-primary transition-colors leading-tight">
             {category.name}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -480,10 +480,10 @@ function ModuleAccordion({ category, domainSlug, index }: { category: DomainCate
         <div className={cn(
           "w-8 h-8 rounded-full border flex items-center justify-center transition-all shrink-0",
           isOpen
-            ? "border-blue-400 dark:border-blue-700 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400"
-            : "border-border bg-background text-muted-foreground group-hover:border-blue-300 dark:border-blue-700 group-hover:text-blue-500 dark:text-blue-400"
+            ? "border-default dark:border-default bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary"
+            : "border-border bg-background text-muted-foreground group-hover:border-default dark:border-default group-hover:text-primary dark:group-hover:text-primary"
         )}>
-          <ChevronDown className={cn("h-4 w-4 transition-transform duration-300", isOpen && "rotate-180")} />
+          <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", isOpen && "rotate-180")} />
         </div>
       </button>
 
@@ -523,8 +523,8 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
 
   return (
     <div
-      className={`border rounded-[12px] transition-all duration-300 overflow-hidden ${
-        isOpen ? "border-[#2e64e5]/30 shadow-md ring-1 ring-[#2e64e5]/5 bg-background" : "border-border shadow-sm hover:border-border hover:shadow-md bg-[#f8f9fa]"
+      className={`border rounded-[12px] transition-all duration-200 overflow-hidden ${
+        isOpen ? "border-primary/30 shadow-md ring-1 ring-primary/5 bg-background" : "border-border shadow-sm hover:border-border hover:shadow-md bg-slate-50"
       }`}
     >
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center">
@@ -534,12 +534,12 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
         >
           <div className="flex-1 pr-4 flex gap-3 items-start sm:items-center mb-3 sm:mb-0">
             <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-              isOpen ? "bg-[#2e64e5]/10 text-[#2e64e5]" : "bg-background border border-border text-muted-foreground group-hover:bg-[#2e64e5]/5 group-hover:text-[#2e64e5]"
+              isOpen ? "bg-primary/10 text-primary" : "bg-background border border-border text-muted-foreground group-hover:bg-primary/5 group-hover:text-primary"
             }`}>
               <Layers className="h-3.5 w-3.5" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-[15px] font-bold text-foreground tracking-tight group-hover:text-[#2e64e5] transition-colors leading-tight mb-0.5">
+              <h3 className="text-[15px] font-bold text-foreground tracking-tight group-hover:text-primary transition-colors leading-tight mb-0.5">
                 {stack.name}
               </h3>
               {stack.description && (
@@ -568,17 +568,17 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
         <div className="flex items-center gap-2 p-4 pt-0 sm:pt-4 sm:pl-0 sm:border-l-0 border-slate-100 dark:border-slate-800/60 bg-inherit shrink-0">
           <Link
             href={`/${domainSlug}/${stack.slug}`}
-            className="flex items-center justify-center h-8 px-3 rounded-md bg-background border border-border text-[#2e64e5] text-[11px] font-bold uppercase tracking-wider hover:border-[#2e64e5] hover:bg-[#2e64e5]/5 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2e64e5]/30 group/btn"
+            className="flex items-center justify-center h-8 px-3 rounded-md bg-background border border-border text-primary text-[11px] font-bold uppercase tracking-wider hover:border-primary hover:bg-primary/5 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 group/btn"
           >
             Start <ChevronRight className="h-3.5 w-3.5 ml-1 group-hover/btn:translate-x-0.5 transition-transform" />
           </Link>
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-[#2e64e5]/30 ${
-              isOpen ? "border-[#2e64e5] bg-[#2e64e5] text-white" : "border-border bg-background text-muted-foreground hover:border-[#2e64e5]/30 hover:text-[#2e64e5]"
+            className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-primary/30 ${
+              isOpen ? "border-primary bg-primary text-white" : "border-border bg-background text-muted-foreground hover:border-primary/30 hover:text-primary"
             }`}
           >
-            <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} />
+            <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
           </button>
         </div>
       </div>
@@ -600,10 +600,10 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
                     <Link
                       key={`${idx}-${q.slug}`}
                       href={`/${domainSlug}/${stack.slug}/${q.slug}`}
-                      className="group/link flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:pr-4 rounded-[8px] hover:bg-[#f8f9fa] transition-all duration-200"
+                      className="group/link flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:pr-4 rounded-[8px] hover:bg-slate-50 transition-all duration-200"
                     >
                        <div className="flex items-start sm:items-center gap-3 mb-2 sm:mb-0 max-w-full overflow-hidden">
-                          <div className="shrink-0 w-5 h-5 rounded-full bg-background border border-border flex items-center justify-center text-[9px] font-bold text-muted-foreground group-hover/link:border-[#2e64e5] group-hover/link:text-[#2e64e5] shadow-sm transition-all sm:ml-2">
+                          <div className="shrink-0 w-5 h-5 rounded-full bg-background border border-border flex items-center justify-center text-[9px] font-bold text-muted-foreground group-hover/link:border-primary group-hover/link:text-primary shadow-sm transition-all sm:ml-2">
                              {idx + 1}
                           </div>
                           <h4 className="text-[13.5px] font-medium text-foreground group-hover/link:text-foreground transition-colors leading-tight truncate">
@@ -627,7 +627,7 @@ function StackAccordion({ domainSlug, stack, index }: { domainSlug: string; stac
                </div>
 
                <div className="mt-3 text-center border-t border-slate-100 dark:border-slate-800/60 pt-3">
-                  <Link href={`/${domainSlug}/${stack.slug}`} className="text-[#2e64e5] hover:text-blue-700 dark:text-blue-400 text-[12px] font-bold tracking-wide flex items-center justify-center gap-1 group/more">
+                  <Link href={`/${domainSlug}/${stack.slug}`} className="text-primary hover:text-primary dark:text-primary text-[12px] font-bold tracking-wide flex items-center justify-center gap-1 group/more">
                     Open Topic <ChevronRight className="h-3.5 w-3.5 group-hover/more:translate-x-0.5 transition-transform" />
                   </Link>
                </div>

@@ -92,21 +92,21 @@ const TOOL_CATEGORIES: Record<
   cloud: {
     label: "Cloud & Infrastructure",
     icon: Cloud,
-    color: "text-blue-600 dark:text-blue-400",
+    color: "text-primary dark:text-primary",
     bg: "bg-blue-100 dark:bg-blue-950/20",
     slugs: ["aws", "gcp", "azure", "terraform", "ansible"],
   },
   containers: {
     label: "Containers & Orchestration",
     icon: Container,
-    color: "text-indigo-600",
-    bg: "bg-indigo-100 dark:bg-indigo-950/20",
+    color: "text-primary",
+    bg: "bg-blue-100 dark:bg-blue-950/20",
     slugs: ["docker", "kubernetes"],
   },
   apis: {
     label: "APIs & Protocols",
     icon: Globe,
-    color: "text-cyan-600",
+    color: "text-primary",
     bg: "bg-cyan-100 dark:bg-cyan-950/20",
     slugs: ["graphql", "grpc", "rest", "websockets"],
   },
@@ -134,8 +134,8 @@ const TOOL_CATEGORIES: Record<
   frontend: {
     label: "Frontend Frameworks",
     icon: Code2,
-    color: "text-violet-600 dark:text-violet-400",
-    bg: "bg-violet-100 dark:bg-violet-950/20",
+    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-blue-100 dark:bg-blue-950/20",
     slugs: ["react", "angular", "vue", "nextjs", "svelte", "tailwind"],
   },
   security: {
@@ -190,7 +190,7 @@ export default function ToolsIndexPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-teal-50/20 dark:via-teal-950/40 to-cyan-50/20 dark:to-cyan-950/40 font-sans text-foreground selection:bg-teal-200  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-teal-50/20 dark:via-teal-950/40  font-sans text-foreground selection:bg-teal-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -208,7 +208,7 @@ export default function ToolsIndexPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-teal-50 dark:from-teal-950/40 via-cyan-50 dark:via-cyan-950/40 to-blue-50 dark:to-blue-950/40  ">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-teal-50 dark:from-teal-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Wrench className="h-5 w-5 text-teal-600 dark:text-teal-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-teal-600 dark:text-teal-400">
@@ -244,7 +244,7 @@ export default function ToolsIndexPage() {
               <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center">
-                  <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <BookOpen className="h-5 w-5 text-primary dark:text-primary" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -258,7 +258,7 @@ export default function ToolsIndexPage() {
               <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-cyan-100 dark:bg-cyan-950/20 flex items-center justify-center">
-                  <Target className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                  <Target className="h-5 w-5 text-primary dark:text-primary" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -377,7 +377,7 @@ export default function ToolsIndexPage() {
         )}
 
         {/* CTA */}
-        <section className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-r from-teal-50 dark:from-teal-950/40 to-cyan-50 dark:to-cyan-950/40 p-8 text-center mb-12  ">
+        <section className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-gradient-to-r from-teal-50 dark:from-teal-950/40  p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Tools in Your Domain Prep
           </h2>
@@ -388,7 +388,7 @@ export default function ToolsIndexPage() {
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-teal-600 to-cyan-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-surface border border-default text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

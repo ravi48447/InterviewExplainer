@@ -84,7 +84,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
   } : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20">
+    <div className="min-h-screen bg-surface border border-default dark:from-slate-950 dark:">
       {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />}
 
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
@@ -97,7 +97,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
         </nav>
 
         <header className="mb-8">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 rounded-full text-xs font-bold mb-4 uppercase tracking-wider">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary rounded-full text-xs font-bold mb-4 uppercase tracking-wider">
             Interview Comparison
           </div>
           <h1 className="text-4xl font-black tracking-tight text-foreground mb-4">{title}</h1>
@@ -107,8 +107,8 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
         {data ? (
           <>
             {/* TL;DR */}
-            <section className="mb-8 rounded-xl border-2 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-500/10 p-6">
-              <h2 className="text-sm font-bold text-blue-800 dark:text-blue-400 uppercase tracking-wider mb-3">TL;DR — The Interview Answer</h2>
+            <section className="mb-8 rounded-xl border-2 border-default dark:border-default bg-blue-50 dark:bg-blue-500/10 p-6">
+              <h2 className="text-sm font-bold text-primary dark:text-primary uppercase tracking-wider mb-3">TL;DR — The Interview Answer</h2>
               <p className="text-foreground leading-relaxed">{data.summary}</p>
             </section>
 
@@ -123,8 +123,8 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
                     <thead>
                       <tr className="border-b border-border">
                         <th className="text-left py-3 px-4 text-xs font-bold text-muted-foreground uppercase w-1/3">Aspect</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-blue-600 dark:text-blue-400 uppercase">{data.whenToUse?.a.name ?? "Option A"}</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-purple-600 dark:text-purple-400 uppercase">{data.whenToUse?.b.name ?? "Option B"}</th>
+                        <th className="text-left py-3 px-4 text-xs font-bold text-primary dark:text-primary uppercase">{data.whenToUse?.a.name ?? "Option A"}</th>
+                        <th className="text-left py-3 px-4 text-xs font-bold text-primary dark:text-primary uppercase">{data.whenToUse?.b.name ?? "Option B"}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -145,14 +145,14 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
             {data.whenToUse && (
               <section className="mb-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {[data.whenToUse.a, data.whenToUse.b].map((opt, i) => (
-                  <div key={i} className={`rounded-xl border p-5 ${i === 0 ? "border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10" : "border-purple-200 dark:border-purple-500/20 bg-purple-50 dark:bg-purple-950/20"}`}>
-                    <h3 className={`text-sm font-black mb-3 ${i === 0 ? "text-blue-800 dark:text-blue-400" : "text-purple-800 dark:text-purple-400"}`}>
+                  <div key={i} className={`rounded-xl border p-5 ${i === 0 ? "border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10" : "border-default dark:border-default/20 bg-blue-50 dark:bg-blue-950/20"}`}>
+                    <h3 className={`text-sm font-black mb-3 ${i === 0 ? "text-primary dark:text-primary" : "text-primary dark:text-primary"}`}>
                       Use {opt.name} when…
                     </h3>
                     <ul className="space-y-2">
                       {opt.conditions.map((c, j) => (
                         <li key={j} className="flex items-start gap-2 text-xs text-foreground">
-                          <span className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${i === 0 ? "bg-blue-500 dark:bg-blue-800" : "bg-purple-500 dark:bg-purple-800"}`} />
+                          <span className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${i === 0 ? "bg-blue-500 dark:bg-blue-800" : "bg-blue-500 dark:bg-blue-800"}`} />
                           {c}
                         </li>
                       ))}
@@ -164,7 +164,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
 
             {/* Interview tips */}
             {data.interviewTips && data.interviewTips.length > 0 && (
-              <section className="mb-8 rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 p-6">
+              <section className="mb-8 rounded-xl border border-default dark:border-default/20 bg-emerald-50 dark:bg-emerald-500/10 p-6">
                 <h2 className="text-sm font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-4">🎤 Interview Tips</h2>
                 <ul className="space-y-3">
                   {data.interviewTips.map((tip, i) => (
@@ -181,7 +181,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
             {(data.relatedComparisons?.length || data.relatedTools?.length) ? (
               <section className="flex flex-wrap gap-3">
                 {data.relatedComparisons?.map(c => (
-                  <Link key={c} href={`/compare/${c}`} className="px-4 py-2 bg-background border border-border rounded-lg text-sm font-semibold text-foreground hover:border-blue-400 dark:border-blue-700 hover:text-blue-600 dark:text-blue-400 transition-all">
+                  <Link key={c} href={`/compare/${c}`} className="px-4 py-2 bg-background border border-border rounded-lg text-sm font-semibold text-foreground hover:border-default dark:border-default hover:text-primary dark:text-primary transition-all">
                     {formatSlug(c)}
                   </Link>
                 ))}
@@ -197,7 +197,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
           <div className="rounded-2xl border border-border bg-background p-8 text-center">
             <div className="text-4xl mb-4">🚧</div>
             <h2 className="text-xl font-black text-foreground mb-2">Content Loading</h2>
-            <p className="text-muted-foreground text-sm">{title} comparison is being written. <Link href="/compare" className="text-blue-600 dark:text-blue-400 font-bold hover:underline">Browse all comparisons →</Link></p>
+            <p className="text-muted-foreground text-sm">{title} comparison is being written. <Link href="/compare" className="text-primary dark:text-primary font-bold hover:underline">Browse all comparisons →</Link></p>
           </div>
         )}
       </div>

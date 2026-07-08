@@ -105,7 +105,7 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-orange-50/20 dark:via-orange-950/40 to-amber-50/20 dark:to-amber-950/40  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-orange-50/20 dark:via-orange-950/40  ">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
@@ -136,7 +136,7 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
               <div className="space-y-3">
                 {meta.rounds.map((round, i) => (
                   <div key={round.name} className="flex gap-4 p-4 bg-background rounded-xl border border-border">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-50 dark:from-orange-950/400 to-amber-50 dark:to-amber-950/400 text-white flex items-center justify-center text-xs font-black shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-50 dark:from-orange-950/40  text-white flex items-center justify-center text-xs font-black shrink-0">
                       {i + 1}
                     </div>
                     <div>
@@ -152,15 +152,15 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
               {/* DSA Patterns */}
               <section>
                 <h2 className="text-lg font-black text-foreground mb-4 flex items-center gap-2">
-                  <Code2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  <Code2 className="h-5 w-5 text-primary dark:text-primary" />
                   Key DSA Patterns
                 </h2>
                 <div className="space-y-2">
                   {meta.dsaPatterns.map(p => (
                     <Link key={p} href={`/dsa/pattern/${p}`}
-                      className="flex items-center justify-between p-3 bg-background rounded-lg border border-purple-200 dark:border-purple-500/20 hover:border-purple-400 dark:border-purple-700 hover:shadow-sm transition-all group">
-                      <span className="text-sm font-semibold text-foreground group-hover:text-purple-600 dark:text-purple-400 capitalize">{p.replace(/-/g, " ")}</span>
-                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-purple-400 dark:text-purple-300" />
+                      className="flex items-center justify-between p-3 bg-background rounded-lg border border-default dark:border-default/20 hover:border-default dark:border-default hover:shadow-sm transition-all group">
+                      <span className="text-sm font-semibold text-foreground group-hover:text-primary dark:group-hover:text-primary capitalize">{p.replace(/-/g, " ")}</span>
+                      <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary" />
                     </Link>
                   ))}
                 </div>
@@ -185,12 +185,12 @@ export default async function CompanyHubPage({ params }: { params: Promise<{ com
             </div>
 
             {/* Language focus */}
-            <section className="mb-10 rounded-xl border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 p-5">
+            <section className="mb-10 rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 p-5">
               <h2 className="text-base font-black text-foreground mb-3">Preferred Languages at {name}</h2>
               <div className="flex flex-wrap gap-2">
                 {meta.langFocus.map(lang => (
                   <Link key={lang} href={`/interview/${lang}`}
-                    className="px-4 py-2 bg-background border border-blue-300 dark:border-blue-700 rounded-lg text-sm font-bold text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:bg-blue-950/20 transition-colors capitalize">
+                    className="px-4 py-2 bg-background border border-default dark:border-default rounded-lg text-sm font-bold text-primary dark:text-primary hover:bg-blue-100 dark:bg-blue-950/20 transition-colors capitalize">
                     {lang === "csharp" ? "C#" : lang.charAt(0).toUpperCase() + lang.slice(1)}
                   </Link>
                 ))}

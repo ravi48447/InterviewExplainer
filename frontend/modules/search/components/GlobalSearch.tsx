@@ -39,7 +39,7 @@ export function GlobalSearch({ localData }: GlobalSearchProps) {
       {/* Desktop Search Bar (400px - 700px) */}
       <button
         onClick={() => setIsOpen(true)}
-        className="hidden md:flex items-center gap-3 w-full h-9 px-3 rounded-lg border border-default bg-surface hover:bg-hover transition-colors text-left text-secondary select-none text-xs"
+        className="hidden md:flex items-center gap-3 w-full h-9 px-3 rounded-lg border border-default bg-surface hover:bg-hover transition-colors text-left text-muted-foreground select-none text-xs"
         aria-label="Search questions, paths (Press Ctrl+K to open)"
       >
         <Search className="h-4 w-4 shrink-0" />

@@ -274,7 +274,7 @@ export default async function DSAProblemPage({
                 freq.tone === "red"
                   ? "bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400 border-rose-300 dark:border-rose-500/30 dark:border-rose-500/20"
                   : freq.tone === "amber"
-                    ? "bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 border-amber-300 dark:border-amber-500/30 dark:border-amber-500/20"
+                    ? "bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400 border-default dark:border-default/30 dark:border-default/20"
                     : "bg-surface text-foreground border-border"
               }`}
             >
@@ -326,13 +326,13 @@ export default async function DSAProblemPage({
 
       {/* Problem statement */}
       <div className="mb-5 space-y-4">
-        <div className="prose prose-slate max-w-none prose-p:text-[15px] prose-p:leading-[1.8] prose-p:text-foreground prose-p:mb-3 prose-p:last:mb-0 prose-code:text-sm prose-code:font-mono prose-code:text-foreground prose-code:bg-surface prose-code:border prose-code:border-border prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:font-semibold prose-strong:text-foreground prose-strong:font-bold prose-em:text-violet-800 dark:text-violet-400 prose-em:font-semibold prose-em:not-italic">
+        <div className="prose prose-slate max-w-none prose-p:text-[15px] prose-p:leading-[1.8] prose-p:text-foreground prose-p:mb-3 prose-p:last:mb-0 prose-code:text-sm prose-code:font-mono prose-code:text-foreground prose-code:bg-surface prose-code:border prose-code:border-border prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:font-semibold prose-strong:text-foreground prose-strong:font-bold prose-em:text-blue-800 dark:text-blue-400 prose-em:font-semibold prose-em:not-italic">
           <MarkdownContent content={problem.problemStatement} />
         </div>
 
         {problem.understanding && (
           <div className="rounded-md border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-500/10 px-4 py-3">
-            <p className="text-xs font-black uppercase tracking-widest text-blue-700 dark:text-blue-400 mb-1 flex items-center gap-1.5">
+            <p className="text-xs font-black uppercase tracking-widest text-primary dark:text-primary mb-1 flex items-center gap-1.5">
               <Lightbulb className="h-3 w-3" />
               In plain English
             </p>
@@ -417,7 +417,7 @@ export default async function DSAProblemPage({
         >
           <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-muted/50 transition-colors">
             <span className="text-sm font-black text-foreground flex items-center gap-2">
-              <HelpCircle className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 dark:text-blue-500" />
+              <HelpCircle className="h-3.5 w-3.5 text-primary dark:text-primary dark:text-primary" />
               Clarifying questions
               <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-blue-600 dark:bg-blue-800 text-primary-foreground text-xs font-black">
                 {problem.clarifyingQuestions.length}
@@ -429,7 +429,7 @@ export default async function DSAProblemPage({
             {problem.clarifyingQuestions.map((qa, i) => (
               <li key={i} className="px-4 py-2.5 bg-background">
                 <p className="text-sm font-bold text-foreground leading-snug flex items-start gap-1.5">
-                  <span className="text-blue-600 dark:text-blue-400 dark:text-blue-500 font-black">Q{i + 1}.</span>
+                  <span className="text-primary dark:text-primary dark:text-primary font-black">Q{i + 1}.</span>
                   <span>{qa.question}</span>
                 </p>
                 <p className="text-[13.5px] text-muted-foreground leading-[1.65] mt-1 pl-[26px] border-l-2 border-border ml-1">
@@ -470,7 +470,7 @@ export default async function DSAProblemPage({
           <section aria-label="Quick answer" className="mb-6">
             <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 dark:bg-blue-800 text-white">
-                <Zap className="h-4 w-4 text-blue-100 dark:text-blue-300" />
+                <Zap className="h-4 w-4 text-primary dark:text-primary" />
                 <span className="text-xs font-bold uppercase tracking-widest">
                   30-second answer
                 </span>
@@ -486,7 +486,7 @@ export default async function DSAProblemPage({
                   <details open className="mt-5 group rounded-lg border border-border bg-muted/30">
                     <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center justify-between gap-3 rounded-t-lg hover:bg-muted/50 transition-colors">
                       <span className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                        <Target className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 dark:text-blue-500" />
+                        <Target className="h-3.5 w-3.5 text-primary dark:text-primary dark:text-primary" />
                         Why interviewers ask this
                       </span>
                       <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />
@@ -523,10 +523,10 @@ export default async function DSAProblemPage({
 
         {/* ─── ZONE 4 · PROBLEM SOLVING (approaches) ────────────────── */}
         <section className="mb-8">
-          <div className="mb-5 rounded-xl bg-gradient-to-r from-violet-600 via-violet-700 to-indigo-700 px-5 py-4 text-white shadow-md">
+          <div className="mb-5 rounded-xl bg-surface border border-default px-5 py-4 text-foreground shadow-md">
             <div className="flex items-end justify-between gap-4 flex-wrap">
               <div className="min-w-0">
-                <p className="text-xs font-black uppercase tracking-widest text-violet-200 dark:text-violet-300 mb-1 flex items-center gap-1.5">
+                <p className="text-xs font-black uppercase tracking-widest text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5" />
                   Problem Solving
                 </p>
@@ -536,14 +536,14 @@ export default async function DSAProblemPage({
               </div>
               {/* Approach legend: a visual primer so the reader knows
                   dark slate = brute, emerald = optimal. */}
-              <div className="flex items-center gap-4 text-xs font-medium text-violet-100 dark:text-violet-300">
+              <div className="flex items-center gap-4 text-xs font-medium text-blue-800 dark:text-blue-300">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-3 w-3 rounded-sm bg-gradient-to-r from-slate-600 to-slate-700 border border-slate-400 dark:border-slate-700/40" />
+                  <span className="h-3 w-3 rounded-sm bg-surface border border-default border border-slate-400 dark:border-slate-700/40" />
                   Brute force
                 </span>
-                <span className="text-violet-300 dark:text-violet-300">→</span>
+                <span className="text-blue-700 dark:text-blue-300">→</span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-3 w-3 rounded-sm bg-gradient-to-r from-emerald-50 dark:from-emerald-950/400 to-emerald-600 border border-emerald-300 dark:border-emerald-500/30" />
+                  <span className="h-3 w-3 rounded-sm bg-surface border border-default dark:border-default/30" />
                   Optimal
                 </span>
               </div>
@@ -590,7 +590,7 @@ export default async function DSAProblemPage({
                           className={cn(
                             "align-top text-sm",
                             isOptimal
-                              ? "bg-emerald-50/50 dark:bg-emerald-500/10 dark:bg-emerald-500/5 hover:bg-emerald-50 dark:bg-emerald-500/10 dark:hover:bg-emerald-50 dark:bg-emerald-950/200/10"
+                              ? "bg-emerald-50/50 dark:bg-emerald-500/10 dark:bg-emerald-500/5 hover:bg-emerald-50 dark:bg-emerald-500/10 dark:hover:bg-emerald-50 dark:bg-emerald-950/10"
                               : "hover:bg-surface",
                           )}
                         >
@@ -599,7 +599,7 @@ export default async function DSAProblemPage({
                               className={cn(
                                 "inline-flex items-center justify-center h-6 w-6 rounded-md font-black text-sm font-mono border-2",
                                 isOptimal
-                                  ? "bg-emerald-500 dark:bg-emerald-800 text-primary-foreground border-emerald-600 dark:border-emerald-700"
+                                  ? "bg-emerald-500 dark:bg-emerald-800 text-primary-foreground border-default dark:border-default"
                                   : "bg-slate-700 dark:bg-slate-800 text-white border-border",
                               )}
                             >
@@ -624,7 +624,7 @@ export default async function DSAProblemPage({
                               className={cn(
                                 "font-mono font-bold text-sm px-1.5 py-0.5 rounded border",
                                 isOptimal
-                                  ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30"
+                                  ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400 border-default dark:border-default/30"
                                   : "bg-surface text-foreground border-border",
                               )}
                             >
@@ -636,7 +636,7 @@ export default async function DSAProblemPage({
                               className={cn(
                                 "font-mono font-bold text-sm px-1.5 py-0.5 rounded border",
                                 isOptimal
-                                  ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30"
+                                  ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400 border-default dark:border-default/30"
                                   : "bg-surface text-foreground border-border",
                               )}
                             >
@@ -649,7 +649,7 @@ export default async function DSAProblemPage({
                           <td className="px-3 py-3 text-right">
                             <a
                               href={`#approach-${i + 1}`}
-                              className="inline-flex items-center gap-1 text-xs font-bold text-violet-700 dark:text-violet-400 hover:text-violet-900 dark:text-violet-400 hover:underline"
+                              className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:text-blue-400 hover:underline"
                             >
                               Read
                               <ArrowRight className="h-3 w-3" />
@@ -667,19 +667,19 @@ export default async function DSAProblemPage({
           {problem.diagrams && problem.diagrams.length > 0 && (
             <details
               open
-              className="mb-6 rounded-lg border border-violet-300 dark:border-violet-500/30 bg-violet-50/60 dark:bg-violet-500/10 group overflow-hidden"
+              className="mb-6 rounded-lg border border-blue-300 dark:border-blue-500/30 bg-blue-50/60 dark:bg-blue-500/10 group overflow-hidden"
             >
-              <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between hover:bg-violet-100/80 dark:bg-violet-500/20 transition-colors">
-                <span className="text-[13.5px] font-black text-violet-900 dark:text-violet-400 flex items-center gap-2">
-                  <BrainCircuit className="h-4 w-4 text-violet-700 dark:text-violet-400" />
+              <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between hover:bg-blue-100/80 dark:bg-blue-500/20 transition-colors">
+                <span className="text-[13.5px] font-black text-blue-900 dark:text-blue-400 flex items-center gap-2">
+                  <BrainCircuit className="h-4 w-4 text-blue-700 dark:text-blue-400" />
                   How to pick the right approach
-                  <span className="text-[11px] font-medium text-violet-700 dark:text-violet-400 italic">
+                  <span className="text-[11px] font-medium text-blue-700 dark:text-blue-400 italic">
                     · decision tree
                   </span>
                 </span>
-                <ChevronDown className="h-4 w-4 text-violet-700 dark:text-violet-400 transition-transform duration-150 group-open:rotate-180" />
+                <ChevronDown className="h-4 w-4 text-blue-700 dark:text-blue-400 transition-transform duration-150 group-open:rotate-180" />
               </summary>
-              <div className="border-t border-violet-200 dark:border-violet-500/20 px-4 py-4 bg-background">
+              <div className="border-t border-blue-200 dark:border-blue-500/20 px-4 py-4 bg-background">
                 {problem.diagrams.map((d, i) => (
                   <DSADiagram key={i} diagram={d} />
                 ))}
@@ -742,12 +742,12 @@ export default async function DSAProblemPage({
         {/* ─── ZONE 6 · COMMON MISTAKES ─────────────────────────────── */}
         {hasMistakes && (
           <section className="mb-8 rounded-xl border-2 border-rose-300 dark:border-rose-500/30 bg-rose-50/40 dark:bg-rose-500/10 overflow-hidden shadow-sm">
-            <div className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-rose-600 to-rose-700 text-white">
+            <div className="flex items-center gap-2 px-5 py-2.5 bg-surface border border-default text-white">
               <Bug className="h-4 w-4" />
               <span className="text-xs font-black uppercase tracking-widest">
                 Common mistakes
               </span>
-              <span className="ml-auto text-[11px] text-rose-100 dark:text-rose-300">
+              <span className="ml-auto text-[11px] text-rose-800 dark:text-rose-300">
                 Bugs that trip candidates on this exact problem
               </span>
             </div>
@@ -783,7 +783,7 @@ export default async function DSAProblemPage({
                         <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x divide-slate-700 border-t border-rose-200 dark:border-rose-500/20">
                           {m.bad && (
                             <div>
-                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-rose-50 dark:text-rose-300 bg-gradient-to-r from-rose-700 to-rose-800 flex items-center gap-1.5  ">
+                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-rose-50 dark:text-rose-300 bg-surface border border-default flex items-center gap-1.5  ">
                                 <XCircle className="h-3.5 w-3.5" />
                                 Don't write this
                               </p>
@@ -796,7 +796,7 @@ export default async function DSAProblemPage({
                           )}
                           {m.good && (
                             <div>
-                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-emerald-50 dark:text-emerald-300 bg-gradient-to-r from-emerald-700 to-emerald-800 flex items-center gap-1.5  ">
+                              <p className="px-3 py-1.5 text-xs font-black uppercase tracking-widest text-emerald-50 dark:text-emerald-300 bg-surface border border-default flex items-center gap-1.5  ">
                                 <CheckCircle2 className="h-3.5 w-3.5" />
                                 Write this instead
                               </p>
@@ -831,10 +831,10 @@ export default async function DSAProblemPage({
 
         {/* ─── Pattern footer + More problems ─── */}
         {problem.patternNote && (
-          <div className="mb-8 flex items-start gap-3 rounded-lg border border-violet-300 dark:border-violet-500/30 bg-violet-50 dark:bg-violet-500/10 px-4 py-3">
-            <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 shrink-0" />
+          <div className="mb-8 flex items-start gap-3 rounded-lg border border-blue-300 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 px-4 py-3">
+            <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
             <p className="text-[13.5px] text-foreground leading-[1.65]">
-              <span className="text-xs font-bold uppercase tracking-widest text-violet-700 dark:text-violet-400 mr-1.5">
+              <span className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-400 mr-1.5">
                 Pattern
               </span>
               {problem.patternNote}
@@ -862,11 +862,11 @@ export default async function DSAProblemPage({
                       <li key={fv.slug}>
                         <Link
                           href={`/dsa/problem/${fv.slug}`}
-                          className="group flex items-start gap-3 p-3 rounded-lg border border-border bg-background hover:border-violet-300 dark:border-violet-500/30 hover:shadow-sm transition-all"
+                          className="group flex items-start gap-3 p-3 rounded-lg border border-border bg-background hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm transition-all"
                         >
-                          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-violet-600 dark:text-violet-400 mt-1 shrink-0" />
+                          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-600 dark:text-blue-400 mt-1 shrink-0" />
                           <div className="flex-1">
-                            <div className="text-[14.5px] font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400 leading-snug">
+                            <div className="text-[14.5px] font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400 leading-snug">
                               {fv.title}
                             </div>
                             <div className="text-sm text-muted-foreground mt-0.5 leading-[1.65]">
@@ -912,12 +912,12 @@ export default async function DSAProblemPage({
                     <li key={r.slug}>
                       <Link
                         href={`/dsa/problem/${r.slug}`}
-                        className="flex items-center justify-between gap-2 p-3 rounded-lg border border-border bg-background hover:border-violet-300 dark:border-violet-500/30 group transition-all"
+                        className="flex items-center justify-between gap-2 p-3 rounded-lg border border-border bg-background hover:border-blue-300 dark:border-blue-500/30 group transition-all"
                       >
-                        <span className="text-[13.5px] font-semibold text-foreground group-hover:text-violet-700 dark:text-violet-400 truncate">
+                        <span className="text-[13.5px] font-semibold text-foreground group-hover:text-blue-700 dark:text-blue-400 truncate">
                           {r.title}
                         </span>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-violet-600 dark:text-violet-400 shrink-0" />
+                        <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-600 dark:text-blue-400 shrink-0" />
                       </Link>
                     </li>
                   ))}
@@ -951,10 +951,10 @@ export default async function DSAProblemPage({
             {next && (
               <Link
                 href={`/dsa/problem/${next.slug}`}
-                className="group flex-1 flex items-center justify-between gap-3 rounded-xl bg-violet-600 dark:bg-violet-800 hover:bg-violet-700 dark:bg-violet-800 text-white px-5 py-3 shadow-md transition-all"
+                className="group flex-1 flex items-center justify-between gap-3 rounded-xl bg-blue-600 dark:bg-blue-800 hover:bg-blue-700 dark:bg-blue-800 text-foreground px-5 py-3 shadow-md transition-all"
               >
                 <div className="min-w-0">
-                  <div className="text-xs font-black uppercase tracking-widest text-violet-200 dark:text-violet-300">
+                  <div className="text-xs font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">
                     Continue · Next problem
                   </div>
                   <div className="text-[14.5px] font-bold line-clamp-1">
@@ -987,7 +987,7 @@ function RevisionCard({ remember }: { remember: DSARevision }) {
     <section aria-label="Things to remember" className="mb-6">
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
         <div className="flex items-center gap-2 px-5 py-2.5 bg-muted/50 border-b border-border text-foreground">
-          <Repeat className="h-4 w-4 text-blue-600 dark:text-blue-400 dark:text-blue-500" />
+          <Repeat className="h-4 w-4 text-primary dark:text-primary dark:text-primary" />
           <span className="text-xs font-bold uppercase tracking-widest">
             Revise & remember
           </span>
@@ -1000,11 +1000,11 @@ function RevisionCard({ remember }: { remember: DSARevision }) {
           {/* Pattern classifier */}
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1 flex items-center gap-1.5">
-              <BrainCircuit className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 dark:text-blue-500" />
+              <BrainCircuit className="h-3.5 w-3.5 text-primary dark:text-primary dark:text-primary" />
               Pattern
             </p>
             <p className="text-[16px] font-bold text-foreground leading-snug">
-              <span className="bg-blue-500/10 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded">
+              <span className="bg-blue-500/10 dark:bg-blue-500/20 text-primary dark:text-primary px-1.5 py-0.5 rounded">
                 {remember.pattern}
               </span>
             </p>
@@ -1014,7 +1014,7 @@ function RevisionCard({ remember }: { remember: DSARevision }) {
           {remember.formula && (
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                <Lightbulb className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 dark:text-blue-500" />
+                <Lightbulb className="h-3.5 w-3.5 text-primary dark:text-primary dark:text-primary" />
                 Template to memorize
               </p>
               <pre className="m-0 px-4 py-3 rounded-md bg-surface text-foreground text-sm leading-[1.7] font-mono overflow-x-auto border border-border">
@@ -1026,7 +1026,7 @@ function RevisionCard({ remember }: { remember: DSARevision }) {
           {/* Rules — the big highlighter list */}
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 dark:text-blue-500" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-primary dark:text-primary dark:text-primary" />
               Rules to internalize
             </p>
             <ol className="space-y-2">
@@ -1036,7 +1036,7 @@ function RevisionCard({ remember }: { remember: DSARevision }) {
                     {i + 1}
                   </span>
                   <span
-                    className="text-[14.5px] text-foreground leading-[1.65] [&_code]:font-mono [&_code]:text-sm [&_code]:bg-background [&_code]:border [&_code]:border-border [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-semibold [&_strong]:text-foreground [&_strong]:font-black [&_strong]:bg-blue-500/10 dark:bg-blue-500/20 [&_strong]:text-blue-700 dark:text-blue-400 dark:[&_strong]:text-blue-400 [&_strong]:px-1 [&_strong]:rounded"
+                    className="text-[14.5px] text-foreground leading-[1.65] [&_code]:font-mono [&_code]:text-sm [&_code]:bg-background [&_code]:border [&_code]:border-border [&_code]:rounded [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-semibold [&_strong]:text-foreground [&_strong]:font-black [&_strong]:bg-blue-500/10 dark:bg-blue-500/20 [&_strong]:text-primary dark:text-primary dark:[&_strong]:text-primary [&_strong]:px-1 [&_strong]:rounded"
                   >
                     <MarkdownContent content={r} inline />
                   </span>
@@ -1051,7 +1051,7 @@ function RevisionCard({ remember }: { remember: DSARevision }) {
               {remember.whenToUse && remember.whenToUse.length > 0 && (
                 <div className="rounded-md border border-border bg-surface px-4 py-3">
                   <p className="text-xs font-bold uppercase tracking-widest text-foreground mb-1.5 flex items-center gap-1.5">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 dark:text-blue-500" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-primary dark:text-primary dark:text-primary" />
                     Reach for this when
                   </p>
                   <ul className="space-y-1">
@@ -1070,7 +1070,7 @@ function RevisionCard({ remember }: { remember: DSARevision }) {
               {remember.antiSignals && remember.antiSignals.length > 0 && (
                 <div className="rounded-md border border-border bg-surface px-4 py-3">
                   <p className="text-xs font-bold uppercase tracking-widest text-foreground mb-1.5 flex items-center gap-1.5">
-                    <XCircle className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 dark:text-blue-500" />
+                    <XCircle className="h-3.5 w-3.5 text-primary dark:text-primary dark:text-primary" />
                     Do NOT reach for this when
                   </p>
                   <ul className="space-y-1">
@@ -1091,8 +1091,8 @@ function RevisionCard({ remember }: { remember: DSARevision }) {
 
           {/* Takeaway — the wisdom line */}
           {remember.takeaway && (
-            <div className="rounded-md bg-surface text-muted-foreground px-4 py-3 border-l-4 border-blue-500 dark:border-blue-700">
-              <p className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 dark:text-blue-500 mb-1">
+            <div className="rounded-md bg-surface text-muted-foreground px-4 py-3 border-l-4 border-default dark:border-default">
+              <p className="text-xs font-bold uppercase tracking-widest text-primary dark:text-primary dark:text-primary mb-1">
                 Takeaway
               </p>
               <p className="text-[14px] italic text-muted-foreground leading-[1.7]">
@@ -1143,7 +1143,7 @@ function ApproachBlock({
     <article
       id={`approach-${index}`}
       className={`scroll-mt-24 rounded-xl overflow-hidden shadow-md border-2 ${
-        isOptimal ? "border-emerald-500 dark:border-emerald-500/50" : "border-border"
+        isOptimal ? "border-default dark:border-default/50" : "border-border"
       }`}
     >
       {/* Header bar — the dominant visual divider. Dark for brute
@@ -1152,8 +1152,8 @@ function ApproachBlock({
       <div
         className={`px-5 py-4 flex flex-wrap items-center gap-x-5 gap-y-2 ${
           isOptimal
-            ? "bg-gradient-to-r from-emerald-600 to-emerald-700 text-white"
-            : "bg-gradient-to-r from-slate-700 to-slate-800 text-white"
+            ? "bg-surface border border-default text-white"
+            : "bg-surface border border-default text-white"
         }`}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -1169,7 +1169,7 @@ function ApproachBlock({
           <div className="min-w-0">
             <p
               className={`text-xs font-bold uppercase tracking-widest mb-0.5 ${
-                isOptimal ? "text-emerald-200 dark:text-emerald-300" : "text-muted-foreground"
+                isOptimal ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"
               }`}
             >
               Approach {index} of {total}
@@ -1200,7 +1200,7 @@ function ApproachBlock({
         <div
           className={`px-5 py-2 text-[13.5px] border-b-2 flex items-start gap-2 ${
             isOptimal
-              ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
+              ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400 border-default dark:border-default/20"
               : "bg-surface text-foreground border-border"
           }`}
         >
@@ -1225,8 +1225,8 @@ function ApproachBlock({
             We only render the block when hints exist — problems
             without hints get straight to "The idea" as before. */}
         {approach.hints && approach.hints.length > 0 && (
-          <div className="rounded-lg border border-amber-300 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-500/10 overflow-hidden">
-            <div className="px-4 py-2 bg-amber-100/80 dark:bg-amber-500/20 border-b border-amber-200 dark:border-amber-500/20 flex items-center gap-2">
+          <div className="rounded-lg border border-default dark:border-default/30 bg-amber-50/70 dark:bg-amber-500/10 overflow-hidden">
+            <div className="px-4 py-2 bg-amber-100/80 dark:bg-amber-500/20 border-b border-default dark:border-default/20 flex items-center gap-2">
               <HelpCircle className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400" />
               <span className="text-xs font-black uppercase tracking-widest text-amber-900 dark:text-amber-400">
                 Stuck? Progressive hints
@@ -1239,7 +1239,7 @@ function ApproachBlock({
               {approach.hints.map((hint, hi) => (
                 <details
                   key={hi}
-                  className="group rounded-md border border-amber-200 dark:border-amber-500/20 bg-background overflow-hidden"
+                  className="group rounded-md border border-default dark:border-default/20 bg-background overflow-hidden"
                 >
                   <summary className="cursor-pointer list-none px-3 py-2 flex items-center gap-2 hover:bg-amber-50 dark:bg-amber-500/10 transition-colors">
                     <span className="inline-flex items-center justify-center h-5 w-5 rounded bg-amber-500 dark:bg-amber-800 text-white text-[11px] font-black shrink-0">
@@ -1256,7 +1256,7 @@ function ApproachBlock({
                     </span>
                     <ChevronDown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 transition-transform duration-150 group-open:rotate-180" />
                   </summary>
-                  <p className="px-3 pb-3 pt-1 text-[13.5px] leading-[1.65] text-foreground border-t border-amber-100 dark:border-amber-500/20">
+                  <p className="px-3 pb-3 pt-1 text-[13.5px] leading-[1.65] text-foreground border-t border-default dark:border-default/20">
                     {hint}
                   </p>
                 </details>
@@ -1326,7 +1326,7 @@ function ApproachBlock({
           >
             <summary className="cursor-pointer list-none px-4 py-2.5 flex items-center justify-between gap-3 bg-muted/50 hover:bg-muted/80 border-b border-border transition-colors">
               <span className="text-[13.5px] font-black text-foreground flex items-center gap-2">
-                <Brain className="h-4 w-4 text-blue-500 dark:text-blue-400" />
+                <Brain className="h-4 w-4 text-primary dark:text-primary" />
                 Why it works · why these complexities
               </span>
               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />
@@ -1339,14 +1339,14 @@ function ApproachBlock({
               )}
               {approach.complexityReasoning && (
                 <p className="text-[14px] text-foreground leading-[1.7] border-t border-border pt-3">
-                  <span className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-400 mr-1.5">
+                  <span className="text-xs font-bold uppercase tracking-widest text-primary dark:text-primary mr-1.5">
                     Complexity
                   </span>
-                  <code className="font-mono font-bold text-blue-900 dark:text-blue-200 bg-blue-100 dark:bg-blue-950/60 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800/50">
+                  <code className="font-mono font-bold text-primary dark:text-primary bg-blue-100 dark:bg-blue-950/60 px-1.5 py-0.5 rounded border border-default dark:border-default/50">
                     {approach.complexity.time}
                   </code>{" "}
                   time,{" "}
-                  <code className="font-mono font-bold text-blue-900 dark:text-blue-200 bg-blue-100 dark:bg-blue-950/60 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800/50">
+                  <code className="font-mono font-bold text-primary dark:text-primary bg-blue-100 dark:bg-blue-950/60 px-1.5 py-0.5 rounded border border-default dark:border-default/50">
                     {approach.complexity.space}
                   </code>{" "}
                   space — {approach.complexityReasoning}
@@ -1431,7 +1431,7 @@ function ComplexityPill({
     <span
       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-mono text-[13.5px] font-bold border-2 ${
         isOptimal
-          ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30"
+          ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 border-default dark:border-default/30"
           : "bg-surface dark:bg-surface/40 text-muted-foreground border-slate-200 dark:border-slate-600"
       }`}
     >
@@ -1459,7 +1459,7 @@ function IntentBlock({
   text: string;
 }) {
   const toneClasses = {
-    blue: "text-blue-600 dark:text-blue-400 dark:text-blue-500",
+    blue: "text-primary dark:text-primary dark:text-primary",
     rose: "text-rose-600 dark:text-rose-400 dark:text-rose-500",
     emerald: "text-emerald-600 dark:text-emerald-400 dark:text-emerald-500",
   };

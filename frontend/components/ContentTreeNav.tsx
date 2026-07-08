@@ -295,7 +295,7 @@ export default function ContentTreeNav({
         <div className="flex items-center justify-between gap-2 px-4 py-3">
           <Link
             href={`/${domainSlug}`}
-            className="flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-blue-400 dark:text-blue-300 transition-colors truncate"
+            className="flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-primary dark:text-primary transition-colors truncate"
           >
             <ArrowLeft className="h-4 w-4 shrink-0" />
             {!collapsed && <span className="truncate">Back to roadmap</span>}
@@ -319,7 +319,7 @@ export default function ContentTreeNav({
               <span className="rounded-md border border-border dark:bg-surface px-2 py-1 font-bold text-muted-foreground">
                 {totalStacks} modules
               </span>
-              <span className="rounded-md border border-blue-700 dark:border-blue-700/50 bg-blue-900 dark:bg-blue-800/40 px-2 py-1 font-bold text-blue-300 dark:text-blue-300">
+              <span className="rounded-md border border-default dark:border-default/50 bg-blue-900 dark:bg-blue-800/40 px-2 py-1 font-bold text-primary dark:text-primary">
                 {totalQuestions} questions
               </span>
             </div>
@@ -340,7 +340,7 @@ export default function ContentTreeNav({
                   "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
                   stack.slug === activeStackSlug
                     ? "bg-blue-600 text-white"
-                    : "dark:bg-surface text-muted-foreground hover:bg-blue-900 dark:bg-blue-800/50 hover:text-blue-400 dark:text-blue-300"
+                    : "dark:bg-surface text-muted-foreground hover:bg-blue-900 dark:bg-blue-800/50 hover:text-primary dark:text-primary"
                 )}
               >
                 <BookOpen className="h-4 w-4" />
@@ -365,7 +365,7 @@ export default function ContentTreeNav({
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all",
                     hasCatActive
-                      ? "bg-gradient-to-r from-amber-900/70 to-amber-800/40 text-amber-200 dark:text-amber-300 ring-1 ring-amber-500/50 shadow-sm"
+                      ? "bg-surface border border-default text-amber-700 dark:text-amber-300 ring-1 ring-ring/50 shadow-sm"
                       : "dark:bg-surface text-muted-foreground hover:bg-slate-700 dark:bg-slate-800/80 hover:text-white border border-border/50"
                   )}
                 >
@@ -379,14 +379,14 @@ export default function ContentTreeNav({
                   <span className="flex-1 text-left text-[14px] font-extrabold leading-snug truncate tracking-tight">{cat.name}</span>
                   <span className={cn(
                     "text-[11px] font-bold px-1.5 py-0.5 rounded shrink-0",
-                    hasCatActive ? "bg-amber-800 dark:bg-amber-800/60 text-amber-300 dark:text-amber-300" : "bg-slate-700 dark:bg-slate-800 text-muted-foreground"
+                    hasCatActive ? "bg-amber-800 dark:bg-amber-800/60 text-amber-700 dark:text-amber-300" : "bg-slate-700 dark:bg-slate-800 text-muted-foreground"
                   )}>
                     {cat.stacks.length}
                   </span>
                   <ChevronRight className={cn(
                     "h-4 w-4 shrink-0 transition-transform duration-200",
                     isCatOpen && "rotate-90",
-                    hasCatActive ? "text-amber-400 dark:text-amber-300" : "text-muted-foreground"
+                    hasCatActive ? "text-amber-600 dark:text-amber-300" : "text-muted-foreground"
                   )} />
                 </button>
 
@@ -405,7 +405,7 @@ export default function ContentTreeNav({
                           <div className={cn(
                             "flex items-center rounded-lg transition-all",
                             isActiveStack
-                              ? "bg-blue-600 dark:bg-blue-800/25 ring-1 ring-blue-500/50"
+                              ? "bg-blue-600 dark:bg-blue-800/25 ring-1 ring-ring/50"
                               : "hover:bg-slate-700 dark:bg-slate-800/60"
                           )}>
                             <button
@@ -419,23 +419,23 @@ export default function ContentTreeNav({
                               )} />
                               <span className={cn(
                                 "flex-1 text-[13px] leading-tight truncate",
-                                isActiveStack ? "font-bold text-blue-100 dark:text-blue-300" : "font-semibold text-muted-foreground hover:text-muted-foreground"
+                                isActiveStack ? "font-bold text-primary dark:text-primary" : "font-semibold text-muted-foreground hover:text-muted-foreground"
                               )}>
                                 {stack.name}
                               </span>
                               <span className={cn(
                                 "text-[11px] shrink-0 mr-1 px-1.5 py-0.5 rounded font-bold",
-                                isActiveStack ? "bg-blue-700 dark:bg-blue-800/60 text-blue-200 dark:text-blue-300" : "text-muted-foreground"
+                                isActiveStack ? "bg-blue-700 dark:bg-blue-800/60 text-primary dark:text-primary" : "text-muted-foreground"
                               )}>
                                 {stack.questionCount}
                               </span>
                               {isLoadingStack ? (
-                                <Loader2 className="h-3 w-3 text-blue-500 dark:text-blue-400 animate-spin shrink-0" />
+                                <Loader2 className="h-3 w-3 text-primary dark:text-primary animate-spin shrink-0" />
                               ) : (
                                 <ChevronRight className={cn(
                                   "h-3.5 w-3.5 transition-transform duration-200 shrink-0",
                                   isExpStack && "rotate-90",
-                                  isActiveStack ? "text-blue-400 dark:text-blue-300" : "text-muted-foreground"
+                                  isActiveStack ? "text-primary dark:text-primary" : "text-muted-foreground"
                                 )} />
                               )}
                             </button>
@@ -465,11 +465,11 @@ export default function ContentTreeNav({
                                         className={cn(
                                           "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-[12px] leading-snug transition-all",
                                           isActiveQ
-                                            ? "bg-emerald-600 dark:bg-emerald-800 text-white font-bold shadow-sm ring-1 ring-emerald-500"
+                                            ? "bg-emerald-600 dark:bg-emerald-800 text-white font-bold shadow-sm ring-1 ring-ring"
                                             : "text-muted-foreground hover:bg-slate-700 dark:bg-slate-800/60 hover:text-muted-foreground"
                                         )}
                                       >
-                                        <span className={cn("mt-0.5 shrink-0", isActiveQ ? "text-emerald-200 dark:text-emerald-300" : "text-muted-foreground")}>
+                                        <span className={cn("mt-0.5 shrink-0", isActiveQ ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground")}>
                                           {isActiveQ ? <CheckCircle2 className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
                                         </span>
                                         <span className="line-clamp-2 leading-snug">{q.title}</span>
@@ -496,15 +496,15 @@ export default function ContentTreeNav({
                                         className={cn(
                                           "w-full flex items-center gap-1.5 px-2 py-2 rounded-md text-[12.5px] transition-colors",
                                           hasActiveQ
-                                            ? "bg-amber-900 dark:bg-amber-800/40 text-amber-300 dark:text-amber-300 font-bold ring-1 ring-amber-700/40"
+                                            ? "bg-amber-900 dark:bg-amber-800/40 text-amber-700 dark:text-amber-300 font-bold ring-1 ring-ring/40"
                                             : "text-muted-foreground hover:bg-slate-700 dark:bg-slate-800/60 font-semibold hover:text-muted-foreground"
                                         )}
                                       >
                                         {isExpSubcat
-                                          ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-400 dark:text-amber-300" />
+                                          ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-300" />
                                           : <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                                         <span className="flex-1 text-left truncate">{sc.name}</span>
-                                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-900 dark:bg-amber-800/40 text-amber-400 dark:text-amber-300 shrink-0">
+                                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-900 dark:bg-amber-800/40 text-amber-600 dark:text-amber-300 shrink-0">
                                           {sc.questionCount}
                                         </span>
                                         <ChevronRight
@@ -533,11 +533,11 @@ export default function ContentTreeNav({
                                                 className={cn(
                                                   "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-[12px] leading-snug transition-all",
                                                   isActiveQ
-                                                    ? "bg-emerald-600 dark:bg-emerald-800 text-white font-bold shadow-sm ring-1 ring-emerald-500"
+                                                    ? "bg-emerald-600 dark:bg-emerald-800 text-white font-bold shadow-sm ring-1 ring-ring"
                                                     : "text-muted-foreground hover:bg-slate-700 dark:bg-slate-800/60 hover:text-muted-foreground"
                                                 )}
                                               >
-                                                <span className={cn("mt-0.5 shrink-0", isActiveQ ? "text-emerald-200 dark:text-emerald-300" : "text-muted-foreground")}>
+                                                <span className={cn("mt-0.5 shrink-0", isActiveQ ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground")}>
                                                   {isActiveQ ? <CheckCircle2 className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
                                                 </span>
                                                 <span className="line-clamp-2 leading-snug">{q.title}</span>
@@ -605,7 +605,7 @@ export default function ContentTreeNav({
             className="absolute right-0 top-0 h-full w-3 z-50 cursor-col-resize group/handle flex items-center justify-center"
           >
             {/* Hover highlight line */}
-            <div className="absolute inset-y-0 right-0 w-px bg-blue-500 dark:bg-blue-800/0 group-hover/handle:bg-blue-50 dark:bg-blue-950/200/50 transition-colors duration-150" />
+            <div className="absolute inset-y-0 right-0 w-px bg-blue-500 dark:bg-blue-800/0 group-hover/handle:bg-blue-50 dark:bg-blue-950/50 transition-colors duration-150" />
             {/* Arrow badge — always faintly visible, bright on hover */}
             <div className="absolute top-1/2 -translate-y-1/2 right-0 translate-x-1/2
                             flex items-center gap-0.5 px-1 py-0.5 rounded-full

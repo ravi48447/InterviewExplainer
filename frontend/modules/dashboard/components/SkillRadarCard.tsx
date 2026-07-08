@@ -33,7 +33,7 @@ export function SkillRadarCard({ radar }: SkillRadarCardProps) {
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center min-h-[220px]">
           <Brain className="h-8 w-8 text-muted-foreground mb-3" aria-hidden="true" />
-          <p className="text-xs text-secondary text-center">Complete questions across stacks to build your skill map.</p>
+          <p className="text-xs text-muted-foreground text-center">Complete questions across stacks to build your skill map.</p>
         </div>
       )}
     </Card>

@@ -30,7 +30,7 @@ export default async function OGImage({
   const title = slugToTitle(questionSlug);
   const difficulty = "";
 
-  const diffColor = "#6366f1";
+  const diffColor = "#3B82F6";
   const domainLabel = slugToTitle(domainSlug);
   const stackLabel = slugToTitle(stackSlug);
 
@@ -54,7 +54,7 @@ export default async function OGImage({
             style={{
               width: 44,
               height: 44,
-              background: "linear-gradient(135deg, #3b82f6, #6366f1)",
+              background: "linear-gradient(135deg, #3b82f6, #3B82F6)",
               borderRadius: 10,
               display: "flex",
               alignItems: "center",
@@ -142,7 +142,7 @@ export default async function OGImage({
           <span style={{ fontSize: 16, color: "#64748b" }}>interviewexplainer.com</span>
           <span
             style={{
-              background: "linear-gradient(135deg, #3b82f6, #6366f1)",
+              background: "linear-gradient(135deg, #3b82f6, #3B82F6)",
               color: "white",
               padding: "10px 24px",
               borderRadius: 10,

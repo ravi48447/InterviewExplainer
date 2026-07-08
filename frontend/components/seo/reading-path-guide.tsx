@@ -17,13 +17,13 @@ export function ModuleReadingPathGuide({
     <section
       id="reading-path"
       aria-labelledby="reading-path-heading"
-      className="mb-8 scroll-mt-24 rounded-2xl border border-border/90 bg-gradient-to-br from-white via-slate-50/80 dark:via-slate-950/40 to-blue-50/30 dark:to-blue-950/40 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-5 sm:p-6 shadow-sm ring-1 ring-slate-900/[0.03]"
+      className="mb-8 scroll-mt-24 rounded-2xl border border-border/90 bg-gradient-to-br from-white via-slate-50/80 dark:via-slate-950/40  dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-5 sm:p-6 shadow-sm ring-1 ring-slate-900/[0.03]"
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <p
             id="reading-path-heading"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400 mb-2"
+            className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary dark:text-primary mb-2"
           >
             Suggested path
           </p>
@@ -37,7 +37,7 @@ export function ModuleReadingPathGuide({
           </p>
           <ol className="mt-4 space-y-2.5 text-sm text-foreground">
             <li className="flex gap-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-600 dark:bg-indigo-800 text-[11px] font-bold text-white">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-600 dark:bg-blue-800 text-[11px] font-bold text-white">
                 1
               </span>
               <span className="pt-0.5 leading-snug">
@@ -63,7 +63,7 @@ export function ModuleReadingPathGuide({
                 Jump to any topic in the{" "}
                 <a
                   href="#all-questions"
-                  className="font-semibold text-indigo-700 dark:text-indigo-400 underline decoration-indigo-200 underline-offset-2 hover:text-indigo-900 dark:text-indigo-400"
+                  className="font-semibold text-primary dark:text-primary underline decoration-blue-200 underline-offset-2 hover:text-primary dark:text-primary"
                 >
                   full catalog
                 </a>{" "}
@@ -75,21 +75,21 @@ export function ModuleReadingPathGuide({
         <div className="flex flex-col gap-2 shrink-0 w-full sm:w-auto sm:min-w-[200px]">
           <Link
             href={`/${seoSlug}/${firstQuestionSlug}`}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 dark:bg-indigo-800 px-5 py-3 text-sm font-bold text-white shadow-md shadow-indigo-900/15 hover:bg-indigo-700 dark:bg-indigo-800 transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 dark:bg-blue-800 px-5 py-3 text-sm font-bold text-foreground shadow-md shadow-sm hover:bg-blue-700 dark:bg-blue-800 transition-colors"
           >
             <BookOpenCheck className="h-4 w-4 shrink-0" aria-hidden />
             Open question 1
           </Link>
           <Link
             href={`/${seoSlug}#q-${firstQuestionSlug}`}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-bold text-foreground hover:border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/60 transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-bold text-foreground hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 transition-colors"
           >
             <ListOrdered className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
             Jump to Q1 in list
           </Link>
           <a
             href="#all-questions"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-transparent px-4 py-2 text-xs font-semibold text-indigo-700 dark:text-indigo-400 hover:bg-background/80 transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-transparent px-4 py-2 text-xs font-semibold text-primary dark:text-primary hover:bg-background/80 transition-colors"
           >
             <MousePointerClick className="h-3.5 w-3.5 shrink-0" aria-hidden />
             Scroll to full catalog
@@ -116,13 +116,13 @@ export function PillarReadingPathGuide({
     <section
       id="reading-path"
       aria-labelledby="pillar-reading-path-heading"
-      className="mb-8 scroll-mt-24 rounded-2xl border border-border/90 bg-gradient-to-br from-white via-slate-50/80 dark:via-slate-950/40 to-indigo-50/25 dark:to-indigo-950/40 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-5 sm:p-6 shadow-sm ring-1 ring-slate-900/[0.03]"
+      className="mb-8 scroll-mt-24 rounded-2xl border border-border/90 bg-gradient-to-br from-white via-slate-50/80 dark:via-slate-950/40  dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-5 sm:p-6 shadow-sm ring-1 ring-slate-900/[0.03]"
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <p
             id="pillar-reading-path-heading"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400 mb-2"
+            className="text-[11px] font-bold uppercase tracking-[0.2em] text-primary dark:text-primary mb-2"
           >
             How to use this hub
           </p>
@@ -139,14 +139,14 @@ export function PillarReadingPathGuide({
         <div className="flex flex-col gap-2 shrink-0 w-full lg:w-auto">
           <Link
             href={`/${firstModuleSeoSlug}/${firstQuestionSlug}`}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 dark:bg-indigo-800 px-5 py-3 text-sm font-bold text-white shadow-md shadow-indigo-900/15 hover:bg-indigo-700 dark:bg-indigo-800 transition-colors whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 dark:bg-blue-800 px-5 py-3 text-sm font-bold text-foreground shadow-md shadow-sm hover:bg-blue-700 dark:bg-blue-800 transition-colors whitespace-nowrap"
           >
             <BookOpenCheck className="h-4 w-4 shrink-0" aria-hidden />
             Start with the first question
           </Link>
           <a
             href="#all-modules"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-bold text-foreground hover:border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/60 transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-xs font-bold text-foreground hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 transition-colors"
           >
             <ListOrdered className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
             Jump to all modules

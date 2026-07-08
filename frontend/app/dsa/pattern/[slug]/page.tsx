@@ -154,7 +154,7 @@ export default async function DSAPatternPage({
 
       {/* Problems grouped by curriculum module */}
       <section className="mb-12">
-        <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-1">
+        <p className="text-xs font-bold uppercase tracking-widest text-primary dark:text-primary mb-1">
           Where this pattern shows up
         </p>
         <h2 className="text-xl font-black text-foreground tracking-tight mb-5">
@@ -172,11 +172,11 @@ export default async function DSAPatternPage({
                 >
                   <Link
                     href={`/dsa/module/${m.moduleSlug}`}
-                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 hover:bg-violet-50/40 dark:bg-violet-500/10 transition-colors"
+                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 hover:bg-blue-50/40 dark:bg-blue-500/10 transition-colors"
                   >
-                    <span className="text-sm font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400 inline-flex items-center gap-1.5 transition-colors">
+                    <span className="text-sm font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400 inline-flex items-center gap-1.5 transition-colors">
                       {m.title}
-                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-violet-500 dark:text-violet-400" />
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400" />
                     </span>
                     <span className="text-[11px] font-semibold text-muted-foreground">
                       {modProblems.length} problem{modProblems.length === 1 ? "" : "s"}
@@ -223,7 +223,7 @@ export default async function DSAPatternPage({
               <Link
                 key={s.slug}
                 href={`/dsa/pattern/${s.slug}`}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:border-violet-300 dark:border-violet-500/30 hover:text-violet-700 dark:text-violet-400 transition-colors"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1 text-xs font-semibold text-foreground hover:border-blue-300 dark:border-blue-500/30 hover:text-blue-700 dark:text-blue-400 transition-colors"
               >
                 {toDisplayName(s.slug)}
                 <span className="text-[10px] text-muted-foreground">{s.count}</span>

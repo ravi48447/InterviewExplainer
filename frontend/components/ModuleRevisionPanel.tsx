@@ -61,10 +61,10 @@ export function ModuleRevisionPanel({
   if (!revision?.sections?.length) return null;
 
   return (
-    <div className={cn("bg-background text-foreground [&_a]:text-blue-700 dark:text-blue-400", className)}>
+    <div className={cn("bg-background text-foreground [&_a]:text-primary dark:text-primary", className)}>
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-5 py-4">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400">
+          <p className="text-[10px] font-black uppercase tracking-widest text-primary dark:text-primary">
             Revision sheet
           </p>
           <h3 className="mt-1 text-base font-black leading-tight text-foreground">

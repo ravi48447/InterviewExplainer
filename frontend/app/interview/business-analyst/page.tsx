@@ -21,7 +21,7 @@ const TOPICS = [
 
 export default function BusinessAnalystPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-amber-50/20 dark:via-amber-950/40 to-yellow-50/20 dark:to-yellow-950/40  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  to-yellow-50/20 dark:to-yellow-950/40  ">
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
         <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
           <Link href="/" className="hover:text-foreground">Home</Link>
@@ -46,7 +46,7 @@ export default function BusinessAnalystPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           {TOPICS.map(topic => (
-            <div key={topic.name} className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-background p-5 opacity-70">
+            <div key={topic.name} className="rounded-xl border border-default dark:border-default/20 bg-background p-5 opacity-70">
               <div className="text-2xl mb-3">{topic.emoji}</div>
               <h3 className="font-black text-foreground mb-2">{topic.name}</h3>
               <p className="text-xs text-muted-foreground leading-relaxed">{topic.desc}</p>
@@ -55,7 +55,7 @@ export default function BusinessAnalystPage() {
           ))}
         </div>
 
-        <Link href="/interview" className="px-4 py-2 dark:bg-surface text-white rounded-lg text-sm font-bold hover:bg-slate-700 dark:bg-slate-800 transition-colors">
+        <Link href="/interview" className="px-4 py-2 dark:bg-surface text-foreground rounded-lg text-sm font-bold hover:bg-slate-700 dark:bg-slate-800 transition-colors">
           ← Browse All Roles
         </Link>
       </div>

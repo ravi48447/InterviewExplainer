@@ -33,7 +33,7 @@ const trackIcon: Record<string, React.ReactNode> = {
 };
 
 const trackColor: Record<string, string> = {
-  frontend:           "#6366f1",
+  frontend:           "#3B82F6",
   backend:            "#0ea5e9",
   fullstack:          "#8b5cf6",
   'data-engineering': "#f59e0b",
@@ -439,7 +439,7 @@ export default function DomainsPage() {
                       <span className="px-3 py-1.5 rounded-lg bg-surface border border-border text-xs font-bold text-muted-foreground">
                         {grouped[lang].length} paths
                       </span>
-                      <ChevronDown className={cn("h-5 w-5 text-muted-foreground transition-transform duration-300", expandedLang[lang] && "rotate-180 text-primary")} />
+                      <ChevronDown className={cn("h-5 w-5 text-muted-foreground transition-transform duration-200", expandedLang[lang] && "rotate-180 text-primary")} />
                     </div>
                   </button>
 

@@ -339,13 +339,13 @@ export default async function SeoModulePage({
               {/* Hero — editorial layout, clear primary action */}
               <header className="relative mb-8 rounded-2xl border border-border/90 bg-background shadow-[0_20px_50px_-24px_rgba(15,23,42,0.18)] overflow-hidden ring-1 ring-slate-900/[0.04]">
                 <div
-                  className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-600 via-indigo-600 to-violet-600"
+                  className="absolute left-0 top-0 bottom-0 w-1 bg-surface border border-default"
                   aria-hidden
                 />
                 <div className="relative pl-4 sm:pl-5">
-                  <div className="px-4 sm:px-6 pt-7 pb-6 sm:pt-8 sm:pb-7 bg-gradient-to-br from-slate-50/90 via-white to-indigo-50/35 dark:from-slate-900/40 dark:via-background dark:to-indigo-950/20">
+                  <div className="px-4 sm:px-6 pt-7 pb-6 sm:pt-8 sm:pb-7 bg-gradient-to-br from-slate-50/90 via-white  dark:from-slate-900/40 dark:via-background dark:">
                     <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary dark:text-primary">
                         {entry.pillarName}
                       </span>
                       <span className="hidden sm:inline text-muted-foreground">·</span>
@@ -371,7 +371,7 @@ export default async function SeoModulePage({
                   <div className="px-4 sm:px-6 py-4 bg-background/90 border-t border-slate-100 dark:border-slate-800/60 flex flex-col gap-4 sm:flex-row sm:items-center sm:flex-wrap">
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
                       <div className="flex items-center gap-2">
-                        <BookOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                        <BookOpen className="h-4 w-4 text-primary dark:text-primary shrink-0" />
                         <span className="font-bold text-foreground tabular-nums">
                           {totalQ}
                         </span>
@@ -379,7 +379,7 @@ export default async function SeoModulePage({
                       </div>
                       <div className="h-5 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block" />
                       <div className="flex items-center gap-2">
-                        <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                        <Layers className="h-4 w-4 text-primary dark:text-primary shrink-0" />
                         <span className="font-bold text-foreground tabular-nums">
                           {topicsWithQ.length}
                         </span>
@@ -390,11 +390,11 @@ export default async function SeoModulePage({
                         className="flex items-center gap-1.5 text-xs"
                         title={`${diffMix.easy} easy · ${diffMix.medium} medium · ${diffMix.hard} hard`}
                       >
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 font-bold border border-emerald-100 dark:border-emerald-500/20/80">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 font-bold border border-default dark:border-default/20/80">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-800" />
                           {diffMix.easy}
                         </span>
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-400 font-bold border border-amber-100 dark:border-amber-500/20/80">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-400 font-bold border border-default dark:border-default/20/80">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-800" />
                           {diffMix.medium}
                         </span>
@@ -411,14 +411,14 @@ export default async function SeoModulePage({
                       <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto w-full sm:w-auto">
                         <Link
                           href={`/${entry.seoSlug}/${firstQ.slug}`}
-                          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 dark:bg-indigo-800 text-white font-bold text-sm shadow-md shadow-indigo-900/20 hover:bg-indigo-700 dark:bg-indigo-800 transition-colors"
+                          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 dark:bg-blue-800 text-foreground font-bold text-sm shadow-md shadow-sm hover:bg-blue-700 dark:bg-blue-800 transition-colors"
                         >
                           <BookOpenCheck className="h-4 w-4 shrink-0" />
                           Open question 1
                         </Link>
                         <Link
                           href={`/${entry.seoSlug}#reading-path`}
-                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-background text-foreground font-semibold text-sm hover:border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/50 transition-colors"
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-background text-foreground font-semibold text-sm hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/50 transition-colors"
                         >
                           <ListOrdered className="h-4 w-4 text-muted-foreground shrink-0" />
                           How to read this module
@@ -449,7 +449,7 @@ export default async function SeoModulePage({
                   className="mb-7 rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
                 >
                   <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background flex items-center gap-2">
-                    <BookOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    <BookOpen className="h-4 w-4 text-primary dark:text-primary" />
                     <h2
                       id="domain-intro-heading"
                       className="text-[13px] font-black uppercase tracking-widest text-foreground"
@@ -478,7 +478,7 @@ export default async function SeoModulePage({
                 </span>
                 <span className="text-muted-foreground">·</span>
                 <span className="inline-flex items-center gap-1.5">
-                  <GraduationCap className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
+                  <GraduationCap className="h-3.5 w-3.5 text-primary dark:text-primary" />
                   <span>Free · No sign-up required</span>
                 </span>
               </div>
@@ -496,7 +496,7 @@ export default async function SeoModulePage({
                     <Link
                       key={p.pillarSlug}
                       href={`/${p.pillarSlug}`}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 text-[12px] font-bold hover:bg-indigo-100 dark:bg-indigo-950/20 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary text-[12px] font-bold hover:bg-blue-100 dark:bg-blue-950/20 transition-colors"
                     >
                       <Sparkles className="h-3 w-3" />
                       {p.title.replace(/\s+Interview Prep.*$/, "")}
@@ -514,7 +514,7 @@ export default async function SeoModulePage({
                   aria-labelledby="top-asked-heading"
                   className="mb-8 rounded-2xl border border-border/90 bg-background shadow-md shadow-slate-200/30 overflow-hidden ring-1 ring-slate-900/[0.03]"
                 >
-                  <div className="px-5 py-3.5 bg-gradient-to-r from-amber-50/90 dark:from-amber-950/40 via-orange-50/50 dark:via-orange-950/40 to-white border-b border-amber-100 dark:border-amber-500/20/80 flex items-center gap-2  ">
+                  <div className="px-5 py-3.5 bg-surface via-orange-50/50 dark:via-orange-950/40 to-white border-b border-default dark:border-default/20/80 flex items-center gap-2  ">
                     <Flame className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     <h2
                       id="top-asked-heading"
@@ -540,11 +540,11 @@ export default async function SeoModulePage({
                             <span className="block text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-0.5">
                               {t.topic}
                             </span>
-                            <span className="block text-sm font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors leading-snug">
+                            <span className="block text-sm font-bold text-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors leading-snug">
                               {t.question.title}
                             </span>
                           </span>
-                          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+                          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
                         </Link>
                       </li>
                     ))}
@@ -557,7 +557,7 @@ export default async function SeoModulePage({
               <section id="all-questions" className="mb-10 scroll-mt-28">
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400 mb-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary dark:text-primary mb-1.5">
                       Full catalog
                     </p>
                     <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
@@ -600,7 +600,7 @@ export default async function SeoModulePage({
                   className="mb-8 rounded-xl border border-border bg-background shadow-sm overflow-hidden"
                 >
                   <div className="px-5 py-3 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-b border-border flex items-center gap-2">
-                    <HelpCircle className="h-4 w-4 text-blue-500 dark:text-blue-400" />
+                    <HelpCircle className="h-4 w-4 text-primary dark:text-primary" />
                     <h2
                       id="faq-heading"
                       className="text-sm font-black text-foreground tracking-tight"
@@ -616,7 +616,7 @@ export default async function SeoModulePage({
                         open={idx === 0}
                       >
                         <summary className="flex items-start gap-3 cursor-pointer list-none">
-                          <span className="mt-0.5 shrink-0 w-5 h-5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-black text-[10px] flex items-center justify-center group-open:bg-blue-600 group-open:text-white transition-colors">
+                          <span className="mt-0.5 shrink-0 w-5 h-5 rounded bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary font-black text-[10px] flex items-center justify-center group-open:bg-blue-600 group-open:text-white transition-colors">
                             Q
                           </span>
                           <span className="flex-1 text-[13px] font-bold text-foreground leading-snug">
@@ -646,8 +646,8 @@ export default async function SeoModulePage({
           <aside className="hidden xl:flex w-[300px] shrink-0 flex-col gap-4 self-start sticky top-6 px-4 py-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
             {readingRail.length > 0 && (
               <div className="rounded-2xl border border-border/90 bg-background shadow-md shadow-slate-200/25 overflow-hidden ring-1 ring-slate-900/[0.03]">
-                <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-indigo-50/80 to-white dark:from-indigo-950/40 dark:to-background flex items-center gap-2">
-                  <ListOrdered className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r  to-white dark:to-background flex items-center gap-2">
+                  <ListOrdered className="h-3.5 w-3.5 text-primary dark:text-primary shrink-0" />
                   <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                     Start here (Q1–Q{Math.min(20, readingRail.length)})
                   </h3>
@@ -657,16 +657,16 @@ export default async function SeoModulePage({
                     <li key={q.slug}>
                       <Link
                         href={`/${entry.seoSlug}/${q.slug}`}
-                        className="flex items-start gap-2.5 px-4 py-2 text-left hover:bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/50 transition-colors group"
+                        className="flex items-start gap-2.5 px-4 py-2 text-left hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/50 transition-colors group"
                       >
-                        <span className="mt-0.5 flex h-6 min-w-[1.5rem] items-center justify-center rounded-md dark:bg-surface text-[10px] font-bold text-white tabular-nums group-hover:bg-indigo-600 dark:bg-indigo-800 shrink-0">
+                        <span className="mt-0.5 flex h-6 min-w-[1.5rem] items-center justify-center rounded-md dark:bg-surface text-[10px] font-bold text-white tabular-nums group-hover:bg-blue-600 dark:bg-blue-800 shrink-0">
                           {i + 1}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide truncate">
                             {q.topicName}
                           </span>
-                          <span className="block text-[12px] font-semibold text-foreground leading-snug group-hover:text-indigo-800 dark:text-indigo-400 line-clamp-2">
+                          <span className="block text-[12px] font-semibold text-foreground leading-snug group-hover:text-primary dark:group-hover:text-primary line-clamp-2">
                             {q.title}
                           </span>
                         </span>
@@ -678,7 +678,7 @@ export default async function SeoModulePage({
                   <div className="px-4 py-2 border-t border-slate-100 dark:border-slate-800/60 bg-surface/60">
                     <a
                       href="#all-questions"
-                      className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400 hover:text-indigo-900 dark:text-indigo-400"
+                      className="text-[11px] font-bold text-primary dark:text-primary hover:text-primary dark:text-primary"
                     >
                       + {flatQuestions.length - 20} more in the catalog ↓
                     </a>
@@ -734,7 +734,7 @@ export default async function SeoModulePage({
                     <li key={sc.slug}>
                       <a
                         href={`#${sc.slug}`}
-                        className="flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground hover:text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:bg-blue-500/10 transition-colors"
+                        className="flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground hover:text-primary dark:text-primary hover:bg-blue-50 dark:bg-blue-500/10 transition-colors"
                       >
                         <span className="text-[10px] font-black text-muted-foreground w-5 shrink-0">
                           {String(idx + 1).padStart(2, "0")}
@@ -742,7 +742,7 @@ export default async function SeoModulePage({
                         <span className="flex-1 truncate font-semibold">
                           {sc.name}
                         </span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shrink-0">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary shrink-0">
                           {sc.questions.length}
                         </span>
                       </a>
@@ -756,18 +756,18 @@ export default async function SeoModulePage({
             {pillar && (
               <Link
                 href={`/${pillar.pillarSlug}`}
-                className="group rounded-xl border border-indigo-100 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 dark:from-indigo-950/40 to-white p-4 hover:border-indigo-300 dark:border-indigo-700 transition-colors  "
+                className="group rounded-xl border border-default dark:border-default/20 bg-surface to-white p-4 hover:border-default dark:border-default transition-colors  "
               >
-                <div className="text-[10px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-primary dark:text-primary mb-1">
                   Part of
                 </div>
-                <div className="text-sm font-black text-foreground group-hover:text-indigo-700 dark:text-indigo-400 transition-colors leading-snug">
+                <div className="text-sm font-black text-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors leading-snug">
                   {pillar.title.replace(/\s+Interview Prep.*$/, "")}
                 </div>
                 <div className="mt-1 text-[11px] text-muted-foreground leading-snug line-clamp-2">
                   {pillar.tagline}
                 </div>
-                <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-primary dark:text-primary">
                   Open category
                   <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
                 </div>

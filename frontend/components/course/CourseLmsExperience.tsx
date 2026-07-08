@@ -191,11 +191,11 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0f1014] text-muted-foreground">
+      <div className="min-h-screen bg-[#0f1014] text-slate-300">
         <div className="w-full min-w-0 space-y-6 px-5 py-12">
-          <Skeleton className="h-5 w-48 bg-zinc-800 dark:bg-zinc-800/80" />
-          <Skeleton className="h-36 w-full rounded-3xl bg-zinc-800 dark:bg-zinc-800/60" />
-          <Skeleton className="h-56 w-full rounded-3xl bg-zinc-800 dark:bg-zinc-800/40" />
+          <Skeleton className="h-5 w-48 bg-zinc-800/80" />
+          <Skeleton className="h-36 w-full rounded-3xl bg-zinc-800/60" />
+          <Skeleton className="h-56 w-full rounded-3xl bg-zinc-800/40" />
         </div>
       </div>
     );
@@ -203,7 +203,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
 
   if (!domain) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-zinc-500 dark:text-zinc-400">
+      <div className="min-h-screen flex items-center justify-center text-zinc-400">
         Course not found.
       </div>
     );
@@ -214,7 +214,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
   const estHours = Math.round(estMinutes / 60);
 
   return (
-    <div className="relative min-h-screen overflow-x-clip text-muted-foreground selection:bg-background/20">
+    <div className="relative min-h-screen overflow-x-clip text-slate-300 selection:bg-background/20">
       {/* ── FIXED PAGE BACKGROUND ── */}
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden>
         <div className="absolute inset-0 bg-[#f4f5f7] " />
@@ -223,7 +223,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
       {/* ════════════════════════════════════════════════
           HERO — dark with grid
       ════════════════════════════════════════════════ */}
-      <header className="relative overflow-hidden bg-[#0f1014] border-b border-white/[0.08] text-white">
+      <header className="dark relative overflow-hidden bg-[#0f1014] border-b border-white/[0.08] text-foreground">
         {/* fine square grid */}
         <div className="pointer-events-none absolute inset-0" style={BG_DARK_HERO_GRID} aria-hidden />
         {/* soft radial centre-glow so grid fades to dark at edges */}
@@ -238,28 +238,28 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
         <div className="relative w-full min-w-0 px-4 pb-14 pt-6 sm:px-8 sm:pb-16 sm:pt-8 lg:px-12">
 
           {/* Breadcrumb */}
-          <nav className="mb-5 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
-            <Link href="/" className="transition-colors hover:text-muted-foreground">Home</Link>
-            <ChevronRight className="h-3 w-3 text-zinc-700 dark:text-zinc-400" />
-            <Link href="/domains" className="transition-colors hover:text-muted-foreground">Paths</Link>
-            <ChevronRight className="h-3 w-3 text-zinc-700 dark:text-zinc-400" />
-            <span className="text-muted-foreground">{displayTitle}</span>
+          <nav className="mb-5 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-zinc-400">
+            <Link href="/" className="transition-colors hover:text-slate-300">Home</Link>
+            <ChevronRight className="h-3 w-3 text-zinc-400" />
+            <Link href="/domains" className="transition-colors hover:text-slate-300">Paths</Link>
+            <ChevronRight className="h-3 w-3 text-zinc-400" />
+            <span className="text-slate-300">{displayTitle}</span>
           </nav>
 
           {/* Trust bar */}
-          <div className="mb-8 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-medium tracking-wide text-zinc-500 dark:text-zinc-400">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500 dark:border-emerald-500/50 dark:border-emerald-700/20 bg-emerald-500 dark:bg-emerald-800/10 px-3 py-1 text-white dark:text-emerald-300">
+          <div className="mb-8 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] font-medium tracking-wide text-zinc-400">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-emerald-400">
               <span className="relative flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 dark:bg-emerald-800 opacity-75" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 dark:bg-emerald-800" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
               </span>
               Live curriculum
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500 dark:border-amber-700/20 bg-amber-500 dark:bg-amber-800/10 px-3 py-1 text-amber-950 dark:text-amber-300/90">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-amber-400">
               <Award className="h-3 w-3" />
               Free to browse
             </span>
-            <span className="rounded-full border border-white/[0.08] bg-background/[0.04] px-3 py-1 text-zinc-500 dark:text-zinc-400">
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1 text-zinc-400">
               Progress tracked with account
             </span>
           </div>
@@ -271,18 +271,18 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
             <div className="min-w-0">
 
               {/* Kicker pill */}
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-400 dark:border-amber-700/25 bg-amber-400 dark:bg-amber-800/10 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-950 dark:text-amber-300/90">
-                <Sparkles className="h-3 w-3 text-amber-400 dark:text-amber-300" />
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-400 bg-amber-500/10 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-400">
+                <Sparkles className="h-3 w-3 text-amber-400" />
                 {copy.kicker}
               </div>
 
               {/* Language icon + headline row */}
               <div className="flex items-start gap-4">
                 <div className="relative hidden shrink-0 sm:block">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.1] bg-background/[0.06] p-2.5 ring-1 ring-inset ring-white/[0.06]">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.1] bg-white/[0.06] p-2.5 ring-1 ring-inset ring-white/[0.06]">
                     <TechIcon name={langIcon} className="h-10 w-10" />
                   </div>
-                  <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-[#0f1014] bg-emerald-400 dark:bg-emerald-800" />
+                  <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-[#0f1014] bg-emerald-400" />
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -290,7 +290,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                     {displayTitle}
                   </h1>
 
-                  <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
+                  <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-slate-300">
                     {copy.heroSub}
                   </p>
                 </div>
@@ -301,40 +301,40 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                 <div className="flex items-center gap-1.5">
                   <div className="flex">
                     {[1,2,3,4].map(i => (
-                      <Star key={i} className="h-3.5 w-3.5 fill-amber-400 text-amber-400 dark:text-amber-300" />
+                      <Star key={i} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                     ))}
-                    <Star className="h-3.5 w-3.5 fill-amber-400/40 text-amber-400 dark:text-amber-300/60" />
+                    <Star className="h-3.5 w-3.5 fill-amber-400/40 text-amber-400/60" />
                   </div>
-                  <span className="text-sm font-bold text-amber-400 dark:text-amber-300">4.8</span>
-                  <span className="text-[11px] text-zinc-600 dark:text-zinc-400">· 2,400+ learners</span>
+                  <span className="text-sm font-bold text-amber-400">4.8</span>
+                  <span className="text-[11px] text-zinc-400">· 2,400+ learners</span>
                 </div>
-                <span className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  <Users className="h-3.5 w-3.5 text-zinc-600 dark:text-zinc-400" />
+                <span className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+                  <Users className="h-3.5 w-3.5 text-zinc-400" />
                   12,500 enrolled
                 </span>
-                <span className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  <Clock className="h-3.5 w-3.5 text-zinc-600 dark:text-zinc-400" />
+                <span className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+                  <Clock className="h-3.5 w-3.5 text-zinc-400" />
                   ~{estHours}h content
                 </span>
-                <span className="text-[11px] text-zinc-600 dark:text-zinc-400">Updated Apr 2025</span>
+                <span className="text-[11px] text-zinc-400">Updated Apr 2025</span>
               </div>
 
               {/* Tag pills */}
               <div className="mt-4 flex flex-wrap gap-2">
                 {domain.language && (
-                  <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-background/[0.06] px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                  <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-slate-300">
                     {domain.language}
                   </span>
                 )}
                 {domain.track && (
-                  <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-background/[0.06] px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                  <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-slate-300">
                     {domain.track}
                   </span>
                 )}
-                <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-background/[0.06] px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                <span className="inline-flex items-center rounded-md border border-white/[0.1] bg-white/[0.06] px-2.5 py-1 text-[11px] font-semibold text-slate-300">
                   {levelMeta.label} · {levelMeta.range}
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500 dark:border-emerald-500/50 dark:border-emerald-700/20 bg-emerald-500 dark:bg-emerald-800/10 px-2.5 py-1 text-[11px] font-semibold text-white dark:text-emerald-300">
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400">
                   <BadgeCheck className="h-3 w-3" />
                   Speakable Answers
                 </span>
@@ -345,7 +345,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                 {firstStackHref && (
                   <Link
                     href={firstStackHref}
-                    className="group inline-flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-50 dark:via-amber-950/400 to-orange-50 dark:to-orange-950/400 px-7 py-3.5 text-[14px] font-black text-zinc-950 dark:text-zinc-400 shadow-[0_6px_24px_-6px_rgba(245,158,11,0.55)] transition-all hover:shadow-[0_10px_36px_-8px_rgba(245,158,11,0.65)] hover:brightness-105 active:scale-[0.98]"
+                    className="group inline-flex items-center gap-2.5 rounded-xl bg-primary px-7 py-3.5 text-[14px] font-black text-white shadow-[0_6px_24px_-6px_rgba(37,99,235,0.4)] transition-all hover:shadow-[0_10px_36px_-8px_rgba(37,99,235,0.5)] hover:brightness-105 active:scale-[0.98]"
                   >
                     <Play className="h-4 w-4 fill-current transition-transform group-hover:scale-110" />
                     Start learning free
@@ -354,37 +354,37 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                 )}
                 <a
                   href="#interview-road"
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/[0.14] bg-background/[0.06] px-5 py-3.5 text-[14px] font-semibold text-white transition-all hover:border-white/[0.24] hover:bg-background/[0.1]"
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/[0.14] bg-white/[0.06] px-5 py-3.5 text-[14px] font-semibold text-white transition-all hover:border-white/[0.24] hover:bg-white/[0.1]"
                 >
-                  <Route className="h-4 w-4 text-amber-300 dark:text-amber-300/80" />
+                  <Route className="h-4 w-4 text-amber-400/80" />
                   View the road
                 </a>
               </div>
             </div>
 
             {/* ── RIGHT: course snapshot card ── */}
-            <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-background/[0.05] lg:mt-6 lg:self-start">
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-white/[0.05] lg:mt-6 lg:self-start">
               {/* amber top bar */}
-              <div className="h-[3px] w-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-50 dark:to-amber-950/400" />
+              <div className="h-[3px] w-full bg-amber-400" />
 
               {/* card header */}
               <div className="flex items-center gap-2.5 border-b border-white/[0.08] px-5 py-3.5 sm:px-6">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400 dark:bg-amber-800/15">
-                  <Crown className="h-3.5 w-3.5 text-amber-400 dark:text-amber-300" />
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15">
+                  <Crown className="h-3.5 w-3.5 text-amber-400" />
                 </span>
-                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Course snapshot</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-300">Course snapshot</span>
               </div>
 
               {/* stats — 2×2 grid, each cell distinct */}
               <div className="grid grid-cols-2 divide-x divide-y divide-white/[0.06]">
                 {[
-                  { icon: <BookOpen className="h-4 w-4 text-amber-400 dark:text-amber-300" />, label: "Questions", value: `${totalQs}+`, color: "text-amber-300 dark:text-amber-300" },
-                  { icon: <Target className="h-4 w-4 text-sky-400 dark:text-sky-300" />, label: "Pillars", value: String(categories.length), color: "text-sky-300 dark:text-sky-300" },
-                  { icon: <Zap className="h-4 w-4 text-emerald-400 dark:text-emerald-300" />, label: "Modules", value: String(totalStacks), color: "text-emerald-300 dark:text-emerald-300" },
-                  { icon: <Clock className="h-4 w-4 text-muted-foreground" />, label: "Est. depth", value: `~${estHours}h`, color: "text-muted-foreground" },
+                  { icon: <BookOpen className="h-4 w-4 text-amber-400" />, label: "Questions", value: `${totalQs}+`, color: "text-amber-400" },
+                  { icon: <Target className="h-4 w-4 text-sky-400 dark:text-sky-300" />, label: "Pillars", value: String(categories.length), color: "text-sky-400" },
+                  { icon: <Zap className="h-4 w-4 text-emerald-400" />, label: "Modules", value: String(totalStacks), color: "text-emerald-400" },
+                  { icon: <Clock className="h-4 w-4 text-slate-300" />, label: "Est. depth", value: `~${estHours}h`, color: "text-slate-300" },
                 ].map(({ icon, label, value, color }) => (
                   <div key={label} className="flex flex-col gap-1 px-5 py-4">
-                    <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-500 dark:text-zinc-400">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-400">
                       {icon}{label}
                     </span>
                     <span className={`text-[1.6rem] font-black tabular-nums leading-none tracking-tight ${color}`}>{value}</span>
@@ -401,8 +401,8 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                   "Difficulty-tagged questions",
                   "Free · no account required",
                 ].map((f) => (
-                  <div key={f} className="flex items-center gap-2.5 text-[12px] text-muted-foreground">
-                    <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400 dark:text-emerald-300" strokeWidth={2.5} />
+                  <div key={f} className="flex items-center gap-2.5 text-[12px] text-slate-300">
+                    <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" strokeWidth={2.5} />
                     {f}
                   </div>
                 ))}
@@ -415,7 +415,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
       {/* ════════════════════════════════════════════════
           ROAD SECTION
       ════════════════════════════════════════════════ */}
-      <div className="relative overflow-hidden bg-[#1e2130]">
+      <div className="dark relative overflow-hidden bg-[#1e2130] text-foreground">
         {/* atlas map texture */}
         <div className="pointer-events-none absolute inset-0 opacity-[0.28]" style={{
           backgroundImage: "url('/road-atlas-bg.svg')",
@@ -424,9 +424,9 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
           backgroundRepeat: "no-repeat",
         }} aria-hidden />
         {/* warm amber glow — bottom right, like city lights on a night map */}
-        <div className="pointer-events-none absolute -bottom-32 -right-32 h-[28rem] w-[28rem] rounded-full bg-amber-500 dark:bg-amber-800/10 blur-[96px]" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-32 -right-32 h-[28rem] w-[28rem] rounded-full bg-amber-500/10 blur-[96px]" aria-hidden />
         {/* cool teal glow — top left */}
-        <div className="pointer-events-none absolute -left-24 top-0 h-80 w-80 rounded-full bg-sky-600 dark:bg-sky-800/10 blur-[80px]" aria-hidden />
+        <div className="pointer-events-none absolute -left-24 top-0 h-80 w-80 rounded-full bg-sky-600 bg-sky-500/10 blur-[80px]" aria-hidden />
         {/* top edge separator line */}
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
@@ -438,7 +438,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {copy.outcomes.map((line, i) => (
               <li key={line} className="flex gap-3 rounded-xl border border-white/10 bg-white/5 p-4 text-[14px] leading-relaxed text-slate-300">
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-400 text-[10px] font-black text-white shadow-sm">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-white/10 border-white/20 text-[10px] font-black text-white shadow-sm">
                   {i + 1}
                 </span>
                 {line}
@@ -454,7 +454,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h2 className="flex items-center gap-3 text-2xl font-black tracking-tight text-white sm:text-[1.85rem] lg:text-[2.1rem]">
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-50 dark:bg-amber-950/200/10 text-amber-400">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-default/20 bg-amber-500/10 text-amber-400">
                   <Route className="h-5 w-5" strokeWidth={2} />
                 </span>
                 Interview Road
@@ -467,9 +467,9 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
               {/* inline stats */}
               <div className="mt-5 flex flex-wrap gap-2.5">
                 {[
-                  { value: String(categories.length), label: "Pillars", dot: "bg-amber-400 dark:bg-amber-800" },
-                  { value: String(journeyModuleCount), label: "Modules", dot: "bg-sky-400 dark:bg-sky-800" },
-                  { value: `${journeyQuestionCount}+`, label: "Questions", dot: "bg-emerald-400 dark:bg-emerald-800" },
+                  { value: String(categories.length), label: "Pillars", dot: "bg-amber-400" },
+                  { value: String(journeyModuleCount), label: "Modules", dot: "bg-sky-400" },
+                  { value: `${journeyQuestionCount}+`, label: "Questions", dot: "bg-emerald-400" },
                 ].map(({ value, label, dot }) => (
                   <div key={label} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5">
                     <span className={`h-2 w-2 rounded-full ${dot}`} />
@@ -479,7 +479,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                 ))}
                 {expandedPillarIds.size > 0 && (
                   <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-[11px] font-medium text-slate-300">
-                    <span className="h-2 w-2 rounded-full bg-slate-50 dark:bg-slate-950/200" />
+                    <span className="h-2 w-2 rounded-full bg-slate-300" />
                     {expandedPillarIds.size} open
                   </div>
                 )}
@@ -520,7 +520,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
         <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/80 bg-background/92 p-3 backdrop-blur-xl lg:hidden">
           <Link
             href={firstStackHref}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-50 dark:via-amber-950/400 to-orange-600 py-3.5 text-sm font-bold text-zinc-950 dark:text-zinc-400 shadow-lg shadow-amber-900/20"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-bold text-white shadow-lg shadow-sm"
           >
             <Play className="h-4 w-4 fill-current" />
             Start learning

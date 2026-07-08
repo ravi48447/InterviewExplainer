@@ -158,7 +158,7 @@ export default function ExperienceLevelSwitcher({
           disabled={saved}
           className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${
             saved
-              ? "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
+              ? "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-default dark:border-default/20"
               : "bg-blue-600 dark:bg-blue-800 text-white hover:bg-blue-700 dark:bg-blue-800 shadow-md hover:shadow-lg"
           }`}
         >

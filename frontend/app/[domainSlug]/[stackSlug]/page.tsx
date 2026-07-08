@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { StackHeader } from "@/components/stack/StackHeader";
+import { StackSidebar } from "@/components/stack/StackSidebar";
 import { ModuleRevisionPanel } from "@/components/ModuleRevisionPanel";
 import ContentTreeNav from "@/components/ContentTreeNav";
 import { PILLAR_HUBS } from "@/lib/seo-pillars";
@@ -394,7 +396,7 @@ export default function StackPage({
             {activeSubcat && (
               <>
                 <ChevronRight className="h-3 w-3 text-foreground" />
-                <span className={cn("font-semibold", premiumCourse ? "text-amber-400 dark:text-amber-300" : "text-blue-400 dark:text-blue-300")}>
+                <span className={cn("font-semibold", premiumCourse ? "text-amber-600 dark:text-amber-300" : "text-primary dark:text-primary")}>
                   {mergedSubcats.find(sc => sc.slug === activeSubcat)?.name}
                 </span>
               </>
@@ -402,132 +404,31 @@ export default function StackPage({
           </nav>
 
           {/* Hero */}
-          <header className="mb-5 rounded-2xl overflow-hidden shadow-xl">
-            {/* Dark gradient top */}
-            <div className={cn(
-              "px-7 py-7",
-              premiumCourse
-                ? "bg-gradient-to-br from-zinc-950 via-zinc-900 to-amber-950"
-                : "bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950",
-            )}>
-              <div className="flex items-start justify-between gap-6">
-                <div className="flex-1 min-w-0">
-                  <p className={cn(
-                    "text-[10px] font-black uppercase tracking-[0.24em] mb-2",
-                    premiumCourse ? "text-amber-400 dark:text-amber-300" : "text-blue-400 dark:text-blue-300",
-                  )}>
-                    Interview Track
-                  </p>
-                  <h1 className="text-[1.85rem] font-black text-white tracking-tight leading-tight">
-                    {stack.name}
-                    {activeSubcat && (
-                      <span className="font-bold text-blue-300 dark:text-blue-300">
-                        {" "}— {mergedSubcats.find(sc => sc.slug === activeSubcat)?.name}
-                      </span>
-                    )}
-                  </h1>
-                  {stack.description && (
-                    <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-2xl">
-                      {stack.description}
-                    </p>
-                  )}
-                  <div className="mt-4 flex items-center gap-2 flex-wrap">
-                    <span className="rounded-md border border-white/20 bg-background/10 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                      {mergedSubcats.length} topics
-                    </span>
-                    <span className="rounded-md border border-blue-400 dark:border-blue-700/30 bg-blue-500 dark:bg-blue-800/15 px-2.5 py-1 text-[11px] font-semibold text-white dark:text-blue-300">
-                      {allQuestions.length} questions
-                    </span>
-                    <span className="rounded-md border border-amber-400 dark:border-amber-700/30 bg-amber-500 dark:bg-amber-800/15 px-2.5 py-1 text-[11px] font-semibold text-amber-950 dark:text-amber-300">
-                      ~{totalTime} min
-                    </span>
-                    {pendingCount > 0 && (
-                      <span className="rounded-md border border-white/10 bg-background/5 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                        {pendingCount} pending
-                      </span>
-                    )}
-                  </div>
-                  {firstQuestion && (
-                    <div className="mt-5 flex items-center gap-3 flex-wrap">
-                      <Link
-                        href={`/${domainSlug}/${stackSlug}/${firstQuestion.slug}`}
-                        className={cn(
-                          "inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-all",
-                          premiumCourse
-                            ? "bg-amber-500 dark:bg-amber-800 text-white hover:bg-amber-400 dark:bg-amber-800"
-                            : "bg-blue-500 dark:bg-blue-800 text-white hover:bg-blue-400 dark:bg-blue-800",
-                        )}
-                      >
-                        <Play className="h-4 w-4 fill-current" />
-                        Start Practicing
-                      </Link>
-                      {curriculumNav.nextModule && (
-                        <Link
-                          href={`/${domainSlug}/${curriculumNav.nextModule.moduleSlug}`}
-                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-white/20 text-white/70 text-sm font-semibold hover:bg-background/10 transition-colors"
-                        >
-                          Next module
-                          <ArrowUpRight className="h-4 w-4" />
-                        </Link>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Readiness ring */}
-                <div className="hidden lg:flex flex-col items-center justify-center w-28 h-28 rounded-2xl border border-white/10 bg-background/5 shrink-0 gap-1">
-                  <span className="text-3xl font-black text-white leading-none">{completionPct}%</span>
-                  <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">coverage</span>
-                  <div className="mt-1 w-14 h-1 rounded-full bg-background/10 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-blue-400 to-indigo-400"
-                      style={{ width: `${completionPct}%` }}
-                    />
-                  </div>
-                  <span className="text-[9px] text-muted-foreground">{allQuestions.length}/{totalContentQ}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Dark stats strip */}
-            <div className={cn(
-              "px-7 py-3 border-t flex items-center gap-5 flex-wrap",
-              premiumCourse
-                ? "bg-zinc-900 border-zinc-800 dark:border-zinc-700"
-                : "dark:bg-surface border-border/60",
-            )}>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <BookCheck className="h-3.5 w-3.5 text-blue-400 dark:text-blue-300" />
-                {mergedSubcats.length} topics
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                {allQuestions.length}/{totalContentQ} loaded
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <Clock className="h-3.5 w-3.5 text-amber-400 dark:text-amber-300" />
-                {totalTime} min
-              </div>
-              <div className="ml-auto flex items-center gap-3 text-[11px]">
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <span className="w-2 h-2 rounded-full bg-green-500 dark:bg-green-800 inline-block" />{easyCt} easy
-                </span>
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-800 inline-block" />{medCt} med
-                </span>
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <span className="w-2 h-2 rounded-full bg-red-500 dark:bg-red-800 inline-block" />{hardCt} hard
-                </span>
-              </div>
-            </div>
-          </header>
+          <StackHeader
+            premiumCourse={premiumCourse}
+            stack={stack}
+            activeSubcatName={activeSubcatName}
+            mergedSubcatsLength={mergedSubcats.length}
+            allQuestionsLength={allQuestions.length}
+            totalTime={totalTime}
+            pendingCount={pendingCount}
+            firstQuestionSlug={firstQuestion?.slug}
+            curriculumNavNextModuleSlug={curriculumNav.nextModule?.moduleSlug}
+            domainSlug={domainSlug}
+            stackSlug={stackSlug}
+            completionPct={completionPct}
+            totalContentQ={totalContentQ}
+            easyCt={easyCt}
+            medCt={medCt}
+            hardCt={hardCt}
+          />
 
           {(curriculumNav.previousModule || curriculumNav.nextModule) && (
             <div className="mb-5 flex items-center gap-3">
               {curriculumNav.previousModule ? (
                 <Link
                   href={`/${domainSlug}/${curriculumNav.previousModule.moduleSlug}`}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-background/8 border border-white/15 text-[13px] font-semibold text-muted-foreground hover:bg-background/15 hover:text-white transition-all"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-background/8 border border-white/15 text-[13px] font-semibold text-muted-foreground hover:bg-background/15 hover:text-foreground transition-all"
                 >
                   <ChevronRight className="h-4 w-4 rotate-180 shrink-0" />
                   {curriculumNav.previousModule.title}
@@ -537,7 +438,7 @@ export default function StackPage({
               {curriculumNav.nextModule ? (
                 <Link
                   href={`/${domainSlug}/${curriculumNav.nextModule.moduleSlug}`}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-background/8 border border-white/15 text-[13px] font-semibold text-muted-foreground hover:bg-background/15 hover:text-white transition-all"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-background/8 border border-white/15 text-[13px] font-semibold text-muted-foreground hover:bg-background/15 hover:text-foreground transition-all"
                 >
                   {curriculumNav.nextModule.title}
                   <ChevronRight className="h-4 w-4 shrink-0" />
@@ -550,11 +451,11 @@ export default function StackPage({
           {isModuleEmpty && (
             <section
               aria-labelledby="coming-soon-heading"
-              className="mb-5 rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-br from-amber-50 via-white to-orange-50/60 dark:from-amber-950/20 dark:via-background dark:to-orange-950/20 shadow-sm overflow-hidden"
+              className="mb-5 rounded-xl border border-default dark:border-default/20 bg-gradient-to-br  via-white to-orange-50/60 dark:via-background dark:to-orange-950/20 shadow-sm overflow-hidden"
             >
-              <div className="px-6 py-5 border-b border-amber-100 dark:border-amber-500/20 flex items-start gap-4 flex-wrap">
+              <div className="px-6 py-5 border-b border-default dark:border-default/20 flex items-start gap-4 flex-wrap">
                 <div className="shrink-0 w-11 h-11 rounded-lg bg-amber-500 dark:bg-amber-800 flex items-center justify-center">
-                  <Hammer className="h-5 w-5 text-white" />
+                  <Hammer className="h-5 w-5 text-foreground" />
                 </div>
                 <div className="flex-1 min-w-[240px]">
                   <div className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-1">
@@ -578,7 +479,7 @@ export default function StackPage({
               <div className="px-6 py-4 flex items-center gap-3 flex-wrap">
                 <Link
                   href={`/${domainSlug}`}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg dark:bg-surface text-white font-bold text-sm hover:dark:bg-surface transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg dark:bg-surface text-foreground font-bold text-sm hover:dark:bg-surface transition-colors"
                 >
                   <Layers className="h-4 w-4" />
                   Back to roadmap
@@ -593,7 +494,7 @@ export default function StackPage({
               </div>
 
               {matchingPillarHubs.length > 0 && (
-                <div className="px-6 py-4 border-t border-amber-100 dark:border-amber-500/20 bg-background/60">
+                <div className="px-6 py-4 border-t border-default dark:border-default/20 bg-background/60">
                   <div className="text-[11px] font-black uppercase tracking-widest text-muted-foreground mb-2">
                     Related prep you can start now
                   </div>
@@ -602,7 +503,7 @@ export default function StackPage({
                       <Link
                         key={p.pillarSlug}
                         href={`/${p.pillarSlug}`}
-                        className="group flex items-start gap-2.5 rounded-lg border border-border bg-background px-3 py-2.5 hover:border-amber-300 dark:border-amber-500/30 hover:shadow-sm transition-all"
+                        className="group flex items-start gap-2.5 rounded-lg border border-border bg-background px-3 py-2.5 hover:border-default dark:border-default/30 hover:shadow-sm transition-all"
                       >
                         <div className="flex-1 min-w-0">
                           <div className="text-[13px] font-black text-foreground group-hover:text-amber-700 dark:text-amber-400 leading-snug">
@@ -631,7 +532,7 @@ export default function StackPage({
                 <span className="rounded-md border border-border bg-surface px-2 py-1 font-bold text-foreground">
                   {displayedSubcats.length} topics
                 </span>
-                <span className="rounded-md border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-2 py-1 font-bold text-blue-700 dark:text-blue-400">
+                <span className="rounded-md border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 px-2 py-1 font-bold text-primary dark:text-primary">
                   {visibleQuestionCount} visible
                 </span>
               </div>
@@ -643,8 +544,8 @@ export default function StackPage({
                   className={cn(
                     "px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
                     activeSubcat === null
-                      ? "bg-blue-600 dark:bg-blue-800 text-white border-blue-600 dark:border-blue-700"
-                      : "bg-background text-muted-foreground border-border hover:border-blue-300 dark:border-blue-700 hover:text-blue-600 dark:text-blue-400"
+                      ? "bg-blue-600 dark:bg-blue-800 text-white border-default dark:border-default"
+                      : "bg-background text-muted-foreground border-border hover:border-default dark:border-default hover:text-primary dark:text-primary"
                   )}
                 >
                   All Topics
@@ -656,14 +557,14 @@ export default function StackPage({
                     className={cn(
                       "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border",
                       activeSubcat === sc.slug
-                        ? "bg-blue-600 dark:bg-blue-800 text-white border-blue-600 dark:border-blue-700"
-                        : "bg-background text-muted-foreground border-border hover:border-blue-300 dark:border-blue-700 hover:text-blue-600 dark:text-blue-400"
+                        ? "bg-blue-600 dark:bg-blue-800 text-white border-default dark:border-default"
+                        : "bg-background text-muted-foreground border-border hover:border-default dark:border-default hover:text-primary dark:text-primary"
                     )}
                   >
                     {sc.name}
                     <span className={cn(
                       "ml-1.5 text-[10px] font-bold",
-                      activeSubcat === sc.slug ? "text-blue-200 dark:text-blue-300" : "text-muted-foreground"
+                      activeSubcat === sc.slug ? "text-primary dark:text-primary" : "text-muted-foreground"
                     )}>
                       {sc.questions.length > 0 ? `${sc.questions.length}/${sc.contentCount}` : sc.contentCount}
                     </span>
@@ -683,8 +584,8 @@ export default function StackPage({
                         difficultyFilter === d
                           ? d === "all" ? "bg-slate-700 dark:bg-slate-800 text-white border-border"
                             : d === "easy" ? "bg-green-600 dark:bg-green-800 text-white border-green-600 dark:border-green-700"
-                            : d === "medium" ? "bg-amber-500 dark:bg-amber-800 text-white border-amber-500 dark:border-amber-700"
-                            : "bg-red-500 dark:bg-red-800 text-white border-red-500 dark:border-red-700"
+                            : d === "medium" ? "bg-amber-500 dark:bg-amber-800 text-white border-default dark:border-default"
+                            : "bg-red-500 dark:bg-red-800 text-white border-default dark:border-default"
                           : "bg-background text-muted-foreground border-border hover:border-border"
                       )}
                     >
@@ -700,7 +601,7 @@ export default function StackPage({
                     value={questionQuery}
                     onChange={(e) => setQuestionQuery(e.target.value)}
                     placeholder="Search questions in this module..."
-                    className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus:border-blue-300 dark:border-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200/60"
+                    className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus:border-default dark:border-default focus:outline-none focus:ring-2 focus:ring-ring/60"
                   />
                   {questionQuery ? (
                     <button
@@ -734,7 +635,7 @@ export default function StackPage({
                     setDifficultyFilter("all");
                     setQuestionQuery("");
                   }}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-background/8 px-3 py-1.5 text-xs font-bold text-muted-foreground hover:bg-background/15 hover:text-white transition-all"
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-background/8 px-3 py-1.5 text-xs font-bold text-muted-foreground hover:bg-background/15 hover:text-foreground transition-all"
                 >
                   <X className="h-3.5 w-3.5" />
                   Clear all filters
@@ -755,37 +656,37 @@ export default function StackPage({
                 if (!matchesQuery) return null;
                 const isRevExpanded = expandedSubcats.has(REVISION_SUBCAT_SLUG);
                 return (
-                  <div className="rounded-2xl overflow-hidden bg-background border border-blue-200 dark:border-blue-500/20/80 shadow-[0_4px_24px_rgba(30,64,175,0.25)]">
+                  <div className="rounded-2xl overflow-hidden bg-background border border-default dark:border-default/20/80 shadow-[0_4px_24px_rgba(30,64,175,0.25)]">
                     <button
                       onClick={() => toggleSubcat(REVISION_SUBCAT_SLUG)}
-                      className="relative w-full flex items-center gap-4 px-5 py-4 transition-colors border-b border-blue-700 dark:border-blue-700/60 bg-gradient-to-r from-blue-900 via-indigo-900 to-blue-900 hover:from-blue-800 hover:via-indigo-800 hover:to-blue-800 overflow-hidden"
+                      className="relative w-full flex items-center gap-4 px-5 py-4 transition-colors border-b border-default dark:border-default/60 bg-surface border border-default hover: hover: hover: overflow-hidden"
                     >
                       <span className="absolute right-14 top-1/2 -translate-y-1/2 text-[3.5rem] font-black text-white/[0.06] select-none pointer-events-none leading-none tabular-nums">
                         00
                       </span>
-                      <div className="w-1 h-9 rounded-full shrink-0 bg-gradient-to-b from-blue-300 to-indigo-400" />
+                      <div className="w-1 h-9 rounded-full shrink-0 bg-surface border border-default" />
                       <div className="flex-1 text-left min-w-0 relative z-10">
                         <div className="flex flex-wrap items-center gap-2">
                           <h2 className="text-[14px] font-black leading-tight tracking-tight text-white flex items-center gap-2">
                             <BookOpen className="h-3.5 w-3.5" />
                             Revision
                           </h2>
-                          <span className="rounded-md border border-blue-300 dark:border-blue-700/40 bg-blue-300 dark:bg-blue-800/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-100 dark:text-blue-300">
+                          <span className="rounded-md border border-default dark:border-default/40 bg-blue-300 dark:bg-blue-800/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-primary dark:text-primary">
                             Read me first
                           </span>
                         </div>
-                        <p className="text-[10px] mt-0.5 font-medium text-blue-200 dark:text-blue-300">
+                        <p className="text-[10px] mt-0.5 font-medium text-primary dark:text-primary">
                           {moduleRevision.sections.length} concepts
                           {moduleRevision.estimatedMinutes ? ` · ~${moduleRevision.estimatedMinutes} min` : ""}
                           {" · skim before drilling questions"}
                         </p>
                       </div>
-                      <span className="text-[11px] font-black px-2.5 py-1 rounded-lg shrink-0 relative z-10 bg-blue-400 dark:bg-blue-800/20 text-white dark:text-blue-300 border border-blue-300 dark:border-blue-700/40">
+                      <span className="text-[11px] font-black px-2.5 py-1 rounded-lg shrink-0 relative z-10 bg-blue-400 dark:bg-blue-800/20 text-white dark:text-primary border border-default dark:border-default/40">
                         {moduleRevision.sections.length}
                       </span>
                       {isRevExpanded
-                        ? <ChevronUp className="h-4 w-4 text-blue-200 dark:text-blue-300 shrink-0 relative z-10" />
-                        : <ChevronDown className="h-4 w-4 text-blue-200 dark:text-blue-300 shrink-0 relative z-10" />}
+                        ? <ChevronUp className="h-4 w-4 text-primary dark:text-primary shrink-0 relative z-10" />
+                        : <ChevronDown className="h-4 w-4 text-primary dark:text-primary shrink-0 relative z-10" />}
                     </button>
                     {isRevExpanded && (
                       <ModuleRevisionPanel
@@ -821,7 +722,7 @@ export default function StackPage({
                     className={cn(
                       "relative w-full flex items-center gap-4 px-5 py-4 transition-colors border-b overflow-hidden",
                       hasQuestions
-                        ? "bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:via-slate-700 hover:to-slate-800 border-border/60"
+                        ? "bg-surface border border-default hover:from-slate-800 hover:via-slate-700 hover:to-slate-800 border-border/60"
                         : "bg-slate-700 dark:bg-slate-800/60 hover:bg-slate-700 dark:bg-slate-800/80 border-slate-600 dark:border-slate-700/40 opacity-70"
                     )}
                   >
@@ -833,7 +734,7 @@ export default function StackPage({
                     {/* Left colored accent bar */}
                     <div className={cn(
                       "w-1 h-9 rounded-full shrink-0",
-                      hasQuestions ? "bg-gradient-to-b from-blue-400 to-indigo-50 dark:to-indigo-950/400" : "bg-slate-600 dark:bg-slate-800"
+                      hasQuestions ? "bg-surface border border-default dark:" : "bg-slate-600 dark:bg-slate-800"
                     )} />
 
                     <div className="flex-1 text-left min-w-0 relative z-10">
@@ -857,9 +758,9 @@ export default function StackPage({
                       {sc.questions.length > 0 && (
                         <>
                           {[
-                            { d: "easy", color: "bg-green-900 dark:bg-green-800/60 text-green-400 dark:text-green-300 border border-green-800 dark:border-green-700/50" },
-                            { d: "medium", color: "bg-amber-900 dark:bg-amber-800/60 text-amber-400 dark:text-amber-300 border border-amber-800 dark:border-amber-700/50" },
-                            { d: "hard", color: "bg-red-900 dark:bg-red-800/60 text-red-400 dark:text-red-300 border border-red-800 dark:border-red-700/50" },
+                            { d: "easy", color: "bg-green-900 dark:bg-green-800/60 text-green-600 dark:text-green-300 border border-green-800 dark:border-green-700/50" },
+                            { d: "medium", color: "bg-amber-900 dark:bg-amber-800/60 text-amber-600 dark:text-amber-300 border border-default dark:border-default/50" },
+                            { d: "hard", color: "bg-red-900 dark:bg-red-800/60 text-red-600 dark:text-red-300 border border-default dark:border-default/50" },
                           ].map(({ d, color }) => {
                             const c = sc.questions.filter(q => q.difficulty === d).length;
                             return c > 0 ? (
@@ -874,7 +775,7 @@ export default function StackPage({
 
                     <span className={cn(
                       "text-[11px] font-black px-2.5 py-1 rounded-lg shrink-0 relative z-10",
-                      hasQuestions ? "bg-blue-500 dark:bg-blue-800/20 text-white dark:text-blue-300 border border-blue-700 dark:border-blue-700/40" : "bg-slate-700 dark:bg-slate-800/50 text-muted-foreground"
+                      hasQuestions ? "bg-blue-500 dark:bg-blue-800/20 text-white dark:text-primary border border-default dark:border-default/40" : "bg-slate-700 dark:bg-slate-800/50 text-muted-foreground"
                     )}>
                       {sc.contentCount}
                     </span>
@@ -892,11 +793,11 @@ export default function StackPage({
                           {filteredQ.map((q, idx) => {
                             const rowBg =
                               q.difficulty === "easy"
-                                ? "bg-green-50/60 hover:bg-green-50 dark:bg-green-500/5 dark:hover:bg-green-50 dark:bg-green-950/200/10"
+                                ? "bg-green-50/60 hover:bg-green-50 dark:bg-green-500/5 dark:hover:bg-green-50 dark:bg-green-950/10"
                                 : q.difficulty === "medium"
-                                ? "bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-500/5 dark:hover:bg-amber-50 dark:bg-amber-950/200/10"
+                                ? "bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-500/5 dark:hover:bg-amber-50 dark:bg-amber-950/10"
                                 : q.difficulty === "hard"
-                                ? "bg-red-50 dark:bg-red-500/10 hover:bg-red-50/80 dark:bg-red-500/5 dark:hover:bg-red-50 dark:bg-red-950/200/10"
+                                ? "bg-red-50 dark:bg-red-500/10 hover:bg-red-50/80 dark:bg-red-500/5 dark:hover:bg-red-50 dark:bg-red-950/10"
                                 : "bg-background hover:bg-surface dark:hover:bg-slate-800/50";
                             return (
                             <div key={`${idx}-${q.slug}`}>
@@ -913,7 +814,7 @@ export default function StackPage({
                                   {String(idx + 1).padStart(2, "0")}
                                 </span>
                                 <div className="flex-1 min-w-0">
-                                  <h3 className="text-[13.5px] font-semibold text-foreground group-hover:text-blue-700 dark:text-blue-400 dark:text-slate-200 dark:group-hover:text-blue-400 transition-colors leading-snug line-clamp-1">
+                                  <h3 className="text-[13.5px] font-semibold text-foreground group-hover:text-primary dark:group-hover:text-primary dark:text-slate-200 dark:group-hover:text-primary transition-colors leading-snug line-clamp-1">
                                     {q.title}
                                   </h3>
                                   <div className="mt-0.5 flex items-center gap-2">
@@ -930,7 +831,7 @@ export default function StackPage({
                                     </span>
                                   </div>
                                 </div>
-                                <div className="shrink-0 rounded-lg border border-border bg-background px-2.5 py-1 text-[10px] font-bold text-muted-foreground group-hover:border-blue-300 dark:border-blue-700 group-hover:bg-blue-600 dark:bg-blue-800 group-hover:text-white transition-all">
+                                <div className="shrink-0 rounded-lg border border-border bg-background px-2.5 py-1 text-[10px] font-bold text-muted-foreground group-hover:border-default dark:border-default group-hover:bg-blue-600 dark:bg-blue-800 group-hover:text-white transition-all">
                                   Open →
                                 </div>
                               </Link>
@@ -961,14 +862,14 @@ export default function StackPage({
 
           {/* Completion Banner */}
           {allQuestions.length > 0 && !hasActiveFilters && (
-            <section className="mb-8 p-7 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-border flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-xl">
+            <section className="mb-8 p-7 rounded-2xl bg-surface border border-default border border-border flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-xl">
               <div className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-[0.08] pointer-events-none">
-                <Award className="w-64 h-64 text-white" />
+                <Award className="w-64 h-64 text-foreground" />
               </div>
               <div className="relative z-10">
                 <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="h-5 w-5 text-amber-300 dark:text-amber-300" />
-                  <span className="text-xs font-bold text-amber-200 dark:text-amber-300 uppercase tracking-wide">
+                  <Sparkles className="h-5 w-5 text-amber-700 dark:text-amber-300" />
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wide">
                     Complete the Path
                   </span>
                 </div>
@@ -984,7 +885,7 @@ export default function StackPage({
                 <div className="relative z-10 shrink-0 flex flex-col sm:flex-row gap-2">
                   <Link
                     href={`/${domainSlug}/${stackSlug}/${firstQuestion.slug}`}
-                    className="inline-flex items-center gap-2 px-7 py-3 rounded-xl bg-blue-600 dark:bg-blue-800 text-white font-black text-sm hover:bg-blue-700 dark:bg-blue-800 transition-all shadow-lg"
+                    className="inline-flex items-center gap-2 px-7 py-3 rounded-xl bg-blue-600 dark:bg-blue-800 text-foreground font-black text-sm hover:bg-blue-700 dark:bg-blue-800 transition-all shadow-lg"
                   >
                     <Play className="h-5 w-5 fill-current" />
                     Begin from Start
@@ -1005,86 +906,16 @@ export default function StackPage({
         </main>
 
         {/* ─── RIGHT SIDEBAR — Stats ─── */}
-        <aside className="hidden xl:flex w-[260px] shrink-0 flex-col gap-4 self-start sticky top-5 px-3 py-5 h-[calc(100vh-1.25rem)] overflow-y-auto custom-scrollbar">
-          {/* Quick Stats */}
-          <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 dark:bg-surface border-b border-border flex items-center gap-2">
-              <Zap className="h-3.5 w-3.5 text-amber-300 dark:text-amber-300" />
-              <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wide">Overview</h3>
-            </div>
-            <div className="p-3 space-y-2">
-              {[
-                { label: "Topics", value: mergedSubcats.length },
-                { label: "Available", value: allQuestions.length },
-                { label: "Total Curriculum", value: totalContentQ },
-                { label: "Est. Time", value: `${totalTime}m` },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between text-xs rounded-lg px-3 py-2 border border-border bg-surface">
-                  <span className="text-muted-foreground font-medium">{label}</span>
-                  <span className="font-black text-foreground">{value}</span>
-                </div>
-              ))}
-              <div className="rounded-lg border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-3 py-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400">
-                  Readiness
-                </p>
-                <p className="mt-0.5 text-sm font-black text-blue-900 dark:text-blue-400">{completionPct}% complete</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Difficulty Mix */}
-          <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 bg-blue-700 dark:bg-blue-800 border-b border-blue-800 dark:border-blue-700 flex items-center gap-2">
-              <BarChart2 className="h-3.5 w-3.5 text-blue-200 dark:text-blue-300" />
-              <h3 className="text-[11px] font-bold text-white uppercase tracking-wide">Difficulty Mix</h3>
-            </div>
-            <div className="p-3 space-y-2.5">
-              {[
-                { label: "Easy", count: easyCt, gradient: "from-green-50 dark:from-green-950/400 to-emerald-600", color: "#22c55e" },
-                { label: "Medium", count: medCt, gradient: "from-orange-50 dark:from-orange-950/400 to-amber-600", color: "#f59e0b" },
-                { label: "Hard", count: hardCt, gradient: "from-red-50 dark:from-red-950/400 to-rose-600", color: "#ef4444" },
-              ].map(({ label, count, gradient, color }) => (
-                <div key={label} className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="font-bold" style={{ color }}>{label}</span>
-                    <span className="font-black text-foreground">{count}</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-surface rounded-full overflow-hidden border border-border">
-                    <div
-                      className={`h-full rounded-full bg-gradient-to-r ${gradient}`}
-                      style={{ width: allQuestions.length ? `${(count / allQuestions.length) * 100}%` : "0%" }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Study tips */}
-          <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
-            <div className="px-4 py-2.5 bg-amber-600 dark:bg-amber-800 border-b border-amber-700 dark:border-amber-700 flex items-center gap-2">
-              <BookMarked className="h-3.5 w-3.5 text-amber-100 dark:text-amber-300" />
-              <h3 className="text-[11px] font-bold text-white uppercase tracking-wide">Study Tips</h3>
-            </div>
-            <div className="p-3">
-              <div className="space-y-2">
-                {[
-                  "Finish one topic before jumping to another.",
-                  "Practice answers aloud before checking notes.",
-                  "Mark hard questions and revisit them tomorrow.",
-                ].map((tip, i) => (
-                  <div key={tip} className="flex items-start gap-2 rounded-lg border border-border bg-surface px-2.5 py-2">
-                    <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full dark:bg-surface text-[10px] font-bold text-white">
-                      {i + 1}
-                    </span>
-                    <p className="text-[11px] text-foreground leading-relaxed">{tip}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </aside>
+        <StackSidebar 
+          mergedSubcatsCount={mergedSubcats.length}
+          allQuestionsCount={allQuestions.length}
+          totalContentQ={totalContentQ}
+          totalTime={totalTime}
+          completionPct={completionPct}
+          easyCt={easyCt}
+          medCt={medCt}
+          hardCt={hardCt}
+        />
       </div>
     </div>
   );

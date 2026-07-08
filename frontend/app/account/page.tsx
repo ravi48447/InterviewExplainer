@@ -113,7 +113,7 @@ export default function AccountPage() {
         <CardContent>
           <form onSubmit={save} className="space-y-4">
             {error && (
-              <div className="rounded-lg border border-red-100 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 p-2.5 text-sm font-medium text-red-600 dark:text-red-400">{error}</div>
+              <div className="rounded-lg border border-default dark:border-default/20 bg-red-50 dark:bg-red-500/10 p-2.5 text-sm font-medium text-red-600 dark:text-red-400">{error}</div>
             )}
 
             <div className="space-y-2">

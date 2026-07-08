@@ -158,8 +158,8 @@ function SubcategoryGroup({
   return (
     <details open={hasCurrentQuestion} className="mb-1">
       <summary className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer list-none select-none hover:bg-surface transition-colors group/sub">
-        <FolderOpen className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400 shrink-0" />
-        <span className="flex-1 text-[11px] font-bold text-muted-foreground group-open/sub:text-blue-700 dark:text-blue-400 truncate">
+        <FolderOpen className="h-3.5 w-3.5 text-primary dark:text-primary shrink-0" />
+        <span className="flex-1 text-[11px] font-bold text-muted-foreground group-open/sub:text-primary dark:text-primary truncate">
           {group.name}
         </span>
         <span className="text-[11px] text-muted-foreground font-medium shrink-0">
@@ -204,8 +204,8 @@ function QuestionLink({
       scroll={false}
       className={`flex items-start gap-2.5 py-1.5 pl-3 pr-3 text-[12px] leading-snug rounded-lg transition-all ${
         isCurrent
-          ? 'text-foreground font-bold bg-blue-50 dark:bg-blue-500/10 border-l-4 border-blue-600 dark:border-blue-700'
-          : 'text-foreground hover:text-foreground hover:bg-surface outline-none focus:ring-2 focus:ring-blue-200'
+          ? 'text-foreground font-bold bg-blue-50 dark:bg-blue-500/10 border-l-4 border-default dark:border-default'
+          : 'text-foreground hover:text-foreground hover:bg-surface outline-none focus:ring-2 focus:ring-ring'
       }`}
     >
       <span

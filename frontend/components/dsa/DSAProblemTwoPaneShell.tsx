@@ -79,7 +79,7 @@ export function DSAProblemTwoPaneShell({
             </ResizablePanel>
             <ResizableHandle
               withHandle
-              className="w-1 hover:w-2 bg-border hover:bg-violet-500 dark:bg-violet-800/50 transition-all duration-150 ease-out z-10 cursor-col-resize"
+              className="w-1 hover:w-2 bg-border hover:bg-blue-500 dark:bg-blue-800/50 transition-all duration-150 ease-out z-10 cursor-col-resize"
             />
             <ResizablePanel
               defaultSize={58}

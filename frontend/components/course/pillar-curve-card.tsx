@@ -38,13 +38,13 @@ export function PillarCurveCard({
         className={cn(
           "group relative overflow-hidden rounded-2xl border bg-background transition-all duration-300",
           expanded
-            ? "border-amber-200 dark:border-amber-500/20/70 shadow-[0_8px_40px_-12px_rgba(245,158,11,0.18)]"
-            : "border-border shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] hover:border-amber-200 dark:border-amber-500/20/60 hover:shadow-[0_6px_28px_-8px_rgba(245,158,11,0.12)]",
+            ? "border-default dark:border-default/20/70 shadow-[0_8px_40px_-12px_rgba(245,158,11,0.18)]"
+            : "border-border shadow-[0_2px_16px_-4px_rgba(15,23,42,0.08)] hover:border-default dark:border-default/20/60 hover:shadow-[0_6px_28px_-8px_rgba(245,158,11,0.12)]",
         )}
       >
         {/* top accent bar */}
         <div className={cn(
-          "h-[3px] w-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-50 dark:to-amber-950/400 transition-opacity duration-300",
+          "h-[3px] w-full bg-surface border border-default transition-opacity duration-300",
           expanded ? "opacity-100" : "opacity-0 group-hover:opacity-40",
         )} />
 
@@ -55,7 +55,7 @@ export function PillarCurveCard({
           onClick={onToggle}
           aria-expanded={expanded}
           className={cn(
-            "relative flex w-full items-center gap-4 px-5 py-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-400/60 sm:px-6 sm:py-5",
+            "relative flex w-full items-center gap-4 px-5 py-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60 sm:px-6 sm:py-5",
             isRight ? "sm:flex-row-reverse" : "",
           )}
         >
@@ -64,8 +64,8 @@ export function PillarCurveCard({
             className={cn(
               "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-[15px] font-black text-white shadow-md transition-all duration-200",
               expanded
-                ? "bg-gradient-to-br from-amber-400 via-orange-400 to-amber-50 dark:to-amber-950/400 shadow-amber-200/60 group-hover:scale-105"
-                : "bg-gradient-to-br from-slate-700 to-slate-900 group-hover:from-slate-600 group-hover:to-slate-800",
+                ? "bg-surface border border-default shadow-sm group-hover:scale-105"
+                : "bg-surface border border-default group-hover:from-slate-600 group-hover:to-slate-800",
             )}
           >
             {index + 1}
@@ -90,7 +90,7 @@ export function PillarCurveCard({
                 <Layers className="h-3 w-3" />
                 {cat.stacks.length} modules
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 dark:border-amber-500/20/70 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-0.5 font-semibold text-amber-700 dark:text-amber-400">
+              <span className="inline-flex items-center gap-1 rounded-full border border-default dark:border-default/20/70 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-0.5 font-semibold text-amber-700 dark:text-amber-400">
                 <Clock className="h-3 w-3" />
                 {totalQAll} questions
               </span>
@@ -102,7 +102,7 @@ export function PillarCurveCard({
             className={cn(
               "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200",
               expanded
-                ? "border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                ? "border-default dark:border-default/30 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
                 : "border-border bg-background text-muted-foreground group-hover:border-border",
               isRight && "sm:order-first",
             )}
@@ -122,8 +122,8 @@ export function PillarCurveCard({
           <div className="min-h-0 overflow-hidden">
             <div className={cn(
               "max-h-[min(65vh,26rem)] overflow-y-auto border-t px-4 py-4 sm:px-5",
-              expanded ? "border-amber-100 dark:border-amber-500/20" : "border-transparent",
-              "bg-gradient-to-b   from-amber-50/40 dark:from-amber-950/40 to-white",
+              expanded ? "border-default dark:border-default/20" : "border-transparent",
+              "bg-surface to-white",
             )}>
               {stacks.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border bg-surface/50 px-3 py-6 text-center text-[11px] text-muted-foreground">
@@ -135,9 +135,9 @@ export function PillarCurveCard({
                     <li key={stack.id} className="list-none">
                       <Link
                         href={`/${domainSlug}/${stack.slug}`}
-                        className="group/link flex items-center gap-3 overflow-hidden rounded-xl border border-border/70 bg-background p-3 shadow-sm transition-all hover:border-amber-200 dark:border-amber-500/20/70 hover:shadow-[0_4px_16px_-4px_rgba(245,158,11,0.15)] sm:p-3.5"
+                        className="group/link flex items-center gap-3 overflow-hidden rounded-xl border border-border/70 bg-background p-3 shadow-sm transition-all hover:border-default dark:border-default/20/70 hover:shadow-[0_4px_16px_-4px_rgba(245,158,11,0.15)] sm:p-3.5"
                       >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-400 text-[11px] font-black text-white shadow-sm">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface border border-default text-[11px] font-black text-foreground shadow-sm">
                           {String(i + 1).padStart(2, "0")}
                         </span>
                         <span className="min-w-0 flex-1">
@@ -154,7 +154,7 @@ export function PillarCurveCard({
                           <Clock className="h-3 w-3" />
                           {stack.questionCount}
                         </span>
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-200 dark:border-amber-500/20/60 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 transition-all group-hover/link:scale-110 group-hover/link:bg-amber-100 dark:bg-amber-950/30">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-default dark:border-default/20/60 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 transition-all group-hover/link:scale-110 group-hover/link:bg-amber-100 dark:bg-amber-950/30">
                           <BookOpen className="h-3.5 w-3.5" strokeWidth={2} />
                         </span>
                       </Link>

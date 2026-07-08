@@ -24,7 +24,7 @@ export default function CompletionTrigger({ questionId }: { questionId: number }
   }
 
   return (
-    <div className="flex items-center justify-center p-6 my-10 bg-emerald-500 dark:bg-emerald-800/10 border border-emerald-500 dark:border-emerald-500/50 dark:border-emerald-700/20 rounded-2xl text-white dark:text-emerald-300 gap-3 animate-in fade-in slide-in-from-bottom-4">
+    <div className="flex items-center justify-center p-6 my-10 bg-emerald-500 dark:bg-emerald-800/10 border border-default dark:border-default/50 dark:border-default/20 rounded-2xl text-white dark:text-emerald-300 gap-3 animate-in fade-in slide-in-from-bottom-4">
       <CheckCircle2 className="h-6 w-6" />
       <span className="font-bold tracking-wide">✔ You completed this question</span>
     </div>

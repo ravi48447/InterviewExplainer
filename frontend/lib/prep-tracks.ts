@@ -69,6 +69,6 @@ export const STANDALONE_PREP_TRACKS: readonly PrepTrackCard[] = [
     href: "/java-fullstack-intermediate",
     prepHash: "#track-frontend",
     icon: "react",
-    accent: "from-violet-500 to-purple-600",
+    accent: "from-blue-500 to-blue-600",
   },
 ] as const;

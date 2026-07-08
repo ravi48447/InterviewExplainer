@@ -191,7 +191,7 @@ function buildRendererOptions() {
         const cls: Record<number, string> = {
           1: 'text-[22px] font-black text-foreground dark:text-muted-foreground mt-8 mb-4 first:mt-0 pb-2.5 border-b border-border dark:border-border/60 tracking-tight leading-tight',
           2: 'text-[19px] font-bold text-foreground dark:text-muted-foreground mt-8 mb-3 first:mt-0 pb-1.5 border-b border-border dark:border-border/40 tracking-tight leading-snug',
-          3: 'text-[16.5px] font-bold text-foreground dark:text-muted-foreground mt-7 mb-2.5 first:mt-0 leading-snug pl-3 border-l-[3px] border-blue-500/70 dark:border-blue-500/60',
+          3: 'text-[16.5px] font-bold text-foreground dark:text-muted-foreground mt-7 mb-2.5 first:mt-0 leading-snug pl-3 border-l-[3px] border-default/70 dark:border-default/60',
           4: 'text-[12.5px] font-bold text-muted-foreground uppercase tracking-[0.12em] mt-5 mb-1.5',
         };
         return `<${tag} class="${cls[depth] ?? ''}">${text}</${tag}>`;
@@ -200,21 +200,21 @@ function buildRendererOptions() {
       paragraph(this: any, token: any) {
         const { tokens } = token;
         const text = this.parser.parseInline(tokens);
-        const cls = 'text-[15.5px] leading-[1.78] text-foreground dark:text-muted-foreground mb-5 last:mb-0';
+        const cls = 'text-[15.5px] leading-[1.75] text-foreground dark:text-muted-foreground mb-4 last:mb-0';
         return `<p class="${cls}">${text}</p>`;
       },
 
       blockquote(this: any, token: any) {
         const { tokens } = token;
         const body = this.parser.parse(tokens);
-        const cls = 'border-l-4 border-blue-400/60 dark:border-blue-500/60 pl-4 py-2 my-4 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/30 rounded-r-lg text-muted-foreground italic';
+        const cls = 'border-l-4 border-default/60 dark:border-default/60 pl-4 py-2 my-4 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/30 rounded-r-lg text-muted-foreground italic';
         return `<blockquote class="${cls}">${body}</blockquote>`;
       },
 
       list(this: any, token: any) {
         const { items, ordered, start } = token;
         const tag = ordered ? 'ol' : 'ul';
-        const listCls = 'space-y-3 mb-5 pl-0 list-none';
+        const listCls = 'space-y-2 mb-4 pl-0 list-none';
         let counter = typeof start === 'number' ? start : 1;
         const itemsHtml = items
           .map((item: any) => {
@@ -222,11 +222,11 @@ function buildRendererOptions() {
             if (ordered) {
               const num = counter++;
               const badgeCls = 'mt-[3px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-surface dark:bg-slate-700/70 text-[11px] font-bold text-foreground dark:text-muted-foreground border border-border dark:border-slate-600/60';
-              const textCls = 'flex-1 text-[15.5px] leading-[1.78] text-foreground dark:text-muted-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
+              const textCls = 'flex-1 text-[15.5px] leading-[1.75] text-foreground dark:text-muted-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
               return `<li class="flex items-start gap-3"><span class="${badgeCls}">${num}</span><div class="${textCls}">${body}</div></li>`;
             }
             const dotCls = 'mt-[9px] h-[7px] w-[7px] rounded-full bg-blue-500 dark:bg-blue-400 shrink-0';
-            const textCls = 'flex-1 text-[15.5px] leading-[1.78] text-foreground dark:text-muted-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
+            const textCls = 'flex-1 text-[15.5px] leading-[1.75] text-foreground dark:text-muted-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
             return `<li class="flex items-start gap-3"><span class="${dotCls}"></span><div class="${textCls}">${body}</div></li>`;
           })
           .join('');
@@ -247,7 +247,7 @@ function buildRendererOptions() {
 
       codespan(token: any) {
         const { text } = token;
-        const cls = 'bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 dark:text-blue-200 rounded px-[6px] py-[2px] text-[0.86em] font-mono font-medium border border-blue-200/70 dark:border-blue-800/50';
+        const cls = 'bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/60 text-primary dark:text-primary dark:text-primary rounded px-[6px] py-[2px] text-[0.86em] font-mono font-medium border border-default/70 dark:border-default/50';
         return `<code class="${cls}">${text}</code>`;
       },
 
@@ -274,7 +274,7 @@ function buildRendererOptions() {
         const { href, text } = token;
         const isExternal = href.startsWith('http');
         const target = isExternal ? ' target="_blank" rel="noopener noreferrer"' : '';
-        const cls = 'text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline underline-offset-4 decoration-blue-600/30 dark:decoration-blue-400/30 hover:decoration-blue-700 dark:hover:decoration-blue-300 transition-colors';
+        const cls = 'text-primary dark:text-primary hover:text-primary dark:text-primary dark:hover:text-primary underline underline-offset-4 decoration-blue-600/30 dark:decoration-blue-400/30 hover:decoration-blue-700 dark:hover:decoration-blue-300 transition-colors';
         return `<a href="${href}"${target} class="${cls}">${text}</a>`;
       },
 

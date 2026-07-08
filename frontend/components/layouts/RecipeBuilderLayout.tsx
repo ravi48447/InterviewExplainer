@@ -45,7 +45,7 @@ export function RecipeBuilderLayout({
   return (
     <div className="space-y-8">
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 px-5 py-4  ">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-surface px-5 py-4  ">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
@@ -66,7 +66,7 @@ export function RecipeBuilderLayout({
       {hasSteps && (
         <div className="rounded-xl border border-border overflow-hidden">
           {/* Progress Bar */}
-          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 dark:from-slate-950/40 to-blue-50 dark:to-blue-950/40 border-b border-border  ">
+          <div className="px-5 py-3 bg-gradient-to-r from-slate-50 dark:from-slate-950/40  border-b border-border  ">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-foreground uppercase tracking-wide">Implementation Steps</span>
               <span className="text-xs text-muted-foreground font-medium">
@@ -133,8 +133,8 @@ export function RecipeBuilderLayout({
 
       {/* Deep explanation fallback */}
       {!hasSteps && deepExplain && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-blue-200 dark:border-blue-500/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Implementation Guide</span>
           </div>
           <div className="px-5 py-5">
@@ -182,8 +182,8 @@ export function RecipeBuilderLayout({
 
       {/* Interview Summary */}
       {interviewSummary && (
-        <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-500/30 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60">
+        <div className="rounded-xl border-2 border-default dark:border-default/30 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-default dark:border-default/20 dark:border-default/60">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">
               What the Interviewer Sees You Know
             </span>

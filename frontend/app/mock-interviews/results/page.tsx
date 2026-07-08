@@ -131,27 +131,27 @@ function MockInterviewResultsContent() {
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-emerald-600 dark:text-emerald-400';
-    if (score >= 70) return 'text-blue-600 dark:text-blue-400';
+    if (score >= 70) return 'text-primary dark:text-primary';
     if (score >= 60) return 'text-orange-600 dark:text-orange-400';
     return 'text-red-600 dark:text-red-400';
   };
 
   const getScoreGradient = (score: number) => {
-    if (score >= 80) return 'from-emerald-50 dark:from-emerald-950/400 to-green-600';
-    if (score >= 70) return 'from-blue-50 dark:from-blue-950/400 to-cyan-600';
-    if (score >= 60) return 'from-orange-50 dark:from-orange-950/400 to-amber-600';
-    return 'from-red-50 dark:from-red-950/400 to-rose-600';
+    if (score >= 80) return 'from-emerald-500 to-emerald-600';
+    if (score >= 70) return 'from-blue-500 to-blue-600';
+    if (score >= 60) return 'from-orange-500 to-orange-600';
+    return 'from-rose-500 to-rose-600';
   };
 
   const getScoreBg = (score: number) => {
-    if (score >= 80) return 'from-emerald-50 dark:from-emerald-950/40 to-green-50 dark:to-green-950/40';
-    if (score >= 70) return 'from-blue-50 dark:from-blue-950/40 to-cyan-50 dark:to-cyan-950/40';
-    if (score >= 60) return 'from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40';
-    return 'from-red-50 dark:from-red-950/40 to-rose-50 dark:to-rose-950/40';
+    if (score >= 80) return 'bg-emerald-500/10';
+    if (score >= 70) return 'bg-blue-500/10';
+    if (score >= 60) return 'bg-orange-500/10';
+    return 'bg-rose-500/10';
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  ">
       {/* Hero Section */}
       <div className={cn("bg-gradient-to-r", getScoreGradient(mockData.overallScore), "text-white")}>
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
@@ -191,7 +191,7 @@ function MockInterviewResultsContent() {
                       animate={{ scale: 1, rotate: 0 }}
                       transition={{ delay: 0.4, type: 'spring' }}
                     >
-                      <CheckCircle2 className="h-12 w-12 text-white" />
+                      <CheckCircle2 className="h-12 w-12 text-foreground" />
                     </motion.div>
                   )}
                 </div>
@@ -240,7 +240,7 @@ function MockInterviewResultsContent() {
             <Share2 className="h-4 w-4 mr-2" />
             Share Results
           </Button>
-          <Button size="lg" asChild className="font-bold bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 shadow-lg">
+          <Button size="lg" asChild className="font-bold bg-surface border border-default hover: hover:to-rose-700 shadow-lg">
             <Link href="/mock-interviews">
               <Zap className="h-4 w-4 mr-2" />
               Try Another Mock
@@ -291,13 +291,13 @@ function MockInterviewResultsContent() {
                   <div className="flex items-start gap-4 flex-1">
                     <div className={cn(
                       "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
-                      q.type === 'coding' && "bg-gradient-to-br from-blue-50 dark:from-blue-950/400 to-cyan-600",
-                      q.type === 'system-design' && "bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-indigo-600",
-                      q.type === 'behavioral' && "bg-gradient-to-br from-orange-50 dark:from-orange-950/400 to-amber-600"
+                      q.type === 'coding' && "bg-surface ",
+                      q.type === 'system-design' && "bg-surface ",
+                      q.type === 'behavioral' && "bg-gradient-to-br from-orange-50 dark:from-orange-950/40 "
                     )}>
-                      {q.type === 'coding' && <Code2 className="h-6 w-6 text-white" />}
-                      {q.type === 'system-design' && <GitBranch className="h-6 w-6 text-white" />}
-                      {q.type === 'behavioral' && <MessageSquare className="h-6 w-6 text-white" />}
+                      {q.type === 'coding' && <Code2 className="h-6 w-6 text-foreground" />}
+                      {q.type === 'system-design' && <GitBranch className="h-6 w-6 text-foreground" />}
+                      {q.type === 'behavioral' && <MessageSquare className="h-6 w-6 text-foreground" />}
                     </div>
                     <div className="flex-1">
                       <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
@@ -310,7 +310,7 @@ function MockInterviewResultsContent() {
                       {q.reviewUrl && q.score < 80 && (
                         <Link
                           href={q.reviewUrl}
-                          className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400 text-xs font-bold hover:bg-blue-100 dark:bg-blue-950/20 transition-colors"
+                          className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-default dark:border-default/20 text-primary dark:text-primary text-xs font-bold hover:bg-blue-100 dark:bg-blue-950/20 transition-colors"
                         >
                           <BookOpen className="h-3 w-3" />
                           Review Full Answer & Explanation
@@ -329,7 +329,7 @@ function MockInterviewResultsContent() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Strengths */}
-                  <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
+                  <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-default dark:border-default/20">
                     <div className="flex items-center gap-2 mb-3">
                       <ThumbsUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                       <h4 className="text-sm font-black text-emerald-900 dark:text-emerald-400">What Went Well</h4>
@@ -379,8 +379,8 @@ function MockInterviewResultsContent() {
                   <div key={category}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        {category === 'coding' && <Code2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />}
-                        {category === 'systemDesign' && <GitBranch className="h-4 w-4 text-purple-600 dark:text-purple-400" />}
+                        {category === 'coding' && <Code2 className="h-4 w-4 text-primary dark:text-primary" />}
+                        {category === 'systemDesign' && <GitBranch className="h-4 w-4 text-primary dark:text-primary" />}
                         {category === 'behavioral' && <MessageSquare className="h-4 w-4 text-orange-600 dark:text-orange-400" />}
                         <span className="text-sm font-bold text-foreground capitalize">
                           {category.replace(/([A-Z])/g, ' $1')}
@@ -419,17 +419,17 @@ function MockInterviewResultsContent() {
                     href="/domains"
                     className={cn(
                       "flex items-center justify-between p-4 rounded-xl border-2 transition-all hover:scale-[1.02] group",
-                      rec.priority === 'high' && "bg-gradient-to-r   from-red-50 dark:from-red-950/40 to-rose-50 dark:to-rose-950/40 border-red-200 dark:border-red-500/20 hover:border-red-400 dark:border-red-700",
-                      rec.priority === 'medium' && "bg-gradient-to-r   from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40 border-orange-200 dark:border-orange-500/20 hover:border-orange-400 dark:border-orange-700",
-                      rec.priority === 'low' && "bg-gradient-to-r   from-blue-50 dark:from-blue-950/40 to-cyan-50 dark:to-cyan-950/40 border-blue-200 dark:border-blue-500/20 hover:border-blue-400 dark:border-blue-700"
+                      rec.priority === 'high' && "bg-surface border-default dark:border-default/20 hover:border-default dark:border-default",
+                      rec.priority === 'medium' && "bg-gradient-to-r   from-orange-50 dark:from-orange-950/40  border-orange-200 dark:border-orange-500/20 hover:border-orange-400 dark:border-orange-700",
+                      rec.priority === 'low' && "bg-surface border-default dark:border-default/20 hover:border-default dark:border-default"
                     )}
                   >
                     <div className="flex items-center gap-3">
                       <div className={cn(
                         "w-10 h-10 rounded-lg flex items-center justify-center",
-                        rec.priority === 'high' && "bg-gradient-to-br from-red-50 dark:from-red-950/400 to-rose-600",
-                        rec.priority === 'medium' && "bg-gradient-to-br from-orange-50 dark:from-orange-950/400 to-amber-600",
-                        rec.priority === 'low' && "bg-gradient-to-br from-blue-50 dark:from-blue-950/400 to-cyan-600"
+                        rec.priority === 'high' && "bg-surface to-rose-600",
+                        rec.priority === 'medium' && "bg-gradient-to-br from-orange-50 dark:from-orange-950/40 ",
+                        rec.priority === 'low' && "bg-surface "
                       )}>
                         <rec.icon className="h-5 w-5 text-white" />
                       </div>
@@ -449,18 +449,18 @@ function MockInterviewResultsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
-              className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 rounded-2xl border-2 border-purple-200 dark:border-purple-500/20 shadow-lg p-6"
+              className="bg-surface border border-default rounded-2xl border-2 border-default dark:border-default/20 shadow-lg p-6"
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-50 dark:from-purple-950/400 to-pink-600 flex items-center justify-center">
-                  <Award className="h-5 w-5 text-white" />
+                <div className="w-10 h-10 rounded-lg bg-surface flex items-center justify-center">
+                  <Award className="h-5 w-5 text-foreground" />
                 </div>
                 <h3 className="text-lg font-black text-foreground">Keep Going!</h3>
               </div>
               <p className="text-sm text-foreground mb-4">
                 Consistent practice is key to interview success. Take another mock to track your improvement.
               </p>
-              <Button asChild className="w-full font-bold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
+              <Button asChild className="w-full font-bold bg-surface border border-default hover: hover:">
                 <Link href="/mock-interviews">
                   Start New Mock
                   <ArrowRight className="h-4 w-4 ml-2" />

@@ -68,13 +68,14 @@ export function ActivityHeatmapCard({ heatmapData, showSample }: ActivityHeatmap
   const gridCols = { gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` };
 
   return (
-    <Card className="flex flex-col bg-card border border-default p-5 shadow-sm h-full rounded-2xl">
+    <Card className="flex flex-col bg-card border border-default p-5 shadow-sm h-full rounded-2xl relative overflow-hidden">
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500/40 to-transparent" />
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h2 className="text-[13px] font-bold text-primary tracking-tight">Study Activity</h2>
         </div>
-        <span className="text-[10px] font-bold text-secondary bg-surface border border-default px-2.5 py-0.5 rounded-full uppercase tracking-wider">Last 12 months</span>
+        <span className="text-[10px] font-bold text-muted-foreground bg-surface border border-default px-2.5 py-0.5 rounded-full uppercase tracking-wider">Last 12 months</span>
       </div>
 
       <div className="flex-1 flex flex-col justify-center overflow-x-auto">

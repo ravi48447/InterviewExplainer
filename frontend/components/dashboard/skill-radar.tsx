@@ -13,7 +13,7 @@ export function SkillRadar({ data }: { data: { subject: string; score: number }[
           <PolarGrid stroke="#e2e8f0" />
           <PolarAngleAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 11, fontWeight: 600 }} />
           <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-          <Radar name="Proficiency" dataKey="score" stroke="#6366f1" fill="#6366f1" fillOpacity={0.2} strokeWidth={2} />
+          <Radar name="Proficiency" dataKey="score" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.2} strokeWidth={2} />
           <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '12px', padding: '6px 10px' }} />
         </RadarChart>
       </ResponsiveContainer>

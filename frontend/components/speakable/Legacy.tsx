@@ -85,15 +85,15 @@ function LegacyQuestionCard({
       <div
         className={`rounded-xl overflow-hidden shadow-lg ${
           d
-            ? "border border-emerald-600 dark:border-emerald-700/50 bg-[#0d1c15] shadow-black/40"
-            : "border border-emerald-200 dark:border-emerald-500/20/70 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 shadow-emerald-100/60"
+            ? "border border-default dark:border-default/50 bg-[#0d1c15] shadow-black/40"
+            : "border border-default dark:border-default/20/70 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 shadow-sm"
         }`}
       >
         <div
           className={`flex items-center gap-2 px-5 py-2.5 border-b ${
             d
-              ? "border-emerald-700 dark:border-emerald-700/50 bg-emerald-900 dark:bg-emerald-800/30"
-              : "border-emerald-200 dark:border-emerald-500/20/60 bg-emerald-100 dark:bg-emerald-950/20/40"
+              ? "border-default dark:border-default/50 bg-emerald-900 dark:bg-emerald-800/30"
+              : "border-default dark:border-default/20/60 bg-emerald-100 dark:bg-emerald-950/20/40"
           }`}
         >
           <Star
@@ -105,7 +105,7 @@ function LegacyQuestionCard({
           />
           <span
             className={`text-[11px] font-bold uppercase tracking-widest ${
-              d ? "text-emerald-300" : "text-emerald-700 dark:text-emerald-400"
+              d ? "text-emerald-700" : "text-emerald-700 dark:text-emerald-400"
             }`}
           >
             Interview Answer
@@ -126,8 +126,8 @@ function LegacyQuestionCard({
             <p
               className={`text-[17px] leading-[1.6] font-medium mb-5 pb-5 border-b border-dashed ${
                 d
-                  ? "text-white border-emerald-800 dark:border-emerald-700/60"
-                  : "text-foreground border-emerald-200 dark:border-emerald-500/20/60"
+                  ? "text-white border-default dark:border-default/60"
+                  : "text-foreground border-default dark:border-default/20/60"
               }`}
             >
               <MarkdownContent content={lede} inline />
@@ -143,7 +143,7 @@ function LegacyQuestionCard({
           {questionId !== undefined && (
             <div
               className={`mt-5 pt-4 border-t ${
-                d ? "border-emerald-900 dark:border-emerald-700/50" : "border-emerald-200 dark:border-emerald-500/20/50"
+                d ? "border-default dark:border-default/50" : "border-default dark:border-default/20/50"
               }`}
             >
               <MarkCompleteButton questionId={Number(questionId)} />

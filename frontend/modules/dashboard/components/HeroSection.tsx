@@ -63,18 +63,18 @@ export function HeroSection({
               </div>
             </div>
             <div>
-              <p className="text-secondary text-xs font-medium mb-0.5">{greeting()}</p>
+              <p className="text-muted-foreground text-xs font-medium mb-0.5">{greeting()}</p>
               <h1 className="text-2xl lg:text-3xl font-semibold tracking-tight text-primary">
                 {isGuest ? 'Dashboard Preview' : (user?.name ?? 'Welcome Back')}
               </h1>
               <div className="flex flex-wrap items-center gap-2 mt-2.5">
                 {!isGuest && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface border border-default text-[11px] font-medium text-secondary">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface border border-default text-[11px] font-medium text-muted-foreground">
                     <span className="h-1.5 w-1.5 rounded-full bg-success" /> {lvl.title} · Level {lvl.level}
                   </span>
                 )}
                 {!isGuest && user?.experienceLevel && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface border border-default text-[11px] font-medium text-secondary">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface border border-default text-[11px] font-medium text-muted-foreground">
                     <GraduationCap className="h-3 w-3 text-muted-foreground" /> {fmtExp(user.experienceLevel)}
                   </span>
                 )}
@@ -84,7 +84,7 @@ export function HeroSection({
                       type="button"
                       onClick={() => setDomainMenuOpen(!domainMenuOpen)}
                       disabled={switchingDomain}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface border border-default text-[11px] font-medium text-secondary hover:bg-hover transition-colors disabled:opacity-60"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface border border-default text-[11px] font-medium text-muted-foreground hover:bg-hover transition-colors disabled:opacity-60"
                     >
                       <Target className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
                       {switchingDomain ? 'Saving…' : (domainDisplayName ?? 'Set focus domain')}
@@ -109,7 +109,7 @@ export function HeroSection({
                                         'flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors',
                                         active
                                           ? 'border-primary bg-surface text-primary font-semibold'
-                                          : 'border-default bg-card text-secondary hover:border-primary hover:bg-surface',
+                                          : 'border-default bg-card text-muted-foreground hover:border-primary hover:bg-surface',
                                       )}
                                     >
                                       <span className="truncate">{dom.name}</span>
@@ -134,7 +134,7 @@ export function HeroSection({
                   </div>
                 )}
                 {isGuest && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface border border-default text-[11px] font-medium text-secondary">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface border border-default text-[11px] font-medium text-muted-foreground">
                     <Sparkles className="h-3 w-3 text-muted-foreground" /> Preview Mode
                   </span>
                 )}
@@ -146,12 +146,12 @@ export function HeroSection({
             {!isGuest && (
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-default">
-                  <Flame className="h-4 w-4 text-secondary" />
+                  <Flame className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-semibold tabular-nums text-primary">{currentStreak}</span>
                   <span className="text-[11px] text-muted-foreground">day streak</span>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-default">
-                  <CheckCircle2 className="h-4 w-4 text-secondary" />
+                  <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-semibold tabular-nums text-primary">{done.toLocaleString()}</span>
                   <span className="text-[11px] text-muted-foreground">solved</span>
                 </div>
@@ -184,12 +184,12 @@ export function HeroSection({
         {!isGuest && (
           <div className="mt-8 max-w-xl">
             <div className="flex items-center justify-between text-[11px] mb-2">
-              <span className="text-secondary font-medium">Level {lvl.level} · {lvl.title}</span>
+              <span className="text-muted-foreground font-medium">Level {lvl.level} · {lvl.title}</span>
               <span className="text-muted-foreground">{lvl.toNext} more to Level {lvl.level + 1}</span>
             </div>
             <div className="h-1.5 rounded-full bg-surface overflow-hidden">
               <div
-                className="h-full rounded-full bg-primary transition-all duration-1000"
+                className="h-full rounded-full bg-primary transition-all duration-500"
                 style={{ width: `${Math.max(4, lvl.pct)}%` }}
               />
             </div>

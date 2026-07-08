@@ -25,7 +25,7 @@ export function SignupBanner() {
       <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
         <div className="flex-1 space-y-4">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-zinc-900 dark:bg-zinc-800 border border-zinc-800 dark:border-zinc-700 text-xs font-semibold text-zinc-300 dark:text-zinc-300">
-            <Sparkles className="h-3 w-3 text-blue-400 dark:text-blue-300" />
+            <Sparkles className="h-3 w-3 text-primary dark:text-primary" />
             <span>Mastery Awaits</span>
           </div>
           <h2 className="text-3xl font-bold tracking-tight text-white">
@@ -59,7 +59,7 @@ export function SignupBanner() {
             </Button>
           </Link>
           <Link href="/login">
-            <Button variant="ghost" className="w-full text-zinc-400 dark:text-zinc-300 hover:text-white hover:bg-zinc-900 dark:bg-zinc-800 font-medium">
+            <Button variant="ghost" className="w-full text-zinc-400 dark:text-zinc-300 hover:text-foreground hover:bg-zinc-900 dark:bg-zinc-800 font-medium">
               Already a member? Sign In
             </Button>
           </Link>

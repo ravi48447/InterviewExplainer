@@ -26,7 +26,8 @@ export function KnowledgeCard({
   ];
 
   return (
-    <Card className="flex flex-col bg-card border border-default p-5 shadow-sm h-full rounded-2xl">
+    <Card className="flex flex-col bg-card border border-default p-5 shadow-sm h-full rounded-2xl relative overflow-hidden">
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500/40 to-transparent" />
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Layers className="h-4 w-4 text-muted-foreground" aria-hidden="true" />

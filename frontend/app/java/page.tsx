@@ -75,13 +75,13 @@ export default function JavaPathsPage() {
  {paths.map((path) => (
  <Link href={path.href} key={path.id}>
  <div 
- className="group h-full rounded-2xl border border-border bg-card overflow-hidden flex flex-col transition-all duration-300 hover:shadow-xl hover:border-primary/30 hover:-translate-y-1"
+ className="group h-full rounded-2xl border border-border bg-card overflow-hidden flex flex-col transition-all duration-200 hover:shadow-xl hover:border-primary/30 hover:-translate-y-1"
  >
  <div className="p-8 flex-1">
  {/* Accent line */}
  <div 
  className={`w-12 h-1.5 rounded-full mb-6 ${
- path.typeColor === 'blue' ? 'bg-blue-500 dark:bg-blue-800' : 'bg-purple-500 dark:bg-purple-800'
+ path.typeColor === 'blue' ? 'bg-blue-500 dark:bg-blue-800' : 'bg-blue-500 dark:bg-blue-800'
  }`} 
  />
  
@@ -91,8 +91,8 @@ export default function JavaPathsPage() {
  variant="outline" 
  className={`border-transparent font-medium ${
  path.typeColor === 'blue' 
- ? 'bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 dark:text-blue-400' 
- : 'bg-purple-500 dark:bg-purple-800/10 text-white dark:text-purple-400'
+ ? 'bg-blue-500/10 dark:bg-blue-500/20 text-primary dark:text-primary' 
+ : 'bg-blue-500 dark:bg-blue-800/10 text-white dark:text-primary'
  }`}
  >
  {path.type}
@@ -125,7 +125,7 @@ export default function JavaPathsPage() {
  <BookOpen className="w-4 h-4" />
  Start Learning
  </div>
- <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-300" />
+ <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all duration-200" />
  </div>
  </div>
  </Link>

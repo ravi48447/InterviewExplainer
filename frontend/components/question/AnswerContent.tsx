@@ -35,12 +35,12 @@ export function AnswerContent({ answer }: AnswerContentProps) {
             {/* 1. What the Interviewer Wants to Hear */}
             <section className="space-y-5">
                 <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 dark:text-blue-400">
+                    <div className="p-2.5 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-primary dark:text-primary">
                         <MessageSquareQuote className="h-5 w-5" />
                     </div>
-                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-blue-400 dark:text-blue-300">What the Interviewer Wants to Hear</h2>
+                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-primary dark:text-primary">What the Interviewer Wants to Hear</h2>
                 </div>
-                <div className="p-8 rounded-[2rem] bg-blue-500 dark:bg-blue-800/[0.03] border border-blue-500 dark:border-blue-700/10 leading-relaxed relative overflow-hidden group">
+                <div className="p-8 rounded-[2rem] bg-blue-500 dark:bg-blue-800/[0.03] border border-default dark:border-default/10 leading-relaxed relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
                         <MessageSquareQuote className="h-12 w-12" />
                     </div>
@@ -88,10 +88,10 @@ export function AnswerContent({ answer }: AnswerContentProps) {
                 <section className="space-y-5">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-cyan-500 dark:bg-cyan-800/10 text-white dark:text-cyan-400">
+                            <div className="p-2.5 rounded-xl bg-cyan-500 dark:bg-cyan-800/10 text-white dark:text-primary">
                                 <Code2 className="h-5 w-5" />
                             </div>
-                            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-cyan-400 dark:text-cyan-300">Implementation Pattern</h2>
+                            <h2 className="text-sm font-black uppercase tracking-[0.2em] text-primary dark:text-primary">Implementation Pattern</h2>
                         </div>
                         <button
                             onClick={() => copyToClipboard(answer.codeSnippet || "")}
@@ -102,7 +102,7 @@ export function AnswerContent({ answer }: AnswerContentProps) {
                         </button>
                     </div>
                     <div className="relative group">
-                        <pre className="p-10 rounded-[2.5rem] bg-foreground /40 border border-white/5 overflow-x-auto text-[14px] font-mono text-cyan-500 dark:text-cyan-400/80 leading-relaxed shadow-inner">
+                        <pre className="p-10 rounded-[2.5rem] bg-foreground /40 border border-white/5 overflow-x-auto text-[14px] font-mono text-primary dark:text-primary/80 leading-relaxed shadow-inner">
                             <code>{answer.codeSnippet}</code>
                         </pre>
                         <div className="absolute top-6 right-8 text-[9px] font-mono text-muted-foreground/20 uppercase tracking-[0.3em]">IDE Edition</div>

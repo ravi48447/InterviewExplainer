@@ -53,7 +53,7 @@ export function StatsGrid({
               <m.icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" aria-hidden="true" />
             </div>
             <p className="text-2xl font-bold text-primary tracking-tight leading-none tabular-nums">{m.val}</p>
-            <p className="text-[11px] text-secondary mt-1.5 leading-none">{m.sub}</p>
+            <p className="text-[11px] text-muted-foreground mt-1.5 leading-none">{m.sub}</p>
           </div>
         ))}
       </div>

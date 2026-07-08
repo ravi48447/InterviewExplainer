@@ -37,7 +37,7 @@ const DOMAIN_ROADMAPS = [
     name: "Java Backend Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "Spring Boot, Microservices, PostgreSQL, Kafka, Docker, AWS",
-    gradient: "from-orange-50 dark:from-orange-950/400 to-red-600",
+    gradient: "from-orange-50 dark:from-orange-950/40 ",
     weeks: "8-week plan per level",
   },
   {
@@ -45,7 +45,7 @@ const DOMAIN_ROADMAPS = [
     name: "Python Backend Developer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "Django, FastAPI, PostgreSQL, Redis, Celery, AWS",
-    gradient: "from-blue-50 dark:from-blue-950/400 to-cyan-600",
+    gradient: "from-blue-500 to-blue-600",
     weeks: "8-week plan per level",
   },
   {
@@ -53,7 +53,7 @@ const DOMAIN_ROADMAPS = [
     name: "JavaScript Frontend Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "React, TypeScript, Next.js, Testing, Performance",
-    gradient: "from-yellow-400 to-orange-50 dark:to-orange-950/400",
+    gradient: "from-yellow-400 to-orange-50 dark:to-orange-950/40",
     weeks: "8-week plan per level",
   },
   {
@@ -61,7 +61,7 @@ const DOMAIN_ROADMAPS = [
     name: "Python Data Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "Spark, Airflow, Kafka, SQL, Data Modeling, dbt",
-    gradient: "from-emerald-50 dark:from-emerald-950/400 to-teal-600",
+    gradient: " to-teal-600",
     weeks: "8-week plan per level",
   },
   {
@@ -69,7 +69,7 @@ const DOMAIN_ROADMAPS = [
     name: "Python ML/AI Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "PyTorch, TensorFlow, MLOps, NLP, Computer Vision",
-    gradient: "from-violet-50 dark:from-violet-950/400 to-purple-600",
+    gradient: "from-blue-50 dark:from-blue-950/40 ",
     weeks: "8-week plan per level",
   },
   {
@@ -77,7 +77,7 @@ const DOMAIN_ROADMAPS = [
     name: "Go Backend Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "Go, gRPC, Kubernetes, Docker, PostgreSQL",
-    gradient: "from-cyan-50 dark:from-cyan-950/400 to-blue-600",
+    gradient: "from-blue-500 to-blue-600",
     weeks: "8-week plan per level",
   },
   {
@@ -85,7 +85,7 @@ const DOMAIN_ROADMAPS = [
     name: "DevOps / SRE Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "Kubernetes, Terraform, CI/CD, AWS, Monitoring, Linux",
-    gradient: "from-slate-50 dark:from-slate-950/400 to-slate-700",
+    gradient: "from-slate-50 dark:from-slate-950/40 to-slate-700",
     weeks: "8-week plan per level",
   },
   {
@@ -93,7 +93,7 @@ const DOMAIN_ROADMAPS = [
     name: "Full-Stack Engineer",
     levels: ["Beginner", "Intermediate", "Advanced"],
     stacks: "React, Node.js/Spring Boot, PostgreSQL, DevOps",
-    gradient: "from-rose-50 dark:from-rose-950/400 to-pink-600",
+    gradient: "from-rose-50 dark:from-rose-950/40 ",
     weeks: "10-week plan per level",
   },
 ];
@@ -115,7 +115,7 @@ const DSA_PLANS = [
     duration: "8-10 weeks",
     desc: "Expanded Blind 75 with better coverage of edge cases and advanced patterns. Includes video explanations for every problem.",
     tag: "Comprehensive",
-    tagColor: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
+    tagColor: "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
   },
   {
     slug: "grind-75",
@@ -133,7 +133,7 @@ const DSA_PLANS = [
     duration: "6-8 weeks",
     desc: "Community-voted top problems. Good breadth across all major patterns with emphasis on frequently asked questions.",
     tag: "Community Pick",
-    tagColor: "bg-purple-100 dark:bg-purple-950/20 text-purple-700 dark:text-purple-400",
+    tagColor: "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
   },
   {
     slug: "dsa-foundations",
@@ -168,7 +168,7 @@ const TIMELINE_PLANS = [
     icon: BookOpen,
     desc: "Comprehensive prep with deep mastery of all areas. DSA pattern-by-pattern, full system design course, behavioral bank complete.",
     ideal: "Planning ahead, want thorough preparation",
-    color: "text-blue-600 dark:text-blue-400",
+    color: "text-primary dark:text-primary",
     bg: "bg-blue-100 dark:bg-blue-950/20",
   },
   {
@@ -183,7 +183,7 @@ const TIMELINE_PLANS = [
 
 export default function RoadmapsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-green-50/20 dark:via-green-950/40 to-emerald-50/20 dark:to-emerald-950/40 font-sans text-foreground selection:bg-green-200  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-green-50/20 dark:via-green-950/40  font-sans text-foreground selection:bg-green-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -201,7 +201,7 @@ export default function RoadmapsPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-green-50 dark:from-green-950/40 via-emerald-50 dark:via-emerald-950/40 to-teal-50 dark:to-teal-950/40  ">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-green-50 dark:from-green-950/40  to-teal-50 dark:to-teal-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Map className="h-5 w-5 text-green-600 dark:text-green-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-green-600 dark:text-green-400">
@@ -331,7 +331,7 @@ export default function RoadmapsPage() {
                   <div
                     className={`w-12 h-12 rounded-xl bg-gradient-to-br ${roadmap.gradient} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}
                   >
-                    <Layers className="h-6 w-6 text-white" />
+                    <Layers className="h-6 w-6 text-foreground" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
@@ -366,7 +366,7 @@ export default function RoadmapsPage() {
         {/* DSA Study Plans */}
         <section className="mb-12">
           <div className="flex items-center gap-2 mb-2">
-            <Code2 className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+            <Code2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             <h2 className="text-xl font-black text-foreground">
               Curated DSA Problem Sets
             </h2>
@@ -380,14 +380,14 @@ export default function RoadmapsPage() {
               <Link
                 key={plan.slug}
                 href={`/roadmaps/dsa/${plan.slug}`}
-                className="group flex items-start gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-violet-300 dark:border-violet-500/30 transition-all p-5"
+                className="group flex items-start gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-blue-300 dark:border-blue-500/30 transition-all p-5"
               >
-                <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-950/20 flex items-center justify-center shrink-0">
-                  <Code2 className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center shrink-0">
+                  <Code2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-[15px] font-bold text-foreground group-hover:text-violet-600 dark:text-violet-400 transition-colors">
+                    <h3 className="text-[15px] font-bold text-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors">
                       {plan.name}
                     </h3>
                     <span
@@ -409,14 +409,14 @@ export default function RoadmapsPage() {
                     </span>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-violet-500 dark:text-violet-400 group-hover:translate-x-1 transition-all mt-1 shrink-0" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 group-hover:translate-x-1 transition-all mt-1 shrink-0" />
               </Link>
             ))}
           </div>
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-green-200 dark:border-green-500/20 bg-gradient-to-r from-green-50 dark:from-green-950/40 to-emerald-50 dark:to-emerald-950/40 p-8 text-center mb-12  ">
+        <section className="rounded-xl border border-green-200 dark:border-green-500/20 bg-gradient-to-r from-green-50 dark:from-green-950/40  p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Get a Personalized Roadmap for Your Domain
           </h2>
@@ -427,7 +427,7 @@ export default function RoadmapsPage() {
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-surface border border-default text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

@@ -70,7 +70,7 @@ function highlightAll(root: ParentNode, hljs: HljsApi) {
 
     // 2. Wrap and build interface
     const container = document.createElement("div");
-    container.className = "relative border border-border rounded-xl bg-card my-6 overflow-hidden group shadow-sm transition-all";
+    container.className = "relative border border-border rounded-xl bg-card my-6 overflow-hidden group shadow-sm transition-all duration-200 ease-out";
     
     // Get language name
     let lang = "Code";
@@ -176,10 +176,10 @@ function highlightAll(root: ParentNode, hljs: HljsApi) {
       linesContainer.classList.add("max-h-[320px]", "overflow-hidden");
 
       const fadeOverlay = document.createElement("div");
-      fadeOverlay.className = "absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-card to-transparent pointer-events-none z-10 transition-opacity duration-300";
+      fadeOverlay.className = "absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-card to-transparent pointer-events-none z-10 transition-opacity duration-200";
 
       const showMoreBtn = document.createElement("button");
-      showMoreBtn.className = "absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-primary text-primary-foreground rounded-full text-xs font-semibold shadow-md hover:scale-105 transition-all z-20";
+      showMoreBtn.className = "absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-primary text-primary-foreground rounded-full text-xs font-semibold shadow-md hover:scale-105 transition-transform duration-200 z-20";
       showMoreBtn.textContent = "Show More";
 
       showMoreBtn.addEventListener("click", () => {

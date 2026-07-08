@@ -33,7 +33,7 @@ export function VersionTabs({ versions }: VersionTabsProps) {
             onClick={() => setActive(v)}
             className={`px-4 py-2 text-xs font-semibold transition-colors ${
               active === v
-                ? "bg-background text-blue-700 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-700"
+                ? "bg-background text-primary dark:text-primary border-b-2 border-default dark:border-default"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >

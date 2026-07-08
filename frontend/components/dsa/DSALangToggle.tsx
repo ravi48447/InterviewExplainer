@@ -43,7 +43,7 @@ export function DSALangToggle({ className = "" }: { className?: string }) {
             className={cn(
               "px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md transition-colors",
               active
-                ? "bg-violet-600 dark:bg-violet-800 text-primary-foreground dark:text-foreground shadow-sm"
+                ? "bg-blue-600 dark:bg-blue-800 text-primary-foreground dark:text-foreground shadow-sm"
                 : "text-secondary hover:text-foreground hover:bg-surface",
             )}
           >

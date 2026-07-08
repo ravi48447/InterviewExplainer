@@ -198,10 +198,10 @@ function buildToc(sections: AnswerSection[]): TocItem[] {
 
 const CM_COLORS: Record<string, { bar: string; chip: string }> = {
   amber: { bar: "bg-amber-400", chip: "text-amber-950 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10" },
-  blue: { bar: "bg-blue-400", chip: "text-white dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10" },
+  blue: { bar: "bg-blue-400", chip: "text-white dark:text-primary bg-blue-50 dark:bg-blue-500/10" },
   emerald: { bar: "bg-emerald-400", chip: "text-white dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10" },
-  violet: { bar: "bg-violet-400", chip: "text-white dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10" },
-  indigo: { bar: "bg-indigo-400", chip: "text-white dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10" },
+  violet: { bar: "bg-blue-400", chip: "text-white dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10" },
+  indigo: { bar: "bg-blue-400", chip: "text-white dark:text-primary bg-blue-50 dark:bg-blue-500/10" },
   rose: { bar: "bg-rose-400", chip: "text-white dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10" },
   slate: { bar: "bg-slate-400 dark:bg-slate-800", chip: "text-foreground bg-surface" },
 };
@@ -387,7 +387,7 @@ export function DeepDiveArticle({ sections, followupQuestions }: Props) {
           <ol className="rounded-2xl border border-border/80 bg-background px-6 py-6 sm:px-8 sm:py-7 space-y-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
             {followupQuestions!.map((q, i) => (
               <li key={i} className="flex items-start gap-3.5">
-                <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-black border border-indigo-100 dark:border-indigo-500/20">
+                <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary text-[11px] font-black border border-default dark:border-default/20">
                   {i + 1}
                 </span>
                 <span className="text-[15.5px] leading-[1.65] text-foreground pt-[1px]">

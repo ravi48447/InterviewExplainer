@@ -49,7 +49,7 @@ const CATEGORIES = [
     count: 10,
     desc: "Cross-functional work, resolving disagreements, building consensus, supporting teammates",
     icon: Users,
-    color: "text-blue-600 dark:text-blue-400",
+    color: "text-primary dark:text-primary",
     bg: "bg-blue-100 dark:bg-blue-950/20",
   },
   {
@@ -76,8 +76,8 @@ const CATEGORIES = [
     count: 8,
     desc: "Ambiguous situations, creative solutions, data-driven decisions, debugging production",
     icon: Lightbulb,
-    color: "text-violet-600 dark:text-violet-400",
-    bg: "bg-violet-100 dark:bg-violet-950/20",
+    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-blue-100 dark:bg-blue-950/20",
   },
   {
     slug: "communication",
@@ -85,7 +85,7 @@ const CATEGORIES = [
     count: 6,
     desc: "Explaining technical concepts, presenting to executives, writing technical docs",
     icon: MessageSquare,
-    color: "text-cyan-600",
+    color: "text-primary",
     bg: "bg-cyan-100 dark:bg-cyan-950/20",
   },
   {
@@ -103,7 +103,7 @@ const CATEGORIES = [
     count: 5,
     desc: "User empathy, prioritizing customer impact, measuring outcomes, product thinking",
     icon: Heart,
-    color: "text-pink-600",
+    color: "text-primary",
     bg: "bg-pink-100 dark:bg-pink-950/20",
   },
   {
@@ -112,8 +112,8 @@ const CATEGORIES = [
     count: 5,
     desc: "Managing competing priorities, estimating work, saying no, deadline management",
     icon: Target,
-    color: "text-indigo-600",
-    bg: "bg-indigo-100 dark:bg-indigo-950/20",
+    color: "text-primary",
+    bg: "bg-blue-100 dark:bg-blue-950/20",
   },
   {
     slug: "mentoring",
@@ -141,7 +141,7 @@ const COMPANY_SPECIFIC = [
     count: 8,
     desc: "Google's unique behavioral dimensions: cognitive ability, role-related knowledge, Googleyness, and leadership signals they look for.",
     tag: "FAANG",
-    tagColor: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
+    tagColor: "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
   },
   {
     slug: "meta-behavioral",
@@ -149,7 +149,7 @@ const COMPANY_SPECIFIC = [
     count: 8,
     desc: "Meta values impact and velocity. Questions focus on autonomy, driving impact, working at scale, and cross-functional collaboration.",
     tag: "FAANG",
-    tagColor: "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400",
+    tagColor: "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
   },
   {
     slug: "microsoft-behavioral",
@@ -165,7 +165,7 @@ const COMPANY_SPECIFIC = [
     count: 6,
     desc: "Startup interviews value resourcefulness, wearing multiple hats, handling ambiguity, and delivering with limited resources.",
     tag: "Startups",
-    tagColor: "bg-purple-100 dark:bg-purple-950/20 text-purple-700 dark:text-purple-400",
+    tagColor: "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
   },
 ];
 
@@ -174,25 +174,25 @@ const STAR_STEPS = [
     letter: "S",
     title: "Situation",
     desc: "Set the context. When and where did this happen? What was your role? Keep it concise — 2-3 sentences max.",
-    color: "from-blue-50 dark:from-blue-950/400 to-blue-600",
+    color: "from-blue-400 to-blue-500",
   },
   {
     letter: "T",
     title: "Task",
     desc: "What was your specific responsibility? What challenge or goal were you facing? What were the stakes?",
-    color: "from-indigo-50 dark:from-indigo-950/400 to-indigo-600",
+    color: "from-blue-500 to-blue-600",
   },
   {
     letter: "A",
     title: "Action",
     desc: "What did YOU do? Be specific about your individual contribution. This should be 60% of your answer. Use 'I', not 'we'.",
-    color: "from-violet-50 dark:from-violet-950/400 to-violet-600",
+    color: "from-blue-600 to-blue-700",
   },
   {
     letter: "R",
     title: "Result",
     desc: "What was the outcome? Quantify when possible (reduced latency by 40%, saved $50K/month). Include learnings.",
-    color: "from-purple-50 dark:from-purple-950/400 to-purple-600",
+    color: "from-blue-700 to-blue-800",
   },
 ];
 
@@ -200,7 +200,7 @@ const totalQuestions = CATEGORIES.reduce((sum, c) => sum + c.count, 0);
 
 export default function BehavioralPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-amber-50/20 dark:via-amber-950/40 to-orange-50/20 dark:to-orange-950/40 font-sans text-foreground selection:bg-amber-200  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  to-orange-50/20 dark:to-orange-950/40 font-sans text-foreground selection:bg-amber-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -218,7 +218,7 @@ export default function BehavioralPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-amber-50 dark:from-amber-950/40 via-orange-50 dark:via-orange-950/40 to-rose-50 dark:to-rose-950/40  ">
+          <div className="relative px-8 py-8 bg-surface via-orange-50 dark:via-orange-950/40 to-rose-50 dark:to-rose-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Brain className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
@@ -336,7 +336,7 @@ export default function BehavioralPage() {
               <Link
                 key={cat.slug}
                 href={`/behavioral/${cat.slug}`}
-                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-amber-300 dark:border-amber-500/30 transition-all p-5"
+                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-default dark:border-default/30 transition-all p-5"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div
@@ -380,7 +380,7 @@ export default function BehavioralPage() {
               <Link
                 key={comp.slug}
                 href={`/behavioral/company/${comp.slug}`}
-                className="group flex items-start gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-amber-300 dark:border-amber-500/30 transition-all p-5"
+                className="group flex items-start gap-4 rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-default dark:border-default/30 transition-all p-5"
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1.5">
@@ -407,7 +407,7 @@ export default function BehavioralPage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-gradient-to-r from-amber-50 dark:from-amber-950/40 to-orange-50 dark:to-orange-950/40 p-8 text-center mb-12  ">
+        <section className="rounded-xl border border-default dark:border-default/20 bg-surface p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Behavioral Prep Is Part of Every Interview Domain
           </h2>
@@ -418,7 +418,7 @@ export default function BehavioralPage() {
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-surface border border-default text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

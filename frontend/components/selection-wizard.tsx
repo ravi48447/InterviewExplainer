@@ -61,16 +61,16 @@ function deriveLanguagesFromDomains(domains: ContentDomain[], trackSlug?: string
 
 
 const trackTheme: Record<string, any> = {
-    frontend: { icon: Palette, color: "from-blue-50 dark:from-blue-950/400 to-cyan-400" },
-    backend: { icon: Server, color: "from-green-50 dark:from-green-950/400 to-emerald-400" },
-    fullstack: { icon: Layout, color: "from-purple-50 dark:from-purple-950/400 to-pink-400" },
-    data: { icon: Database, color: "from-orange-50 dark:from-orange-950/400 to-yellow-400" },
-    business: { icon: Compass, color: "from-blue-600 to-indigo-400" },
+    frontend: { icon: Palette, color: "text-rose-500 bg-rose-500/10 border-rose-500/20" },
+    backend: { icon: Server, color: "text-blue-500 bg-blue-500/10 border-blue-500/20" },
+    fullstack: { icon: Layout, color: "text-blue-500 bg-blue-500/10 border-blue-500/20" },
+    data: { icon: Database, color: "text-amber-500 bg-amber-500/10 border-amber-500/20" },
+    business: { icon: Compass, color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" },
 };
 
 const expTheme: Record<ExperienceLevelKey, { subtitle: string; icon: any; color: string }> = {
-    beginner:     { subtitle: "Junior Tier",  icon: Sparkles, color: "from-emerald-50 dark:from-emerald-950/400 to-teal-400" },
-    intermediate: { subtitle: "Pro Tier",     icon: Trophy,   color: "from-purple-50 dark:from-purple-950/400 to-pink-400"  },
+    beginner:     { subtitle: "Junior Tier",  icon: Sparkles, color: "text-teal-500 bg-teal-500/10 border-teal-500/20" },
+    intermediate: { subtitle: "Pro Tier",     icon: Trophy,   color: "text-blue-500 bg-blue-500/10 border-blue-500/20"  },
 };
 
 // Hardcoded themes for visual flair, but data is dynamic
@@ -238,15 +238,13 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
                 className="relative w-full max-w-4xl bg-background/95 dark:bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-[2rem] sm:rounded-[3rem] p-5 sm:p-8 md:p-14 shadow-[0_50px_100px_rgba(0,0,0,0.6)] overflow-hidden"
             >
-                <div className="bg-blob bg-primary/10 top-[-30%] left-[-30%] scale-[2] blur-[120px]" />
-                <div className="bg-blob bg-purple-500 dark:bg-purple-800/10 bottom-[-30%] right-[-30%] scale-[2] blur-[120px]" />
-
-                {onClose && (
+                <div className="absolute top-[-30%] left-[-30%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
+                <div className="absolute bottom-[-30%] right-[-30%] w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />                {onClose && (
                     <button
                         onClick={onClose}
                         className="absolute top-4 right-4 sm:top-10 sm:right-10 p-2 sm:p-4 rounded-2xl glass hover:bg-background/10 transition-all z-20 group"
                     >
-                        <X className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground group-hover:text-white transition-colors" />
+                        <X className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground group-hover:text-foreground transition-colors" />
                     </button>
                 )}
 
@@ -257,14 +255,14 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                             <div key={i} className="flex items-center">
                                 <div
                                     className={cn(
-                                        "w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all duration-700 font-bold text-xs sm:text-sm",
-                                        step === i ? "bg-primary text-primary-foreground scale-110 shadow-[0_0_30px_rgba(0,242,254,0.4)]" :
+                                        "w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-all duration-200 font-bold text-xs sm:text-sm",
+                                        step === i ? "bg-primary text-primary-foreground scale-110 shadow-sm" :
                                             step > i ? "bg-background/20 text-white" : "bg-background/5 text-muted-foreground border border-white/5"
                                     )}
                                 >
                                     {step > i ? <Check className="h-4 w-4 sm:h-5 sm:w-5" /> : i + 1}
                                 </div>
-                                {i < 3 && <div className={cn("w-4 sm:w-8 h-[2px] mx-1 sm:mx-2 rounded-full transition-colors duration-700", step > i ? "bg-primary" : "bg-background/10")} />}
+                                {i < 3 && <div className={cn("w-4 sm:w-8 h-[2px] mx-1 sm:mx-2 rounded-full transition-colors duration-200", step > i ? "bg-primary" : "bg-background/10")} />}
                             </div>
                         ))}
                     </div>
@@ -278,7 +276,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                             transition={{ duration: 0.5, ease: "circOut" }}
                             className="text-center"
                         >
-                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-black tracking-tighter mb-2 sm:mb-4 leading-tight bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">{title}</h2>
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-black tracking-tighter mb-2 sm:mb-4 leading-tight bg-gradient-to-br from-foreground via-foreground/90 to-foreground/60 bg-clip-text text-transparent">{title}</h2>
                             <p className="text-xs sm:text-sm md:text-base text-muted-foreground mb-6 sm:mb-12 max-w-lg mx-auto font-medium">{subtitle}</p>
 
                             <div className={cn(
@@ -309,14 +307,14 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                         key={track.slug}
                                         onClick={() => handleSelection("track", track)}
                                         className={cn(
-                                            "group relative p-4 rounded-2xl border transition-all duration-300 flex flex-col items-center justify-center text-center gap-3",
+                                            "group relative p-4 rounded-2xl border transition-all duration-200 flex flex-col items-center justify-center text-center gap-3",
                                             selections.track === track.slug
-                                                ? "bg-primary/10 border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,242,254,0.15)] scale-105"
+                                                ? "bg-primary/10 border-primary ring-1 ring-primary/50 shadow-sm scale-105"
                                                 : "bg-background/5 border-white/5 hover:border-white/10 hover:bg-background/10"
                                         )}
                                     >
                                         <div className={cn(
-                                            "w-12 h-12 rounded-2xl flex items-center justify-center mb-4 transition-all duration-500",
+                                            "w-12 h-12 rounded-2xl flex items-center justify-center mb-4 transition-all duration-200",
                                             selections.track === track.slug ? "bg-primary text-primary-foreground scale-110" : "bg-background/5 text-muted-foreground group-hover:scale-110"
                                         )}>
                                             {track.icon ? <track.icon className="h-5 w-5" /> : <Layout className="h-5 w-5" />}
@@ -338,15 +336,15 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                                 key={opt.slug}
                                                 onClick={() => handleSelection("language", opt)}
                                                 className={cn(
-                                                    "group relative py-4 px-2 rounded-xl border transition-all duration-300 flex flex-col items-center justify-center gap-2",
+                                                    "group relative py-4 px-2 rounded-xl border transition-all duration-200 flex flex-col items-center justify-center gap-2",
                                                     selections.languageSlug === opt.slug
-                                                        ? "bg-primary/10 border-primary ring-1 ring-primary/50 shadow-[0_0_15px_rgba(0,242,254,0.1)] scale-105"
+                                                        ? "bg-primary/10 border-primary ring-1 ring-primary/50 shadow-sm scale-105"
                                                         : "bg-background/5 border-white/5 hover:border-white/10"
                                                 )}
                                             >
                                                 <div className="w-10 h-10 rounded-xl bg-background/5 flex items-center justify-center group-hover:bg-background/10 transition-colors">
                                                     <TechIcon name={opt.iconUrl || opt.slug} className={cn(
-                                                        "h-5 w-5 transition-transform duration-300",
+                                                        "h-5 w-5 transition-transform duration-200",
                                                         selections.languageSlug === opt.slug ? "scale-110 opacity-100" : "opacity-40 grayscale group-hover:opacity-100 group-hover:grayscale-0 group-hover:scale-110"
                                                     )} />
                                                 </div>
@@ -366,16 +364,16 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                         key={opt.key}
                                         onClick={() => handleSelection("experience", opt)}
                                         className={cn(
-                                            "relative group p-6 rounded-3xl glass-strong text-center transition-all duration-500 border border-white/5 flex flex-col items-center",
+                                            "relative group p-6 rounded-3xl glass-strong text-center transition-all duration-200 border border-white/5 flex flex-col items-center",
                                             selections.experienceKey === opt.key
-                                                ? "border-primary/50 bg-primary/10 scale-105 shadow-[0_0_30px_rgba(0,242,254,0.1)]"
+                                                ? "border-primary/50 bg-primary/10 scale-105 shadow-sm"
                                                 : "hover:border-white/20 hover:bg-background/5"
                                         )}
                                     >
-                                        <div className={cn("inline-flex items-center justify-center p-3 rounded-2xl bg-gradient-to-br mb-4 shadow-xl group-hover:scale-110 transition-transform", opt.color || "from-blue-50 dark:from-blue-950/400 to-cyan-400")}>
-                                            {opt.icon ? <opt.icon className="h-6 w-6 text-foreground" /> : <Sparkles className="h-6 w-6 text-foreground" />}
+                                        <div className={cn("inline-flex items-center justify-center p-3 rounded-2xl mb-4 transition-transform group-hover:scale-110", opt.color)}>
+                                            {opt.icon ? <opt.icon className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
                                         </div>
-                                        <span className="text-2xl font-black bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent mb-1">{opt.label}</span>
+                                        <span className="text-2xl font-black bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent mb-1">{opt.label}</span>
                                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">{opt.range}</span>
                                         <span className="text-[9px] uppercase tracking-tighter opacity-40 mt-1">{opt.subtitle}</span>
                                     </button>
@@ -392,7 +390,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                 {step === 3 && selections.experienceKey && (
                                     <Button
                                         size="lg"
-                                        className="rounded-2xl h-14 px-10 bg-primary text-primary-foreground font-black uppercase tracking-[0.15em] hover:scale-105 transition-all shadow-[0_20px_50px_rgba(0,242,254,0.4)] relative overflow-hidden group"
+                                        className="rounded-2xl h-14 px-10 bg-primary text-primary-foreground font-black uppercase tracking-[0.15em] hover:scale-105 transition-all shadow-sm relative overflow-hidden group"
                                         onClick={() => {
                                             const slug = `${selections.languageSlug}-${selections.track}-${selections.experienceKey}`;
                                             router.push(`/${slug}`);
@@ -402,7 +400,7 @@ export default function SelectionWizard({ onClose }: SelectionWizardProps) {
                                         <span className="relative z-10 flex items-center">
                                             Initialize Path <Zap className="ml-2 h-5 w-5 fill-current" />
                                         </span>
-                                        <div className="absolute inset-0 bg-background/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                                        <div className="absolute inset-0 bg-background/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-200" />
                                     </Button>
                                 )}
                             </div>

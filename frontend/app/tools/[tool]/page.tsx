@@ -23,9 +23,9 @@ function difficultyBadge(d: string): { bg: string; text: string; label: string }
 }
 
 const LEVEL_META: Record<Level, { label: string; colorClass: string; range: string; icon: string }> = {
-  beginner: { label: "Beginner", colorClass: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20", range: "0–2 yrs", icon: "🌱" },
-  intermediate: { label: "Intermediate", colorClass: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20", range: "2–5 yrs", icon: "⚡" },
-  advanced: { label: "Advanced", colorClass: "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/20", range: "5+ yrs", icon: "🚀" },
+  beginner: { label: "Beginner", colorClass: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20", range: "0–2 yrs", icon: "🌱" },
+  intermediate: { label: "Intermediate", colorClass: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-default dark:border-default/20", range: "2–5 yrs", icon: "⚡" },
+  advanced: { label: "Advanced", colorClass: "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-default dark:border-default/20", range: "5+ yrs", icon: "🚀" },
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ tool: string }> }): Promise<Metadata> {
@@ -57,7 +57,7 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20 font-sans text-foreground selection:bg-blue-200">
+      <div className="min-h-screen bg-surface border border-default dark:from-slate-950 font-sans text-foreground selection:bg-blue-200">
         <div className="w-full min-w-0 px-6 py-8">
           {/* Breadcrumb */}
           <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -70,12 +70,12 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
 
           {/* Hero */}
           <header className="mb-10 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-            <div className="relative px-8 py-6 bg-gradient-to-br from-teal-50 dark:from-teal-950/40 via-cyan-50 dark:via-cyan-950/40 to-blue-50 dark:to-blue-950/40  ">
+            <div className="relative px-8 py-6 bg-gradient-to-br from-teal-50 dark:from-teal-950/40  ">
               <div className="flex flex-wrap gap-2 mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-teal-100 dark:bg-teal-950/20 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-500/20 shadow-sm">
                   Tool
                 </span>
-                <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 shadow-sm">
+                <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary border border-default dark:border-default/20 shadow-sm">
                   Universal
                 </span>
               </div>
@@ -99,8 +99,8 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
                 </div>
                 <div className="h-9 w-px bg-slate-200 dark:bg-slate-800" />
                 <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-950/20 flex items-center justify-center">
-                    <GraduationCap className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center">
+                    <GraduationCap className="h-4 w-4 text-primary dark:text-primary" />
                   </div>
                   <div>
                     <div className="text-[10px] text-muted-foreground font-medium">Levels</div>
@@ -132,7 +132,7 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
                       const db = difficultyBadge(q.difficulty);
                       return (
                         <div key={`${idx}-${q.slug}`} className="flex items-center gap-4 px-6 py-3.5 hover:bg-surface/50 transition-colors">
-                          <div className="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-teal-100 dark:from-teal-950/50 to-cyan-100 dark:to-cyan-950/50 flex items-center justify-center text-[10px] font-bold text-teal-700 dark:text-teal-400">
+                          <div className="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-teal-100 dark:from-teal-950/50  flex items-center justify-center text-[10px] font-bold text-teal-700 dark:text-teal-400">
                             {idx + 1}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -161,10 +161,10 @@ export default async function ToolHubPage({ params }: { params: Promise<{ tool: 
                 <Link
                   key={path}
                   href={`/interview/${path}/intermediate/${tool}`}
-                  className="group flex items-center gap-1.5 text-xs text-muted-foreground hover:text-blue-600 dark:text-blue-400 px-3 py-2 rounded-lg border border-border hover:border-blue-300 dark:border-blue-700 hover:shadow-sm transition-all"
+                  className="group flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary dark:text-primary px-3 py-2 rounded-lg border border-border hover:border-default dark:border-default hover:shadow-sm transition-all"
                 >
                   {toDisplayName(path.replace("/", " "))}
-                  <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-blue-400 dark:text-blue-300 transition-colors" />
+                  <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors" />
                   {toolName}
                 </Link>
               ))}

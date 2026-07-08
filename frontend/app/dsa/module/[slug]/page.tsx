@@ -53,14 +53,14 @@ const SITE_URL =
 const DSA_ROOT = path.join(process.cwd(), "..", "content", "dsa");
 
 const LEVEL_PILL: Record<string, string> = {
-  beginner: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20",
-  intermediate: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20",
-  advanced: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/20",
+  beginner: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20",
+  intermediate: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-default dark:border-default/20",
+  advanced: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-default dark:border-default/20",
 };
 
 const FOCUS_PILL: Record<string, { label: string; className: string }> = {
-  theory: { label: "Theory", className: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" },
-  practice: { label: "Practice", className: "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-200 dark:border-violet-500/20" },
+  theory: { label: "Theory", className: "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary border-default dark:border-default/20" },
+  practice: { label: "Practice", className: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" },
   mixed: { label: "Mixed", className: "bg-surface text-foreground border-border" },
 };
 
@@ -70,17 +70,17 @@ const CALLOUT_STYLE: Record<
 > = {
   tip: {
     icon: Lightbulb,
-    className: "border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-400",
+    className: "border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-400",
     label: "Tip",
   },
   warning: {
     icon: AlertTriangle,
-    className: "border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 text-red-900 dark:text-red-400",
+    className: "border-default dark:border-default/20 bg-red-50 dark:bg-red-500/10 text-red-900 dark:text-red-400",
     label: "Watch out",
   },
   note: {
     icon: Info,
-    className: "border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 text-blue-900 dark:text-blue-400",
+    className: "border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary",
     label: "Note",
   },
 };
@@ -420,9 +420,9 @@ export default async function DSAModulePage(
             <div className="relative px-6 sm:px-8 py-7">
               {/* Kicker */}
               <div className="flex items-center gap-2 mb-4">
-                <div className="inline-flex items-center gap-2 rounded-full border border-violet-500 dark:border-violet-500/50 dark:border-violet-700/25 bg-violet-500 dark:bg-violet-800/10 px-3 py-1">
-                  <GraduationCap className="h-3.5 w-3.5 text-violet-400 dark:text-violet-300" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-violet-300 dark:text-violet-300">
+                <div className="inline-flex items-center gap-2 rounded-full border border-blue-500 dark:border-blue-500/50 dark:border-blue-700/25 bg-blue-500 dark:bg-blue-800/10 px-3 py-1">
+                  <GraduationCap className="h-3.5 w-3.5 text-blue-600 dark:text-blue-300" />
+                  <span className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300">
                     Module {mod.moduleNumber} · DSA Curriculum
                   </span>
                 </div>
@@ -445,7 +445,7 @@ export default async function DSAModulePage(
                   {focus.label}
                 </span>
                 {learn && (
-                  <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md border border-blue-500 dark:border-blue-700/30 bg-blue-500/10 dark:bg-blue-500/20 text-blue-300 dark:text-blue-300 inline-flex items-center gap-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md border border-default dark:border-default/30 bg-blue-500/10 dark:bg-blue-500/20 text-primary dark:text-primary inline-flex items-center gap-1.5">
                     <BookOpen className="h-3 w-3" /> Full theory
                   </span>
                 )}
@@ -457,7 +457,7 @@ export default async function DSAModulePage(
                       <span key={p.moduleSlug}>
                         <Link
                           href={`/dsa/module/${p.moduleSlug}`}
-                          className="font-semibold text-muted-foreground hover:text-violet-400 dark:text-violet-300 hover:underline transition-colors"
+                          className="font-semibold text-muted-foreground hover:text-blue-400 dark:text-blue-300 hover:underline transition-colors"
                         >
                           {p.title}
                         </Link>
@@ -473,7 +473,7 @@ export default async function DSAModulePage(
                 {firstAuthored && (
                   <Link
                     href={`/dsa/problem/${firstAuthored.slug}`}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 dark:bg-violet-800 hover:bg-violet-500 dark:bg-violet-800 text-white font-bold rounded-xl transition-colors text-sm shadow-lg shadow-violet-900/30"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 dark:bg-blue-800 hover:bg-blue-500 dark:bg-blue-800 text-foreground font-bold rounded-xl transition-colors text-sm shadow-lg shadow-blue-900/30"
                   >
                     Start practice
                     <ArrowRight className="h-4 w-4" />
@@ -482,7 +482,7 @@ export default async function DSAModulePage(
                 {learn && (
                   <a
                     href="#theory"
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-muted-foreground hover:text-white font-medium rounded-xl transition-colors text-sm"
+                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-muted-foreground hover:text-foreground font-medium rounded-xl transition-colors text-sm"
                   >
                     Read the theory
                     <ArrowRight className="h-3.5 w-3.5" />
@@ -490,7 +490,7 @@ export default async function DSAModulePage(
                 )}
                 <a
                   href="#practice"
-                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-muted-foreground hover:text-white font-medium rounded-xl transition-colors text-sm"
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-muted-foreground hover:text-foreground font-medium rounded-xl transition-colors text-sm"
                 >
                   See all problems
                   <ArrowRight className="h-3.5 w-3.5" />
@@ -502,9 +502,9 @@ export default async function DSAModulePage(
           {/* ─── WHAT YOU'LL LEARN ─────────────────────────────────────────── */}
           {learn && learn.objectives.length > 0 && (
             <section id="what-youll-learn" className="mb-10 scroll-mt-24">
-              <div className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-background p-6 shadow-sm">
+              <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background p-6 shadow-sm">
                 <div className="flex items-center gap-2 mb-4">
-                  <Target className="h-5 w-5 text-violet-700 dark:text-violet-400" />
+                  <Target className="h-5 w-5 text-blue-700 dark:text-blue-400" />
                   <h2 className="text-lg font-black text-foreground">
                     What you&apos;ll learn
                   </h2>
@@ -512,7 +512,7 @@ export default async function DSAModulePage(
                 <ul className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
                   {learn.objectives.map((obj, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                      <CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 shrink-0 mt-0.5" />
+                      <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                       <span>{obj}</span>
                     </li>
                   ))}
@@ -529,7 +529,7 @@ export default async function DSAModulePage(
                 <h2 className="text-xl font-black text-foreground">When to reach for this</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-500/10 p-5">
+                <div className="rounded-xl border border-default dark:border-default/20 bg-emerald-50/50 dark:bg-emerald-500/10 p-5">
                   <div className="flex items-center gap-2 mb-3">
                     <CheckCircle2 className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
                     <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
@@ -569,7 +569,7 @@ export default async function DSAModulePage(
           {learn ? (
             <section id="theory" className="mb-10 scroll-mt-24">
               <div className="flex items-center gap-2 mb-5">
-                <BookOpen className="h-5 w-5 text-blue-700 dark:text-blue-400" />
+                <BookOpen className="h-5 w-5 text-primary dark:text-primary" />
                 <h2 className="text-xl font-black text-foreground">Theory &amp; deep dive</h2>
               </div>
 
@@ -620,7 +620,7 @@ export default async function DSAModulePage(
             <section id="interview-voice" className="mb-10 scroll-mt-24">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {learn.interviewTalking && (
-                  <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/50 p-6">
+                  <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/50 p-6">
                     <div className="flex items-center gap-2 mb-3">
                       <Zap className="h-4 w-4 text-amber-700 dark:text-amber-400" />
                       <h3 className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
@@ -657,10 +657,10 @@ export default async function DSAModulePage(
           {/* ─── COMPLEXITY NOTES ──────────────────────────────────────────── */}
           {learn?.complexityNotes && (
             <section id="complexity" className="mb-10 scroll-mt-24">
-              <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/50 p-5 flex items-start gap-3">
-                <Clock className="h-4 w-4 text-blue-700 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/50 p-5 flex items-start gap-3">
+                <Clock className="h-4 w-4 text-primary dark:text-primary shrink-0 mt-0.5" />
                 <div>
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-1">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-primary dark:text-primary mb-1">
                     Complexity summary
                   </div>
                   <p className="text-sm text-foreground leading-relaxed">
@@ -674,7 +674,7 @@ export default async function DSAModulePage(
           {/* ─── PRACTICE PROBLEMS ─────────────────────────────────────────── */}
           <section id="practice" className="mb-10 scroll-mt-24">
             <div className="flex items-center gap-2 mb-4">
-              <Target className="h-5 w-5 text-violet-700 dark:text-violet-400" />
+              <Target className="h-5 w-5 text-blue-700 dark:text-blue-400" />
               <h2 className="text-xl font-black text-foreground">
                 Practice problems
               </h2>
@@ -692,12 +692,12 @@ export default async function DSAModulePage(
               {prevMod ? (
                 <Link
                   href={`/dsa/module/${prevMod.moduleSlug}`}
-                  className="group rounded-xl border border-border bg-background p-5 hover:border-violet-300 dark:border-violet-500/30 hover:shadow-sm transition-all"
+                  className="group rounded-xl border border-border bg-background p-5 hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
                     <ArrowLeft className="h-3 w-3" /> Previous module
                   </div>
-                  <div className="text-[14px] font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400">
+                  <div className="text-[14px] font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400">
                     {prevMod.moduleNumber} · {prevMod.title}
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -707,12 +707,12 @@ export default async function DSAModulePage(
               ) : (
                 <Link
                   href="/dsa"
-                  className="group rounded-xl border border-border bg-background p-5 hover:border-violet-300 dark:border-violet-500/30 hover:shadow-sm transition-all"
+                  className="group rounded-xl border border-border bg-background p-5 hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
                     <ArrowLeft className="h-3 w-3" /> Back to
                   </div>
-                  <div className="text-[14px] font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400">
+                  <div className="text-[14px] font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400">
                     DSA curriculum
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -723,12 +723,12 @@ export default async function DSAModulePage(
               {nextMod ? (
                 <Link
                   href={`/dsa/module/${nextMod.moduleSlug}`}
-                  className="group rounded-xl border border-border bg-background p-5 hover:border-violet-300 dark:border-violet-500/30 hover:shadow-sm transition-all text-right"
+                  className="group rounded-xl border border-border bg-background p-5 hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm transition-all text-right"
                 >
                   <div className="flex items-center justify-end gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
                     Next module <ArrowRight className="h-3 w-3" />
                   </div>
-                  <div className="text-[14px] font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400">
+                  <div className="text-[14px] font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400">
                     {nextMod.moduleNumber} · {nextMod.title}
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -738,12 +738,12 @@ export default async function DSAModulePage(
               ) : (
                 <Link
                   href="/dsa"
-                  className="group rounded-xl border border-border bg-background p-5 hover:border-violet-300 dark:border-violet-500/30 hover:shadow-sm transition-all text-right"
+                  className="group rounded-xl border border-border bg-background p-5 hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm transition-all text-right"
                 >
                   <div className="flex items-center justify-end gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
                     Curriculum complete <ArrowRight className="h-3 w-3" />
                   </div>
-                  <div className="text-[14px] font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400">
+                  <div className="text-[14px] font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400">
                     Back to DSA hub
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">

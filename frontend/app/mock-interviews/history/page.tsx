@@ -147,23 +147,23 @@ function MockInterviewHistoryContent() {
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-emerald-600 dark:text-emerald-400';
-    if (score >= 70) return 'text-blue-600 dark:text-blue-400';
+    if (score >= 70) return 'text-primary dark:text-primary';
     if (score >= 60) return 'text-orange-600 dark:text-orange-400';
     return 'text-red-600 dark:text-red-400';
   };
 
   const getScoreGradient = (score: number) => {
-    if (score >= 80) return 'from-emerald-50 dark:from-emerald-950/400 to-green-600';
-    if (score >= 70) return 'from-blue-50 dark:from-blue-950/400 to-cyan-600';
-    if (score >= 60) return 'from-orange-50 dark:from-orange-950/400 to-amber-600';
-    return 'from-red-50 dark:from-red-950/400 to-rose-600';
+    if (score >= 80) return 'from-emerald-500 to-emerald-600';
+    if (score >= 70) return 'from-blue-500 to-blue-600';
+    if (score >= 60) return 'from-orange-500 to-orange-600';
+    return 'from-rose-500 to-rose-600';
   };
 
   const getScoreBg = (score: number) => {
-    if (score >= 80) return 'from-emerald-50 dark:from-emerald-950/40 to-green-50 dark:to-green-950/40';
-    if (score >= 70) return 'from-blue-50 dark:from-blue-950/40 to-cyan-50 dark:to-cyan-950/40';
-    if (score >= 60) return 'from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40';
-    return 'from-red-50 dark:from-red-950/40 to-rose-50 dark:to-rose-950/40';
+    if (score >= 80) return 'bg-emerald-500/10';
+    if (score >= 70) return 'bg-blue-500/10';
+    if (score >= 60) return 'bg-orange-500/10';
+    return 'bg-rose-500/10';
   };
 
   const getTypeIcon = (type: string) => {
@@ -184,22 +184,22 @@ function MockInterviewHistoryContent() {
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'coding-mock':
-        return 'from-blue-50 dark:from-blue-950/400 to-cyan-600';
+        return 'from-blue-500 to-primary';
       case 'system-design-mock':
-        return 'from-purple-50 dark:from-purple-950/400 to-indigo-600';
+        return 'from-blue-400 to-blue-600';
       case 'behavioral-mock':
-        return 'from-orange-50 dark:from-orange-950/400 to-amber-600';
+        return 'from-blue-700 to-blue-800';
       case 'full-mock':
-        return 'from-pink-50 dark:from-pink-950/400 to-rose-600';
+        return 'from-blue-600 to-blue-700';
       default:
-        return 'from-slate-50 dark:from-slate-950/400 to-slate-600';
+        return 'from-blue-400 to-blue-500';
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  ">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white">
+      <div className="bg-surface border border-default text-white">
         <div className="w-full min-w-0 px-6 lg:px-12 py-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -311,7 +311,7 @@ function MockInterviewHistoryContent() {
                   placeholder="Search mock interviews..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border-2 border-border focus:border-blue-500 dark:border-blue-700 focus:ring-2 focus:ring-blue-200 transition-all text-sm font-semibold"
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border-2 border-border focus:border-default dark:border-default focus:ring-2 focus:ring-ring transition-all text-sm font-semibold"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -319,7 +319,7 @@ function MockInterviewHistoryContent() {
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
-                  className="px-4 py-2 rounded-lg border-2 border-border focus:border-blue-500 dark:border-blue-700 focus:ring-2 focus:ring-blue-200 transition-all text-sm font-semibold bg-background"
+                  className="px-4 py-2 rounded-lg border-2 border-border focus:border-default dark:border-default focus:ring-2 focus:ring-ring transition-all text-sm font-semibold bg-background"
                 >
                   <option value="all">All Types</option>
                   <option value="full-mock">Full Mock</option>
@@ -346,7 +346,7 @@ function MockInterviewHistoryContent() {
                         <div className="flex items-start gap-6">
                           {/* Icon and Type */}
                           <div className={cn("w-14 h-14 rounded-xl bg-gradient-to-br flex items-center justify-center shrink-0", getTypeColor(mock.type))}>
-                            <Icon className="h-7 w-7 text-white" />
+                            <Icon className="h-7 w-7 text-foreground" />
                           </div>
 
                           {/* Main Content */}
@@ -427,7 +427,7 @@ function MockInterviewHistoryContent() {
                           </div>
 
                           {/* Arrow */}
-                          <ChevronRight className="h-6 w-6 text-muted-foreground group-hover:text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-all shrink-0 mt-4" />
+                          <ChevronRight className="h-6 w-6 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-1 transition-all shrink-0 mt-4" />
                         </div>
                       </div>
                     </Link>
@@ -459,11 +459,11 @@ function MockInterviewHistoryContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-950/20 dark:to-orange-950/20 rounded-2xl border-2 border-yellow-400 dark:border-yellow-700 shadow-lg p-6 sticky top-6"
+              className="bg-surface border border-default dark:from-yellow-950/20 dark:to-orange-950/20 rounded-2xl border-2 border-yellow-400 dark:border-yellow-700 shadow-lg p-6 sticky top-6"
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-orange-50 dark:to-orange-950/400 rounded-xl flex items-center justify-center">
-                  <Trophy className="h-6 w-6 text-white" />
+                <div className="w-12 h-12 bg-surface border border-default dark:to-orange-950/40 rounded-xl flex items-center justify-center">
+                  <Trophy className="h-6 w-6 text-foreground" />
                 </div>
                 <div>
                   <p className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider">Latest Achievement</p>
@@ -488,7 +488,7 @@ function MockInterviewHistoryContent() {
             >
               <h3 className="text-lg font-black text-foreground mb-4">Quick Actions</h3>
               <div className="space-y-3">
-                <Button asChild className="w-full font-bold bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700">
+                <Button asChild className="w-full font-bold bg-surface border border-default hover: hover:to-rose-700">
                   <Link href="/mock-interviews">
                     <Video className="h-4 w-4 mr-2" />
                     Start New Mock
@@ -518,7 +518,7 @@ function MockInterviewHistoryContent() {
             >
               <h3 className="text-lg font-black text-foreground mb-4">Performance Insights</h3>
               <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
+                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-default dark:border-default/20">
                   <div className="flex items-center gap-2 mb-2">
                     <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     <p className="text-sm font-bold text-emerald-900 dark:text-emerald-400">Strongest Area</p>
@@ -538,12 +538,12 @@ function MockInterviewHistoryContent() {
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20">
+                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-default dark:border-default/20">
                   <div className="flex items-center gap-2 mb-2">
-                    <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    <p className="text-sm font-bold text-blue-900 dark:text-blue-400">Most Practiced</p>
+                    <BarChart3 className="h-4 w-4 text-primary dark:text-primary" />
+                    <p className="text-sm font-bold text-primary dark:text-primary">Most Practiced</p>
                   </div>
-                  <p className="text-xs text-blue-800 dark:text-blue-400">
+                  <p className="text-xs text-primary dark:text-primary">
                     You've taken <span className="font-black">3 Coding Mocks</span> in the last 2 weeks
                   </p>
                 </div>

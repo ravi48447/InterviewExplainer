@@ -58,7 +58,7 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20">
+    <div className="min-h-screen bg-surface border border-default dark:from-slate-950 dark:">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
@@ -96,7 +96,7 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
                 <span className={`px-3 py-1.5 rounded-full text-xs font-black border ${meta.colorClass}`}>
                   {meta.label} · {meta.range}
                 </span>
-                <TrendingUp className="h-5 w-5 text-muted-foreground group-hover:text-blue-400 dark:text-blue-300 transition-colors" />
+                <TrendingUp className="h-5 w-5 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors" />
               </div>
 
               <div className="mb-4">
@@ -161,17 +161,17 @@ export default async function TrackHubPage({ params }: { params: Promise<{ lang:
 
         {/* CTA */}
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Link href={`/dsa`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-purple-50 dark:from-purple-950/40 to-violet-50 dark:to-violet-950/40 rounded-2xl border border-purple-200 dark:border-purple-500/20 hover:shadow-lg transition-all group  ">
-            <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/20 flex items-center justify-center">
-              <BookOpen className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+          <Link href={`/dsa`} className="flex items-center gap-4 p-5 bg-surface rounded-2xl border border-default dark:border-default/20 hover:shadow-lg transition-all group  ">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center">
+              <BookOpen className="h-5 w-5 text-primary dark:text-primary" />
             </div>
             <div>
-              <div className="font-black text-foreground group-hover:text-purple-600 dark:text-purple-400 transition-colors">DSA Problems</div>
+              <div className="font-black text-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors">DSA Problems</div>
               <div className="text-xs text-muted-foreground">Line-by-line explanations — beats LeetCode</div>
             </div>
             <ChevronRight className="h-5 w-5 text-muted-foreground ml-auto group-hover:translate-x-0.5 transition-transform" />
           </Link>
-          <Link href={`/companies`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40 rounded-2xl border border-orange-200 dark:border-orange-500/20 hover:shadow-lg transition-all group  ">
+          <Link href={`/companies`} className="flex items-center gap-4 p-5 bg-gradient-to-br from-orange-50 dark:from-orange-950/40  rounded-2xl border border-orange-200 dark:border-orange-500/20 hover:shadow-lg transition-all group  ">
             <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/20 flex items-center justify-center">
               <Users className="h-5 w-5 text-orange-600 dark:text-orange-400" />
             </div>

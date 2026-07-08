@@ -13,12 +13,12 @@ import type { DSADryRun } from "@/lib/contentV2-types";
  */
 export function DSADryRun({ run }: { run: DSADryRun }) {
   return (
-    <figure className="my-4 rounded-lg border border-indigo-200 dark:border-indigo-500/20 bg-background overflow-hidden">
-      <figcaption className="px-4 py-2 bg-indigo-50 dark:bg-indigo-500/10 border-b border-indigo-200 dark:border-indigo-500/20 flex items-center justify-between gap-3 flex-wrap">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-400">
+    <figure className="my-4 rounded-lg border border-default dark:border-default/20 bg-background overflow-hidden">
+      <figcaption className="px-4 py-2 bg-blue-50 dark:bg-blue-500/10 border-b border-default dark:border-default/20 flex items-center justify-between gap-3 flex-wrap">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-primary dark:text-primary">
           Dry-run on paper
         </span>
-        <code className="text-[11px] font-mono text-foreground bg-background border border-indigo-100 dark:border-indigo-500/20 rounded px-2 py-0.5">
+        <code className="text-[11px] font-mono text-foreground bg-background border border-default dark:border-default/20 rounded px-2 py-0.5">
           {run.input}
         </code>
       </figcaption>
@@ -71,7 +71,7 @@ export function DSADryRun({ run }: { run: DSADryRun }) {
         </table>
       </div>
 
-      <div className="px-4 py-2.5 bg-emerald-50 dark:bg-emerald-500/10 border-t border-emerald-200 dark:border-emerald-500/20 flex items-baseline gap-2 flex-wrap">
+      <div className="px-4 py-2.5 bg-emerald-50 dark:bg-emerald-500/10 border-t border-default dark:border-default/20 flex items-baseline gap-2 flex-wrap">
         <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
           Result
         </span>

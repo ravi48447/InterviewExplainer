@@ -25,9 +25,9 @@ interface SearchResult {
 }
 
 const DIFFICULTY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  easy:   { label: "Easy",   color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10",  border: "border-emerald-200 dark:border-emerald-500/20" },
-  medium: { label: "Medium", color: "text-amber-700 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10",    border: "border-amber-200 dark:border-amber-500/20" },
-  hard:   { label: "Hard",   color: "text-red-700 dark:text-red-400",     bg: "bg-red-50 dark:bg-red-500/10",      border: "border-red-200 dark:border-red-500/20" },
+  easy:   { label: "Easy",   color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10",  border: "border-default dark:border-default/20" },
+  medium: { label: "Medium", color: "text-amber-700 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10",    border: "border-default dark:border-default/20" },
+  hard:   { label: "Hard",   color: "text-red-700 dark:text-red-400",     bg: "bg-red-50 dark:bg-red-500/10",      border: "border-default dark:border-default/20" },
 };
 
 const POPULAR_SEARCHES = [
@@ -123,17 +123,17 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-indigo-50/20 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/20">
+    <div className="min-h-screen bg-surface border border-default dark:from-slate-950 dark:">
       <main className="w-full min-w-0 px-6 pt-12 pb-32">
         {/* Header */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 text-xs font-bold rounded-full mb-4 uppercase tracking-widest">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary text-xs font-bold rounded-full mb-4 uppercase tracking-widest">
             <Search className="h-3.5 w-3.5" />
             Search
           </div>
           <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-foreground mb-3">
             Find Any{" "}
-            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            <span className="bg-surface border border-default bg-clip-text text-transparent">
               Question
             </span>
           </h1>
@@ -153,10 +153,10 @@ export default function SearchPage() {
             onChange={(e) => handleInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") doSearch(query); }}
             placeholder="Search questions... (e.g. HashMap, Spring Boot, Docker)"
-            className="w-full pl-14 pr-14 py-5 rounded-2xl bg-background border border-border focus:border-blue-400 dark:border-blue-700 focus:ring-4 focus:ring-blue-100 focus:outline-none text-foreground placeholder:text-muted-foreground text-base font-medium transition-all shadow-lg shadow-slate-200/50"
+            className="w-full pl-14 pr-14 py-5 rounded-2xl bg-background border border-border focus:border-default dark:border-default focus:ring-4 focus:ring-ring focus:outline-none text-foreground placeholder:text-muted-foreground text-base font-medium transition-all shadow-lg shadow-slate-200/50"
           />
           {loading && (
-            <Loader2 className="absolute right-14 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
+            <Loader2 className="absolute right-14 top-1/2 -translate-y-1/2 h-4 w-4 text-primary dark:text-primary animate-spin" />
           )}
           {query && (
             <button
@@ -182,7 +182,7 @@ export default function SearchPage() {
                 <button
                   key={term}
                   onClick={() => handlePopularClick(term)}
-                  className="px-4 py-2 rounded-xl bg-background border border-border text-sm font-semibold text-foreground hover:border-blue-300 dark:border-blue-700 hover:text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:bg-blue-500/10 transition-all shadow-sm"
+                  className="px-4 py-2 rounded-xl bg-background border border-border text-sm font-semibold text-foreground hover:border-default dark:border-default hover:text-primary dark:text-primary hover:bg-blue-50 dark:bg-blue-500/10 transition-all shadow-sm"
                 >
                   {term}
                 </button>
@@ -207,8 +207,8 @@ export default function SearchPage() {
                 className={cn(
                   "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
                   activeCategory === cat.value
-                    ? "bg-blue-600 dark:bg-blue-800 text-white border-blue-600 dark:border-blue-700"
-                    : "bg-background text-muted-foreground border-border hover:border-blue-300 dark:border-blue-700",
+                    ? "bg-blue-600 dark:bg-blue-800 text-white border-default dark:border-default"
+                    : "bg-background text-muted-foreground border-border hover:border-default dark:border-default",
                 )}
               >
                 {cat.label}
@@ -253,7 +253,7 @@ export default function SearchPage() {
                   <div className="flex items-center justify-center gap-3">
                     <Link
                       href="/domains"
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 dark:bg-blue-800 text-white text-sm font-bold rounded-xl hover:bg-blue-700 dark:bg-blue-800 transition-colors"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 dark:bg-blue-800 text-foreground text-sm font-bold rounded-xl hover:bg-blue-700 dark:bg-blue-800 transition-colors"
                     >
                       <Layers className="h-4 w-4" />
                       Browse Domains
@@ -305,10 +305,10 @@ export default function SearchPage() {
                         <div key={`${r.domainSlug}-${r.stackSlug}-${r.slug}`}>
                           <Link
                             href={getHref(r)}
-                            className="group flex items-center justify-between p-4 sm:p-5 rounded-xl bg-background border border-border hover:border-blue-300 dark:border-blue-700 hover:shadow-md transition-all"
+                            className="group flex items-center justify-between p-4 sm:p-5 rounded-xl bg-background border border-border hover:border-default dark:border-default hover:shadow-md transition-all"
                           >
                             <div className="flex-1 min-w-0 mr-4">
-                              <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors line-clamp-1 mb-1.5">
+                              <h3 className="text-sm font-bold text-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors line-clamp-1 mb-1.5">
                                 {r.title}
                               </h3>
                               <div className="flex flex-wrap items-center gap-2">
@@ -332,13 +332,13 @@ export default function SearchPage() {
                                   </span>
                                 )}
                                 {r.type === "tool" && (
-                                  <span className="text-[10px] text-blue-500 dark:text-blue-400 font-bold uppercase bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded">
+                                  <span className="text-[10px] text-primary dark:text-primary font-bold uppercase bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded">
                                     Tool
                                   </span>
                                 )}
                               </div>
                             </div>
-                            <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 group-hover:translate-x-1 transition-all shrink-0" />
+                            <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-1 transition-all shrink-0" />
                           </Link>
                         </div>
                       );
@@ -353,7 +353,7 @@ export default function SearchPage() {
                       </p>
                       <button
                         onClick={() => { setActiveCategory(""); setActiveDifficulty(""); }}
-                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                        className="text-xs font-bold text-primary dark:text-primary hover:underline"
                       >
                         Clear all filters
                       </button>
@@ -383,16 +383,16 @@ export default function SearchPage() {
                 <Link
                   key={href}
                   href={href}
-                  className="group flex items-center gap-4 p-5 rounded-xl bg-background border border-border hover:border-blue-300 dark:border-blue-700 hover:shadow-md transition-all"
+                  className="group flex items-center gap-4 p-5 rounded-xl bg-background border border-border hover:border-default dark:border-default hover:shadow-md transition-all"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center shrink-0 group-hover:bg-blue-100 dark:bg-blue-950/20 transition-colors">
-                    <Icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-default dark:border-default/20 flex items-center justify-center shrink-0 group-hover:bg-blue-100 dark:bg-blue-950/20 transition-colors">
+                    <Icon className="h-5 w-5 text-primary dark:text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors">{title}</h3>
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors">{title}</h3>
                     <p className="text-xs text-muted-foreground">{desc}</p>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 group-hover:translate-x-1 transition-all shrink-0" />
+                  <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-1 transition-all shrink-0" />
                 </Link>
               ))}
             </div>

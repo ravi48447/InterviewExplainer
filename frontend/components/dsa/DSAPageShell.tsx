@@ -53,7 +53,7 @@ export function DSAPageShell({
       {/* Soft violet wash up top to tie the page to the dark hero. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[340px] bg-gradient-to-b from-violet-200/40 dark:from-violet-900/20 via-violet-100/15 dark:via-violet-900/10 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[340px] bg-gradient-to-b from-blue-200/40 dark:from-blue-900/20 via-blue-100/15 dark:via-blue-900/10 to-transparent"
       />
       <div
         className="relative w-full mx-auto px-3 sm:px-5 lg:px-6 py-5 lg:py-6"

@@ -83,7 +83,7 @@ export default async function CompanyTypePage({
   const siblingTypes = COMPANY_TYPES[company] ?? COMPANY_TYPES.default;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-orange-50/20 dark:via-orange-950/40 to-amber-50/20 dark:to-amber-950/40  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-orange-50/20 dark:via-orange-950/40  ">
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
@@ -133,7 +133,7 @@ export default async function CompanyTypePage({
         {/* Content */}
         {content ? (
           <div className="space-y-6">
-            <pre className="dark:bg-surface text-green-400 dark:text-green-300 text-xs p-4 rounded-xl overflow-auto">
+            <pre className="dark:bg-surface text-green-600 dark:text-green-300 text-xs p-4 rounded-xl overflow-auto">
               {JSON.stringify(content, null, 2)}
             </pre>
           </div>
@@ -145,10 +145,10 @@ export default async function CompanyTypePage({
               We&apos;re writing company-specific content based on real interview reports and patterns.
             </p>
             <div className="flex flex-wrap gap-3 justify-center">
-              <Link href={`/companies/${company}`} className="px-4 py-2 bg-orange-600 dark:bg-orange-800 text-white rounded-lg text-sm font-bold hover:bg-orange-700 dark:bg-orange-800 transition-colors">
+              <Link href={`/companies/${company}`} className="px-4 py-2 bg-orange-600 dark:bg-orange-800 text-foreground rounded-lg text-sm font-bold hover:bg-orange-700 dark:bg-orange-800 transition-colors">
                 ← {companyName} Overview
               </Link>
-              <Link href="/dsa" className="px-4 py-2 bg-purple-600 dark:bg-purple-800 text-white rounded-lg text-sm font-bold hover:bg-purple-700 dark:bg-purple-800 transition-colors">
+              <Link href="/dsa" className="px-4 py-2 bg-blue-600 dark:bg-blue-800 text-foreground rounded-lg text-sm font-bold hover:bg-blue-700 dark:bg-blue-800 transition-colors">
                 Practice DSA Problems
               </Link>
             </div>

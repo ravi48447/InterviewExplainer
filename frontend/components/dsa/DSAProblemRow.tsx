@@ -35,7 +35,7 @@ const COMPANY_DISPLAY: Record<string, string> = {
 
 const FREQ_META: Record<string, { label: string; className: string }> = {
   "very-high": { label: "Hot", className: "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20" },
-  high: { label: "Freq", className: "text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20" },
+  high: { label: "Freq", className: "text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-default dark:border-default/20" },
 };
 
 /**
@@ -63,7 +63,7 @@ export function DSAProblemRow({
   const inner = (
     <div className="flex items-center gap-3 w-full min-w-0">
       {/* Number */}
-      <span className="text-[11px] font-mono tabular-nums text-slate-400 dark:text-slate-300 w-7 shrink-0 text-right">
+      <span className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400 w-7 shrink-0 text-right">
         {String(position).padStart(2, "0")}
       </span>
 
@@ -72,14 +72,14 @@ export function DSAProblemRow({
         <span
           className={`text-[13.5px] font-semibold leading-snug block truncate ${
             authored
-              ? "text-foreground group-hover:text-violet-700 dark:text-violet-400"
-              : "text-slate-400 dark:text-slate-300"
+              ? "text-foreground group-hover:text-blue-700 dark:text-blue-400"
+              : "text-slate-500 dark:text-slate-400"
           }`}
         >
           {problem.title}
         </span>
         {showCategory && (
-          <span className="text-[11px] text-slate-400 dark:text-slate-300 capitalize">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 capitalize">
             {problem.category.replace(/-/g, " ")}
           </span>
         )}
@@ -114,18 +114,18 @@ export function DSAProblemRow({
 
       {/* Status */}
       {authored ? (
-        <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded px-1.5 py-0.5 shrink-0">
+        <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-default dark:border-default/20 rounded px-1.5 py-0.5 shrink-0">
           Explained
         </span>
       ) : (
-        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-300 bg-surface border border-border rounded px-1.5 py-0.5 shrink-0">
+        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-surface border border-border rounded px-1.5 py-0.5 shrink-0">
           Queued
         </span>
       )}
 
       {/* Arrow */}
       {authored && (
-        <ArrowRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-300 group-hover:text-violet-500 dark:text-violet-400 shrink-0 transition-colors" />
+        <ArrowRight className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 group-hover:text-blue-500 dark:text-blue-400 shrink-0 transition-colors" />
       )}
     </div>
   );
@@ -137,7 +137,7 @@ export function DSAProblemRow({
     return (
       <Link
         href={`/dsa/problem/${problem.slug}`}
-        className={`${base} border-border bg-background hover:border-violet-300 dark:border-violet-500/30 hover:shadow-sm hover:bg-violet-50/40 dark:bg-violet-500/10`}
+        className={`${base} border-border bg-background hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm hover:bg-blue-50/40 dark:bg-blue-500/10`}
       >
         {inner}
       </Link>

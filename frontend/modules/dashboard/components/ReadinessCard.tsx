@@ -48,7 +48,7 @@ function ReadinessGauge({ value, size = 120, strokeWidth = 10 }: { value: number
     ? { from: '#22c55e', to: '#16a34a', text: 'text-emerald-500 dark:text-emerald-400' }
     : value >= 40
       ? { from: '#f59e0b', to: '#d97706', text: 'text-amber-500 dark:text-amber-400' }
-      : { from: '#3b82f6', to: '#6366f1', text: 'text-blue-500 dark:text-blue-400' };
+      : { from: '#3b82f6', to: '#3B82F6', text: 'text-primary dark:text-primary' };
 
   return (
     <div
@@ -71,7 +71,7 @@ function ReadinessGauge({ value, size = 120, strokeWidth = 10 }: { value: number
         <circle cx={size / 2} cy={size / 2} r={radius}
           stroke={`url(#${gradId})`} strokeWidth={strokeWidth} fill="none"
           strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset}
-          className="transition-all duration-1000 ease-out" />
+          className="transition-all duration-500 ease-out" />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-2xl font-bold text-primary tabular-nums">{display}<span className="text-xs font-semibold">%</span></span>
@@ -89,7 +89,8 @@ export function ReadinessCard({
   nextBadge,
 }: ReadinessCardProps) {
   return (
-    <Card className="flex flex-col bg-card border border-default p-5 shadow-sm h-full rounded-2xl">
+    <Card className="flex flex-col bg-card border border-default p-5 shadow-sm h-full rounded-2xl relative overflow-hidden">
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500/40 to-transparent" />
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Trophy className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
@@ -106,7 +107,7 @@ export function ReadinessCard({
           ].map(s => (
             <div key={s.l} className="text-center p-2 rounded-xl bg-surface border border-default">
               <p className="text-sm font-bold text-primary leading-none tabular-nums">{s.n}</p>
-              <p className="text-[10px] font-medium text-secondary mt-1">{s.l}</p>
+              <p className="text-[10px] font-medium text-muted-foreground mt-1">{s.l}</p>
             </div>
           ))}
         </div>
@@ -114,7 +115,7 @@ export function ReadinessCard({
       {nextBadge && (
         <div className="mt-4 pt-3 flex items-center gap-2 p-2.5 rounded-xl bg-surface border border-default">
           <Medal className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
-          <p className="text-[11px] text-secondary">
+          <p className="text-[11px] text-muted-foreground">
             Next badge: <span className="font-semibold text-primary">{nextBadge.label}</span>
           </p>
         </div>

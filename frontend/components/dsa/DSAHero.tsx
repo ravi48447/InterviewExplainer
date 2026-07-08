@@ -36,7 +36,7 @@ export function DSAHero({
   cta?: ReactNode;
 }) {
   return (
-    <header className="mb-8 relative overflow-hidden rounded-2xl bg-[#0f1014] text-primary-foreground dark:text-foreground border border-white/[0.06] shadow-xl shadow-violet-950/10 ring-1 ring-white/[0.04]">
+    <header className="mb-8 relative overflow-hidden rounded-2xl bg-[#0f1014] text-primary-foreground dark:text-foreground border border-white/[0.06] shadow-xl shadow-blue-950/10 ring-1 ring-white/[0.04]">
       {/* Grid texture */}
       <div className="pointer-events-none absolute inset-0" style={BG_GRID} aria-hidden />
       {/* Violet radial glow */}
@@ -48,7 +48,7 @@ export function DSAHero({
       {/* Indigo counter-glow, far corner */}
       <div
         className="pointer-events-none absolute inset-0"
-        style={{ background: "radial-gradient(ellipse 50% 60% at 100% 110%, rgba(99,102,241,0.14) 0%, transparent 55%)" }}
+        style={{ background: "radial-gradient(ellipse 50% 60% at 100% 110%, rgba(37,99,235,0.14) 0%, transparent 55%)" }}
         aria-hidden
       />
       {/* Bottom fade */}
@@ -56,9 +56,9 @@ export function DSAHero({
 
       <div className="relative px-6 sm:px-8 pt-7 pb-8">
         {/* Eyebrow */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-violet-500 dark:border-violet-500/50 dark:border-violet-700/25 bg-violet-500 dark:bg-violet-800/10 px-3.5 py-1.5 mb-4">
-          {EyebrowIcon && <EyebrowIcon className="h-3.5 w-3.5 text-violet-400 dark:text-violet-300" />}
-          <span className="text-xs font-bold uppercase tracking-widest text-violet-300 dark:text-violet-300">{eyebrow}</span>
+        <div className="inline-flex items-center gap-2 rounded-full border border-blue-500 dark:border-blue-500/50 dark:border-blue-700/25 bg-blue-500 dark:bg-blue-800/10 px-3.5 py-1.5 mb-4">
+          {EyebrowIcon && <EyebrowIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-300" />}
+          <span className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300">{eyebrow}</span>
         </div>
 
         {/* Title */}
@@ -112,9 +112,9 @@ export function DSAStatCard({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-background/[0.05] border border-white/[0.08] px-4 py-3 transition-colors hover:bg-background/[0.07] hover:border-violet-500 dark:border-violet-500/50 dark:border-violet-700/25">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500 dark:bg-violet-800/15 shrink-0">
-        <Icon className="h-4 w-4 text-violet-300 dark:text-violet-300" />
+    <div className="flex items-center gap-3 rounded-xl bg-background/[0.05] border border-white/[0.08] px-4 py-3 transition-colors hover:bg-background/[0.07] hover:border-blue-500 dark:border-blue-500/50 dark:border-blue-700/25">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500 dark:bg-blue-800/15 shrink-0">
+        <Icon className="h-4 w-4 text-blue-700 dark:text-blue-300" />
       </div>
       <div className="min-w-0">
         <div className="text-base font-black text-primary-foreground dark:text-foreground leading-none">{value}</div>

@@ -30,7 +30,7 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
       label: "Curriculum",
       blurb: "18 modules · theory + practice",
       icon: BookOpen,
-      accent: "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20",
+      accent: "text-primary dark:text-primary bg-blue-50 dark:bg-blue-500/10 border-default dark:border-default/20",
     },
     {
       key: "sheets",
@@ -38,7 +38,7 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
       label: "Curated sheets",
       blurb: "Blind 75, NeetCode 150, Grind 75",
       icon: ListChecks,
-      accent: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-100 dark:border-amber-500/20",
+      accent: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-default dark:border-default/20",
     },
     {
       key: "difficulty",
@@ -46,7 +46,7 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
       label: "By difficulty",
       blurb: "Easy · Medium · Hard",
       icon: Gauge,
-      accent: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20",
+      accent: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-default dark:border-default/20",
     },
     {
       key: "patterns",
@@ -54,7 +54,7 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
       label: "By pattern",
       blurb: "Sliding window, DFS, DP, greedy…",
       icon: Workflow,
-      accent: "text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10 border-violet-100 dark:border-violet-500/20",
+      accent: "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20",
     },
     {
       key: "companies",
@@ -68,7 +68,7 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
   const filtered = exclude ? links.filter((l) => l.key !== exclude) : links;
   return (
     <section className="mt-12 pt-8 border-t border-border mb-10">
-      <p className="text-xs font-bold uppercase tracking-widest text-violet-600 dark:text-violet-400 mb-1 flex items-center gap-1.5">
+      <p className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1.5">
         <Compass className="h-3.5 w-3.5" />
         Keep exploring
       </p>
@@ -82,16 +82,16 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
             <Link
               key={l.key}
               href={l.href}
-              className="group flex flex-col rounded-2xl border border-border bg-background hover:border-violet-300 dark:border-violet-500/30 hover:shadow-md hover:-translate-y-0.5 transition-all p-4"
+              className="group flex flex-col rounded-2xl border border-border bg-background hover:border-blue-300 dark:border-blue-500/30 hover:shadow-md hover:-translate-y-0.5 transition-all p-4"
             >
               <div className={`w-9 h-9 rounded-lg border flex items-center justify-center mb-3 ${l.accent}`}>
                 <Icon className="h-4 w-4" />
               </div>
-              <div className="text-sm font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400 transition-colors">
+              <div className="text-sm font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors">
                 {l.label}
               </div>
-              <div className="text-[11px] text-slate-400 dark:text-slate-300 mt-0.5 leading-snug">{l.blurb}</div>
-              <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-violet-600 dark:text-violet-400">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">{l.blurb}</div>
+              <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400">
                 Explore <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
               </div>
             </Link>

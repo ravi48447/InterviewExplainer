@@ -68,7 +68,7 @@ function CategorySidebar({
       <div className="px-4 py-3 border-b border-border">
         <Link
           href="/dsa"
-          className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:text-violet-400"
+          className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:text-blue-400"
         >
           <FolderTree className="h-3.5 w-3.5" />
           All categories
@@ -81,7 +81,7 @@ function CategorySidebar({
             href={`/dsa/${cat}`}
             className={`block px-3 py-1.5 text-xs rounded-md transition-colors ${
               cat === current
-                ? "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 font-bold"
+                ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 font-bold"
                 : "text-muted-foreground hover:text-foreground hover:bg-surface font-medium"
             }`}
           >
@@ -178,7 +178,7 @@ export default async function DSACategoryPage({
 
       {/* Grouped by module */}
       <section className="mb-12">
-        <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-1">
+        <p className="text-xs font-bold uppercase tracking-widest text-primary dark:text-primary mb-1">
           Grouped by curriculum module
         </p>
         <h2 className="text-xl font-black text-foreground tracking-tight mb-5">
@@ -196,11 +196,11 @@ export default async function DSACategoryPage({
                 >
                   <Link
                     href={`/dsa/module/${m.moduleSlug}`}
-                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 hover:bg-violet-50/40 dark:bg-violet-500/10 transition-colors"
+                    className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 hover:bg-blue-50/40 dark:bg-blue-500/10 transition-colors"
                   >
-                    <span className="text-sm font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400 inline-flex items-center gap-1.5 transition-colors">
+                    <span className="text-sm font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400 inline-flex items-center gap-1.5 transition-colors">
                       {m.title}
-                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-violet-500 dark:text-violet-400" />
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400" />
                     </span>
                     <span className="text-[11px] font-semibold text-muted-foreground">
                       {modProblems.length} problem{modProblems.length === 1 ? "" : "s"}

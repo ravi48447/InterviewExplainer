@@ -83,10 +83,10 @@ export default function V2ContentTreeNav({
   return (
     <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-900/40 dark:to-slate-900/20 border-b border-border">
+      <div className="px-4 py-3 bg-surface border border-default dark:from-slate-900/40 dark:to-slate-900/20 border-b border-border">
         <Link
           href={basePath}
-          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-blue-600 dark:text-blue-400 transition-colors"
+          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-primary dark:text-primary transition-colors"
         >
           <ArrowLeft className="h-3 w-3" />
           {toDisplayName(lang)} {toDisplayName(track)}
@@ -114,18 +114,18 @@ export default function V2ContentTreeNav({
                     className={cn(
                       "w-full flex items-center gap-2 px-2 py-2 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-colors",
                       moduleHasActive
-                        ? "text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60"
+                        ? "text-primary dark:text-primary bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60"
                         : "text-muted-foreground hover:text-foreground hover:bg-surface"
                     )}
                   >
                     {isModuleExpanded
-                      ? <FolderOpen className={cn("h-3.5 w-3.5 shrink-0", moduleHasActive ? "text-blue-500 dark:text-blue-400" : "text-muted-foreground")} />
-                      : <Folder className={cn("h-3.5 w-3.5 shrink-0", moduleHasActive ? "text-blue-500 dark:text-blue-400" : "text-muted-foreground")} />
+                      ? <FolderOpen className={cn("h-3.5 w-3.5 shrink-0", moduleHasActive ? "text-primary dark:text-primary" : "text-muted-foreground")} />
+                      : <Folder className={cn("h-3.5 w-3.5 shrink-0", moduleHasActive ? "text-primary dark:text-primary" : "text-muted-foreground")} />
                     }
                     <span className="flex-1 text-left truncate">{mod.moduleName}</span>
                     <span className={cn(
                       "text-[9px] font-bold shrink-0",
-                      moduleHasActive ? "text-blue-500 dark:text-blue-400" : "text-muted-foreground"
+                      moduleHasActive ? "text-primary dark:text-primary" : "text-muted-foreground"
                     )}>
                       {totalQuestions}
                     </span>
@@ -161,15 +161,15 @@ export default function V2ContentTreeNav({
             className={cn(
               "w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg transition-colors",
               isActive
-                ? "text-blue-700 dark:text-blue-400 font-bold"
+                ? "text-primary dark:text-primary font-bold"
                 : "text-muted-foreground hover:text-foreground hover:bg-surface font-medium"
             )}
           >
-            <Layers className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-blue-500 dark:text-blue-400" : "text-muted-foreground")} />
+            <Layers className={cn("h-3.5 w-3.5 shrink-0", isActive ? "text-primary dark:text-primary" : "text-muted-foreground")} />
             <span className="flex-1 text-left truncate text-[11px]">{stack.name}</span>
             <span className={cn(
               "text-[10px] shrink-0 px-1.5 py-0.5 rounded font-bold",
-              isActive ? "bg-blue-100 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400" : "text-muted-foreground"
+              isActive ? "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary" : "text-muted-foreground"
             )}>
               {stack.questionCount}
             </span>
@@ -190,11 +190,11 @@ export default function V2ContentTreeNav({
                     className={cn(
                       "flex items-start gap-2 pl-2 pr-2 py-1.5 text-[11px] rounded-lg transition-all",
                       isActiveQ
-                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-sm"
+                        ? "bg-surface border border-default text-white font-medium shadow-sm"
                         : "text-muted-foreground hover:text-foreground hover:bg-surface"
                     )}
                   >
-                    <span className={cn("shrink-0 mt-0.5", isActiveQ ? "text-blue-200 dark:text-blue-300" : "text-muted-foreground")}>
+                    <span className={cn("shrink-0 mt-0.5", isActiveQ ? "text-primary dark:text-primary" : "text-muted-foreground")}>
                       {isActiveQ ? <CheckCircle2 className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
                     </span>
                     <span className="leading-snug line-clamp-2">{q.title}</span>

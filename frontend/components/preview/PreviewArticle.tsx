@@ -35,12 +35,12 @@ function difficultyColour(d?: string) {
   switch ((d || "").toLowerCase()) {
     case "beginner":
     case "easy":
-      return "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20";
+      return "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20";
     case "advanced":
     case "hard":
       return "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20";
     default:
-      return "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20";
+      return "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-default dark:border-default/20";
   }
 }
 
@@ -132,7 +132,7 @@ const ALERT_THEME: Record<
   }
 > = {
   warning: {
-    border: "border-amber-200 dark:border-amber-500/20",
+    border: "border-default dark:border-default/20",
     bg: "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60",
     accentLine: "bg-amber-400 dark:bg-amber-800",
     iconCls: "text-amber-600 dark:text-amber-400",
@@ -140,7 +140,7 @@ const ALERT_THEME: Record<
     label: "Watch out",
   },
   tip: {
-    border: "border-emerald-200 dark:border-emerald-500/20",
+    border: "border-default dark:border-default/20",
     bg: "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60",
     accentLine: "bg-emerald-400 dark:bg-emerald-800",
     iconCls: "text-emerald-600 dark:text-emerald-400",
@@ -148,18 +148,18 @@ const ALERT_THEME: Record<
     label: "Tip",
   },
   note: {
-    border: "border-blue-200 dark:border-blue-500/20",
+    border: "border-default dark:border-default/20",
     bg: "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60",
     accentLine: "bg-blue-400 dark:bg-blue-800",
-    iconCls: "text-blue-600 dark:text-blue-400",
+    iconCls: "text-primary dark:text-primary",
     icon: Info,
     label: "Note",
   },
   info: {
-    border: "border-indigo-200 dark:border-indigo-500/20",
-    bg: "bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/60",
-    accentLine: "bg-indigo-400 dark:bg-indigo-800",
-    iconCls: "text-indigo-600 dark:text-indigo-400",
+    border: "border-default dark:border-default/20",
+    bg: "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60",
+    accentLine: "bg-blue-400 dark:bg-blue-800",
+    iconCls: "text-primary dark:text-primary",
     icon: Info,
     label: "Heads up",
   },
@@ -335,14 +335,14 @@ function CodeBlock({
         }
       : flavour === "good"
       ? {
-          ring: "border-emerald-200 dark:border-emerald-500/20",
-          headerBg: "bg-gradient-to-r   from-emerald-50 dark:from-emerald-950/40 to-emerald-50/60 dark:to-emerald-950/40",
+          ring: "border-default dark:border-default/20",
+          headerBg: "bg-surface ",
           headerText: "text-emerald-700 dark:text-emerald-400",
           iconCls: "text-emerald-500",
           IconCmp: CheckCircle2,
           dotCls: "bg-emerald-400 dark:bg-emerald-800",
           tag: "Recommended",
-          tagCls: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20",
+          tagCls: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20",
         }
       : {
           ring: "border-border",
@@ -626,7 +626,7 @@ export const baseComponents = {
         href={href}
         target={href?.startsWith("http") ? "_blank" : undefined}
         rel="noopener noreferrer"
-        className="text-blue-600 dark:text-blue-400 underline underline-offset-[3px] decoration-blue-200 hover:decoration-blue-500 hover:text-blue-700 dark:text-blue-400 font-medium transition-colors"
+        className="text-primary dark:text-primary underline underline-offset-[3px] decoration-blue-200 hover:decoration-blue-500 hover:text-primary dark:text-primary font-medium transition-colors"
       >
         {children}
       </a>
@@ -725,7 +725,7 @@ const quickComponents = {
   li({ children }: { children?: React.ReactNode }) {
     return (
       <li className="flex items-start gap-3 text-[15.5px] leading-[1.65] text-foreground quick-li">
-        <span className="mt-[8px] h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-800 shrink-0 ring-[3px] ring-amber-100" />
+        <span className="mt-[8px] h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-800 shrink-0 ring-[3px] ring-ring" />
         <span className="flex-1 [&>p]:m-0">{children}</span>
       </li>
     );
@@ -1043,8 +1043,8 @@ export default function PreviewArticle({ article }: Props) {
                   icon={Sparkles}
                   accent="amber"
                 />
-                <div className="quick-prose relative rounded-2xl border border-amber-200 dark:border-amber-500/20/60 bg-gradient-to-br from-amber-50/60 via-white to-white dark:from-amber-950/20 dark:via-zinc-900 dark:to-zinc-900 px-6 py-6 sm:px-8 sm:py-7 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
-                  <span className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-amber-300" />
+                <div className="quick-prose relative rounded-2xl border border-default dark:border-default/20/60 bg-gradient-to-br  via-white to-white dark:via-zinc-900 dark:to-zinc-900 px-6 py-6 sm:px-8 sm:py-7 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
+                  <span className="absolute left-0 top-0 bottom-0 w-1 bg-surface border border-default" />
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={quickComponents as never}>
                     {zones.quick}
                   </ReactMarkdown>
@@ -1130,7 +1130,7 @@ export default function PreviewArticle({ article }: Props) {
                 <ol className="rounded-2xl border border-border/80 bg-background px-6 py-6 sm:px-8 sm:py-7 space-y-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                   {meta.followup_questions.map((q, i) => (
                     <li key={i} className="flex items-start gap-3.5 group">
-                      <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[11px] font-black border border-indigo-100 dark:border-indigo-500/20">
+                      <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary text-[11px] font-black border border-default dark:border-default/20">
                         {i + 1}
                       </span>
                       <span className="text-[15.5px] leading-[1.65] text-foreground pt-[1px]">{q}</span>
@@ -1192,9 +1192,9 @@ export function ZoneHeader({
       iconBg: "bg-surface text-muted-foreground",
     },
     indigo: {
-      text: "text-indigo-600 dark:text-indigo-400",
-      bg: "bg-indigo-50 dark:bg-indigo-500/10",
-      iconBg: "bg-indigo-100 dark:bg-indigo-950/20/80 text-indigo-600 dark:text-indigo-400",
+      text: "text-primary dark:text-primary",
+      bg: "bg-blue-50 dark:bg-blue-500/10",
+      iconBg: "bg-blue-100 dark:bg-blue-950/20/80 text-primary dark:text-primary",
     },
   };
   const a = accentMap[accent];

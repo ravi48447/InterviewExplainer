@@ -55,7 +55,7 @@ export function MarkCompleteButton({ questionId }: { questionId: number }) {
             <Button
                 onClick={handleComplete}
                 disabled={loading}
-                className="gap-2 bg-emerald-600 dark:bg-emerald-800 hover:bg-emerald-700 dark:bg-emerald-800 text-white"
+                className="gap-2 bg-emerald-600 dark:bg-emerald-800 hover:bg-emerald-700 dark:bg-emerald-800 text-foreground"
             >
                 <CheckCircle className="h-4 w-4" />
                 {loading ? "Saving..." : "Mark as Completed"}

@@ -45,10 +45,10 @@ export function AlgorithmWorkshopLayout({
     <div className="space-y-8">
       {/* Problem + constraints */}
       <div className="rounded-xl border border-border bg-background shadow-sm overflow-hidden">
-        <div className="px-5 py-3 bg-gradient-to-r from-slate-50 dark:from-slate-950/40 to-blue-50 dark:to-blue-950/40 border-b border-border flex items-center justify-between  ">
+        <div className="px-5 py-3 bg-gradient-to-r from-slate-50 dark:from-slate-950/40  border-b border-border flex items-center justify-between  ">
           <span className="text-xs font-bold text-foreground uppercase tracking-wide">Problem</span>
           {patternBadge && (
-            <span className="flex items-center gap-1 px-2.5 py-1 bg-violet-100 dark:bg-violet-950/20 text-violet-700 dark:text-violet-400 rounded-full text-[11px] font-bold border border-violet-200 dark:border-violet-500/20">
+            <span className="flex items-center gap-1 px-2.5 py-1 bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 rounded-full text-[11px] font-bold border border-blue-200 dark:border-blue-500/20">
               <Tag className="h-3 w-3" />
               {patternBadge.content.replace(/^#[^\n]*\n+/, '').trim()}
             </span>
@@ -68,9 +68,9 @@ export function AlgorithmWorkshopLayout({
 
       {/* Examples */}
       {examples && (
-        <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/20 bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/40 overflow-hidden">
-          <div className="px-5 py-3 bg-indigo-100 dark:bg-indigo-950/20/50 border-b border-indigo-200 dark:border-indigo-500/20">
-            <span className="text-xs font-bold text-indigo-800 dark:text-indigo-400 uppercase tracking-wide">Examples</span>
+        <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40 overflow-hidden">
+          <div className="px-5 py-3 bg-blue-100 dark:bg-blue-950/20/50 border-b border-default dark:border-default/20">
+            <span className="text-xs font-bold text-primary dark:text-primary uppercase tracking-wide">Examples</span>
           </div>
           <div className="px-5 py-4 font-mono text-sm">
             <MarkdownContent content={examples.content} stripTopHeading />
@@ -88,7 +88,7 @@ export function AlgorithmWorkshopLayout({
                 key={i}
                 onClick={() => setActiveApproach(i)}
                 className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                  activeApproach === i ? "bg-background shadow-sm text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20" : "text-muted-foreground hover:text-foreground"
+                  activeApproach === i ? "bg-background shadow-sm text-primary dark:text-primary border border-default dark:border-default/20" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {APPROACH_ICONS[i] ?? ''} {a.sectionTitle || (i === 0 ? 'Brute Force' : i === approaches.length - 1 ? 'Optimal' : `Approach ${i + 1}`)}
@@ -103,8 +103,8 @@ export function AlgorithmWorkshopLayout({
 
       {/* Deep explanation (fallback) */}
       {approaches.length === 0 && deepExplain && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-blue-200 dark:border-blue-500/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Solution Approach</span>
           </div>
           <div className="px-5 py-5">
@@ -156,7 +156,7 @@ export function AlgorithmWorkshopLayout({
 
       {/* Java Tip */}
       {javaTip && (
-        <div className="rounded-xl border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 px-5 py-4">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 px-5 py-4">
           <div className="flex items-center gap-2 mb-2">
             <Lightbulb className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             <span className="text-[11px] font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wide">Java-Specific Tip</span>

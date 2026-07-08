@@ -255,7 +255,7 @@ function QuestionPageLayoutInner({
 
   return (
     <div
-      className={`min-h-screen font-sans transition-colors duration-300 ${
+      className={`min-h-screen font-sans transition-colors duration-200 ${
         d ? "bg-[#111111] text-muted-foreground" : "bg-surface text-foreground"
       }`}
       style={
@@ -278,7 +278,7 @@ function QuestionPageLayoutInner({
         {/* ── Left sidebar ── */}
         {sidebar && (
           <div
-            className={`hidden lg:block shrink-0 self-start sticky top-0 border-r overflow-y-auto h-screen transition-colors duration-300 ${
+            className={`hidden lg:block shrink-0 self-start sticky top-0 border-r overflow-y-auto h-screen transition-colors duration-200 ${
               d
                 ? "border-border/50 bg-[#1a1a1a]"
                 : "border-border/80 bg-background"
@@ -290,7 +290,7 @@ function QuestionPageLayoutInner({
 
         {/* ── Main content ── */}
         <main
-          className={`flex-1 min-w-0 transition-colors duration-300 ${
+          className={`flex-1 min-w-0 transition-colors duration-200 ${
             d ? "bg-[#1a1a1a]" : "bg-background"
           }`}
         >
@@ -370,7 +370,7 @@ function QuestionPageLayoutInner({
                 <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap text-[11px]">
                   <span
                     className={`font-black tabular-nums ${
-                      d ? "text-blue-400" : "text-blue-600 dark:text-blue-400"
+                      d ? "text-primary" : "text-primary dark:text-primary"
                     }`}
                   >
                     Q {currentIdx + 1}{" "}
@@ -470,7 +470,7 @@ function QuestionPageLayoutInner({
                         nextQuestion.slug,
                         nextQuestion.stackSlug || stackSlug
                       )}
-                      className="p-1.5 rounded-md bg-blue-600 dark:bg-blue-800 text-white hover:bg-blue-700 dark:bg-blue-800 transition-colors"
+                      className="p-1.5 rounded-md bg-blue-600 dark:bg-blue-800 text-foreground hover:bg-blue-700 dark:bg-blue-800 transition-colors"
                       aria-label={`Next: ${nextQuestion.title}`}
                       title={`Next: ${nextQuestion.title}`}
                     >
@@ -495,8 +495,8 @@ function QuestionPageLayoutInner({
                   href={`${breadcrumbs[breadcrumbs.length - 1].href}#all-questions`}
                   className={`font-semibold underline underline-offset-[3px] transition-colors ${
                     d
-                      ? "text-indigo-400 decoration-indigo-700 hover:text-indigo-300 hover:decoration-indigo-500"
-                      : "text-indigo-600 decoration-indigo-300 hover:text-indigo-700 dark:text-indigo-400 hover:decoration-indigo-500"
+                      ? "text-primary decoration-blue-700 hover:text-primary hover:decoration-blue-500"
+                      : "text-primary decoration-blue-300 hover:text-primary dark:text-primary hover:decoration-blue-500"
                   }`}
                 >
                   Full question list in order
@@ -572,7 +572,7 @@ function QuestionPageLayoutInner({
                   >
                     <Target
                       className={`h-3.5 w-3.5 ${
-                        d ? "text-indigo-400 dark:text-indigo-300" : "text-indigo-500 dark:text-indigo-400"
+                        d ? "text-primary dark:text-primary" : "text-primary dark:text-primary"
                       }`}
                     />
                     <span
@@ -588,13 +588,13 @@ function QuestionPageLayoutInner({
                       <div
                         className={`rounded-lg px-3 py-2.5 border ${
                           d
-                            ? "bg-[#101a2a] border-blue-700 dark:border-blue-700/40"
-                            : "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 border-blue-200 dark:border-blue-500/20/60"
+                            ? "bg-[#101a2a] border-default dark:border-default/40"
+                            : "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 border-default dark:border-default/20/60"
                         }`}
                       >
                         <div
                           className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
-                            d ? "text-blue-400" : "text-blue-600 dark:text-blue-400"
+                            d ? "text-primary" : "text-primary dark:text-primary"
                           }`}
                         >
                           Testing
@@ -612,13 +612,13 @@ function QuestionPageLayoutInner({
                       <div
                         className={`rounded-lg px-3 py-2.5 border ${
                           d
-                            ? "bg-[#1a1408] border-amber-700 dark:border-amber-700/40"
-                            : "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 border-amber-200 dark:border-amber-500/20/60"
+                            ? "bg-[#1a1408] border-default dark:border-default/40"
+                            : "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 border-default dark:border-default/20/60"
                         }`}
                       >
                         <div
                           className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
-                            d ? "text-amber-400" : "text-amber-600 dark:text-amber-400"
+                            d ? "text-amber-600" : "text-amber-600 dark:text-amber-400"
                           }`}
                         >
                           Common Mistake
@@ -636,13 +636,13 @@ function QuestionPageLayoutInner({
                       <div
                         className={`rounded-lg px-3 py-2.5 border ${
                           d
-                            ? "bg-[#0d1c14] border-emerald-700 dark:border-emerald-700/40"
-                            : "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 border-emerald-200 dark:border-emerald-500/20/60"
+                            ? "bg-[#0d1c14] border-default dark:border-default/40"
+                            : "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 border-default dark:border-default/20/60"
                         }`}
                       >
                         <div
                           className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
-                            d ? "text-emerald-400" : "text-emerald-600 dark:text-emerald-400"
+                            d ? "text-emerald-600" : "text-emerald-600 dark:text-emerald-400"
                           }`}
                         >
                           To Stand Out
@@ -666,25 +666,25 @@ function QuestionPageLayoutInner({
                 <div
                   className={`rounded-xl overflow-hidden shadow-lg ${
                     d
-                      ? "border border-emerald-600 dark:border-emerald-700/50 bg-[#0d1c15] shadow-black/40"
-                      : "border border-emerald-200 dark:border-emerald-500/20/70 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/40 shadow-emerald-100/60"
+                      ? "border border-default dark:border-default/50 bg-[#0d1c15] shadow-black/40"
+                      : "border border-default dark:border-default/20/70 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/40 shadow-sm"
                   }`}
                 >
                   <div
                     className={`flex items-center gap-2 px-5 py-2.5 border-b ${
                       d
-                        ? "border-emerald-700 dark:border-emerald-700/50 bg-emerald-900 dark:bg-emerald-800/30"
-                        : "border-emerald-200 dark:border-emerald-500/20/60 bg-emerald-100 dark:bg-emerald-950/20/40"
+                        ? "border-default dark:border-default/50 bg-emerald-900 dark:bg-emerald-800/30"
+                        : "border-default dark:border-default/20/60 bg-emerald-100 dark:bg-emerald-950/20/40"
                     }`}
                   >
                     <MessageSquare
                       className={`h-3.5 w-3.5 ${
-                        d ? "text-emerald-400" : "text-emerald-600 dark:text-emerald-400"
+                        d ? "text-emerald-600" : "text-emerald-600 dark:text-emerald-400"
                       }`}
                     />
                     <span
                       className={`text-[11px] font-bold uppercase tracking-widest ${
-                        d ? "text-emerald-300" : "text-emerald-700 dark:text-emerald-400"
+                        d ? "text-emerald-700" : "text-emerald-700 dark:text-emerald-400"
                       }`}
                     >
                       Interview Answer
@@ -701,7 +701,7 @@ function QuestionPageLayoutInner({
                     <MarkdownContent content={answerMarkdown} />
                     <div
                       className={`mt-5 pt-4 border-t ${
-                        d ? "border-emerald-900 dark:border-emerald-700/50" : "border-emerald-200 dark:border-emerald-500/20/50"
+                        d ? "border-default dark:border-default/50" : "border-default dark:border-default/20/50"
                       }`}
                     >
                       <MarkCompleteButton questionId={Number(data.id)} />
@@ -730,7 +730,7 @@ function QuestionPageLayoutInner({
                   >
                     <BookOpen
                       className={`h-3.5 w-3.5 ${
-                        d ? "text-blue-400" : "text-blue-600 dark:text-blue-400"
+                        d ? "text-primary" : "text-primary dark:text-primary"
                       }`}
                     />
                     <span
@@ -754,25 +754,25 @@ function QuestionPageLayoutInner({
                 <div
                   className={`rounded-xl overflow-hidden ${
                     d
-                      ? "border border-indigo-700 dark:border-indigo-700/40 bg-[#13131f]"
-                      : "border border-indigo-200 dark:border-indigo-500/20/70 bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/40"
+                      ? "border border-default dark:border-default/40 bg-[#13131f]"
+                      : "border border-default dark:border-default/20/70 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40"
                   }`}
                 >
                   <div
                     className={`flex items-center gap-2 px-5 py-2.5 border-b ${
                       d
-                        ? "border-indigo-800 dark:border-indigo-700/50 bg-indigo-900 dark:bg-indigo-800/20"
-                        : "border-indigo-200 dark:border-indigo-500/20/60 bg-indigo-100 dark:bg-indigo-950/20/40"
+                        ? "border-default dark:border-default/50 bg-blue-900 dark:bg-blue-800/20"
+                        : "border-default dark:border-default/20/60 bg-blue-100 dark:bg-blue-950/20/40"
                     }`}
                   >
                     <HelpCircle
                       className={`h-3.5 w-3.5 ${
-                        d ? "text-indigo-400 dark:text-indigo-300" : "text-indigo-600 dark:text-indigo-400"
+                        d ? "text-primary dark:text-primary" : "text-primary dark:text-primary"
                       }`}
                     />
                     <span
                       className={`text-[11px] font-bold uppercase tracking-widest ${
-                        d ? "text-indigo-300" : "text-indigo-700 dark:text-indigo-400"
+                        d ? "text-primary" : "text-primary dark:text-primary"
                       }`}
                     >
                       Follow-up questions
@@ -784,8 +784,8 @@ function QuestionPageLayoutInner({
                         <span
                           className={`mt-[2px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-black border ${
                             d
-                              ? "bg-indigo-950/60 text-indigo-300 dark:text-indigo-300 border-indigo-800 dark:border-indigo-700/60"
-                              : "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-100 dark:border-indigo-500/20"
+                              ? "bg-blue-950/60 text-primary dark:text-primary border-default dark:border-default/60"
+                              : "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary border-default dark:border-default/20"
                           }`}
                         >
                           {i + 1}
@@ -810,8 +810,8 @@ function QuestionPageLayoutInner({
                 <div
                   className={`mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest ${
                     d
-                      ? "bg-amber-900/30 border-amber-700/40 text-amber-400"
-                      : "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400"
+                      ? "bg-amber-900/30 border-default/40 text-amber-400"
+                      : "bg-amber-50 dark:bg-amber-500/10 border-default dark:border-default/20 text-amber-700 dark:text-amber-400"
                   }`}
                 >
                   <Folder className="h-3 w-3" />
@@ -862,13 +862,13 @@ function QuestionPageLayoutInner({
                       nextQuestion.slug,
                       nextQuestion.stackSlug || stackSlug
                     )}
-                    className="group flex-1 flex items-center justify-between gap-3 rounded-xl bg-blue-600 dark:bg-blue-800 hover:bg-blue-700 dark:bg-blue-800 text-white px-5 py-3 shadow-sm transition-all"
+                    className="group flex-1 flex items-center justify-between gap-3 rounded-xl bg-blue-600 dark:bg-blue-800 hover:bg-blue-700 dark:bg-blue-800 text-foreground px-5 py-3 shadow-sm transition-all"
                   >
                     <div className="min-w-0">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-blue-200 dark:text-blue-300">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-primary dark:text-primary">
                         Continue · Next question
                         {totalQuestions > 0 && currentIdx >= 0 && (
-                          <span className="text-blue-100 dark:text-blue-300 font-bold">
+                          <span className="text-primary dark:text-primary font-bold">
                             {" "}
                             · Q {currentIdx + 2}/{totalQuestions}
                           </span>
@@ -886,8 +886,8 @@ function QuestionPageLayoutInner({
                 <div
                   className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[12px] font-bold ${
                     d
-                      ? "bg-emerald-900/30 border-emerald-700/40 text-emerald-400"
-                      : "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                      ? "bg-emerald-900/30 border-default/40 text-emerald-400"
+                      : "bg-emerald-50 dark:bg-emerald-500/10 border-default dark:border-default/20 text-emerald-700 dark:text-emerald-400"
                   }`}
                 >
                   You&apos;ve reached the end of this module — well done.
@@ -901,8 +901,8 @@ function QuestionPageLayoutInner({
                 href={nextCurriculumModule.href}
                 className={`group mt-8 block rounded-xl border hover:shadow-md transition-all overflow-hidden ${
                   d
-                    ? "border-emerald-700/40 bg-gradient-to-br from-emerald-950/60 via-slate-900 to-slate-900 hover:border-emerald-600/60 hover:shadow-emerald-950/30"
-                    : "border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 via-white to-white dark:from-emerald-950/40 dark:via-zinc-900 dark:to-zinc-900 hover:border-emerald-300 dark:border-emerald-500/30 hover:shadow-emerald-100/60"
+                    ? "border-default/40 bg-surface border border-default hover:border-default/60 hover:shadow-sm"
+                    : "border-default dark:border-default/20 dark:border-default/60 bg-gradient-to-br  via-white to-white dark:via-zinc-900 dark:to-zinc-900 hover:border-default dark:border-default/30 hover:shadow-sm"
                 }`}
               >
                 <div className="px-5 py-4 flex items-center gap-4">
@@ -960,7 +960,7 @@ function QuestionPageLayoutInner({
                       : "border-border bg-background"
                   }`}
                 >
-                  <Compass className="h-4 w-4 text-indigo-400 dark:text-indigo-300" />
+                  <Compass className="h-4 w-4 text-primary dark:text-primary" />
                   <h2
                     id="related-prep-heading"
                     className={`text-sm font-black tracking-tight ${
@@ -972,8 +972,8 @@ function QuestionPageLayoutInner({
                   <span
                     className={`ml-auto text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${
                       d
-                        ? "bg-indigo-900 dark:bg-indigo-800/60 text-indigo-300 dark:text-indigo-300"
-                        : "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400"
+                        ? "bg-blue-900 dark:bg-blue-800/60 text-primary dark:text-primary"
+                        : "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary"
                     }`}
                   >
                     {relatedPillars.length}
@@ -987,13 +987,13 @@ function QuestionPageLayoutInner({
                         href={`/${p.pillarSlug}`}
                         className={`group flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
                           d
-                            ? "border-border/60 dark:bg-surface/60 hover:border-indigo-600 dark:border-indigo-700/50 hover:bg-slate-700 dark:bg-slate-800/60"
-                            : "border-border bg-background hover:border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/40"
+                            ? "border-border/60 dark:bg-surface/60 hover:border-default dark:border-default/50 hover:bg-slate-700 dark:bg-slate-800/60"
+                            : "border-border bg-background hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40"
                         }`}
                       >
                         <div className="flex-1 min-w-0">
                           <div
-                            className={`text-[13px] font-black leading-snug group-hover:text-indigo-500 dark:text-indigo-400 transition-colors ${
+                            className={`text-[13px] font-black leading-snug group-hover:text-primary dark:group-hover:text-primary transition-colors ${
                               d ? "text-muted-foreground" : "text-foreground"
                             }`}
                           >
@@ -1010,8 +1010,8 @@ function QuestionPageLayoutInner({
                         <ChevronRight
                           className={`h-3.5 w-3.5 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5 ${
                             d
-                              ? "text-muted-foreground group-hover:text-indigo-400 dark:text-indigo-300"
-                              : "text-muted-foreground group-hover:text-indigo-500 dark:text-indigo-400"
+                              ? "text-muted-foreground group-hover:text-primary dark:group-hover:text-primary"
+                              : "text-muted-foreground group-hover:text-primary dark:group-hover:text-primary"
                           }`}
                         />
                       </Link>
@@ -1027,18 +1027,18 @@ function QuestionPageLayoutInner({
                 aria-labelledby="roadmap-cta-heading"
                 className={`mt-8 rounded-xl border shadow-sm overflow-hidden ${
                   d
-                    ? "border-indigo-700/40 bg-gradient-to-br from-indigo-950/60 via-slate-900 to-slate-900"
-                    : "border-indigo-200 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-50 via-white to-white dark:from-indigo-950/40 dark:via-zinc-900 dark:to-zinc-900"
+                    ? "border-default/40 bg-surface border border-default"
+                    : "border-default dark:border-default/20 bg-gradient-to-br  via-white to-white dark:via-zinc-900 dark:to-zinc-900"
                 }`}
               >
                 <div className="p-5 flex items-start gap-4 flex-wrap">
-                  <div className="shrink-0 w-11 h-11 rounded-lg bg-indigo-700 dark:bg-indigo-800 flex items-center justify-center">
-                    <Compass className="h-5 w-5 text-white" />
+                  <div className="shrink-0 w-11 h-11 rounded-lg bg-blue-700 dark:bg-blue-800 flex items-center justify-center">
+                    <Compass className="h-5 w-5 text-foreground" />
                   </div>
                   <div className="flex-1 min-w-[220px]">
                     <div
                       className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
-                        d ? "text-indigo-400 dark:text-indigo-300" : "text-indigo-600 dark:text-indigo-400"
+                        d ? "text-primary dark:text-primary" : "text-primary dark:text-primary"
                       }`}
                     >
                       Full prep
@@ -1062,7 +1062,7 @@ function QuestionPageLayoutInner({
                   <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                     <Link
                       href={roadmapCta.href}
-                      className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 dark:bg-indigo-800 text-white font-bold text-sm hover:bg-indigo-700 dark:bg-indigo-800 shadow-sm transition-colors"
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 dark:bg-blue-800 text-foreground font-bold text-sm hover:bg-blue-700 dark:bg-blue-800 shadow-sm transition-colors"
                     >
                       {roadmapCta.ctaLabel}
                       <ArrowRight className="h-4 w-4" />
@@ -1090,7 +1090,7 @@ function QuestionPageLayoutInner({
 
         {/* ── Right sidebar ── */}
         <aside
-          className={`hidden xl:flex w-[280px] shrink-0 flex-col self-start sticky top-0 border-l overflow-y-auto h-screen transition-colors duration-300 ${
+          className={`hidden xl:flex w-[280px] shrink-0 flex-col self-start sticky top-0 border-l overflow-y-auto h-screen transition-colors duration-200 ${
             d
               ? "border-border/50 bg-[#1a1a1a]"
               : "border-border/80 bg-background"
@@ -1113,7 +1113,7 @@ function QuestionPageLayoutInner({
               onClick={toggleTheme}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
                 d
-                  ? "border-slate-600 dark:border-slate-700 dark:bg-surface text-muted-foreground hover:border-amber-500 dark:border-amber-700/60 hover:text-amber-300 dark:text-amber-300"
+                  ? "border-slate-600 dark:border-slate-700 dark:bg-surface text-muted-foreground hover:border-default dark:border-default/60 hover:text-amber-300 dark:text-amber-300"
                   : "border-border bg-surface text-muted-foreground hover:border-border hover:text-foreground"
               }`}
               aria-label={d ? "Switch to light mode" : "Switch to dark mode"}
@@ -1149,7 +1149,7 @@ function QuestionPageLayoutInner({
                 </span>
                 <span
                   className={`text-sm font-bold ${
-                    d ? "text-blue-400" : "text-blue-600 dark:text-blue-400"
+                    d ? "text-primary" : "text-primary dark:text-primary"
                   }`}
                 >
                   {currentIdx + 1}/{totalQuestions}
@@ -1249,7 +1249,7 @@ function QuestionPageLayoutInner({
           >
             <Link
               href="/mock-interviews"
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-indigo-600 dark:bg-indigo-800 text-white text-sm font-bold hover:bg-indigo-700 dark:bg-indigo-800 transition-colors"
+              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-blue-600 dark:bg-blue-800 text-foreground text-sm font-bold hover:bg-blue-700 dark:bg-blue-800 transition-colors"
             >
               <PlayCircle className="h-4 w-4" />
               Mock Interview
@@ -1274,8 +1274,8 @@ function QuestionPageLayoutInner({
                       className={`block text-[13px] py-1.5 px-2 rounded-md transition-colors leading-snug ${
                         q.slug === questionSlug
                           ? d
-                            ? "bg-blue-900/40 text-blue-300 font-semibold"
-                            : "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 font-semibold"
+                            ? "bg-blue-900/40 text-primary font-semibold"
+                            : "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary font-semibold"
                           : d
                           ? "text-muted-foreground hover:text-muted-foreground hover:dark:bg-surface/70"
                           : "text-muted-foreground hover:text-foreground hover:bg-surface"

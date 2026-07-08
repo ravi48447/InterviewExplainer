@@ -57,7 +57,7 @@ export function QuestionSidebar({ topics, activeQuestionId }: QuestionSidebarPro
                         <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${progressPercentage}%` }}
-                            className="h-full bg-primary shadow-[0_0_10px_rgba(var(--primary),0.5)]"
+                            className="h-full bg-primary shadow-sm"
                         />
                     </div>
                 </div>

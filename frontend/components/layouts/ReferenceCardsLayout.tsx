@@ -53,7 +53,7 @@ export function ReferenceCardsLayout({
   return (
     <div className="space-y-6">
       {directAnswer && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40 to-indigo-50 dark:to-indigo-950/40 px-5 py-4  ">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-surface px-5 py-4  ">
           <p className="text-sm font-semibold text-foreground">{directAnswer}</p>
         </div>
       )}
@@ -71,8 +71,8 @@ export function ReferenceCardsLayout({
 
       {/* Deep Dive */}
       {deepDive && (
-        <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
-          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-blue-200 dark:border-blue-500/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-background shadow-sm overflow-hidden">
+          <div className="px-5 py-3 bg-blue-50 dark:bg-blue-500/10 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Deep Dive</span>
           </div>
           <div className="px-5 py-5">
@@ -93,7 +93,7 @@ export function ReferenceCardsLayout({
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search..."
-                className="w-full rounded-2xl border border-slate-200 dark:border-slate-500/20 dark:border-white/20 bg-slate-50 dark:bg-slate-950/20 dark:bg-white/5 py-2 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-100 shadow-sm dark:shadow-md placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-slate-400 dark:focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:focus:ring-white/10 transition-all"
+                className="w-full rounded-2xl border border-slate-200 dark:border-slate-500/20 bg-slate-50 dark:bg-slate-950/20 py-2 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-100 shadow-sm dark:shadow-md placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-slate-400 dark:focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:focus:ring-white/10 transition-all"
               />
             </div>
             <div className="flex gap-1 flex-wrap">
@@ -116,7 +116,7 @@ export function ReferenceCardsLayout({
           {/* Cards grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {visibleSections.map((section, i) => (
-              <div key={i} className="relative rounded-xl border border-border bg-background shadow-sm overflow-hidden hover:border-blue-300 dark:border-blue-700 hover:shadow-md transition-all">
+              <div key={i} className="relative rounded-xl border border-border bg-background shadow-sm overflow-hidden hover:border-default dark:border-default hover:shadow-md transition-all">
                 <div className="flex items-center justify-between px-4 py-3 bg-surface border-b border-border">
                   <span className="text-xs font-bold text-foreground">{section.sectionTitle || `Item ${i + 1}`}</span>
                   <button
@@ -141,8 +141,8 @@ export function ReferenceCardsLayout({
 
       {/* Speakable */}
       {speakable && (
-        <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-500/30 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-emerald-200 dark:border-emerald-500/20 dark:border-emerald-800/60">
+        <div className="rounded-xl border-2 border-default dark:border-default/30 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-default dark:border-default/20 dark:border-default/60">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

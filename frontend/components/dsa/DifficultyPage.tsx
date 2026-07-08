@@ -117,9 +117,9 @@ export function DSADifficultyPage({
             hard: "bg-red-500 dark:bg-red-800",
           };
           const activeClasses: Record<string, string> = {
-            easy: "bg-gradient-to-br   from-emerald-50 dark:from-emerald-950/40 to-white border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 shadow-sm",
-            medium: "bg-gradient-to-br   from-amber-50 dark:from-amber-950/40 to-white border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 shadow-sm",
-            hard: "bg-gradient-to-br   from-red-50 dark:from-red-950/40 to-white border-red-200 dark:border-red-500/20 text-red-700 dark:text-red-400 shadow-sm",
+            easy: "bg-surface to-white border-default dark:border-default/20 text-emerald-700 dark:text-emerald-400 shadow-sm",
+            medium: "bg-surface to-white border-default dark:border-default/20 text-amber-700 dark:text-amber-400 shadow-sm",
+            hard: "bg-surface to-white border-default dark:border-default/20 text-red-700 dark:text-red-400 shadow-sm",
           };
           return (
             <Link
@@ -128,7 +128,7 @@ export function DSADifficultyPage({
               className={`rounded-2xl border px-4 py-3.5 transition-all ${
                 active
                   ? activeClasses[d]
-                  : "bg-background border-border hover:border-violet-300 dark:border-violet-500/30 hover:shadow-sm hover:-translate-y-0.5"
+                  : "bg-background border-border hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm hover:-translate-y-0.5"
               }`}
             >
               <div className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest ${active ? "opacity-80" : "text-muted-foreground"}`}>
@@ -137,7 +137,7 @@ export function DSADifficultyPage({
               </div>
               <div className={`text-lg font-black mt-1 ${active ? "" : "text-foreground"}`}>
                 {count}
-                <span className="text-xs font-semibold text-slate-400 dark:text-slate-300 ml-1">problems</span>
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 ml-1">problems</span>
               </div>
             </Link>
           );
@@ -146,7 +146,7 @@ export function DSADifficultyPage({
 
       {/* Problems grouped by module */}
       <section className="mb-12">
-        <p className="text-xs font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-1">
+        <p className="text-xs font-bold uppercase tracking-widest text-primary dark:text-primary mb-1">
           Grouped by curriculum module
         </p>
         <h2 className="text-xl font-black text-foreground tracking-tight mb-5">
@@ -169,13 +169,13 @@ export function DSADifficultyPage({
                   >
                     <Link
                       href={`/dsa/module/${m.moduleSlug}`}
-                      className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 hover:bg-violet-50/40 dark:bg-violet-500/10 transition-colors"
+                      className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 hover:bg-blue-50/40 dark:bg-blue-500/10 transition-colors"
                     >
-                      <span className="text-sm font-bold text-foreground group-hover:text-violet-700 dark:text-violet-400 inline-flex items-center gap-1.5 transition-colors">
+                      <span className="text-sm font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400 inline-flex items-center gap-1.5 transition-colors">
                         {m.title}
-                        <ArrowRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-300 group-hover:text-violet-500 dark:text-violet-400" />
+                        <ArrowRight className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 group-hover:text-blue-500 dark:text-blue-400" />
                       </span>
-                      <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-300">
+                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                         {modProblems.length} problem
                         {modProblems.length === 1 ? "" : "s"}
                       </span>

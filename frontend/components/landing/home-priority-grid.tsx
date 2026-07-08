@@ -49,36 +49,36 @@ const LUCIDE_ICON_BOXES: Partial<
   Record<HomeStandoutIcon, { wrap: string; node: ReactNode }>
 > = {
   network: {
-    wrap: "bg-gradient-to-br from-emerald-50 dark:from-emerald-950/400 to-teal-600",
-    node: <Network className="h-5 w-5 text-white" aria-hidden />,
+    wrap: "bg-teal-500/10 dark:bg-teal-500/20",
+    node: <Network className="h-5 w-5 text-teal-600 dark:text-teal-400" aria-hidden />,
   },
   zap: {
-    wrap: "bg-gradient-to-br from-amber-50 dark:from-amber-950/400 to-orange-600",
-    node: <Zap className="h-5 w-5 text-white" aria-hidden />,
+    wrap: "bg-orange-500/10 dark:bg-orange-500/20",
+    node: <Zap className="h-5 w-5 text-orange-600 dark:text-orange-400" aria-hidden />,
   },
   layers: {
-    wrap: "bg-gradient-to-br from-indigo-50 dark:from-indigo-950/400 to-blue-600",
-    node: <Layers className="h-5 w-5 text-white" aria-hidden />,
+    wrap: "bg-blue-500/10 dark:bg-blue-500/20",
+    node: <Layers className="h-5 w-5 text-blue-600 dark:text-blue-400" aria-hidden />,
   },
   link2: {
-    wrap: "bg-gradient-to-br from-violet-50 dark:from-violet-950/400 to-purple-600",
-    node: <Link2 className="h-5 w-5 text-white" aria-hidden />,
+    wrap: "bg-blue-500/10 dark:bg-blue-500/20",
+    node: <Link2 className="h-5 w-5 text-blue-600 dark:text-blue-400" aria-hidden />,
   },
   radio: {
-    wrap: "bg-gradient-to-br from-rose-50 dark:from-rose-950/400 to-pink-600",
-    node: <Radio className="h-5 w-5 text-white" aria-hidden />,
+    wrap: "bg-rose-500/10 dark:bg-rose-500/20",
+    node: <Radio className="h-5 w-5 text-rose-600 dark:text-rose-400" aria-hidden />,
   },
   cloud: {
-    wrap: "bg-gradient-to-br from-sky-50 dark:from-sky-950/400 to-cyan-600",
-    node: <Cloud className="h-5 w-5 text-white" aria-hidden />,
+    wrap: "bg-sky-500/10 dark:bg-sky-500/20",
+    node: <Cloud className="h-5 w-5 text-sky-600 dark:text-sky-400" aria-hidden />,
   },
   layout: {
-    wrap: "bg-gradient-to-br from-slate-600 to-slate-800",
-    node: <LayoutGrid className="h-5 w-5 text-white" aria-hidden />,
+    wrap: "bg-blue-500/10 dark:bg-blue-500/20",
+    node: <LayoutGrid className="h-5 w-5 text-blue-600 dark:text-blue-400" aria-hidden />,
   },
   braces: {
-    wrap: "bg-gradient-to-br from-orange-50 dark:from-orange-950/400 to-amber-600",
-    node: <Braces className="h-5 w-5 text-white" aria-hidden />,
+    wrap: "bg-amber-500/10 dark:bg-amber-500/20",
+    node: <Braces className="h-5 w-5 text-amber-600 dark:text-amber-400" aria-hidden />,
   },
 };
 
@@ -136,12 +136,12 @@ export function HomeStandoutPicks({ picks }: { picks: HomeStandoutPick[] }) {
               <li key={`${p.headline}::${p.href}`}>
                 <Link
                   href={p.href}
-                  className="group flex h-full flex-col rounded-xl border border-border bg-background p-3 shadow-sm hover:border-indigo-300 dark:border-indigo-700 hover:shadow-md transition-all"
+                  className="group flex h-full flex-col rounded-xl border border-border bg-background p-3 shadow-sm hover:border-default dark:border-default hover:shadow-md transition-all"
                 >
                   <div className="flex items-start gap-2.5 mb-2.5">
                     <PickIcon icon={p.icon} />
                     <div className="flex-1 min-w-0 text-left">
-                      <h3 className="text-sm font-bold text-foreground leading-snug group-hover:text-indigo-700 dark:text-indigo-400 transition-colors">
+                      <h3 className="text-sm font-bold text-foreground leading-snug group-hover:text-primary dark:group-hover:text-primary transition-colors">
                         {p.headline}
                       </h3>
                       <p className="mt-1 text-[11px] text-muted-foreground leading-snug line-clamp-3">
@@ -153,7 +153,7 @@ export function HomeStandoutPicks({ picks }: { picks: HomeStandoutPick[] }) {
                     <span className="text-[10.5px] font-semibold tabular-nums text-muted-foreground">
                       {countLabel(p.questionCount)}
                     </span>
-                    <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+                    <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-primary dark:text-primary">
                       Open
                       <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
                     </span>

@@ -43,7 +43,7 @@ const FAANG = [
     behavioralFocus: "Very High",
     topPatterns: ["Hash Maps", "Trees", "Graphs", "DP"],
     timeline: "4-8 weeks",
-    gradient: "from-orange-50 dark:from-orange-950/400 to-amber-600",
+    gradient: "from-orange-50 dark:from-orange-950/40 ",
   },
   {
     slug: "google",
@@ -55,7 +55,7 @@ const FAANG = [
     behavioralFocus: "Medium",
     topPatterns: ["Graphs", "DP", "Binary Search", "Two Pointers"],
     timeline: "6-12 weeks",
-    gradient: "from-blue-50 dark:from-blue-950/400 to-indigo-600",
+    gradient: "from-blue-500 to-blue-600",
   },
   {
     slug: "microsoft",
@@ -67,7 +67,7 @@ const FAANG = [
     behavioralFocus: "Medium",
     topPatterns: ["Arrays", "Trees", "Strings", "DP"],
     timeline: "3-6 weeks",
-    gradient: "from-emerald-50 dark:from-emerald-950/400 to-teal-600",
+    gradient: " to-teal-600",
   },
   {
     slug: "meta",
@@ -79,7 +79,7 @@ const FAANG = [
     behavioralFocus: "Medium-High",
     topPatterns: ["Arrays", "Graphs", "Strings", "BFS/DFS"],
     timeline: "4-8 weeks",
-    gradient: "from-indigo-50 dark:from-indigo-950/400 to-violet-600",
+    gradient: " to-blue-600",
   },
   {
     slug: "apple",
@@ -103,7 +103,7 @@ const FAANG = [
     behavioralFocus: "High",
     topPatterns: ["System Design", "Architecture", "API Design", "Scaling"],
     timeline: "4-8 weeks",
-    gradient: "from-red-600 to-rose-700",
+    gradient: " to-rose-700",
   },
 ];
 
@@ -205,11 +205,11 @@ const DSA_LEVEL_COLORS: Record<string, string> = {
 };
 
 const SD_LEVEL_COLORS: Record<string, string> = {
-  Medium: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
-  "Medium-High": "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
-  High: "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400",
-  "Very High": "bg-violet-100 dark:bg-violet-950/20 text-violet-700 dark:text-violet-400",
-  "High (L4+)": "bg-indigo-100 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400",
+  Medium: "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
+  "Medium-High": "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
+  High: "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
+  "Very High": "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
+  "High (L4+)": "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
 };
 
 function CompanyCard({
@@ -289,7 +289,7 @@ const totalCompanies =
 
 export default function CompaniesPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-orange-50/20 dark:via-orange-950/40 to-amber-50/20 dark:to-amber-950/40 font-sans text-foreground selection:bg-orange-200  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-orange-50/20 dark:via-orange-950/40  font-sans text-foreground selection:bg-orange-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -305,7 +305,7 @@ export default function CompaniesPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-orange-50 dark:from-orange-950/40 via-amber-50 dark:via-amber-950/40 to-yellow-50 dark:to-yellow-950/40  ">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-orange-50 dark:from-orange-950/40  to-yellow-50 dark:to-yellow-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Building2 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400">
@@ -376,11 +376,11 @@ export default function CompaniesPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {[
               { icon: Gauge, label: "Interview Process", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-100 dark:bg-orange-950/20" },
-              { icon: Code2, label: "DSA Focus Areas", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-100 dark:bg-violet-950/20" },
+              { icon: Code2, label: "DSA Focus Areas", color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-100 dark:bg-blue-950/20" },
               { icon: Network, label: "System Design", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-100 dark:bg-emerald-950/20" },
               { icon: Brain, label: "Behavioral Prep", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-100 dark:bg-amber-950/20" },
               { icon: TrendingUp, label: "Difficulty Level", color: "text-red-600", bg: "bg-red-100 dark:bg-red-950/20" },
-              { icon: Star, label: "Culture Signals", color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-100 dark:bg-blue-950/20" },
+              { icon: Star, label: "Culture Signals", color: "text-primary dark:text-primary", bg: "bg-blue-100 dark:bg-blue-950/20" },
             ].map((item) => (
               <div key={item.label} className="text-center">
                 <div
@@ -418,7 +418,7 @@ export default function CompaniesPage() {
         {/* Unicorns */}
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-1.5">
-            <TrendingUp className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+            <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
             <h2 className="text-xl font-black text-foreground">
               Top Unicorns & Growth Companies
             </h2>
@@ -431,7 +431,7 @@ export default function CompaniesPage() {
             {UNICORNS.map((c) => (
               <CompanyCard
                 key={c.slug}
-                company={{ ...c, gradient: "from-violet-50 dark:from-violet-950/400 to-purple-600", behavioralFocus: "", timeline: "" }}
+                company={{ ...c, gradient: "from-blue-50 dark:from-blue-950/40 ", behavioralFocus: "", timeline: "" }}
               />
             ))}
           </div>
@@ -453,7 +453,7 @@ export default function CompaniesPage() {
             {INDIA_TIER1.map((c) => (
               <CompanyCard
                 key={c.slug}
-                company={{ ...c, gradient: "from-emerald-50 dark:from-emerald-950/400 to-teal-600", behavioralFocus: "", timeline: "" }}
+                company={{ ...c, gradient: " to-teal-600", behavioralFocus: "", timeline: "" }}
               />
             ))}
           </div>
@@ -462,7 +462,7 @@ export default function CompaniesPage() {
         {/* Finance */}
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-1.5">
-            <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <DollarSign className="h-5 w-5 text-primary dark:text-primary" />
             <h2 className="text-xl font-black text-foreground">
               Finance & Banking
             </h2>
@@ -475,14 +475,14 @@ export default function CompaniesPage() {
             {FINANCE.map((c) => (
               <CompanyCard
                 key={c.slug}
-                company={{ ...c, gradient: "from-blue-50 dark:from-blue-950/400 to-cyan-600", behavioralFocus: "", timeline: "" }}
+                company={{ ...c, gradient: "from-blue-500 to-blue-600", behavioralFocus: "", timeline: "" }}
               />
             ))}
           </div>
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-gradient-to-r from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40 p-8 text-center mb-12  ">
+        <section className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-gradient-to-r from-orange-50 dark:from-orange-950/40  p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Company Prep Is Part of Your Domain Dashboard
           </h2>
@@ -493,7 +493,7 @@ export default function CompaniesPage() {
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-surface border border-default text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

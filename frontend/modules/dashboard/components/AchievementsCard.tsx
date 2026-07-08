@@ -45,7 +45,7 @@ export function AchievementsCard({ achievements, earnedCount }: AchievementsCard
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-primary leading-tight">{a.label}</p>
-                <p className="text-[11px] text-secondary leading-tight mt-0.5">{a.desc}</p>
+                <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{a.desc}</p>
                 {!a.earned && a.progress !== undefined && a.progress > 0 && (
                   <div className="mt-2 h-1 bg-default rounded-full overflow-hidden">
                     <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${a.progress}%` }} />

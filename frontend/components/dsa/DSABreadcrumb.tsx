@@ -22,7 +22,7 @@ export function DSABreadcrumb({ trail }: { trail: BreadcrumbItem[] }) {
       >
         <Home className="h-3 w-3" /> Home
       </Link>
-      <ChevronRight className="h-3 w-3 text-slate-300 dark:text-slate-300" />
+      <ChevronRight className="h-3 w-3 text-slate-500 dark:text-slate-400" />
       <Link href="/dsa" className="hover:text-foreground">
         DSA
       </Link>
@@ -30,7 +30,7 @@ export function DSABreadcrumb({ trail }: { trail: BreadcrumbItem[] }) {
         const isLast = i === trail.length - 1;
         return (
           <span key={`${item.label}-${i}`} className="flex items-center gap-1.5">
-            <ChevronRight className="h-3 w-3 text-slate-300 dark:text-slate-300" />
+            <ChevronRight className="h-3 w-3 text-slate-500 dark:text-slate-400" />
             {isLast || !item.href ? (
               <span className="text-secondary font-medium truncate max-w-[240px]">
                 {item.label}

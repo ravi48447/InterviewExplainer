@@ -107,16 +107,16 @@ type LearnEntry = {
 };
 
 const LEARN_SKILLS: LearnEntry[] = [
-  { hub: "prepCategories",  href: "/prep",          title: "Prep by Topic",    description: "Every category & module SEO hub",   icon: <Compass className="h-4 w-4 text-indigo-500"  /> },
+  { hub: "prepCategories",  href: "/prep",          title: "Prep by Topic",    description: "Every category & module SEO hub",   icon: <Compass className="h-4 w-4 text-primary"  /> },
   { hub: "systemDesign",    href: "/system-design", title: "System Design",    description: "25+ real problems & architecture",  icon: <Network className="h-4 w-4 text-emerald-500" /> },
-  { hub: "dsa",             href: "/dsa",           title: "DSA Problems",     description: "450+ problems by pattern",          icon: <Code2   className="h-4 w-4 text-violet-500"  /> },
+  { hub: "dsa",             href: "/dsa",           title: "DSA Problems",     description: "450+ problems by pattern",          icon: <Code2   className="h-4 w-4 text-blue-500"  /> },
   { hub: "behavioral",      href: "/behavioral",    title: "Behavioral",       description: "STAR method & company-specific",    icon: <Brain   className="h-4 w-4 text-amber-500"   /> },
-  { hub: "topics",          href: "/topics",        title: "Topics & Concepts",description: "Microservices, caching, security",   icon: <Layers  className="h-4 w-4 text-blue-500"    /> },
+  { hub: "topics",          href: "/topics",        title: "Topics & Concepts",description: "Microservices, caching, security",   icon: <Layers  className="h-4 w-4 text-primary"    /> },
 ];
 
 const LEARN_TOOLS: LearnEntry[] = [
   { hub: "tools",           href: "/tools",    title: "Tools & Technologies", description: "Docker, Kafka, Redis, AWS",      icon: <Wrench         className="h-4 w-4 text-teal-500"   /> },
-  { hub: "compare",         href: "/compare",  title: "Compare X vs Y",       description: "Kafka vs RabbitMQ & 20+ more",    icon: <ArrowLeftRight className="h-4 w-4 text-blue-500"   /> },
+  { hub: "compare",         href: "/compare",  title: "Compare X vs Y",       description: "Kafka vs RabbitMQ & 20+ more",    icon: <ArrowLeftRight className="h-4 w-4 text-primary"   /> },
   { hub: "companies",       href: "/companies",title: "Company Prep",         description: "FAANG process & patterns",        icon: <Building2      className="h-4 w-4 text-orange-500" /> },
   { hub: "interviewByLang", href: "/interview",title: "Browse by Language",   description: "Java, Python, Go & more",         icon: <Target         className="h-4 w-4 text-rose-500"   /> },
 ];
@@ -177,7 +177,7 @@ const MOBILE_NAV: Array<{ title: string; items: Array<{ href: string; label: str
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -213,7 +213,7 @@ export function SiteHeader() {
     );
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur-2xl">
+    <header className="dark sticky top-0 z-50 border-b border-white/10 bg-background/80 backdrop-blur-2xl text-foreground">
       <PageContainer className="flex h-16 items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 shrink-0 group">
@@ -224,7 +224,7 @@ export function SiteHeader() {
                 <defs>
                   <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stopColor="#3B82F6" />
-                    <stop offset="50%" stopColor="#6366F1" />
+                    <stop offset="50%" stopColor="#3B82F6" />
                     <stop offset="100%" stopColor="#8B5CF6" />
                   </linearGradient>
                 </defs>
@@ -378,8 +378,11 @@ export function SiteHeader() {
           >
             {mounted && (
               <>
-                <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                {resolvedTheme === "dark" ? (
+                  <Moon className="h-[1.2rem] w-[1.2rem] transition-all" />
+                ) : (
+                  <Sun className="h-[1.2rem] w-[1.2rem] transition-all" />
+                )}
                 <span className="sr-only">Toggle theme</span>
               </>
             )}

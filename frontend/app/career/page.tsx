@@ -41,7 +41,7 @@ const MAIN_SECTIONS = [
     name: "Resume & Portfolio",
     desc: "ATS-optimized resume templates, action verb lists, project descriptions that impress, GitHub portfolio strategy, LinkedIn optimization",
     icon: FileText,
-    color: "text-blue-600 dark:text-blue-400",
+    color: "text-primary dark:text-primary",
     bg: "bg-blue-100 dark:bg-blue-950/20",
     articles: 8,
     highlight: "Includes downloadable templates",
@@ -51,8 +51,8 @@ const MAIN_SECTIONS = [
     name: "Interview Process Deep-Dive",
     desc: "Step-by-step breakdown of tech interview processes at 20+ companies. What to expect in each round, how to prepare, timeline management",
     icon: Search,
-    color: "text-violet-600 dark:text-violet-400",
-    bg: "bg-violet-100 dark:bg-violet-950/20",
+    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-blue-100 dark:bg-blue-950/20",
     articles: 12,
     highlight: "FAANG + unicorn processes covered",
   },
@@ -91,7 +91,7 @@ const MAIN_SECTIONS = [
     name: "Networking & Referrals",
     desc: "How to get referrals without being spammy. Cold outreach templates, conference networking, building your professional brand",
     icon: Users,
-    color: "text-cyan-600 dark:text-cyan-400",
+    color: "text-primary dark:text-primary",
     bg: "bg-cyan-100 dark:bg-cyan-950/20",
     articles: 4,
     highlight: "Cold message templates",
@@ -158,17 +158,17 @@ const QUICK_GUIDES = [
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Resume: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
+  Resume: "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
   Negotiation: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400",
-  Process: "bg-violet-100 dark:bg-violet-950/20 text-violet-700 dark:text-violet-400",
+  Process: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
   Transitions: "bg-rose-100 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400",
   Growth: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400",
-  Compensation: "bg-cyan-100 dark:bg-cyan-950/20 text-cyan-700 dark:text-cyan-400",
+  Compensation: "bg-cyan-100 dark:bg-cyan-950/20 text-primary dark:text-primary",
 };
 
 export default function CareerPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-rose-50/20 dark:via-rose-950/40 to-pink-50/20 dark:to-pink-950/40 font-sans text-foreground selection:bg-rose-200  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-rose-50/20 dark:via-rose-950/40  font-sans text-foreground selection:bg-rose-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -184,7 +184,7 @@ export default function CareerPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-rose-50 dark:from-rose-950/40 via-pink-50 dark:via-pink-950/40 to-fuchsia-50 dark:to-fuchsia-950/40  ">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-rose-50 dark:from-rose-950/40  to-blue-50 dark:to-blue-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Briefcase className="h-5 w-5 text-rose-600 dark:text-rose-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-rose-600 dark:text-rose-400">
@@ -221,7 +221,7 @@ export default function CareerPage() {
               <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-pink-100 dark:bg-pink-950/20 flex items-center justify-center">
-                  <BookOpen className="h-5 w-5 text-pink-600 dark:text-pink-400" />
+                  <BookOpen className="h-5 w-5 text-primary dark:text-primary" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -234,8 +234,8 @@ export default function CareerPage() {
               </div>
               <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-950/20 flex items-center justify-center">
-                  <Target className="h-5 w-5 text-fuchsia-600 dark:text-fuchsia-400" />
+                <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center">
+                  <Target className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -344,7 +344,7 @@ export default function CareerPage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-rose-200 dark:border-rose-500/20 bg-gradient-to-r from-rose-50 dark:from-rose-950/40 to-pink-50 dark:to-pink-950/40 p-8 text-center mb-12  ">
+        <section className="rounded-xl border border-rose-200 dark:border-rose-500/20 bg-gradient-to-r from-rose-50 dark:from-rose-950/40  p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Career Guidance + Technical Prep = Complete Package
           </h2>
@@ -355,7 +355,7 @@ export default function CareerPage() {
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-surface border border-default text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Select Your Domain
             <ArrowRight className="h-4 w-4" />

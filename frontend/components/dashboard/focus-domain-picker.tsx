@@ -130,8 +130,8 @@ export function FocusDomainPicker({
               className={cn(
                 'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors',
                 lang === l.slug
-                  ? 'bg-indigo-600 text-white border-indigo-600 dark:border-indigo-700'
-                  : 'bg-background text-foreground border-border hover:border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:bg-indigo-500/10',
+                  ? 'bg-blue-600 text-white border-default dark:border-default'
+                  : 'bg-background text-foreground border-border hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10',
               )}
             >
               {l.name}
@@ -153,8 +153,8 @@ export function FocusDomainPicker({
                 className={cn(
                   'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors',
                   track === t.slug
-                    ? 'bg-indigo-600 text-white border-indigo-600 dark:border-indigo-700'
-                    : 'bg-background text-foreground border-border hover:border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:bg-indigo-500/10',
+                    ? 'bg-blue-600 text-white border-default dark:border-default'
+                    : 'bg-background text-foreground border-border hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10',
                 )}
               >
                 {t.name}
@@ -179,8 +179,8 @@ export function FocusDomainPicker({
                   className={cn(
                     'group flex items-center justify-between gap-2 rounded-xl border p-2.5 text-left transition-all',
                     selected
-                      ? 'border-indigo-400 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-500/10 ring-1 ring-indigo-300'
-                      : 'border-border bg-background hover:border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/20/60',
+                      ? 'border-default dark:border-default bg-blue-50 dark:bg-blue-500/10 ring-1 ring-ring'
+                      : 'border-border bg-background hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60',
                     emphasizeLevels && 'flex-col items-start',
                   )}
                 >
@@ -192,8 +192,8 @@ export function FocusDomainPicker({
                     </p>
                   </div>
                   {selected
-                    ? <Check className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" aria-hidden="true" />
-                    : <span className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Select →</span>}
+                    ? <Check className="h-4 w-4 text-primary dark:text-primary shrink-0" aria-hidden="true" />
+                    : <span className="text-[10px] font-bold text-primary dark:text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0">Select →</span>}
                 </button>
               );
             })}

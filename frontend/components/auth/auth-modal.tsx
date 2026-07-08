@@ -109,7 +109,7 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
               </p>
 
               {willSync && (
-                <div className="mt-3 flex items-center gap-2 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 dark:bg-indigo-950/30 px-3 py-2 text-xs font-medium text-indigo-700 dark:text-indigo-400 dark:text-indigo-300">
+                <div className="mt-3 flex items-center gap-2 rounded-lg bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/30 px-3 py-2 text-xs font-medium text-primary dark:text-primary dark:text-primary">
                   <Sparkles className="h-3.5 w-3.5 shrink-0" />
                   Your saved items will sync to your account automatically.
                 </div>
@@ -127,7 +127,7 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
               </div>
 
               {error && (
-                <div className="mb-3 rounded-lg border border-red-100 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 p-2.5 text-xs font-medium text-red-600 dark:text-red-400">{error}</div>
+                <div className="mb-3 rounded-lg border border-default dark:border-default/20 bg-red-50 dark:bg-red-500/10 p-2.5 text-xs font-medium text-red-600 dark:text-red-400">{error}</div>
               )}
 
               <form onSubmit={submit} className="space-y-3">
@@ -136,7 +136,7 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
                     <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                     <input
                       type="text" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)}
-                      className="w-full rounded-lg border border-border dark:border-border bg-background dark:bg-surface py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400 dark:border-indigo-700"
+                      className="w-full rounded-lg border border-border dark:border-border bg-background dark:bg-surface py-2 pl-9 pr-3 text-sm outline-none focus:border-default dark:border-default"
                       autoComplete="name"
                     />
                   </div>
@@ -145,7 +145,7 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
                   <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <input
                     type="email" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required
-                    className="w-full rounded-lg border border-border dark:border-border bg-background dark:bg-surface py-2 pl-9 pr-3 text-sm outline-none focus:border-indigo-400 dark:border-indigo-700"
+                    className="w-full rounded-lg border border-border dark:border-border bg-background dark:bg-surface py-2 pl-9 pr-3 text-sm outline-none focus:border-default dark:border-default"
                     autoComplete="email"
                   />
                 </div>
@@ -154,7 +154,7 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
                   <input
                     type={showPwd ? 'text' : 'password'} placeholder={tab === 'signup' ? 'Password (6+ chars)' : 'Password'}
                     value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6}
-                    className="w-full rounded-lg border border-border dark:border-border bg-background dark:bg-surface py-2 pl-9 pr-9 text-sm outline-none focus:border-indigo-400 dark:border-indigo-700"
+                    className="w-full rounded-lg border border-border dark:border-border bg-background dark:bg-surface py-2 pl-9 pr-9 text-sm outline-none focus:border-default dark:border-default"
                     autoComplete={tab === 'signup' ? 'new-password' : 'current-password'}
                   />
                   <button type="button" onClick={() => setShowPwd((s) => !s)} className="absolute right-3 top-2.5 text-muted-foreground hover:text-muted-foreground" tabIndex={-1} aria-label="Toggle password">
@@ -164,7 +164,7 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
 
                 <button
                   type="submit" disabled={busy}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 py-2.5 text-sm font-semibold text-white hover:from-blue-700 hover:to-indigo-700 transition-colors disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-surface border border-default py-2.5 text-sm font-semibold text-foreground hover: hover: transition-colors disabled:opacity-60"
                 >
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {tab === 'login' ? 'Sign In' : 'Create Free Account'}
@@ -172,7 +172,7 @@ export function AuthModal({ open, onClose, onSuccess, title, subtitle }: AuthMod
               </form>
 
               <div className="mt-3 flex items-center justify-between text-xs">
-                <button onClick={sendMagic} disabled={busy} className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
+                <button onClick={sendMagic} disabled={busy} className="font-medium text-primary dark:text-primary hover:underline">
                   Email me a sign-in link
                 </button>
                 <button

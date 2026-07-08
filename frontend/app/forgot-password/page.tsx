@@ -34,9 +34,9 @@ export default function ForgotPasswordPage() {
         <Card className="border-border dark:border-border shadow-xl shadow-slate-200/50 dark:shadow-none">
           <CardHeader className="space-y-1 text-center">
             <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-100 dark:bg-blue-950/40 mx-auto mb-4">
-              <KeyRound className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              <KeyRound className="h-8 w-8 text-primary dark:text-primary" />
             </div>
-            <CardTitle className="text-2xl font-bold tracking-tight text-foreground dark:text-white">
+            <CardTitle className="text-2xl font-bold tracking-tight text-foreground dark:text-foreground">
               Reset your password
             </CardTitle>
             <CardDescription className="text-muted-foreground">
@@ -66,7 +66,7 @@ export default function ForgotPasswordPage() {
                     />
                   </div>
                 </div>
-                <Button type="submit" disabled={busy || !email} className="w-full py-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold">
+                <Button type="submit" disabled={busy || !email} className="w-full py-6 bg-surface border border-default text-foreground font-semibold">
                   {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Send reset link
                 </Button>

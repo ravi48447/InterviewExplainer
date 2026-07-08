@@ -30,12 +30,12 @@ export function RoadmapCard({
           <Flag className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <h2 className="text-[13px] font-bold text-primary tracking-tight">Your Roadmap</h2>
         </div>
-        <span className="text-[10px] font-bold text-secondary bg-surface border border-default px-2.5 py-0.5 rounded-full uppercase tracking-wider tabular-nums">{done} solved</span>
+        <span className="text-[10px] font-bold text-muted-foreground bg-surface border border-default px-2.5 py-0.5 rounded-full uppercase tracking-wider tabular-nums">{done} solved</span>
       </div>
 
       <div className="relative pt-4 pb-2 px-1 flex-1 flex flex-col justify-center">
         <div className="absolute left-6 right-6 top-[28px] h-1 bg-surface border-t border-b border-default rounded-full overflow-hidden">
-          <div className="h-full bg-primary rounded-full transition-all duration-1000" style={{ width: `${roadmapFill}%` }} />
+          <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${roadmapFill}%` }} />
         </div>
         <div className="relative flex items-start justify-between">
           {milestones.map((m, i) => {

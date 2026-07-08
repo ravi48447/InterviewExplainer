@@ -42,14 +42,14 @@ import { getSubcategoriesWithQuestions } from "@/lib/content-reader";
 // Every language we intend to support, ever. `available` is derived from
 // launch-config so the ROADMAP and UI can't drift apart.
 const ALL_LANGUAGES = [
-  { name: "Java",       slug: "java",       icon: "java",       gradient: "from-orange-50 dark:from-orange-950/400 to-red-600" },
-  { name: "Python",     slug: "python",     icon: "python",     gradient: "from-blue-50 dark:from-blue-950/400 to-cyan-600" },
-  { name: "JavaScript", slug: "javascript", icon: "javascript", gradient: "from-yellow-400 to-orange-50 dark:to-orange-950/400" },
-  { name: "TypeScript", slug: "typescript", icon: "typescript", gradient: "from-blue-600 to-indigo-700" },
-  { name: "Go",         slug: "go",         icon: "go",         gradient: "from-cyan-50 dark:from-cyan-950/400 to-blue-600" },
-  { name: "Kotlin",     slug: "kotlin",     icon: "kotlin",     gradient: "from-purple-50 dark:from-purple-950/400 to-violet-600" },
-  { name: "Ruby",       slug: "ruby",       icon: "ruby",       gradient: "from-red-50 dark:from-red-950/400 to-rose-600" },
-  { name: "C#",         slug: "csharp",     icon: "csharp",     gradient: "from-indigo-600 to-purple-700" },
+  { name: "Java",       slug: "java",       icon: "java",       gradient: "" },
+  { name: "Python",     slug: "python",     icon: "python",     gradient: "" },
+  { name: "JavaScript", slug: "javascript", icon: "javascript", gradient: "" },
+  { name: "TypeScript", slug: "typescript", icon: "typescript", gradient: "" },
+  { name: "Go",         slug: "go",         icon: "go",         gradient: "" },
+  { name: "Kotlin",     slug: "kotlin",     icon: "kotlin",     gradient: "" },
+  { name: "Ruby",       slug: "ruby",       icon: "ruby",       gradient: "" },
+  { name: "C#",         slug: "csharp",     icon: "csharp",     gradient: "" },
 ];
 
 const LANGUAGES = ALL_LANGUAGES.map((l) => ({
@@ -60,12 +60,12 @@ const LANGUAGES = ALL_LANGUAGES.map((l) => ({
 // Pillars — keep only those that point to a hub we've launched.
 // When we unlock a hub, it automatically appears here.
 const ALL_PILLARS = [
-  { key: "interviewQA",    icon: BookOpen, title: "Interview Q&A",   desc: "Domain-specific questions tailored to your language, track, and experience level.",   stat: "400+ Questions",  gradient: "from-blue-50 dark:from-blue-950/400 to-indigo-600",   href: "/domains" },
-  { key: "systemDesign",   icon: Compass,  title: "System Design",   desc: "Real interview problems with architecture, deep-dives, and scaling strategies.",       stat: "25+ Problems",    gradient: "from-emerald-50 dark:from-emerald-950/400 to-teal-600",  href: "/system-design" },
-  { key: "dsa",            icon: Code2,    title: "DSA Problems",    desc: "Problems organized by pattern — two pointers, sliding window, DP, graphs.",            stat: "450+ Problems",   gradient: "from-violet-50 dark:from-violet-950/400 to-purple-600", href: "/dsa" },
-  { key: "behavioral",     icon: Brain,    title: "Behavioral Prep", desc: "STAR method with company-specific guides and Amazon Leadership Principles.",           stat: "70+ Questions",   gradient: "from-amber-50 dark:from-amber-950/400 to-orange-600",  href: "/behavioral" },
-  { key: "companies",      icon: Target,   title: "Company Prep",    desc: "FAANG, unicorns and top-tech process breakdowns.",                                     stat: "22+ Companies",   gradient: "from-orange-50 dark:from-orange-950/400 to-red-600",    href: "/companies" },
-  { key: "career",         icon: Rocket,   title: "Career Guide",    desc: "Resume optimization, salary negotiation playbook, and career transition strategies.",  stat: "42+ Articles",    gradient: "from-rose-50 dark:from-rose-950/400 to-pink-600",     href: "/career" },
+  { key: "interviewQA",    icon: BookOpen, title: "Interview Q&A",   desc: "Domain-specific questions tailored to your language, track, and experience level.",   stat: "400+ Questions",  gradient: "bg-blue-500/10 text-blue-500",   href: "/domains" },
+  { key: "systemDesign",   icon: Compass,  title: "System Design",   desc: "Real interview problems with architecture, deep-dives, and scaling strategies.",       stat: "25+ Problems",    gradient: "bg-slate-500/10 text-slate-500",  href: "/system-design" },
+  { key: "dsa",            icon: Code2,    title: "DSA Problems",    desc: "Problems organized by pattern — two pointers, sliding window, DP, graphs.",            stat: "450+ Problems",   gradient: "bg-blue-500/10 text-blue-500", href: "/dsa" },
+  { key: "behavioral",     icon: Brain,    title: "Behavioral Prep", desc: "STAR method with company-specific guides and Amazon Leadership Principles.",           stat: "70+ Questions",   gradient: "bg-rose-500/10 text-rose-500",  href: "/behavioral" },
+  { key: "companies",      icon: Target,   title: "Company Prep",    desc: "FAANG, unicorns and top-tech process breakdowns.",                                     stat: "22+ Companies",   gradient: "bg-amber-500/10 text-amber-500",    href: "/companies" },
+  { key: "career",         icon: Rocket,   title: "Career Guide",    desc: "Resume optimization, salary negotiation playbook, and career transition strategies.",  stat: "42+ Articles",    gradient: "bg-emerald-500/10 text-emerald-500",     href: "/career" },
 ] as const;
 
 const PILLARS = ALL_PILLARS.filter((p) => isHubEnabled(p.key));
@@ -262,10 +262,10 @@ function buildHomeStandoutPicks(): HomeStandoutPick[] {
 }
 
 const WHY_DIFFERENT = [
-  { icon: Brain,      title: "Domain-Specific Content",  desc: "Java Backend ≠ Python Backend. Every question is tailored to your exact technology stack and patterns.",                gradient: "from-blue-50 dark:from-blue-950/400 to-indigo-600" },
-  { icon: TrendingUp, title: "Experience-Level Aware",   desc: "Juniors get solid foundations with examples. Seniors get architecture patterns and scalability challenges.",            gradient: "from-purple-50 dark:from-purple-950/400 to-pink-600" },
-  { icon: Target,     title: "Real Interview Focus",     desc: "Practice questions modeled on top tech company interviews. Learn what recruiters expect at your level, not theory.",    gradient: "from-orange-50 dark:from-orange-950/400 to-red-600" },
-  { icon: Rocket,     title: "Progressive Learning",     desc: "Master basics, tackle intermediate, conquer advanced. Track your journey across every topic.",                           gradient: "from-cyan-50 dark:from-cyan-950/400 to-blue-600" },
+  { icon: Brain,      title: "Domain-Specific Content",  desc: "Java Backend ≠ Python Backend. Every question is tailored to your exact technology stack and patterns.",                gradient: "bg-blue-500/10 text-blue-500" },
+  { icon: TrendingUp, title: "Experience-Level Aware",   desc: "Juniors get solid foundations with examples. Seniors get architecture patterns and scalability challenges.",            gradient: "bg-emerald-500/10 text-emerald-500" },
+  { icon: Target,     title: "Real Interview Focus",     desc: "Practice questions modeled on top tech company interviews. Learn what recruiters expect at your level, not theory.",    gradient: "bg-amber-500/10 text-amber-500" },
+  { icon: Rocket,     title: "Progressive Learning",     desc: "Master basics, tackle intermediate, conquer advanced. Track your journey across every topic.",                           gradient: "bg-blue-500/10 text-blue-500" },
 ];
 
 export default function HomePage() {
@@ -275,24 +275,27 @@ export default function HomePage() {
     <div className="min-h-screen bg-background">
 
       {/* ── Hero ── */}
-      <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-surface">
+      <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-background" style={{ backgroundImage: 'radial-gradient(circle at top right, rgba(37,99,235,0.12), transparent 35%), radial-gradient(circle at bottom left, rgba(16,185,129,0.08), transparent 30%)' }}>
         <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--border))_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--border))_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-40" />
-          <div className="absolute top-1/4 right-1/4 w-[600px] h-[600px] bg-primary/5 rounded-full blur-3xl" />
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:4rem_4rem]" />
+          {/* Small decorative blurred circles */}
+          <div className="absolute top-[20%] right-[15%] w-32 h-32 bg-blue-500/20 rounded-full blur-[50px] pointer-events-none" />
+          <div className="absolute bottom-[20%] left-[10%] w-40 h-40 bg-emerald-500/15 rounded-full blur-[60px] pointer-events-none" />
+          <div className="absolute top-[40%] left-[50%] w-24 h-24 bg-blue-500/20 rounded-full blur-[40px] pointer-events-none" />
         </div>
 
         <div className="w-full px-6 sm:px-12 lg:px-20 relative z-10">
           <div className="w-full min-w-0">
             <div className="grid lg:grid-cols-2 gap-16 items-center">
               <div className="animate-fade-in-left">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-full mb-8 shadow-sm animate-fade-in-up anim-delay-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <span className="text-xs font-bold text-primary">Built for developers, by developers</span>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-full mb-8 shadow-sm animate-fade-in-up anim-delay-2">
+                  <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-xs font-bold text-blue-700 dark:text-blue-300">Built for developers, by developers</span>
                 </div>
 
                 <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black text-foreground mb-6 leading-[1.05] animate-fade-in-up anim-delay-3">
                   Interview Prep That
-                  <span className="block mt-2 text-primary">
+                  <span className="block mt-2 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-600">
                     Knows Your Stack
                   </span>
                 </h1>
@@ -345,10 +348,10 @@ export default function HomePage() {
 
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 {/* 1. DSA Problems */}
-                <FeatureCard href="/dsa">
+                <FeatureCard href="/dsa" className="hover:border-blue-500/20 hover:shadow-[0_10px_30px_rgba(59,130,246,0.12)] border-border/50">
                   <FeatureCardIcon
-                    icon={<Code2 className="h-6 w-6 text-white" />}
-                    gradient="from-violet-50 dark:from-violet-950/400 to-purple-600"
+                    icon={<Code2 className="h-6 w-6 text-blue-500" />}
+                    gradient="bg-[rgba(59,130,246,0.15)]"
                   />
                   <FeatureCardHeader>DSA Problems</FeatureCardHeader>
                   <FeatureCardDescription>
@@ -358,10 +361,10 @@ export default function HomePage() {
                 </FeatureCard>
 
                 {/* 2. Mock Interviews */}
-                <FeatureCard href="/mock-interviews">
+                <FeatureCard href="/mock-interviews" className="hover:border-amber-500/20 hover:shadow-[0_10px_30px_rgba(245,158,11,0.12)] border-border/50">
                   <FeatureCardIcon
-                    icon={<Brain className="h-6 w-6 text-white" />}
-                    gradient="from-orange-50 dark:from-orange-950/400 to-red-600"
+                    icon={<Brain className="h-6 w-6 text-amber-500" />}
+                    gradient="bg-[rgba(245,158,11,0.15)]"
                   />
                   <FeatureCardHeader>Mock Interviews</FeatureCardHeader>
                   <FeatureCardDescription>
@@ -371,10 +374,10 @@ export default function HomePage() {
                 </FeatureCard>
 
                 {/* 3. Interview Q&A */}
-                <FeatureCard href="/domains">
+                <FeatureCard href="/domains" className="hover:border-blue-500/20 hover:shadow-[0_10px_30px_rgba(37,99,235,0.12)] border-border/50">
                   <FeatureCardIcon
-                    icon={<BookOpen className="h-6 w-6 text-white" />}
-                    gradient="from-blue-50 dark:from-blue-950/400 to-indigo-600"
+                    icon={<BookOpen className="h-6 w-6 text-blue-500" />}
+                    gradient="bg-[rgba(37,99,235,0.15)]"
                   />
                   <FeatureCardHeader>Interview Q&A</FeatureCardHeader>
                   <FeatureCardDescription>
@@ -420,8 +423,8 @@ export default function HomePage() {
               {LANGUAGES.map((lang) =>
                 lang.available ? (
                   <Link key={lang.name} href={`/domains?language=${lang.name}`}>
-                    <div className="relative bg-card border border-border rounded-xl p-4 hover:shadow-lg hover:border-primary/30 hover:-translate-y-1 transition-all duration-300">
-                      <TechIcon name={lang.icon} className="h-12 w-12 mx-auto mb-2" />
+                    <div className="relative bg-card border border-border rounded-xl p-4 hover:shadow-[0_10px_30px_rgba(16,185,129,0.12)] hover:border-emerald-500/30 hover:-translate-y-1 transition-all duration-[250ms] ease-out">
+                      <TechIcon name={lang.icon} className="h-12 w-12 mx-auto mb-2 transition-transform duration-[250ms] hover:scale-105" />
                       <p className="text-center text-sm font-semibold text-foreground">{lang.name}</p>
                     </div>
                   </Link>
@@ -454,11 +457,11 @@ export default function HomePage() {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {LAUNCH_QUICK_PATHS.map((path) => (
                 <Link href={path.href} key={path.href}>
-                  <div className="group relative bg-card border border-border rounded-xl p-5 hover:shadow-xl hover:border-primary/30 hover:-translate-y-1 transition-all duration-300">
-                    <div className={`absolute left-0 top-6 bottom-6 w-1 bg-gradient-to-b ${path.gradient} rounded-r-full opacity-60 group-hover:w-1.5 transition-all duration-300`} />
+                  <div className="group relative bg-card border border-border rounded-xl p-5 hover:shadow-[0_10px_30px_rgba(37,99,235,0.12)] hover:border-blue-500/30 hover:-translate-y-1 transition-all duration-[250ms] ease-out">
+                    <div className={`absolute left-0 top-6 bottom-6 w-1 bg-border rounded-r-full group-hover:w-1.5 transition-all duration-[250ms] ease-out`} />
                     <div className="relative flex items-start gap-4 mb-3">
-                      <div className={`w-14 h-14 bg-gradient-to-br ${path.gradient} rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-300 shadow-md`}>
-                        <TechIcon name={path.icon} className="h-7 w-7 text-white" />
+                      <div className={`w-14 h-14 bg-surface border border-default rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-primary/5 transition-all duration-200 shadow-sm`}>
+                        <TechIcon name={path.icon} className="h-7 w-7" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="text-lg font-bold text-foreground mb-2 group-hover:text-primary transition-colors leading-tight">{path.title}</h3>
@@ -502,9 +505,9 @@ export default function HomePage() {
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
               {WHY_DIFFERENT.map((feature) => (
-                <div key={feature.title} className="group relative bg-card border border-border rounded-xl p-5 hover:shadow-xl hover:border-primary/30 hover:-translate-y-1 transition-all duration-300">
-                  <div className={`w-12 h-12 bg-gradient-to-br ${feature.gradient} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-all duration-300`}>
-                    <feature.icon className="h-6 w-6 text-white" />
+                <div key={feature.title} className="group relative bg-card border border-border rounded-xl p-5 hover:shadow-xl hover:border-primary/30 hover:-translate-y-1 transition-all duration-200">
+                  <div className={`w-12 h-12 ${feature.gradient} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-all duration-200`}>
+                    <feature.icon className="h-6 w-6" />
                   </div>
                   <h3 className="text-lg font-bold text-foreground mb-2">{feature.title}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{feature.desc}</p>
@@ -516,20 +519,22 @@ export default function HomePage() {
       </section>
 
       {/* ── Stats ── */}
-      <section className="py-20 bg-primary">
+      <section className="py-20 bg-surface">
         <div className="w-full px-6 sm:px-12 lg:px-20">
           <div className="w-full min-w-0">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-10 text-center">
               {[
-                { value: "Java & Python", label: "Live Today", Icon: BookOpen },
-                { value: "3", label: "Experience Levels", Icon: Layers },
-                { value: "100%", label: "Free to Browse", Icon: Target },
-                { value: "∞", label: "Free Forever", Icon: Star },
+                { value: "Java & Python", label: "Live Today", Icon: BookOpen, color: "text-blue-500" },
+                { value: "3", label: "Experience Levels", Icon: Layers, color: "text-emerald-500" },
+                { value: "100%", label: "Free to Browse", Icon: Target, color: "text-blue-500" },
+                { value: "∞", label: "Free Forever", Icon: Star, color: "text-amber-500" },
               ].map((stat) => (
                 <div key={stat.label}>
-                  <stat.Icon className="h-10 w-10 text-primary-foreground/60 mx-auto mb-4" />
-                  <div className="text-5xl font-black text-primary-foreground mb-2">{stat.value}</div>
-                  <div className="text-base text-primary-foreground/80 font-semibold">{stat.label}</div>
+                  <div className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center bg-card border border-border shadow-sm">
+                    <stat.Icon className={`h-8 w-8 ${stat.color} transition-transform duration-[250ms] ease-out hover:rotate-3 hover:scale-105`} />
+                  </div>
+                  <div className="text-5xl font-black text-foreground mb-2">{stat.value}</div>
+                  <div className="text-base text-muted-foreground font-semibold">{stat.label}</div>
                 </div>
               ))}
             </div>
@@ -554,8 +559,8 @@ export default function HomePage() {
       <section className="py-32 bg-surface">
         <div className="w-full px-6 sm:px-12 lg:px-20">
           <div className="w-full min-w-0 text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-yellow-400 to-orange-50 dark:to-orange-950/400 mb-8 shadow-xl">
-              <Award className="h-10 w-10 text-white" />
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-primary/10 dark:bg-primary/20 border border-primary/20 dark:border-primary/30 mb-8 shadow-xl">
+              <Award className="h-10 w-10 text-primary" />
             </div>
             <h2 className="text-5xl sm:text-6xl font-black text-foreground mb-6">Ready to Ace Your Interview?</h2>
             <p className="text-2xl text-muted-foreground mb-12 max-w-2xl mx-auto">

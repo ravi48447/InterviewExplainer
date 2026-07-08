@@ -111,11 +111,11 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="relative min-h-[calc(100vh-80px)] w-full bg-[#000000] overflow-hidden flex items-start justify-center font-sans text-slate-200 selection:bg-blue-50 dark:bg-blue-950/200/30 pt-4 lg:pt-8">
+    <div className="relative min-h-[calc(100vh-80px)] w-full bg-background overflow-hidden flex items-start justify-center font-sans text-foreground selection:bg-blue-50 dark:bg-blue-950/30 pt-4 lg:pt-8">
       {/* Decorative Background */}
       <div className="absolute inset-0 pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-white/5 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-white/5 blur-[120px]" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-[120px]" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[length:32px_32px] opacity-50" />
         
         {/* Subtle Developer Workspace Illustration (Bottom Left) */}
@@ -130,12 +130,12 @@ export default function SignupPage() {
             WebkitMaskImage: 'linear-gradient(to top, rgba(0,0,0,1), rgba(0,0,0,0))'
           }}
         >
-          <div className="absolute bottom-20 left-20 w-48 h-32 bg-slate-800 rounded-lg border border-zinc-700/50 shadow-2xl transform -rotate-12 flex items-center justify-center">
-            <div className="text-blue-400 font-mono text-2xl opacity-50">&lt;/&gt;</div>
+          <div className="absolute bottom-20 left-20 w-48 h-32 bg-slate-800 rounded-lg border border-border shadow-2xl transform -rotate-12 flex items-center justify-center">
+            <div className="text-primary font-mono text-2xl opacity-50">&lt;/&gt;</div>
           </div>
-          <div className="absolute bottom-10 left-10 w-32 h-6 bg-indigo-900/40 rounded border border-indigo-700/30 transform -rotate-12" />
-          <div className="absolute bottom-14 left-8 w-32 h-6 bg-purple-900/40 rounded border border-purple-700/30 transform -rotate-12" />
-          <div className="absolute bottom-32 left-60 w-16 h-20 bg-blue-900/30 rounded-full border border-blue-700/30 transform rotate-12 flex items-center justify-center">
+          <div className="absolute bottom-10 left-10 w-32 h-6 bg-blue-900/40 rounded border border-default/30 transform -rotate-12" />
+          <div className="absolute bottom-14 left-8 w-32 h-6 bg-blue-900/40 rounded border border-default/30 transform -rotate-12" />
+          <div className="absolute bottom-32 left-60 w-16 h-20 bg-blue-900/30 rounded-full border border-default/30 transform rotate-12 flex items-center justify-center">
              <div className="w-8 h-2 bg-blue-400/20 rounded-full" />
           </div>
         </motion.div>
@@ -150,22 +150,22 @@ export default function SignupPage() {
               icon: MapPinned,
               title: "Personalized Learning Roadmap",
               desc: "Generate a customized interview roadmap based on your experience, target roles, and preferred tech stack.",
-              color: "from-fuchsia-50 dark:from-fuchsia-950/400 to-purple-50 dark:to-purple-950/400",
-              shadow: "shadow-purple-500/20"
+              color: "from-blue-500/20 to-blue-500/10 dark:from-blue-500/40 dark:to-blue-500/10",
+              shadow: "shadow-sm"
             },
             {
               icon: Terminal,
               title: "Tech Stack Specific Questions",
               desc: "Practice interview questions tailored for Java, Python, React, Spring Boot, DevOps, DSA, SQL, AI/ML, Cloud and more.",
-              color: "from-blue-50 dark:from-blue-950/400 to-indigo-50 dark:to-indigo-950/400",
-              shadow: "shadow-blue-500/20"
+              color: "from-emerald-500/20 to-emerald-500/10 dark:from-emerald-500/40 dark:to-emerald-500/10",
+              shadow: "shadow-sm"
             },
             {
               icon: BarChart3,
               title: "Smart Progress Analytics",
               desc: "Track completion, weak topics, accuracy, study streaks and improve your interview readiness with powerful analytics.",
-              color: "from-emerald-400 to-teal-50 dark:to-teal-950/400",
-              shadow: "shadow-emerald-500/20"
+              color: "from-amber-500/20 to-amber-500/10 dark:from-amber-500/40 dark:to-amber-500/10",
+              shadow: "shadow-sm"
             }
           ].map((feature, i) => (
             <motion.div
@@ -174,16 +174,16 @@ export default function SignupPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: i * 0.1 }}
               whileHover={{ y: -4 }}
-              className="group relative bg-[#111111]/40 backdrop-blur-md rounded-2xl p-5 border border-zinc-800/60 hover:border-zinc-700/80 transition-all duration-300 shadow-xl overflow-hidden"
+              className="group relative bg-surface/40 backdrop-blur-md rounded-2xl p-5 border border-border hover:border-border transition-all duration-200 shadow-xl overflow-hidden"
             >
               <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.color} p-[1px] mb-4 shadow-lg ${feature.shadow}`}>
-                <div className="w-full h-full bg-[#111111] rounded-xl flex items-center justify-center">
-                  <feature.icon className="w-5 h-5 text-white" />
+                <div className="w-full h-full bg-surface rounded-xl flex items-center justify-center">
+                  <feature.icon className="w-5 h-5 text-foreground" />
                 </div>
               </div>
-              <h3 className="text-sm font-semibold text-white mb-2">{feature.title}</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">{feature.desc}</p>
+              <h3 className="text-sm font-semibold text-foreground mb-2">{feature.title}</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">{feature.desc}</p>
             </motion.div>
           ))}
         </div>
@@ -196,24 +196,24 @@ export default function SignupPage() {
             transition={{ duration: 0.5 }}
             className="w-full max-w-lg mt-8 lg:mt-0"
           >
-            <div className="bg-[#0A0A0A]/80 backdrop-blur-xl rounded-3xl border border-zinc-800/80 shadow-2xl overflow-hidden">
+            <div className="bg-surface/80 backdrop-blur-xl rounded-3xl border border-border shadow-2xl overflow-hidden">
               <div className="p-8 sm:p-10">
                 {/* Progress Indicator */}
                 <div className="flex flex-col items-center justify-center mb-8">
                    <div className="flex items-center gap-2 mb-3">
-                     <div className={`h-1.5 w-12 rounded-full transition-colors duration-300 ${step >= 1 ? 'bg-blue-50 dark:bg-blue-950/200 shadow-[0_0_8px_rgba(59,130,246,0.6)]' : 'bg-slate-800'}`} />
-                     <div className={`h-1.5 w-12 rounded-full transition-colors duration-300 ${step >= 2 ? 'bg-indigo-50 dark:bg-indigo-950/200 shadow-[0_0_8px_rgba(99,102,241,0.6)]' : 'bg-slate-800'}`} />
+                     <div className={`h-1.5 w-12 rounded-full transition-colors duration-200 ${step >= 1 ? 'bg-blue-50 dark:bg-blue-950/200 shadow-sm' : 'bg-slate-800'}`} />
+                     <div className={`h-1.5 w-12 rounded-full transition-colors duration-200 ${step >= 2 ? 'bg-blue-50 dark:bg-blue-950/200 shadow-sm' : 'bg-slate-800'}`} />
                    </div>
-                   <span className="text-[10px] font-medium tracking-widest text-zinc-400 uppercase">
+                   <span className="text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
                      Step {step} of 2
                    </span>
                 </div>
 
                 <div className="text-center mb-8">
-                  <h1 className="text-3xl font-bold tracking-tight mb-2 bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+                  <h1 className="text-3xl font-bold tracking-tight mb-2 text-foreground">
                     {step === 1 ? 'Join the Community' : 'Personalize Your Path'}
                   </h1>
-                  <p className="text-sm text-zinc-400">
+                  <p className="text-sm text-muted-foreground">
                     {step === 1 
                       ? 'Create an account to start tracking your interview readiness' 
                       : 'Help us tailor the interview preparation to your specific goals'}
@@ -222,7 +222,7 @@ export default function SignupPage() {
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {error && (
-                    <div className="p-3 text-sm font-medium text-red-400 bg-red-50 dark:bg-red-950/200/10 rounded-xl border border-red-500/20">
+                    <div className="p-3 text-sm font-medium text-red-600 bg-red-50 dark:bg-red-950/10 rounded-xl border border-default/20">
                       {error}
                     </div>
                   )}
@@ -240,22 +240,22 @@ export default function SignupPage() {
                           <>
                             <SocialButtons />
                             <div className="relative my-6">
-                              <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-zinc-800" /></div>
-                              <div className="relative flex justify-center text-[10px] font-medium tracking-widest uppercase"><span className="bg-[#0A0A0A] px-4 text-zinc-500">Or continue with email</span></div>
+                              <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+                              <div className="relative flex justify-center text-[10px] font-medium tracking-widest uppercase"><span className="bg-[#0A0A0A] px-4 text-muted-foreground">Or continue with email</span></div>
                             </div>
                           </>
                         )}
 
                         <div className="space-y-2">
-                          <Label htmlFor="name" className="text-xs text-slate-300 font-medium ml-1">Full Name</Label>
+                          <Label htmlFor="name" className="text-xs text-foreground/90 font-medium ml-1">Full Name</Label>
                           <div className="relative">
-                            <User className="absolute left-3.5 top-3 h-4 w-4 text-zinc-400" />
+                            <User className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground" />
                             <Input
                               id="name"
                               placeholder="Your full name"
                               value={formData.name}
                               onChange={handleChange}
-                              className="pl-11 h-11 bg-zinc-900/50 border-zinc-800 text-slate-100 placeholder:text-zinc-500 rounded-xl focus-visible:ring-blue-500/50"
+                              className="pl-11 h-11 bg-background/50 border-border text-foreground placeholder:text-muted-foreground rounded-xl focus-visible:ring-ring/50"
                               autoFocus
                               autoComplete="name"
                               required
@@ -263,25 +263,25 @@ export default function SignupPage() {
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="email" className="text-xs text-slate-300 font-medium ml-1">Email</Label>
+                          <Label htmlFor="email" className="text-xs text-foreground/90 font-medium ml-1">Email</Label>
                           <div className="relative">
-                            <Mail className="absolute left-3.5 top-3 h-4 w-4 text-zinc-400" />
+                            <Mail className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground" />
                             <Input
                               id="email"
                               type="email"
                               placeholder="name@example.com"
                               value={formData.email}
                               onChange={handleChange}
-                              className="pl-11 h-11 bg-zinc-900/50 border-zinc-800 text-slate-100 placeholder:text-zinc-500 rounded-xl focus-visible:ring-blue-500/50"
+                              className="pl-11 h-11 bg-background/50 border-border text-foreground placeholder:text-muted-foreground rounded-xl focus-visible:ring-ring/50"
                               autoComplete="email"
                               required
                             />
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="password" className="text-xs text-slate-300 font-medium ml-1">Password</Label>
+                          <Label htmlFor="password" className="text-xs text-foreground/90 font-medium ml-1">Password</Label>
                           <div className="relative">
-                            <KeyRound className="absolute left-3.5 top-3 h-4 w-4 text-zinc-400" />
+                            <KeyRound className="absolute left-3.5 top-3 h-4 w-4 text-muted-foreground" />
                             <Input
                               id="password"
                               type={showPassword ? 'text' : 'password'}
@@ -290,7 +290,7 @@ export default function SignupPage() {
                               onChange={handleChange}
                               onKeyUp={(e) => setCapsLock(e.getModifierState('CapsLock'))}
                               onKeyDown={(e) => setCapsLock(e.getModifierState('CapsLock'))}
-                              className="pl-11 pr-11 h-11 bg-zinc-900/50 border-zinc-800 text-slate-100 placeholder:text-zinc-500 rounded-xl focus-visible:ring-blue-500/50"
+                              className="pl-11 pr-11 h-11 bg-background/50 border-border text-foreground placeholder:text-muted-foreground rounded-xl focus-visible:ring-ring/50"
                               autoComplete="new-password"
                               minLength={6}
                               required
@@ -298,7 +298,7 @@ export default function SignupPage() {
                             <button
                               type="button"
                               onClick={() => setShowPassword((s) => !s)}
-                              className="absolute right-3.5 top-3 text-zinc-400 hover:text-slate-200 transition-colors"
+                              className="absolute right-3.5 top-3 text-muted-foreground hover:text-foreground transition-colors"
                               aria-label={showPassword ? 'Hide password' : 'Show password'}
                               tabIndex={-1}
                             >
@@ -322,31 +322,31 @@ export default function SignupPage() {
                       >
                         <div className="space-y-1 mb-4">
                           <div className="flex items-center gap-2">
-                            <Compass className="h-4 w-4 text-blue-400" />
-                            <Label className="text-slate-200">Choose your focus path(s)</Label>
+                            <Compass className="h-4 w-4 text-primary" />
+                            <Label className="text-foreground">Choose your focus path(s)</Label>
                           </div>
-                          <p className="text-xs text-zinc-400">
+                          <p className="text-xs text-muted-foreground">
                             A focus path tailors every answer and your whole dashboard to the exact
                             interview you&apos;re preparing for. Build one from three choices:
                           </p>
                         </div>
 
                         {/* How to choose — explains each dimension */}
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
+                        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
                           <div className="flex items-start gap-3">
-                            <Target className="h-4 w-4 text-indigo-400 shrink-0 mt-0.5" aria-hidden="true" />
+                            <Target className="h-4 w-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                             <div>
-                              <p className="text-xs font-bold text-slate-200">1 · Language / Role</p>
-                              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              <p className="text-xs font-bold text-foreground">1 · Language / Role</p>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">
                                 The tech you&apos;ll be interviewed on — e.g. Java, Python, Go or Frontend.
                               </p>
                             </div>
                           </div>
                           <div className="flex items-start gap-3">
-                            <Layers className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" aria-hidden="true" />
+                            <Layers className="h-4 w-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
                             <div>
-                              <p className="text-xs font-bold text-slate-200">2 · Track</p>
-                              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              <p className="text-xs font-bold text-foreground">2 · Track</p>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">
                                 Your specialization — e.g. Backend, Full-Stack or Frontend.
                               </p>
                             </div>
@@ -354,16 +354,16 @@ export default function SignupPage() {
                           <div className="flex items-start gap-3">
                             <GraduationCap className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
                             <div>
-                              <p className="text-xs font-bold text-slate-200">3 · Experience Level</p>
-                              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                              <p className="text-xs font-bold text-foreground">3 · Experience Level</p>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">
                                 <strong>Fresher (0–2 yrs)</strong> for fundamentals, or <strong>Intermediate (2–5 yrs)</strong>
                                 {' '}for deeper, system-level answers.
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-start gap-3 border-t border-zinc-800/80 pt-3 mt-1">
+                          <div className="flex items-start gap-3 border-t border-border pt-3 mt-1">
                             <Lightbulb className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
-                            <p className="text-[11px] text-zinc-400 leading-relaxed">
+                            <p className="text-[11px] text-muted-foreground leading-relaxed">
                               <strong>Add one or more</strong> paths. The first one is your primary. You can change or add paths anytime.
                             </p>
                           </div>
@@ -374,7 +374,7 @@ export default function SignupPage() {
                             {picked.map((p, i) => (
                               <span
                                 key={p.slug}
-                                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-50 dark:bg-emerald-950/200/10 pl-3 pr-1.5 py-1.5 text-xs font-semibold text-emerald-400"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-default/20 bg-emerald-100 dark:bg-emerald-900/30 pl-3 pr-1.5 py-1.5 text-xs font-semibold text-emerald-600"
                               >
                                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" aria-hidden="true" />
                                 {p.name}
@@ -382,7 +382,7 @@ export default function SignupPage() {
                                 <button
                                   type="button"
                                   onClick={() => removePicked(p.slug)}
-                                  className="ml-0.5 rounded-full p-1 hover:bg-emerald-50 dark:bg-emerald-950/200/20 transition-colors"
+                                  className="ml-0.5 rounded-full p-1 hover:bg-emerald-50 dark:bg-emerald-950/20 transition-colors"
                                   aria-label={`Remove ${p.name}`}
                                 >
                                   <X className="h-3.5 w-3.5" />
@@ -406,31 +406,31 @@ export default function SignupPage() {
                         )}
 
                         {/* Goal-driven onboarding (optional) */}
-                        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-4">
+                        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
                           <div className="flex items-center gap-2">
-                            <GraduationCap className="h-4 w-4 text-indigo-400" />
-                            <Label className="text-sm text-slate-200">Set a goal (optional)</Label>
+                            <GraduationCap className="h-4 w-4 text-primary" />
+                            <Label className="text-sm text-foreground">Set a goal (optional)</Label>
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="targetRole" className="text-[11px] text-zinc-400 uppercase tracking-wider">Target role</Label>
+                            <Label htmlFor="targetRole" className="text-[11px] text-muted-foreground uppercase tracking-wider">Target role</Label>
                             <Input
                               id="targetRole"
                               placeholder="e.g. Senior Backend Engineer"
                               value={targetRole}
                               onChange={(e) => setTargetRole(e.target.value)}
-                              className="h-10 bg-zinc-900/50 border-zinc-800 text-slate-200 placeholder:text-slate-600 rounded-lg"
+                              className="h-10 bg-background/50 border-border text-foreground placeholder:text-muted-foreground rounded-lg"
                             />
                           </div>
                           <div className="space-y-1.5">
-                            <Label htmlFor="interviewDate" className="text-[11px] text-zinc-400 uppercase tracking-wider">Interview date</Label>
+                            <Label htmlFor="interviewDate" className="text-[11px] text-muted-foreground uppercase tracking-wider">Interview date</Label>
                             <Input
                               id="interviewDate"
                               type="date"
                               value={interviewDate}
                               onChange={(e) => setInterviewDate(e.target.value)}
-                              className="h-10 bg-zinc-900/50 border-zinc-800 text-slate-200 rounded-lg [color-scheme:dark]"
+                              className="h-10 bg-background/50 border-border text-foreground rounded-lg [color-scheme:dark]"
                             />
-                            <p className="text-[10px] text-zinc-500 mt-1">
+                            <p className="text-[10px] text-muted-foreground mt-1">
                               We&apos;ll show a readiness countdown and a daily focus plan on your dashboard.
                             </p>
                           </div>
@@ -445,17 +445,17 @@ export default function SignupPage() {
                         type="button" 
                         variant="ghost" 
                         onClick={() => setStep(1)}
-                        className="w-1/3 h-12 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/50"
+                        className="w-1/3 h-12 rounded-xl text-foreground/90 hover:text-foreground hover:bg-slate-800/50"
                       >
                         Back
                       </Button>
                     )}
                     <Button 
                       type="submit" 
-                      className="group relative flex-1 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-50 dark:from-blue-950/400 hover:to-indigo-50 dark:to-indigo-950/400 text-white font-medium transition-all duration-300 shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] overflow-hidden hover:-translate-y-0.5"
+                      className="group relative flex-1 h-12 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#7C3AED] hover:from-[#1d4ed8] hover:to-[#6d28d9] text-white font-semibold transition-all duration-200 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.23)] hover:-translate-y-0.5 overflow-hidden"
                       disabled={isSubmitting || (step === 1 && !step1Valid)}
                     >
-                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
+                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-200 ease-out" />
                       <span className="relative flex items-center justify-center">
                         {isSubmitting ? (
                           <>
@@ -474,9 +474,9 @@ export default function SignupPage() {
                 </form>
 
                 <div className="mt-8 text-center">
-                  <p className="text-[11px] text-zinc-400">
+                  <p className="text-[11px] text-muted-foreground">
                     Already have an account?{' '}
-                    <Link href="/login" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
+                    <Link href="/login" className="text-primary hover:text-primary font-medium transition-colors">
                       Sign in instead
                     </Link>
                   </p>
@@ -491,20 +491,20 @@ export default function SignupPage() {
                  { icon: Star, title: "Curated by Experts", desc: "Questions reviewed by engineers." },
                  { icon: Cloud, title: "Save Your Progress", desc: "Resume from any device." }
                ].map((badge, i) => (
-                 <div key={i} className="flex flex-col items-center text-center p-3 rounded-xl bg-[#111111]/40 border border-zinc-800/40 backdrop-blur-sm">
-                   <badge.icon className="w-4 h-4 text-blue-400 mb-1.5" />
-                   <h4 className="text-[11px] font-semibold text-slate-200 mb-0.5">{badge.title}</h4>
-                   <p className="text-[10px] text-zinc-500">{badge.desc}</p>
+                 <div key={i} className="flex flex-col items-center text-center p-3 rounded-xl bg-surface/40 border border-border backdrop-blur-sm">
+                   <badge.icon className="w-4 h-4 text-primary mb-1.5" />
+                   <h4 className="text-[11px] font-semibold text-foreground mb-0.5">{badge.title}</h4>
+                   <p className="text-[10px] text-muted-foreground">{badge.desc}</p>
                  </div>
                ))}
             </div>
             
             <div className="mt-8 text-center flex flex-col items-center">
-              <div className="flex items-center justify-center gap-1.5 text-xs text-zinc-500 mb-1">
+              <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground mb-1">
                 <Shield className="w-3.5 h-3.5" /> Trusted by thousands of developers.
               </div>
-              <p className="text-[10px] text-slate-600">
-                Your privacy comes first. <a href="#" className="text-zinc-400 hover:text-slate-300 underline underline-offset-2">Privacy Policy</a>
+              <p className="text-[10px] text-muted-foreground">
+                Your privacy comes first. <a href="#" className="text-muted-foreground hover:text-foreground/90 underline underline-offset-2">Privacy Policy</a>
               </p>
             </div>
           </motion.div>
@@ -516,23 +516,23 @@ export default function SignupPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="relative bg-[#111111]/40 backdrop-blur-md rounded-2xl p-6 border border-zinc-800/60 shadow-xl text-center overflow-hidden group"
+            className="relative bg-surface/40 backdrop-blur-md rounded-2xl p-6 border border-border shadow-xl text-center overflow-hidden group"
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-blue-50 dark:from-blue-950/400/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute inset-0 bg-surface /5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <motion.div 
               animate={{ y: [-4, 4, -4] }}
               transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-              className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-50 dark:from-indigo-950/400/20 to-purple-50 dark:to-purple-950/400/20 border border-indigo-500/30 mb-4 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+              className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-900/30 border border-default/30 mb-4 shadow-sm"
             >
-              <Rocket className="w-8 h-8 text-indigo-400" />
+              <Rocket className="w-8 h-8 text-primary" />
             </motion.div>
             
-            <h3 className="text-xl font-bold text-white mb-2">Join fellow<br />Developers</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed mb-6">
+            <h3 className="text-xl font-bold text-foreground mb-2">Join fellow<br />Developers</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed mb-6">
               Prepare smarter with structured explanations, personalized learning paths, and progress tracking designed for modern developers.
             </p>
             
-            <div className="flex flex-col items-center justify-center pt-4 border-t border-zinc-800/60">
+            <div className="flex flex-col items-center justify-center pt-4 border-t border-border">
               <div className="flex -space-x-3 mb-2">
                 {[
                   "https://i.pravatar.cc/100?img=11",
@@ -544,14 +544,14 @@ export default function SignupPage() {
                   <img key={i} src={url} alt="User" className="w-8 h-8 rounded-full border-2 border-[#0A0A0A]" />
                 ))}
               </div>
-              <span className="text-[10px] text-zinc-500 font-medium">Happy Developers</span>
+              <span className="text-[10px] text-muted-foreground font-medium">Happy Developers</span>
             </div>
           </motion.div>
 
           <div className="grid grid-cols-2 gap-3">
             {[
-              { icon: FileText, num: "450+", label: "QA Pairs", color: "text-blue-400", bg: "bg-blue-500/10 dark:bg-blue-500/20", border: "border-blue-500/20" },
-              { icon: GitBranch, num: "12+", label: "Learning Paths", color: "text-purple-400", bg: "bg-purple-50 dark:bg-purple-950/200/10", border: "border-purple-500/20" },
+              { icon: FileText, num: "450+", label: "QA Pairs", color: "text-primary", bg: "bg-blue-500/10 dark:bg-blue-500/20", border: "border-default/20" },
+              { icon: GitBranch, num: "12+", label: "Learning Paths", color: "text-primary", bg: "bg-blue-100 dark:bg-blue-900/30", border: "border-default/20" },
             ].map((stat, i) => (
               <motion.div
                 key={i}
@@ -559,11 +559,11 @@ export default function SignupPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.3 + (i * 0.1) }}
                 whileHover={{ y: -2 }}
-                className={`flex flex-col items-center justify-center p-3 rounded-xl bg-[#111111]/40 backdrop-blur-md border border-zinc-800/60 transition-colors`}
+                className={`flex flex-col items-center justify-center p-3 rounded-xl bg-surface/40 backdrop-blur-md border border-border transition-colors`}
               >
                  <stat.icon className={`w-4 h-4 ${stat.color} mb-1.5`} />
-                 <div className="text-sm font-bold text-slate-200">{stat.num}</div>
-                 <div className="text-[9px] text-zinc-500 text-center uppercase tracking-wider">{stat.label}</div>
+                 <div className="text-sm font-bold text-foreground">{stat.num}</div>
+                 <div className="text-[9px] text-muted-foreground text-center uppercase tracking-wider">{stat.label}</div>
               </motion.div>
             ))}
           </div>
@@ -573,10 +573,10 @@ export default function SignupPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.5 }}
-            className="bg-[#111111]/40 backdrop-blur-md rounded-2xl p-5 border border-zinc-800/60 shadow-xl relative mt-3"
+            className="bg-surface/40 backdrop-blur-md rounded-2xl p-5 border border-border shadow-xl relative mt-3"
           >
             <div className="text-amber-400 text-xs tracking-widest mb-2">★★★★★</div>
-            <p className="text-xs text-slate-300 italic leading-relaxed mb-3">
+            <p className="text-xs text-foreground/90 italic leading-relaxed mb-3">
               &quot;The personalized roadmap saved weeks of preparation. Exactly the questions I was asked.&quot;
             </p>
             <div className="flex items-center gap-2">
@@ -584,10 +584,10 @@ export default function SignupPage() {
                 <img src="https://i.pravatar.cc/100?img=15" alt="" />
               </div>
               <div>
-                <div className="text-[10px] font-semibold text-slate-200 flex items-center gap-1">
-                  Sarah J. <CheckCircle2 className="w-3 h-3 text-blue-400" />
+                <div className="text-[10px] font-semibold text-foreground flex items-center gap-1">
+                  Sarah J. <CheckCircle2 className="w-3 h-3 text-primary" />
                 </div>
-                <div className="text-[9px] text-zinc-500">Senior Engineer</div>
+                <div className="text-[9px] text-muted-foreground">Senior Engineer</div>
               </div>
             </div>
           </motion.div>

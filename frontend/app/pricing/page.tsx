@@ -65,7 +65,7 @@ export default function PricingPage() {
         </div>
 
         {error && (
-          <div className="max-w-md mx-auto mb-6 p-3 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg border border-red-100 dark:border-red-500/20 text-center">
+          <div className="max-w-md mx-auto mb-6 p-3 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg border border-default dark:border-default/20 text-center">
             {error}
           </div>
         )}
@@ -99,7 +99,7 @@ export default function PricingPage() {
           </div>
 
           {/* Pro tier */}
-          <div className="relative rounded-2xl border-2 border-amber-300 dark:border-amber-500/30 bg-gradient-to-b from-amber-50/80 to-white dark:from-amber-950/20 dark:to-slate-900 p-7 flex flex-col shadow-lg shadow-amber-200/40">
+          <div className="relative rounded-2xl border-2 border-default dark:border-default/30 bg-gradient-to-b  to-white dark:to-slate-900 p-7 flex flex-col shadow-lg shadow-sm">
             <div className="absolute -top-3 left-1/2 -translate-x-1/2">
               <span className="rounded-full bg-amber-500 dark:bg-amber-800 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
                 Most popular
@@ -159,7 +159,7 @@ export default function PricingPage() {
 
         <p className="mt-10 text-center text-sm text-muted-foreground">
           Questions about pricing?{' '}
-          <a href="mailto:support@interviewexplainer.com" className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium">
+          <a href="mailto:support@interviewexplainer.com" className="text-primary dark:text-primary hover:underline font-medium">
             Contact support
           </a>
         </p>

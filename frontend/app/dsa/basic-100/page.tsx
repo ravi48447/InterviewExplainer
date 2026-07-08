@@ -69,9 +69,9 @@ function HeroStat({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-background/[0.04] p-3.5 transition-colors hover:bg-background/[0.07] hover:border-emerald-500 dark:border-emerald-500/50 dark:border-emerald-700/25">
+    <div className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-background/[0.04] p-3.5 transition-colors hover:bg-background/[0.07] hover:border-default dark:border-default/50 dark:border-default/25">
       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500 dark:bg-emerald-800/15 shrink-0">
-        <Icon className="h-4 w-4 text-emerald-300 dark:text-emerald-300" />
+        <Icon className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
       </div>
       <div className="min-w-0">
         <div className="text-lg font-black text-white leading-none tracking-tight">
@@ -115,7 +115,7 @@ function ProblemRow({
         <span
           className={`block text-sm font-semibold truncate transition-colors ${
             authored
-              ? "text-foreground group-hover:text-violet-700 dark:text-violet-400"
+              ? "text-foreground group-hover:text-blue-700 dark:text-blue-400"
               : "text-muted-foreground"
           }`}
         >
@@ -131,7 +131,7 @@ function ProblemRow({
         </span>
       )}
       {authored ? (
-        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 shrink-0">
+        <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20 shrink-0">
           Solved
         </span>
       ) : (
@@ -140,7 +140,7 @@ function ProblemRow({
         </span>
       )}
       {href && (
-        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-violet-600 dark:text-violet-400 transition-colors shrink-0" />
+        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors shrink-0" />
       )}
     </>
   );
@@ -152,7 +152,7 @@ function ProblemRow({
     return (
       <Link
         href={href}
-        className={`${baseClass} border-border hover:border-violet-300 dark:border-violet-500/30 hover:shadow-sm hover:bg-violet-50 dark:bg-violet-500/10 dark:bg-violet-950/20/30 transition-all`}
+        className={`${baseClass} border-border hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/30 transition-all`}
       >
         {RowInner}
       </Link>
@@ -301,9 +301,9 @@ export default function Basic100Page() {
 
           <div className="grid lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_400px] gap-8 xl:gap-12 items-start py-8 lg:py-10">
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-500 dark:border-emerald-500/50 dark:border-emerald-700/25 bg-emerald-500 dark:bg-emerald-800/10 px-3.5 py-1.5">
-                <GraduationCap className="h-3 w-3 text-emerald-400 dark:text-emerald-300" />
-                <span className="text-xs font-bold uppercase tracking-widest text-emerald-300 dark:text-emerald-300">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-default dark:border-default/50 dark:border-default/25 bg-emerald-500 dark:bg-emerald-800/10 px-3.5 py-1.5">
+                <GraduationCap className="h-3 w-3 text-emerald-600 dark:text-emerald-300" />
+                <span className="text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
                   Start here · for freshers
                 </span>
               </div>
@@ -319,14 +319,14 @@ export default function Basic100Page() {
                 {firstAuthored && (
                   <Link
                     href={`/dsa/problem/${firstAuthored.slug}`}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 dark:bg-emerald-800 hover:bg-emerald-500 dark:bg-emerald-800 text-white font-bold rounded-xl transition-colors text-sm shadow-lg shadow-emerald-900/40"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 dark:bg-emerald-800 hover:bg-emerald-500 dark:bg-emerald-800 text-foreground font-bold rounded-xl transition-colors text-sm shadow-lg shadow-sm"
                   >
                     <Play className="h-4 w-4" /> Start first problem
                   </Link>
                 )}
                 <a
                   href="#problems"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-muted-foreground hover:text-white font-medium rounded-xl transition-colors text-sm"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-background/[0.06] hover:bg-background/[0.12] border border-white/[0.12] text-muted-foreground hover:text-foreground font-medium rounded-xl transition-colors text-sm"
                 >
                   Jump to the 100 problems <ChevronRight className="h-4 w-4" />
                 </a>
@@ -351,7 +351,7 @@ export default function Basic100Page() {
                   </div>
                   <div className="h-2 bg-background/[0.08] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-emerald-50 dark:from-emerald-950/400 to-teal-400"
+                      className="h-full bg-surface to-teal-400"
                       style={{ width: `${progressPercent}%` }}
                     />
                   </div>
@@ -366,7 +366,7 @@ export default function Basic100Page() {
       <div className="relative z-10">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-[300px] bg-gradient-to-b from-emerald-200/25 via-emerald-100/10 to-transparent"
+          className="pointer-events-none absolute inset-x-0 top-0 h-[300px] bg-gradient-to-b   to-transparent"
         />
         <div className="relative mx-auto max-w-screen-2xl px-5 sm:px-8 lg:px-12 py-8 space-y-10">
 
@@ -398,12 +398,12 @@ export default function Basic100Page() {
 
           {/* How to use */}
           {catalog.howToUse && catalog.howToUse.length > 0 && (
-            <section className="rounded-2xl border border-violet-100 dark:border-violet-500/20 bg-gradient-to-b from-white to-violet-50/40 dark:to-violet-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden">
-              <div className="px-6 pt-5 pb-3 bg-gradient-to-br from-violet-50 to-violet-50/30 dark:from-violet-950/40 dark:to-violet-950/10 border-b border-violet-100 dark:border-violet-500/20 dark:border-violet-900/40">
+            <section className="rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-gradient-to-b from-white to-blue-50/40 dark:to-blue-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden">
+              <div className="px-6 pt-5 pb-3 bg-surface border border-default dark:from-blue-950/40 dark:to-blue-950/10 border-b border-blue-100 dark:border-blue-500/20 dark:border-blue-900/40">
                 <SectionHeading
                   icon={Flag}
                   kicker="How to use it"
-                  kickerColor="text-violet-700 dark:text-violet-400"
+                  kickerColor="text-blue-700 dark:text-blue-400"
                   title="Get the most out of these 100"
                 />
               </div>
@@ -413,7 +413,7 @@ export default function Basic100Page() {
                     key={i}
                     className="flex gap-3 text-[14.5px] text-foreground leading-[1.7]"
                   >
-                    <span className="text-[11px] font-bold font-mono text-violet-700 dark:text-violet-400 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/40 border border-violet-200 dark:border-violet-500/20 dark:border-violet-700/50 rounded-lg w-6 h-6 flex items-center justify-center shrink-0">
+                    <span className="text-[11px] font-bold font-mono text-blue-700 dark:text-blue-400 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-500/20 dark:border-blue-700/50 rounded-lg w-6 h-6 flex items-center justify-center shrink-0">
                       {i + 1}
                     </span>
                     <span>{line}</span>
@@ -428,7 +428,7 @@ export default function Basic100Page() {
             <SectionHeading
               icon={ListChecks}
               kicker="The problem set"
-              kickerColor="text-indigo-600 dark:text-indigo-400"
+              kickerColor="text-primary dark:text-primary"
               title={`All ${total} problems`}
             />
 
@@ -445,7 +445,7 @@ export default function Basic100Page() {
                   >
                     <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-background dark:from-zinc-900 dark:to-zinc-950/60">
                       <h3 className="text-[15px] font-bold text-foreground flex items-center gap-2.5 tracking-tight">
-                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-50 dark:from-emerald-950/400 to-teal-50 dark:to-teal-950/400 text-white text-xs font-black shadow-sm shadow-emerald-200">
+                        <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-surface text-foreground text-xs font-black shadow-sm shadow-emerald-200">
                           {gi + 1}
                         </span>
                         {group.title}
@@ -494,15 +494,15 @@ export default function Basic100Page() {
                 <Link
                   key={c.href}
                   href={c.href}
-                  className="group rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_16px_-10px_rgba(124,58,237,0.18)] hover:border-violet-300 dark:border-violet-500/30 hover:shadow-xl hover:shadow-violet-200/50 hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col"
+                  className="group rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_16px_-10px_rgba(124,58,237,0.18)] hover:border-blue-300 dark:border-blue-500/30 hover:shadow-xl hover:shadow-blue-200/50 hover:-translate-y-0.5 transition-all overflow-hidden flex flex-col"
                 >
-                  <div className="h-1.5 bg-gradient-to-r from-emerald-50 dark:from-emerald-950/400 to-violet-50 dark:to-violet-950/400" />
+                  <div className="h-1.5 bg-surface " />
                   <div className="p-5 flex flex-col flex-1">
-                    <div className="text-lg font-black text-foreground group-hover:text-violet-700 dark:text-violet-400 tracking-tight transition-colors">
+                    <div className="text-lg font-black text-foreground group-hover:text-blue-700 dark:text-blue-400 tracking-tight transition-colors">
                       {c.label}
                     </div>
                     <div className="text-sm text-muted-foreground mt-1 leading-snug">{c.desc}</div>
-                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-400">
+                    <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
                       Continue <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
                     </div>
                   </div>
@@ -514,7 +514,7 @@ export default function Basic100Page() {
           <div className="pt-2">
             <Link
               href="/dsa"
-              className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-violet-700 dark:text-violet-400 transition-colors"
+              className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-blue-700 dark:text-blue-400 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to DSA hub

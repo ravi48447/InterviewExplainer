@@ -237,7 +237,7 @@ export default function CodeLanguageTabs({
               className={cn(
                 "px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider transition-colors whitespace-nowrap border-b-2",
                 active === lang
-                  ? "text-white border-blue-400 dark:border-blue-700 bg-slate-700/80"
+                  ? "text-white border-default dark:border-default bg-slate-700/80"
                   : "text-muted-foreground border-transparent hover:text-muted-foreground hover:dark:bg-surface/50",
               )}
               aria-pressed={active === lang}

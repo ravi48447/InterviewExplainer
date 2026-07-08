@@ -54,8 +54,8 @@ const CATEGORIES = [
         slug: "microservices",
         name: "Microservices",
         icon: Layers,
-        color: "text-violet-600 dark:text-violet-400",
-        bg: "bg-violet-100 dark:bg-violet-950/30",
+        color: "text-blue-600 dark:text-blue-400",
+        bg: "bg-blue-100 dark:bg-blue-950/30",
         desc: "Service decomposition, communication patterns, sagas, service mesh",
         subtopics: ["Service discovery", "API gateway", "Saga pattern", "Circuit breaker"],
         frequency: "High",
@@ -64,7 +64,7 @@ const CATEGORIES = [
         slug: "distributed-systems",
         name: "Distributed Systems",
         icon: GitBranch,
-        color: "text-blue-600 dark:text-blue-400",
+        color: "text-primary dark:text-primary",
         bg: "bg-blue-100 dark:bg-blue-950/30",
         desc: "CAP theorem, consensus, replication, fault tolerance, CRDTs",
         subtopics: ["Raft consensus", "Leader election", "Replication strategies", "Partition handling"],
@@ -84,8 +84,8 @@ const CATEGORIES = [
         slug: "clean-architecture",
         name: "Clean Architecture",
         icon: Puzzle,
-        color: "text-indigo-600",
-        bg: "bg-indigo-100 dark:bg-indigo-950/30",
+        color: "text-primary",
+        bg: "bg-blue-100 dark:bg-blue-950/30",
         desc: "Hexagonal, onion, dependency rule, ports and adapters",
         subtopics: ["Dependency inversion", "Ports & adapters", "Domain layer", "Use cases"],
         frequency: "Medium",
@@ -130,8 +130,8 @@ const CATEGORIES = [
         slug: "cap-theorem",
         name: "CAP Theorem",
         icon: GitBranch,
-        color: "text-violet-600 dark:text-violet-400",
-        bg: "bg-violet-100 dark:bg-violet-950/30",
+        color: "text-blue-600 dark:text-blue-400",
+        bg: "bg-blue-100 dark:bg-blue-950/30",
         desc: "Consistency, availability, partition tolerance — trade-offs explained with real systems",
         subtopics: ["CP systems", "AP systems", "PACELC", "Eventual consistency"],
         frequency: "High",
@@ -146,7 +146,7 @@ const CATEGORIES = [
         slug: "api-design",
         name: "API Design",
         icon: Globe,
-        color: "text-cyan-600",
+        color: "text-primary",
         bg: "bg-cyan-100 dark:bg-cyan-950/30",
         desc: "REST, GraphQL, gRPC, versioning, rate limiting, documentation",
         subtopics: ["REST maturity model", "GraphQL vs REST", "API versioning", "OpenAPI/Swagger"],
@@ -156,7 +156,7 @@ const CATEGORIES = [
         slug: "concurrency",
         name: "Concurrency",
         icon: Workflow,
-        color: "text-blue-600 dark:text-blue-400",
+        color: "text-primary dark:text-primary",
         bg: "bg-blue-100 dark:bg-blue-950/30",
         desc: "Threads, async/await, locks, deadlocks, actors, reactive programming",
         subtopics: ["Thread pools", "Lock-free structures", "Deadlock detection", "Async patterns"],
@@ -231,7 +231,7 @@ const CATEGORIES = [
 const FREQUENCY_COLORS: Record<string, string> = {
   "Very High": "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400",
   High: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400",
-  Medium: "bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400",
+  Medium: "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
 };
 
 const totalTopics = CATEGORIES.reduce(
@@ -241,7 +241,7 @@ const totalTopics = CATEGORIES.reduce(
 
 export default function TopicsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-violet-50/20 dark:via-violet-950/40 to-indigo-50/20 dark:to-indigo-950/40 font-sans text-foreground selection:bg-violet-200  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/20 dark:via-blue-950/40  font-sans text-foreground selection:bg-blue-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -257,10 +257,10 @@ export default function TopicsPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-violet-50 dark:from-violet-950/40 via-purple-50 dark:via-purple-950/40 to-indigo-50 dark:to-indigo-950/40  ">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-blue-50 dark:from-blue-950/40  ">
             <div className="flex items-center gap-2 mb-3">
-              <BookOpen className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-violet-600 dark:text-violet-400">
+              <BookOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400">
                 Cross-Language Concepts
               </span>
             </div>
@@ -278,8 +278,8 @@ export default function TopicsPage() {
           <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-950/20 flex items-center justify-center">
-                  <Layers className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -292,8 +292,8 @@ export default function TopicsPage() {
               </div>
               <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-950/20 flex items-center justify-center">
-                  <BookOpen className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center">
+                  <BookOpen className="h-5 w-5 text-primary dark:text-primary" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -306,8 +306,8 @@ export default function TopicsPage() {
               </div>
               <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-950/20 flex items-center justify-center">
-                  <Globe className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center">
+                  <Globe className="h-5 w-5 text-primary dark:text-primary" />
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground font-medium">
@@ -335,7 +335,7 @@ export default function TopicsPage() {
                 <Link
                   key={topic.slug}
                   href={`/topics/${topic.slug}`}
-                  className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-violet-300 dark:border-violet-500/30 transition-all p-5"
+                  className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-blue-300 dark:border-blue-500/30 transition-all p-5"
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div
@@ -349,11 +349,11 @@ export default function TopicsPage() {
                       >
                         {topic.frequency}
                       </span>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-violet-500 dark:text-violet-400 group-hover:translate-x-1 transition-all" />
+                      <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 group-hover:translate-x-1 transition-all" />
                     </div>
                   </div>
 
-                  <h3 className="text-[15px] font-bold text-foreground group-hover:text-violet-600 dark:text-violet-400 transition-colors mb-1.5">
+                  <h3 className="text-[15px] font-bold text-foreground group-hover:text-blue-600 dark:text-blue-400 transition-colors mb-1.5">
                     {topic.name}
                   </h3>
                   <p className="text-xs text-muted-foreground leading-relaxed mb-3">
@@ -377,7 +377,7 @@ export default function TopicsPage() {
         ))}
 
         {/* Cross-reference CTA */}
-        <section className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-gradient-to-r from-violet-50 dark:from-violet-950/40 to-purple-50 dark:to-purple-950/40 p-8 text-center mb-12  ">
+        <section className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40  p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Learn Concepts in Context
           </h2>
@@ -389,14 +389,14 @@ export default function TopicsPage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
               href="/domains"
-              className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+              className="inline-flex items-center gap-2 px-8 py-3 bg-surface border border-default text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
             >
               Select Your Domain
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
               href="/system-design"
-              className="inline-flex items-center gap-2 px-8 py-3 bg-background border border-border text-foreground font-bold rounded-xl hover:shadow-md hover:border-violet-300 dark:border-violet-500/30 transition-all"
+              className="inline-flex items-center gap-2 px-8 py-3 bg-background border border-border text-foreground font-bold rounded-xl hover:shadow-md hover:border-blue-300 dark:border-blue-500/30 transition-all"
             >
               System Design Problems
               <ArrowRight className="h-4 w-4" />

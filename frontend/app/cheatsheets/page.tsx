@@ -51,7 +51,7 @@ const LANGUAGE_CHEATSHEETS = [
     name: "Python",
     desc: "Data structures, list comprehensions, decorators, generators, async/await, Django/FastAPI shortcuts",
     items: 7,
-    color: "text-blue-600 dark:text-blue-400",
+    color: "text-primary dark:text-primary",
     bg: "bg-blue-100 dark:bg-blue-950/20",
     icon: Code2,
   },
@@ -69,7 +69,7 @@ const LANGUAGE_CHEATSHEETS = [
     name: "Go",
     desc: "Goroutines, channels, interfaces, error handling, context package, testing patterns, module system",
     items: 5,
-    color: "text-cyan-600",
+    color: "text-primary",
     bg: "bg-cyan-100 dark:bg-cyan-950/20",
     icon: Code2,
   },
@@ -98,15 +98,15 @@ const CONCEPT_CHEATSHEETS = [
     name: "Big-O Complexity",
     desc: "Time and space complexity for all data structures and algorithms. Sorting comparisons, amortized analysis",
     icon: Cpu,
-    color: "text-violet-600 dark:text-violet-400",
-    bg: "bg-violet-100 dark:bg-violet-950/20",
+    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-blue-100 dark:bg-blue-950/20",
   },
   {
     slug: "data-structures",
     name: "Data Structures",
     desc: "Arrays, linked lists, trees, graphs, heaps, tries, hash maps — operations, complexities, when to use what",
     icon: Layers,
-    color: "text-blue-600 dark:text-blue-400",
+    color: "text-primary dark:text-primary",
     bg: "bg-blue-100 dark:bg-blue-950/20",
   },
   {
@@ -114,8 +114,8 @@ const CONCEPT_CHEATSHEETS = [
     name: "Design Patterns",
     desc: "Singleton, Factory, Observer, Strategy, Builder, Decorator — when to use each with real-world examples",
     icon: Workflow,
-    color: "text-indigo-600",
-    bg: "bg-indigo-100 dark:bg-indigo-950/20",
+    color: "text-primary",
+    bg: "bg-blue-100 dark:bg-blue-950/20",
   },
   {
     slug: "api-design",
@@ -149,7 +149,7 @@ const TOOL_CHEATSHEETS = [
     name: "Docker",
     desc: "Dockerfile best practices, multi-stage builds, docker-compose, networking, volume mounts, common commands",
     icon: Container,
-    color: "text-blue-600 dark:text-blue-400",
+    color: "text-primary dark:text-primary",
     bg: "bg-blue-100 dark:bg-blue-950/20",
   },
   {
@@ -157,8 +157,8 @@ const TOOL_CHEATSHEETS = [
     name: "Kubernetes",
     desc: "Pods, services, deployments, configmaps, secrets, ingress, kubectl commands, YAML templates",
     icon: Cloud,
-    color: "text-indigo-600",
-    bg: "bg-indigo-100 dark:bg-indigo-950/20",
+    color: "text-primary",
+    bg: "bg-blue-100 dark:bg-blue-950/20",
   },
   {
     slug: "linux",
@@ -193,7 +193,7 @@ const totalSheets =
 
 export default function CheatsheetsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-yellow-50/20 dark:via-yellow-950/40 to-amber-50/20 dark:to-amber-950/40 font-sans text-foreground selection:bg-yellow-200  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-yellow-50/20 dark:via-yellow-950/40  font-sans text-foreground selection:bg-yellow-200  ">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -209,7 +209,7 @@ export default function CheatsheetsPage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-gradient-to-br from-yellow-50 dark:from-yellow-950/40 via-amber-50 dark:via-amber-950/40 to-orange-50 dark:to-orange-950/40  ">
+          <div className="relative px-8 py-8 bg-gradient-to-br from-yellow-50 dark:from-yellow-950/40  to-orange-50 dark:to-orange-950/40  ">
             <div className="flex items-center gap-2 mb-3">
               <Zap className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-yellow-600 dark:text-yellow-400">
@@ -330,7 +330,7 @@ export default function CheatsheetsPage() {
               <Link
                 key={sheet.slug}
                 href={`/cheatsheets/${sheet.slug}`}
-                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-amber-300 dark:border-amber-500/30 transition-all p-5"
+                className="group rounded-xl border border-border bg-background shadow-sm hover:shadow-md hover:border-default dark:border-default/30 transition-all p-5"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div
@@ -391,7 +391,7 @@ export default function CheatsheetsPage() {
         </section>
 
         {/* CTA */}
-        <section className="rounded-xl border border-yellow-200 dark:border-yellow-500/20 bg-gradient-to-r from-yellow-50 dark:from-yellow-950/40 to-amber-50 dark:to-amber-950/40 p-8 text-center mb-12  ">
+        <section className="rounded-xl border border-yellow-200 dark:border-yellow-500/20 bg-gradient-to-r from-yellow-50 dark:from-yellow-950/40  p-8 text-center mb-12  ">
           <h2 className="text-2xl font-black text-foreground mb-3">
             Cheatsheets Are Part of Your Complete Prep
           </h2>
@@ -402,7 +402,7 @@ export default function CheatsheetsPage() {
           </p>
           <Link
             href="/domains"
-            className="inline-flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-yellow-600 to-amber-600 text-white font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-surface border border-default text-foreground font-bold rounded-xl hover:shadow-lg hover:scale-105 transition-all"
           >
             Start Your Prep Path
             <ArrowRight className="h-4 w-4" />

@@ -50,11 +50,11 @@ export type ProblemSidebarProps = {
 const DIFF_META: Record<Difficulty, { label: string; className: string }> = {
   easy: {
     label: "Easy",
-    className: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20",
+    className: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20",
   },
   medium: {
     label: "Medium",
-    className: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20",
+    className: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-default dark:border-default/20",
   },
   hard: {
     label: "Hard",
@@ -94,7 +94,7 @@ export function ProblemSidebar({
       {backHref && (
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:text-violet-700 dark:text-violet-400 transition-colors mb-4"
+          className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:text-blue-700 dark:text-blue-400 transition-colors mb-4"
         >
           <ArrowLeft className="h-3 w-3" />
           {backLabel ?? "Back"}
@@ -105,16 +105,16 @@ export function ProblemSidebar({
       {total > 0 && currentIdx >= 0 && (
         <div className="mb-5">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-300">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
               Progress
             </span>
-            <span className="text-[12px] font-bold text-violet-700 dark:text-violet-400 tabular-nums">
+            <span className="text-[12px] font-bold text-blue-700 dark:text-blue-400 tabular-nums">
               {currentIdx + 1}/{total}
             </span>
           </div>
           <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
             <div
-              className="h-full bg-violet-500 dark:bg-violet-800 rounded-full transition-all"
+              className="h-full bg-blue-500 dark:bg-blue-800 rounded-full transition-all"
               style={{ width: `${((currentIdx + 1) / total) * 100}%` }}
             />
           </div>
@@ -124,7 +124,7 @@ export function ProblemSidebar({
       {/* ── Quick Info ─────────────────────────────────────────── */}
       <div className="space-y-2 mb-5 pb-5 border-b border-border">
         <Row
-          icon={<Target className="h-3.5 w-3.5 text-slate-400 dark:text-slate-300" />}
+          icon={<Target className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />}
           label="Difficulty"
           value={
             <span
@@ -158,7 +158,7 @@ export function ProblemSidebar({
         )}
         {readingTimeMinutes != null && (
           <Row
-            icon={<Clock className="h-3.5 w-3.5 text-slate-400 dark:text-slate-300" />}
+            icon={<Clock className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />}
             label="Read"
             value={
               <span className="text-[11.5px] font-medium text-secondary">
@@ -173,8 +173,8 @@ export function ProblemSidebar({
       {companies && companies.length > 0 && (
         <div className="mb-5 pb-5 border-b border-border">
           <div className="flex items-center gap-1.5 mb-2">
-            <Building2 className="h-3 w-3 text-slate-400 dark:text-slate-300" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-300">
+            <Building2 className="h-3 w-3 text-slate-500 dark:text-slate-400" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
               Asked at
             </span>
           </div>
@@ -194,7 +194,7 @@ export function ProblemSidebar({
       {/* ── In this module ────────────────────────────────────── */}
       {siblings.length > 0 && (
         <div className="mb-5">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-300 mb-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">
             In this module
           </p>
           <ul className="space-y-0.5 -mx-1">
@@ -207,14 +207,14 @@ export function ProblemSidebar({
                     className={cn(
                       "block py-1.5 px-2 rounded-md text-[12.5px] leading-snug transition-colors",
                       active
-                        ? "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 font-semibold"
+                        ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 font-semibold"
                         : "text-secondary hover:text-foreground hover:bg-surface/70",
                     )}
                   >
                     <span
                       className={cn(
                         "mr-1.5 text-[10.5px] tabular-nums",
-                        active ? "text-violet-400 dark:text-violet-300" : "text-slate-400 dark:text-slate-300",
+                        active ? "text-blue-600 dark:text-blue-300" : "text-slate-500 dark:text-slate-400",
                       )}
                     >
                       {i + 1}.
@@ -234,11 +234,11 @@ export function ProblemSidebar({
           {prev ? (
             <Link
               href={`/dsa/problem/${prev.slug}`}
-              className="group flex items-start gap-1 text-[11.5px] text-muted-foreground hover:text-violet-700 dark:text-violet-400"
+              className="group flex items-start gap-1 text-[11.5px] text-muted-foreground hover:text-blue-700 dark:text-blue-400"
             >
               <ArrowLeft className="h-3 w-3 mt-0.5 shrink-0" />
               <span>
-                <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 group-hover:text-violet-500 dark:text-violet-400">
+                <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 group-hover:text-blue-500 dark:text-blue-400">
                   Prev
                 </span>
                 <span className="block leading-snug line-clamp-2">
@@ -252,10 +252,10 @@ export function ProblemSidebar({
           {next ? (
             <Link
               href={`/dsa/problem/${next.slug}`}
-              className="group flex items-start gap-1 text-right text-[11.5px] text-muted-foreground hover:text-violet-700 dark:text-violet-400 justify-end"
+              className="group flex items-start gap-1 text-right text-[11.5px] text-muted-foreground hover:text-blue-700 dark:text-blue-400 justify-end"
             >
               <span>
-                <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300 group-hover:text-violet-500 dark:text-violet-400">
+                <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 group-hover:text-blue-500 dark:text-blue-400">
                   Next
                 </span>
                 <span className="block leading-snug line-clamp-2">

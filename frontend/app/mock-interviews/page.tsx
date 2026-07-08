@@ -8,6 +8,16 @@ import {
   TrendingUp, Award, CheckCircle2, ArrowRight, Video, FileText, Zap, Radio,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+
 
 const mockTypes = [
   {
@@ -18,8 +28,7 @@ const mockTypes = [
     duration: '15–20 min',
     difficulty: 'All Levels',
     sections: ['Timed questions', 'Self-review against sample answers', 'Domain-specific content'],
-    gradient: 'from-purple-50 dark:from-purple-950/400 to-pink-600',
-    bgGradient: 'from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20',
+    gradient: 'from-blue-500 to-blue-600',
     recommended: true,
     badge: 'POPULAR',
   },
@@ -31,8 +40,7 @@ const mockTypes = [
     duration: '40–60 min',
     difficulty: 'All Levels',
     sections: ['Multiple topic areas', 'Timed per question', 'End-of-session review'],
-    gradient: 'from-pink-50 dark:from-pink-950/400 to-rose-600',
-    bgGradient: 'from-pink-50 dark:from-pink-950/40 to-rose-50 dark:to-rose-950/40',
+    gradient: 'from-blue-600 to-blue-700',
   },
   {
     id: 'coding-mock',
@@ -42,8 +50,7 @@ const mockTypes = [
     duration: '20–30 min',
     difficulty: 'Easy to Hard',
     sections: ['Core technical questions', 'Concept-focused', 'Compare with expert answers'],
-    gradient: 'from-blue-50 dark:from-blue-950/400 to-cyan-600',
-    bgGradient: 'from-blue-50 dark:from-blue-950/40 to-cyan-50 dark:to-cyan-950/40',
+    gradient: 'from-blue-500 to-primary',
   },
   {
     id: 'system-design-mock',
@@ -53,8 +60,7 @@ const mockTypes = [
     duration: '25–40 min',
     difficulty: 'Mid to Senior',
     sections: ['Architecture questions', 'Scalability scenarios', 'Guided review'],
-    gradient: 'from-purple-50 dark:from-purple-950/400 to-indigo-600',
-    bgGradient: 'from-purple-50 dark:from-purple-950/40 to-indigo-50 dark:to-indigo-950/40',
+    gradient: 'from-blue-400 to-blue-600',
   },
   {
     id: 'behavioral-mock',
@@ -64,8 +70,7 @@ const mockTypes = [
     duration: '15–25 min',
     difficulty: 'All Levels',
     sections: ['STAR framework prompts', 'Leadership & conflict scenarios', 'Self-review checklist'],
-    gradient: 'from-orange-50 dark:from-orange-950/400 to-amber-600',
-    bgGradient: 'from-orange-50 dark:from-orange-950/40 to-amber-50 dark:to-amber-950/40',
+    gradient: 'from-blue-700 to-blue-800',
   },
 ];
 
@@ -99,32 +104,35 @@ const platformPillars = [
 ];
 
 function MockInterviewsContent() {
+  const [selectedMock, setSelectedMock] = React.useState<typeof mockTypes[0] | null>(null);
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+
   const startHref = (mockId: string) => `/mock-interviews/select-domain?type=${mockId}`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-blue-50/30 dark:via-blue-950/40 to-indigo-50/20 dark:to-indigo-950/40  ">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  ">
 
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white">
-        <div className="w-full min-w-0 px-6 lg:px-12 py-16">
+      <div className="dark bg-[#0f1014] text-foreground border-b border-white/10 relative overflow-hidden">
+        <div className="w-full min-w-0 px-6 lg:px-12 py-16 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="text-center max-w-3xl mx-auto"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-background/20 backdrop-blur-sm mb-6">
-              <Mic className="h-4 w-4" />
-              <span className="text-sm font-bold">Structured Mock Practice</span>
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm mb-6">
+              <Mic className="h-4 w-4 text-primary" />
+              <span className="text-sm font-bold text-foreground">Structured Mock Practice</span>
             </div>
-            <h1 className="text-4xl md:text-5xl font-black mb-4">
+            <h1 className="text-4xl md:text-5xl font-black mb-4 text-foreground">
               Practise Under Real Conditions
             </h1>
-            <p className="text-lg opacity-90 mb-8">
+            <p className="text-lg text-slate-300 mb-8 leading-relaxed">
               Answer timed, domain-specific questions and review your responses against structured expert answers — building confidence before the real thing.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 text-sm font-bold">
               {platformPillars.map(p => (
-                <div key={p.label} className="flex items-center gap-2 px-4 py-2 rounded-full bg-background/20 backdrop-blur-sm">
+                <div key={p.label} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm text-foreground">
                   <span>{p.icon}</span>
                   <span>{p.label}</span>
                 </div>
@@ -145,16 +153,18 @@ function MockInterviewsContent() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
             >
-              <Link
-                href={startHref(mock.id)}
+              <div
+                onClick={() => { setSelectedMock(mock); setDialogOpen(true); }}
+                role="button"
+                tabIndex={0}
                 className={cn(
                   "relative overflow-hidden rounded-2xl border-2 border-border bg-background p-8 shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] group block",
-                  mock.recommended && "ring-2 ring-purple-500"
+                  mock.recommended && "ring-2 ring-ring"
                 )}
               >
                 {mock.recommended && (
                   <div className="absolute top-4 right-4">
-                    <div className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-50 dark:from-purple-950/400 to-pink-600 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1">
+                    <div className="px-3 py-1 rounded-full bg-surface text-foreground text-xs font-black uppercase tracking-wider flex items-center gap-1">
                       <Star className="h-3 w-3 fill-current" />
                       {mock.badge || 'Recommended'}
                     </div>
@@ -195,7 +205,7 @@ function MockInterviewsContent() {
                   <Play className="h-4 w-4" />
                   Start Mock Interview
                 </div>
-              </Link>
+              </div>
             </motion.div>
           ))}
         </div>
@@ -212,8 +222,8 @@ function MockInterviewsContent() {
                 transition={{ delay: 0.5 + index * 0.1 }}
                 className="text-center"
               >
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-100 dark:from-blue-950/50 to-indigo-100 dark:to-indigo-950/50 flex items-center justify-center mx-auto mb-4">
-                  <feature.icon className="h-7 w-7 text-blue-600 dark:text-blue-400" />
+                <div className="w-14 h-14 rounded-2xl bg-surface flex items-center justify-center mx-auto mb-4">
+                  <feature.icon className="h-7 w-7 text-primary dark:text-primary" />
                 </div>
                 <h3 className="text-sm font-black text-foreground mb-2">{feature.title}</h3>
                 <p className="text-xs text-muted-foreground">{feature.description}</p>
@@ -225,10 +235,10 @@ function MockInterviewsContent() {
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Link href="/mock-interviews/history">
-            <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 dark:from-slate-950/40 to-blue-50 dark:to-blue-950/40 border border-border hover:shadow-lg transition-all group  ">
+            <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 dark:from-slate-950/40  border border-border hover:shadow-lg transition-all group  ">
               <div className="flex items-start justify-between mb-4">
-                <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-all" />
+                <FileText className="h-8 w-8 text-primary dark:text-primary" />
+                <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-1 transition-all" />
               </div>
               <h3 className="text-lg font-black text-foreground mb-2">View Mock History</h3>
               <p className="text-sm text-muted-foreground">Review past interviews and track your progress over time</p>
@@ -236,10 +246,10 @@ function MockInterviewsContent() {
           </Link>
 
           <Link href="/dashboard">
-            <div className="p-6 rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 border border-purple-200 dark:border-purple-500/20 hover:shadow-lg transition-all group">
+            <div className="p-6 rounded-2xl bg-surface border border-default border border-default dark:border-default/20 hover:shadow-lg transition-all group">
               <div className="flex items-start justify-between mb-4">
-                <Zap className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-                <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-purple-600 dark:text-purple-400 group-hover:translate-x-1 transition-all" />
+                <Zap className="h-8 w-8 text-primary dark:text-primary" />
+                <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-1 transition-all" />
               </div>
               <h3 className="text-lg font-black text-foreground mb-2">Performance Analytics</h3>
               <p className="text-sm text-muted-foreground">Detailed insights and recommendations on your dashboard</p>
@@ -247,6 +257,58 @@ function MockInterviewsContent() {
           </Link>
         </div>
       </div>
+
+      {/* Onboarding Modal */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Ready to practice?</DialogTitle>
+            <DialogDescription>
+              Before we begin your {selectedMock?.title}, let's review a few quick things to get the most out of this session.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+                <Mic className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-foreground">Microphone Check</h4>
+                <p className="text-xs text-muted-foreground">You can answer aloud or type your responses. If answering aloud, find a quiet space.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
+                <Clock className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-foreground">Pacing</h4>
+                <p className="text-xs text-muted-foreground">This session takes about {selectedMock?.duration}. Take your time reading each prompt.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-foreground">Self-Review</h4>
+                <p className="text-xs text-muted-foreground">After answering, you'll compare your response against an expert's key points. Be honest with your self-assessment!</p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-between">
+            <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            {selectedMock && (
+              <Button asChild>
+                <Link href={startHref(selectedMock.id)}>
+                  Start Session <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

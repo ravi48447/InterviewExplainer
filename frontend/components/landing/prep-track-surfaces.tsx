@@ -6,8 +6,8 @@ import { STANDALONE_PREP_TRACKS } from "@/lib/prep-tracks";
 function TrackIcon({ icon }: { icon: (typeof STANDALONE_PREP_TRACKS)[number]["icon"] }) {
   if (icon === "network") {
     return (
-      <div className="shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-50 dark:from-emerald-950/400 to-teal-600 flex items-center justify-center shadow-sm">
-        <Network className="h-5 w-5 text-white" aria-hidden />
+      <div className="shrink-0 w-11 h-11 rounded-xl bg-teal-500/10 dark:bg-teal-500/20 flex items-center justify-center shadow-sm">
+        <Network className="h-5 w-5 text-teal-600 dark:text-teal-400" aria-hidden />
       </div>
     );
   }
@@ -70,7 +70,7 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
             {STANDALONE_PREP_TRACKS.map((t) => (
               <div
                 key={t.id}
-                className="flex flex-col gap-2 rounded-xl border border-border bg-surface/60 p-4 sm:p-5 hover:border-indigo-200 dark:border-indigo-500/20 hover:bg-background transition-colors text-left"
+                className="flex flex-col gap-2 rounded-xl border border-border bg-surface/60 p-4 sm:p-5 hover:border-default dark:border-default/20 hover:bg-background transition-colors text-left"
               >
                 <div className="flex gap-4">
                   <TrackIcon icon={t.icon} />
@@ -84,7 +84,7 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 mt-1">
                   <Link
                     href={t.href}
-                    className="inline-flex items-center gap-1.5 rounded-lg dark:bg-surface px-3 py-1.5 text-xs font-semibold text-white hover:dark:bg-surface transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-lg dark:bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:dark:bg-surface transition-colors"
                   >
                     Open track
                     <ArrowRight className="h-3.5 w-3.5" />
@@ -92,7 +92,7 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
                   {isPrep && t.prepHash && (
                     <Link
                       href={`/prep${t.prepHash}`}
-                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                      className="text-xs font-semibold text-primary dark:text-primary hover:underline"
                     >
                       Related section on this page ↓
                     </Link>

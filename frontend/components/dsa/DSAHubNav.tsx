@@ -75,7 +75,7 @@ export function DSAHubNav({ items }: { items: HubNavItem[] }) {
                 onClick={handleClick(item.id)}
                 className={`group inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
                   isActive
-                    ? "bg-violet-600 dark:bg-violet-800 text-primary-foreground dark:text-foreground"
+                    ? "bg-blue-600 dark:bg-blue-800 text-primary-foreground dark:text-foreground"
                     : "text-muted-foreground hover:bg-surface hover:text-foreground"
                 }`}
               >

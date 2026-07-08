@@ -8,10 +8,10 @@ interface InterviewSignalProps {
 
 export function InterviewSignal({ title = "Interview Signal", children }: InterviewSignalProps) {
   return (
-    <div className="rounded-lg border border-violet-200 dark:border-violet-500/20 bg-gradient-to-r from-violet-50 dark:from-violet-950/40 to-purple-50 dark:to-purple-950/40 p-4  ">
+    <div className="rounded-lg border border-blue-200 dark:border-blue-500/20 bg-gradient-to-r from-blue-50 dark:from-blue-950/40  p-4  ">
       <div className="flex items-center gap-2 mb-2">
-        <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-        <span className="text-xs font-bold text-violet-800 dark:text-violet-400 uppercase tracking-wide">{title}</span>
+        <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+        <span className="text-xs font-bold text-blue-800 dark:text-blue-400 uppercase tracking-wide">{title}</span>
       </div>
       <div className="text-sm text-foreground">{children}</div>
     </div>

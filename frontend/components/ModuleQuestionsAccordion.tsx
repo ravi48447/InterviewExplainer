@@ -70,12 +70,12 @@ interface Props {
 }
 
 const ACCENT_COLORS = [
-  "from-blue-50 dark:from-blue-950/400 to-indigo-600",
-  "from-emerald-50 dark:from-emerald-950/400 to-teal-600",
-  "from-purple-50 dark:from-purple-950/400 to-violet-600",
-  "from-amber-50 dark:from-amber-950/400 to-orange-600",
-  "from-rose-50 dark:from-rose-950/400 to-pink-600",
-  "from-cyan-50 dark:from-cyan-950/400 to-sky-600",
+  "from-blue-500 to-blue-600",
+  "from-teal-500 to-teal-600",
+  "from-blue-400 to-blue-500",
+  "from-orange-500 to-orange-600",
+  "from-rose-500 to-rose-600",
+  "from-sky-500 to-sky-600",
 ];
 
 export default function ModuleQuestionsAccordion({
@@ -162,7 +162,7 @@ export default function ModuleQuestionsAccordion({
           <button
             type="button"
             onClick={expandAllTopics}
-            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-bold text-foreground hover:border-blue-300 dark:border-blue-700 hover:bg-blue-50 dark:bg-blue-500/10 hover:text-blue-800 dark:text-blue-400 transition-colors"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-bold text-foreground hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 hover:text-primary dark:text-primary transition-colors"
           >
             <ChevronsDown className="h-3.5 w-3.5" aria-hidden />
             Expand all
@@ -194,27 +194,27 @@ export default function ModuleQuestionsAccordion({
           <div
             key={REVISION_GROUP_SLUG}
             id={REVISION_GROUP_SLUG}
-            className="rounded-xl border border-blue-200 dark:border-blue-500/20/90 bg-background overflow-hidden shadow-sm ring-1 ring-blue-900/[0.04]"
+            className="rounded-xl border border-default dark:border-default/20/90 bg-background overflow-hidden shadow-sm ring-1 ring-ring/[0.04]"
           >
             <button
               type="button"
               onClick={() => toggleGroup(REVISION_GROUP_SLUG)}
-              className="w-full flex items-center gap-3 px-4 py-2.5 bg-gradient-to-r from-blue-50/80 dark:from-blue-950/40 via-indigo-50/40 dark:via-indigo-950/40 to-white hover:from-blue-100/80 dark:from-blue-950/50 transition-colors text-left  "
+              className="w-full flex items-center gap-3 px-4 py-2.5 bg-surface to-white hover: transition-colors text-left  "
             >
-              <span className="text-[11px] font-black text-blue-500 dark:text-blue-400 shrink-0 tabular-nums">00</span>
+              <span className="text-[11px] font-black text-primary dark:text-primary shrink-0 tabular-nums">00</span>
               <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm font-bold text-foreground">
-                <BookOpen className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                <BookOpen className="h-3.5 w-3.5 text-primary dark:text-primary shrink-0" />
                 <span className="truncate">Revision</span>
-                <span className="truncate rounded border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-blue-800 dark:text-blue-400">
+                <span className="truncate rounded border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0 text-[9px] font-black uppercase tracking-wider text-primary dark:text-primary">
                   Read me first
                 </span>
               </span>
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/20 text-blue-800 dark:text-blue-400 shrink-0">
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary shrink-0">
                 {revision.sections.length}
               </span>
               <ChevronDown
                 className={cn(
-                  "h-4 w-4 text-blue-500 dark:text-blue-400 transition-transform shrink-0",
+                  "h-4 w-4 text-primary dark:text-primary transition-transform shrink-0",
                   isClosed && "-rotate-90",
                 )}
               />
@@ -223,7 +223,7 @@ export default function ModuleQuestionsAccordion({
               <ModuleRevisionPanel
                 revision={revision}
                 stackLabel={moduleTitle}
-                className="border-t border-blue-100 dark:border-blue-500/20"
+                className="border-t border-default dark:border-default/20"
               />
             )}
           </div>
@@ -249,7 +249,7 @@ export default function ModuleQuestionsAccordion({
               <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm font-bold text-foreground">
                 <span className="truncate">{g.name}</span>
               </span>
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shrink-0">
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary shrink-0">
                 {g.questionCount}
               </span>
               <ChevronDown
@@ -273,19 +273,19 @@ export default function ModuleQuestionsAccordion({
                   >
                     <Link
                       href={`/${seoSlug}/${q.slug}`}
-                      className="group flex items-center gap-3 px-4 py-2.5 hover:bg-gradient-to-r hover:from-blue-50/90 dark:from-blue-950/40 hover:to-transparent transition-colors  "
+                      className="group flex items-center gap-3 px-4 py-2.5 hover:bg-gradient-to-r hover: hover:to-transparent transition-colors  "
                     >
                       {anchorsOn ? (
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg dark:bg-surface text-[11px] font-bold text-white tabular-nums shadow-sm group-hover:bg-blue-600 dark:bg-blue-800 transition-colors">
                           {globalN}
                         </span>
                       ) : (
-                        <span className="w-6 h-6 rounded-md bg-surface flex items-center justify-center text-[10px] font-black text-muted-foreground shrink-0 group-hover:bg-blue-100 dark:bg-blue-950/20 group-hover:text-blue-600 dark:text-blue-400 transition-colors">
+                        <span className="w-6 h-6 rounded-md bg-surface flex items-center justify-center text-[10px] font-black text-muted-foreground shrink-0 group-hover:bg-blue-100 dark:bg-blue-950/20 group-hover:text-primary dark:group-hover:text-primary transition-colors">
                           {String(qIdx + 1).padStart(2, "0")}
                         </span>
                       )}
                       <span className="flex-1 min-w-0">
-                        <span className="block text-[13.5px] font-semibold text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors leading-snug">
+                        <span className="block text-[13.5px] font-semibold text-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors leading-snug">
                           {q.title}
                         </span>
                         {anchorsOn && g.questionCount > 1 && (
@@ -310,7 +310,7 @@ export default function ModuleQuestionsAccordion({
                           {q.estimatedReadTime || 5}m
                         </span>
                       )}
-                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-blue-400 dark:text-blue-300 group-hover:translate-x-0.5 transition-all shrink-0" />
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0" />
                     </Link>
                   </li>
                   );
@@ -326,9 +326,9 @@ export default function ModuleQuestionsAccordion({
   if (isInline) {
     return (
       <div className="rounded-2xl border border-border/90 bg-background shadow-md shadow-slate-200/40 overflow-hidden ring-1 ring-slate-900/[0.03]">
-        <div className="px-4 sm:px-5 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-white via-slate-50/60 dark:via-slate-950/40 to-blue-50/20 dark:to-blue-950/40 flex flex-wrap items-center justify-between gap-3  ">
+        <div className="px-4 sm:px-5 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-r from-white via-slate-50/60 dark:via-slate-950/40  flex flex-wrap items-center justify-between gap-3  ">
           <div className="min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-400 mb-0.5">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary dark:text-primary mb-0.5">
               Full catalog · reading order
             </div>
             <div className="text-base font-bold tracking-tight text-foreground">
@@ -342,13 +342,13 @@ export default function ModuleQuestionsAccordion({
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground">
               <span className="inline-flex items-center gap-1">
-                <BookOpen className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
+                <BookOpen className="h-3.5 w-3.5 text-primary dark:text-primary" />
                 <span className="font-bold text-foreground">{totalQuestions}</span>{" "}
                 questions
               </span>
               <span className="text-muted-foreground">·</span>
               <span className="inline-flex items-center gap-1">
-                <Layers className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
+                <Layers className="h-3.5 w-3.5 text-primary dark:text-primary" />
                 <span className="font-bold text-foreground">{groups.length}</span> topics
               </span>
             </div>
@@ -381,7 +381,7 @@ export default function ModuleQuestionsAccordion({
                 {pillarLabel}
               </div>
             )}
-            <h3 className="text-base md:text-lg font-black text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors leading-snug">
+            <h3 className="text-base md:text-lg font-black text-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors leading-snug">
               {moduleTitle}
             </h3>
             <div className="mt-1 flex items-center gap-3 text-[12px] text-muted-foreground">
@@ -399,7 +399,7 @@ export default function ModuleQuestionsAccordion({
           <Link
             href={`/${seoSlug}`}
             onClick={(e) => e.stopPropagation()}
-            className="hidden sm:inline-flex shrink-0 items-center gap-1 px-3 py-1.5 rounded-md bg-background border border-border text-blue-600 dark:text-blue-400 text-[11px] font-bold uppercase tracking-wider hover:border-blue-400 dark:border-blue-700 hover:bg-blue-50 dark:bg-blue-500/10 transition-colors"
+            className="hidden sm:inline-flex shrink-0 items-center gap-1 px-3 py-1.5 rounded-md bg-background border border-border text-primary dark:text-primary text-[11px] font-bold uppercase tracking-wider hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 transition-colors"
           >
             Open module
             <ChevronRight className="h-3.5 w-3.5" />
@@ -408,8 +408,8 @@ export default function ModuleQuestionsAccordion({
             className={cn(
               "w-8 h-8 rounded-full border flex items-center justify-center transition-all shrink-0",
               moduleOpen
-                ? "border-blue-400 dark:border-blue-700 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                : "border-border bg-background text-muted-foreground group-hover:border-blue-300 dark:border-blue-700 group-hover:text-blue-500 dark:text-blue-400",
+                ? "border-default dark:border-default bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary"
+                : "border-border bg-background text-muted-foreground group-hover:border-default dark:border-default group-hover:text-primary dark:group-hover:text-primary",
             )}
           >
             <ChevronDown

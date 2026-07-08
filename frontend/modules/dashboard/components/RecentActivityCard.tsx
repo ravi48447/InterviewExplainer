@@ -32,7 +32,7 @@ export function RecentActivityCard({
         <div className="space-y-1.5 flex-1 flex flex-col justify-center">
           {recentActivity.slice(0, 5).map((act, i) => (
             <div key={i} className="flex items-start gap-3 p-2 rounded-lg hover:bg-surface transition-colors duration-150">
-              <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-800 shrink-0 ring-4 ring-emerald-500/10" />
+              <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-800 shrink-0 ring-4 ring-ring/10" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-primary leading-relaxed">
                   {act.title}
@@ -46,7 +46,7 @@ export function RecentActivityCard({
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center py-6 text-center">
           <Activity className="h-7 w-7 mx-auto mb-2 text-muted-foreground" aria-hidden="true" />
-          <p className="text-xs text-secondary">{isGuest ? 'Sign in to track activity.' : 'Complete questions to see activity.'}</p>
+          <p className="text-xs text-muted-foreground">{isGuest ? 'Sign in to track activity.' : 'Complete questions to see activity.'}</p>
         </div>
       )}
     </Card>

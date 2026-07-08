@@ -185,7 +185,7 @@ export default function SpeakableReviewPage() {
             <code className="bg-surface px-1 rounded">YOUR_KEY</code> matches the
             server-side env var <code className="bg-surface px-1 rounded">SPEAKABLE_ADMIN_KEY</code>.
           </p>
-          <p className="mt-4 text-[12px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded px-3 py-2">
+          <p className="mt-4 text-[12px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-default dark:border-default/20 rounded px-3 py-2">
             <strong>Dev-only:</strong> this gate is not production-grade. See HUMAN-REVIEW-QUEUE.md AUTH-1.
           </p>
         </div>
@@ -209,7 +209,7 @@ export default function SpeakableReviewPage() {
           <code className="bg-surface px-1 rounded">complete-qa.json</code> on disk.
         </p>
         {listError && (
-          <p className="mt-3 text-[12px] text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded px-3 py-2">
+          <p className="mt-3 text-[12px] text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-default dark:border-default/20 rounded px-3 py-2">
             Failed to load queue: {listError}
           </p>
         )}
@@ -221,9 +221,9 @@ export default function SpeakableReviewPage() {
                 className={
                   "px-2.5 py-1 rounded-full border font-semibold " +
                   (k === "pending_review"
-                    ? "border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400"
+                    ? "border-default dark:border-default/30 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400"
                     : k === "approved"
-                      ? "border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400"
+                      ? "border-default dark:border-default/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400"
                       : "border-border bg-background text-foreground")
                 }
               >
@@ -291,7 +291,7 @@ export default function SpeakableReviewPage() {
             </div>
           )}
           {activeSlug && detailError && (
-            <div className="bg-background rounded-xl border border-red-200 dark:border-red-500/20 p-6 shadow-sm">
+            <div className="bg-background rounded-xl border border-default dark:border-default/20 p-6 shadow-sm">
               <p className="text-red-700 dark:text-red-400 text-sm">Failed to load detail: {detailError}</p>
             </div>
           )}
@@ -361,7 +361,7 @@ export default function SpeakableReviewPage() {
                     legacyVariant="preview"
                   />
                 </div>
-                <div className="bg-background rounded-xl border border-emerald-200 dark:border-emerald-500/20 p-5 shadow-sm">
+                <div className="bg-background rounded-xl border border-default dark:border-default/20 p-5 shadow-sm">
                   <p className="text-[11px] uppercase tracking-[0.15em] text-emerald-700 dark:text-emerald-400 mb-3 font-semibold">
                     v2 (forced render)
                   </p>
@@ -410,7 +410,7 @@ export default function SpeakableReviewPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => submitDecision("send_back")}
-                    className="px-4 py-2 rounded-md bg-slate-700 text-white font-semibold text-[13px] hover:dark:bg-surface disabled:opacity-50"
+                    className="px-4 py-2 rounded-md bg-slate-700 text-foreground font-semibold text-[13px] hover:dark:bg-surface disabled:opacity-50"
                   >
                     Send back to agent
                   </button>

@@ -162,7 +162,7 @@ export const LAUNCH_QUICK_PATHS: LaunchQuickPath[] = [
     title:  'DSA Interview Prep',
     level:  'All Levels',
     topics: 'Arrays • Trees • Graphs • DP • Backtracking • Java & Python',
-    gradient: 'from-violet-500 to-purple-600',
+    gradient: 'from-blue-500 to-blue-600',
     href:   '/dsa',
     icon:   'layers',
   },

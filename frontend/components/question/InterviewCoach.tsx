@@ -78,7 +78,7 @@ export function InterviewCoach({ timeToAnswer, interviewerExpects }: InterviewCo
                                 "h-4 w-4 rounded-full border flex items-center justify-center transition-all",
                                 item.completed ? "bg-green-500 dark:bg-green-800 border-green-500 dark:border-green-700" : "border-white/20"
                             )}>
-                                {item.completed && <CheckCircle2 className="h-3 w-3 text-white" />}
+                                {item.completed && <CheckCircle2 className="h-3 w-3 text-foreground" />}
                             </div>
                             <span className="text-[11px] font-semibold">{item.text}</span>
                         </button>
@@ -88,7 +88,7 @@ export function InterviewCoach({ timeToAnswer, interviewerExpects }: InterviewCo
 
             {/* Reward/XP */}
             <div className="space-y-4 pt-8 mt-auto">
-                <div className="p-5 rounded-2xl bg-gradient-to-br from-yellow-50 dark:from-yellow-950/400/10 to-transparent border border-yellow-500 dark:border-yellow-700/20 text-center relative overflow-hidden group">
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-yellow-50 dark:from-yellow-950/40/10 to-transparent border border-yellow-500 dark:border-yellow-700/20 text-center relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:scale-110 transition-transform">
                         <Trophy className="h-12 w-12 text-yellow-500 dark:text-yellow-400" />
                     </div>

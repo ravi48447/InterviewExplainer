@@ -59,7 +59,7 @@ export function emailShell(heading: string, body: string, ctaText: string, ctaUr
   <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#0f172a">
     <h1 style="font-size:20px;font-weight:800;margin:0 0 12px">${heading}</h1>
     <p style="font-size:14px;line-height:1.6;color:#475569;margin:0 0 20px">${body}</p>
-    <a href="${ctaUrl}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px">${ctaText}</a>
+    <a href="${ctaUrl}" style="display:inline-block;background:#2563EB;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px">${ctaText}</a>
     <p style="font-size:12px;color:#94a3b8;margin:24px 0 0">If you didn't request this, you can safely ignore this email. This link expires in 1 hour.</p>
   </div>`;
 }
