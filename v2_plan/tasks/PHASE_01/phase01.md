@@ -1,3966 +1,2876 @@
-# PHASE 02 — ROOT SEO, INDEXING, ROUTING & URL ARCHITECTURE REBUILD
+# PHASE 01 — ROOT UI ARCHITECTURE & DESIGN SYSTEM REBUILD
 
 ## Phase Objective
 
-Rebuild the technical SEO, URL, crawlability, indexability and search-discovery foundation of Interview Explainer.
+Rebuild the visual and structural UI foundation of Interview Explainer so every later V2 page can inherit a calm, readable, consistent and maintainable interface.
 
-The objective is not to manually add SEO fields to thousands of pages.
+The current UI problems should not be fixed through hundreds of isolated page-specific CSS patches.
 
-The objective is to create one canonical architecture that determines:
+The root causes must be addressed first.
 
-* which pages exist,
-* which URLs are public,
-* which URLs are canonical,
-* which pages should be indexed,
-* which pages should not be indexed,
-* how crawlers discover pages,
-* how sitemaps are generated,
-* how metadata is generated,
-* how structured data is generated,
-* how duplicate URLs are prevented,
-* how redirects are handled,
-* how internal links expose the site hierarchy,
-* how search engines reach deep content,
-* how content remains server-visible,
-* how indexing failures are detected.
+Phase 01 focuses on:
 
-The central principle is:
+* global styling architecture,
+* semantic design tokens,
+* typography,
+* reading experience,
+* spacing,
+* page widths,
+* surfaces,
+* density reduction,
+* shared primitives,
+* reusable content components,
+* light and dark themes,
+* responsive foundations,
+* interaction states,
+* accessibility foundations,
+* removal of duplicate and conflicting UI systems.
+
+This phase does **not** fully redesign every route.
+
+Instead, it creates the canonical V2 UI system that later phases will apply to:
+
+* global application shell,
+* question pages,
+* content hubs,
+* public route families,
+* authentication,
+* dashboard,
+* practice,
+* search.
+
+---
+
+# Workstream A — UI Architecture Foundation
+
+## P01-T001 — Establish Canonical V2 UI Architecture
+
+Define the permanent hierarchy between:
+
+* design tokens,
+* global styles,
+* shared primitives,
+* composite components,
+* feature components,
+* page layouts,
+* route-specific presentation.
+
+**Priority:** P0
+
+---
+
+## P01-T002 — Define UI Ownership Boundaries
+
+Determine which styling belongs in:
+
+* global CSS,
+* Tailwind configuration,
+* component variants,
+* layout components,
+* route-specific components.
+
+**Priority:** P0
+
+---
+
+## P01-T003 — Establish V2 Component Layering Model
+
+Organize components into:
 
 ```text
-CONTENT ENTITY
-      ↓
-CANONICAL ROUTE REGISTRY
-      ↓
-CANONICAL PUBLIC URL
-      ↓
-INDEXABILITY POLICY
-      ↓
-SERVER-RENDERED PAGE
-      ↓
-METADATA
-      ↓
-STRUCTURED DATA
-      ↓
-SITEMAP
-      ↓
-INTERNAL LINKS
-      ↓
-SEARCH ENGINE DISCOVERY
+PRIMITIVES
+    ↓
+COMPOSITES
+    ↓
+CONTENT COMPONENTS
+    ↓
+FEATURE COMPONENTS
+    ↓
+PAGE COMPOSITION
 ```
 
-SEO must become a system, not a collection of page-specific patches.
-
----
-
-# Workstream A — Canonical SEO Architecture
-
-## P02-T001 — Establish Canonical SEO Architecture
-
-Define the permanent relationship between:
-
-* route entities,
-* URL generation,
-* metadata,
-* canonical URLs,
-* indexability,
-* sitemaps,
-* structured data,
-* internal linking.
-
 **Priority:** P0
 
 ---
 
-## P02-T002 — Establish SEO Ownership Boundaries
+## P01-T004 — Establish Canonical UI Import Boundaries
 
-Define which SEO responsibilities belong to:
-
-* route registry,
-* page templates,
-* metadata factory,
-* sitemap system,
-* structured-data system,
-* content source,
-* backend.
-
-**Priority:** P0
-
----
-
-## P02-T003 — Create Canonical SEO Module Structure
-
-Organize reusable SEO logic into clear modules.
-
-**Priority:** P0
-
----
-
-## P02-T004 — Remove SEO Logic from Arbitrary UI Components
-
-Prevent presentation components from independently generating canonical SEO behavior.
-
-**Priority:** P0
-
----
-
-## P02-T005 — Establish SEO Configuration Source
-
-Create one canonical source for:
-
-* production origin,
-* site name,
-* default metadata,
-* social identity,
-* indexing defaults.
-
-**Priority:** P0
-
----
-
-## P02-T006 — Establish Environment-Safe SEO Behavior
-
-Prevent local, preview or staging environments from accidentally behaving as canonical production.
-
-**Priority:** P0
-
----
-
-## P02-T007 — Establish SEO Failure Philosophy
-
-Critical SEO generation failures must fail visibly during development rather than silently generating invalid URLs.
+Prevent pages from bypassing shared V2 primitives unnecessarily.
 
 **Priority:** P1
 
 ---
 
-## P02-T008 — Establish SEO Type Safety
+## P01-T005 — Establish Shared Component Naming Convention
 
-Use explicit types for route families, entities and SEO configuration.
-
-**Priority:** P1
-
----
-
-## P02-T009 — Establish SEO Utility Naming Convention
-
-Prevent overlapping helper functions.
+Create predictable naming for canonical V2 components.
 
 **Priority:** P2
 
 ---
 
-## P02-T010 — Establish SEO Deprecation Strategy
+## P01-T006 — Establish Component Variant Strategy
 
-Mark legacy SEO helpers for removal during migration.
+Define how visual variants are implemented without creating duplicate components.
 
 **Priority:** P1
 
 ---
 
-# Workstream B — Canonical Site Origin
+## P01-T007 — Establish Component Size Strategy
 
-## P02-T011 — Define Production Site Origin
+Standardize compact, default and large sizing where meaningful.
 
-Create one canonical production origin.
+**Priority:** P1
+
+---
+
+## P01-T008 — Establish Component State Strategy
+
+Standardize:
+
+* default,
+* hover,
+* active,
+* focus,
+* disabled,
+* loading,
+* selected,
+* error.
 
 **Priority:** P0
 
 ---
 
-## P02-T012 — Eliminate Conflicting Base URL Definitions
+## P01-T009 — Establish UI Deprecation Mechanism
 
-Remove duplicate production URL constants.
+Mark legacy UI components clearly during migration.
+
+**Priority:** P1
+
+---
+
+## P01-T010 — Prevent New Legacy Styling During V2 Migration
+
+Add development conventions that prevent new arbitrary styling patterns.
+
+**Priority:** P1
+
+---
+
+# Workstream B — Global CSS & Styling Architecture
+
+## P01-T011 — Reorganize Global CSS
+
+Separate:
+
+* reset/base styles,
+* tokens,
+* typography,
+* content styles,
+* utilities,
+* theme behavior.
 
 **Priority:** P0
 
 ---
 
-## P02-T013 — Normalize WWW Policy
+## P01-T012 — Remove Conflicting Global Style Rules
 
-Choose and enforce the canonical hostname form.
-
-**Priority:** P0
-
----
-
-## P02-T014 — Normalize HTTPS Policy
-
-Ensure canonical URLs always use the production HTTPS scheme.
+Eliminate global selectors that unexpectedly override component behavior.
 
 **Priority:** P0
 
 ---
 
-## P02-T015 — Normalize Trailing Slash Policy
+## P01-T013 — Remove Obsolete Global V1 Styles
 
-Choose one canonical trailing-slash behavior.
+Delete confirmed unused legacy rules after dependency verification.
+
+**Priority:** P1
+
+---
+
+## P01-T014 — Consolidate Duplicate CSS Variables
+
+Create one canonical token source.
 
 **Priority:** P0
 
 ---
 
-## P02-T016 — Normalize URL Case Policy
+## P01-T015 — Remove Uncontrolled Global Element Styling
 
-Prevent case-based duplicate URLs.
+Prevent generic selectors from causing route-specific inconsistencies.
 
-**Priority:** P0
+**Priority:** P1
 
 ---
 
-## P02-T017 — Normalize Default Port Behavior
+## P01-T016 — Normalize Browser Base Behavior
 
-Prevent malformed canonical origins.
+Establish predictable:
+
+* box sizing,
+* margins,
+* typography inheritance,
+* media behavior,
+* form behavior.
+
+**Priority:** P1
+
+---
+
+## P01-T017 — Standardize Selection Styling
+
+Create theme-compatible text selection behavior.
+
+**Priority:** P3
+
+---
+
+## P01-T018 — Standardize Scroll Behavior
+
+Ensure predictable navigation and anchor behavior.
 
 **Priority:** P2
 
 ---
 
-## P02-T018 — Prevent Localhost Canonicals
+## P01-T019 — Standardize Scrollbar Treatment
 
-Ensure development configuration cannot leak into production metadata.
+Use restrained styling only where appropriate.
 
-**Priority:** P0
-
----
-
-## P02-T019 — Prevent Preview-Domain Canonicals
-
-Ensure deployment preview URLs never become canonical production URLs.
-
-**Priority:** P0
+**Priority:** P3
 
 ---
 
-## P02-T020 — Create Canonical Absolute URL Builder
+## P01-T020 — Establish Global Overflow Protection
 
-All absolute public URLs should use one implementation.
-
-**Priority:** P0
-
----
-
-# Workstream C — Canonical Route Registry
-
-## P02-T021 — Build Canonical Public Route Registry
-
-Create the authoritative registry of public route families.
-
-**Priority:** P0
-
----
-
-## P02-T022 — Define Homepage Route Contract
-
-Establish canonical behavior for the root route.
-
-**Priority:** P0
-
----
-
-## P02-T023 — Define Domain Route Contract
-
-Establish canonical domain URL generation.
-
-**Priority:** P0
-
----
-
-## P02-T024 — Define Stack Route Contract
-
-Establish canonical stack URL generation.
-
-**Priority:** P0
-
----
-
-## P02-T025 — Define Pillar Route Contract
-
-Establish canonical pillar URL generation.
-
-**Priority:** P0
-
----
-
-## P02-T026 — Define Module Route Contract
-
-Establish canonical module URL generation.
-
-**Priority:** P0
-
----
-
-## P02-T027 — Define Question Route Contract
-
-Establish one canonical public question URL.
-
-**Priority:** P0
-
----
-
-## P02-T028 — Define Topic Route Contract
-
-Establish canonical topic URL behavior.
-
-**Priority:** P0
-
----
-
-## P02-T029 — Define Company Route Contract
-
-Establish canonical company URL behavior.
-
-**Priority:** P0
-
----
-
-## P02-T030 — Define Comparison Route Contract
-
-Establish canonical comparison URL behavior.
+Prevent common horizontal page overflow without hiding legitimate component defects.
 
 **Priority:** P1
 
 ---
 
-## P02-T031 — Define Tool Route Contract
+# Workstream C — Semantic Color Architecture
 
-Establish canonical tool URL behavior.
+## P01-T021 — Remove Arbitrary Global Color Architecture
+
+Replace uncontrolled page-level color decisions with semantic roles.
+
+**Priority:** P0
+
+---
+
+## P01-T022 — Implement Background Color Tokens
+
+Define:
+
+* application background,
+* elevated background,
+* muted background,
+* reading background.
+
+**Priority:** P0
+
+---
+
+## P01-T023 — Implement Surface Color Tokens
+
+Create canonical surfaces for intentional grouping.
+
+**Priority:** P0
+
+---
+
+## P01-T024 — Implement Text Color Hierarchy
+
+Define:
+
+* primary text,
+* secondary text,
+* muted text,
+* disabled text,
+* inverse text.
+
+**Priority:** P0
+
+---
+
+## P01-T025 — Implement Border Color Hierarchy
+
+Define subtle and strong boundary roles.
+
+**Priority:** P0
+
+---
+
+## P01-T026 — Implement Primary Action Color Tokens
+
+Create one controlled primary interaction system.
+
+**Priority:** P0
+
+---
+
+## P01-T027 — Implement Semantic Success Colors
+
+Use success color only where semantic meaning exists.
 
 **Priority:** P1
 
 ---
 
-## P02-T032 — Define Roadmap Route Contract
+## P01-T028 — Implement Semantic Warning Colors
 
-Establish canonical roadmap URL behavior.
-
-**Priority:** P1
-
----
-
-## P02-T033 — Define Cheatsheet Route Contract
-
-Establish canonical cheatsheet URL behavior.
+Prevent warning colors from becoming decorative noise.
 
 **Priority:** P1
 
 ---
 
-## P02-T034 — Define DSA Hub Route Contract
+## P01-T029 — Implement Semantic Error Colors
 
-Establish canonical DSA hierarchy URLs.
-
-**Priority:** P0
-
----
-
-## P02-T035 — Define DSA Problem Route Contract
-
-Establish canonical problem URLs.
-
-**Priority:** P0
-
----
-
-## P02-T036 — Define Career Content Route Contract
-
-Establish canonical career-content URLs.
+Standardize destructive and validation states.
 
 **Priority:** P1
 
 ---
 
-## P02-T037 — Define Behavioral Content Route Contract
+## P01-T030 — Implement Semantic Information Colors
 
-Establish canonical behavioral interview URLs.
-
-**Priority:** P1
-
----
-
-## P02-T038 — Define Static Information Route Contracts
-
-Establish canonical URLs for stable informational pages.
-
-**Priority:** P1
-
----
-
-## P02-T039 — Define Authentication Route Classification
-
-Explicitly separate authentication routes from public SEO routes.
-
-**Priority:** P0
-
----
-
-## P02-T040 — Define Dashboard Route Classification
-
-Explicitly classify private application routes.
-
-**Priority:** P0
-
----
-
-## P02-T041 — Define Internal Route Classification
-
-Prevent internal rendering routes from entering public SEO systems.
-
-**Priority:** P0
-
----
-
-## P02-T042 — Define Development Route Classification
-
-Exclude development-only pages from production discovery.
-
-**Priority:** P0
-
----
-
-## P02-T043 — Implement Route Registry Type Safety
-
-Prevent unknown route families from silently generating URLs.
-
-**Priority:** P1
-
----
-
-## P02-T044 — Implement Route Registry Validation
-
-Detect duplicate route patterns.
-
-**Priority:** P0
-
----
-
-## P02-T045 — Replace Scattered Route Constants
-
-Migrate public URL generation to the canonical registry.
-
-**Priority:** P0
-
----
-
-# Workstream D — Canonical URL Generation
-
-## P02-T046 — Build Canonical URL Generator
-
-Create the central entity-to-public-URL implementation.
-
-**Priority:** P0
-
----
-
-## P02-T047 — Build Canonical Domain URL Generator
-
-**Priority:** P0
-
----
-
-## P02-T048 — Build Canonical Stack URL Generator
-
-**Priority:** P0
-
----
-
-## P02-T049 — Build Canonical Pillar URL Generator
-
-**Priority:** P0
-
----
-
-## P02-T050 — Build Canonical Module URL Generator
-
-**Priority:** P0
-
----
-
-## P02-T051 — Build Canonical Question URL Generator
-
-**Priority:** P0
-
----
-
-## P02-T052 — Build Canonical Topic URL Generator
-
-**Priority:** P0
-
----
-
-## P02-T053 — Build Canonical Company URL Generator
-
-**Priority:** P0
-
----
-
-## P02-T054 — Build Canonical Comparison URL Generator
-
-**Priority:** P1
-
----
-
-## P02-T055 — Build Canonical Tool URL Generator
-
-**Priority:** P1
-
----
-
-## P02-T056 — Build Canonical Roadmap URL Generator
-
-**Priority:** P1
-
----
-
-## P02-T057 — Build Canonical Cheatsheet URL Generator
-
-**Priority:** P1
-
----
-
-## P02-T058 — Build Canonical DSA URL Generators
-
-**Priority:** P0
-
----
-
-## P02-T059 — Build Canonical Static Page URL Generator
-
-**Priority:** P1
-
----
-
-## P02-T060 — Reject Invalid URL Parameters
-
-Prevent malformed URLs from being generated.
-
-**Priority:** P0
-
----
-
-## P02-T061 — Normalize Slugs During URL Generation
-
-Use canonical slug rules.
-
-**Priority:** P0
-
----
-
-## P02-T062 — Encode Dynamic URL Segments Safely
-
-Prevent malformed route generation.
-
-**Priority:** P1
-
----
-
-## P02-T063 — Prevent Double Slash Generation
-
-**Priority:** P1
-
----
-
-## P02-T064 — Prevent Duplicate Path Segment Generation
-
-**Priority:** P1
-
----
-
-## P02-T065 — Prevent Query Parameters from Becoming Canonical by Default
-
-**Priority:** P0
-
----
-
-## P02-T066 — Migrate Navigation URLs to Canonical Generators
-
-**Priority:** P0
-
----
-
-## P02-T067 — Migrate Breadcrumb URLs to Canonical Generators
-
-**Priority:** P0
-
----
-
-## P02-T068 — Migrate Related-Content URLs to Canonical Generators
-
-**Priority:** P0
-
----
-
-## P02-T069 — Migrate Search Result URLs to Canonical Generators
-
-**Priority:** P0
-
----
-
-## P02-T070 — Migrate Sitemap URLs to Canonical Generators
-
-**Priority:** P0
-
----
-
-## P02-T071 — Migrate Structured-Data URLs to Canonical Generators
-
-**Priority:** P0
-
----
-
-## P02-T072 — Remove Legacy URL Builders
-
-Delete obsolete implementations after migration.
-
-**Priority:** P0
-
----
-
-# Workstream E — Slug Architecture
-
-## P02-T073 — Establish Canonical Slug Policy
-
-Define normalization rules.
-
-**Priority:** P0
-
----
-
-## P02-T074 — Establish Stable Slug Ownership
-
-Determine which content source owns each public slug.
-
-**Priority:** P0
-
----
-
-## P02-T075 — Prevent Runtime Slug Drift
-
-Avoid generating different URLs from mutable presentation labels.
-
-**Priority:** P0
-
----
-
-## P02-T076 — Detect Duplicate Slugs
-
-Identify collisions within route scopes.
-
-**Priority:** P0
-
----
-
-## P02-T077 — Detect Cross-Hierarchy Slug Ambiguity
-
-Prevent incorrect entity resolution.
-
-**Priority:** P0
-
----
-
-## P02-T078 — Preserve Historical Slugs Where Required
-
-Avoid unnecessary loss of existing search equity.
-
-**Priority:** P0
-
----
-
-## P02-T079 — Create Slug Migration Mapping
-
-Map changed legacy slugs to canonical replacements.
-
-**Priority:** P0
-
----
-
-## P02-T080 — Implement Slug Validation
-
-Reject invalid public identifiers.
-
-**Priority:** P1
-
----
-
-## P02-T081 — Prevent Empty Slug Generation
-
-**Priority:** P0
-
----
-
-## P02-T082 — Prevent Unstable Array Indexes from Becoming Public Identity
-
-**Priority:** P0
-
----
-
-## P02-T083 — Separate Display Names from Public Slugs
-
-**Priority:** P0
-
----
-
-## P02-T084 — Establish Slug Change Procedure
-
-Require redirect planning for future public slug changes.
-
-**Priority:** P1
-
----
-
-# Workstream F — Public URL Resolution
-
-## P02-T085 — Build Canonical Entity Resolver
-
-Resolve URL parameters to canonical content entities.
-
-**Priority:** P0
-
----
-
-## P02-T086 — Distinguish Not Found from Temporary Data Failure
-
-Prevent false 404 behavior.
-
-**Priority:** P0
-
----
-
-## P02-T087 — Return True 404 for Missing Public Entities
-
-Avoid soft 404 pages.
-
-**Priority:** P0
-
----
-
-## P02-T088 — Redirect Noncanonical Valid URLs
-
-Send valid aliases to canonical public URLs.
-
-**Priority:** P0
-
----
-
-## P02-T089 — Prevent Duplicate Entity Resolution
-
-Ensure one entity cannot resolve unpredictably through multiple active paths.
-
-**Priority:** P0
-
----
-
-## P02-T090 — Validate Parent-Child Route Relationships
-
-Ensure question URLs resolve to the correct hierarchy.
-
-**Priority:** P0
-
----
-
-## P02-T091 — Handle Renamed Entities Safely
-
-Preserve valid historical links.
-
-**Priority:** P1
-
----
-
-## P02-T092 — Handle Removed Entities Safely
-
-Choose correct 404 or redirect behavior.
-
-**Priority:** P1
-
----
-
-## P02-T093 — Remove Accidental Fallback-to-Homepage Behavior
-
-Missing content must not masquerade as the homepage.
-
-**Priority:** P0
-
----
-
-## P02-T094 — Remove Generic 200 Responses for Missing Content
-
-Prevent soft 404 indexing problems.
-
-**Priority:** P0
-
----
-
-# Workstream G — Redirect Architecture
-
-## P02-T095 — Create Canonical Redirect Registry
-
-Centralize intentional permanent URL migrations.
-
-**Priority:** P0
-
----
-
-## P02-T096 — Classify Existing Redirects
-
-Classify as:
-
-* required,
-* obsolete,
-* temporary,
-* incorrect,
-* unknown.
-
-**Priority:** P0
-
----
-
-## P02-T097 — Convert Permanent Migrations to Permanent Redirects
-
-Use appropriate status behavior.
-
-**Priority:** P0
-
----
-
-## P02-T098 — Remove Unnecessary Redirect Chains
-
-Reduce crawler and user latency.
-
-**Priority:** P0
-
----
-
-## P02-T099 — Remove Redirect Loops
-
-**Priority:** P0
-
----
-
-## P02-T100 — Prevent Sitemap URLs from Redirecting
-
-Sitemaps should list final canonical URLs.
-
-**Priority:** P0
-
----
-
-## P02-T101 — Prevent Internal Links from Targeting Redirects
-
-Update internal links to canonical destinations.
-
-**Priority:** P0
-
----
-
-## P02-T102 — Preserve High-Value Legacy URLs
-
-Redirect retired URLs when a meaningful replacement exists.
-
-**Priority:** P0
-
----
-
-## P02-T103 — Avoid Irrelevant Mass Redirects
-
-Do not redirect unrelated removed content to generic pages.
-
-**Priority:** P0
-
----
-
-## P02-T104 — Establish Redirect Retirement Policy
-
-Define when temporary compatibility redirects can be removed.
+Create restrained informational emphasis.
 
 **Priority:** P2
 
 ---
 
-# Workstream H — Rewrite Architecture
+## P01-T031 — Implement Difficulty Color Semantics
 
-## P02-T105 — Audit Internal Rewrites Against Canonical URLs
-
-Ensure rewrites do not create public duplicate identities.
-
-**Priority:** P0
-
----
-
-## P02-T106 — Separate Internal Rendering Paths from Public URLs
-
-Keep implementation details invisible to crawlers.
-
-**Priority:** P0
-
----
-
-## P02-T107 — Prevent Internal Rewrite Targets from Entering Sitemaps
-
-**Priority:** P0
-
----
-
-## P02-T108 — Prevent Internal Rewrite Targets from Becoming Canonical
-
-**Priority:** P0
-
----
-
-## P02-T109 — Prevent Internal Rewrite Targets from Internal Linking
-
-**Priority:** P0
-
----
-
-## P02-T110 — Remove Obsolete Rewrites
-
-Delete unnecessary compatibility layers.
+Standardize easy, medium and hard indicators without overpowering content.
 
 **Priority:** P1
 
 ---
 
-## P02-T111 — Document Required Rewrite Contracts
+## P01-T032 — Remove Decorative Rainbow Color Usage
 
-Protect intentional public-to-internal routing.
-
-**Priority:** P1
-
----
-
-# Workstream I — Indexability Policy Engine
-
-## P02-T112 — Build Canonical Indexability Policy
-
-Create one decision system for whether a route should be indexed.
+Reduce unnecessary multi-colour visual competition.
 
 **Priority:** P0
 
 ---
 
-## P02-T113 — Define Homepage Indexability
+## P01-T033 — Remove Hard-Coded Hex Values from Shared UI
+
+Migrate shared components to semantic tokens.
 
 **Priority:** P0
 
 ---
 
-## P02-T114 — Define Domain Page Indexability
+## P01-T034 — Remove Hard-Coded Framework Palette Usage from Canonical Components
+
+Prevent canonical V2 components from depending on arbitrary palette values.
 
 **Priority:** P0
 
 ---
 
-## P02-T115 — Define Stack Page Indexability
+## P01-T035 — Validate Semantic Color Contrast
+
+Ensure tokens support readable text and controls.
 
 **Priority:** P0
 
 ---
 
-## P02-T116 — Define Pillar Page Indexability
+# Workstream D — Light Theme Rebuild
+
+## P01-T036 — Rebuild V2 Light Application Background
+
+Create a calm base suitable for long reading sessions.
 
 **Priority:** P0
 
 ---
 
-## P02-T117 — Define Module Page Indexability
+## P01-T037 — Rebuild Light Surface Hierarchy
+
+Ensure cards and sections do not all appear equally elevated.
 
 **Priority:** P0
 
 ---
 
-## P02-T118 — Define Question Page Indexability
+## P01-T038 — Rebuild Light Text Hierarchy
+
+Improve contrast without making every element visually heavy.
 
 **Priority:** P0
 
 ---
 
-## P02-T119 — Define Topic Page Indexability
+## P01-T039 — Rebuild Light Border Treatment
+
+Reduce excessive visible boxes.
 
 **Priority:** P0
 
 ---
 
-## P02-T120 — Define Company Page Indexability
+## P01-T040 — Rebuild Light Interactive States
 
-**Priority:** P0
-
----
-
-## P02-T121 — Define Comparison Page Indexability
-
-**Priority:** P1
-
----
-
-## P02-T122 — Define Tool Page Indexability
+Standardize hover, active and selected states.
 
 **Priority:** P1
 
 ---
 
-## P02-T123 — Define Roadmap Page Indexability
+## P01-T041 — Rebuild Light Code Presentation Foundation
+
+Prepare comfortable code contrast.
 
 **Priority:** P1
 
 ---
 
-## P02-T124 — Define Cheatsheet Page Indexability
+## P01-T042 — Rebuild Light Educational Callout Foundation
+
+Create restrained semantic emphasis.
 
 **Priority:** P1
 
 ---
 
-## P02-T125 — Define DSA Page Indexability
+## P01-T043 — Remove Pure-White Surface Overuse
 
-**Priority:** P0
-
----
-
-## P02-T126 — Define Authentication Page Indexability
-
-**Priority:** P0
-
----
-
-## P02-T127 — Define Dashboard Indexability
-
-**Priority:** P0
-
----
-
-## P02-T128 — Define Search Result Page Indexability
-
-Prevent uncontrolled internal-search result indexing.
-
-**Priority:** P0
-
----
-
-## P02-T129 — Define Filtered Page Indexability
-
-Prevent faceted URL explosion.
-
-**Priority:** P0
-
----
-
-## P02-T130 — Define Pagination Indexability
-
-Choose deliberate behavior.
+Use hierarchy rather than stacking identical white boxes.
 
 **Priority:** P1
 
 ---
 
-## P02-T131 — Define Preview Page Indexability
+## P01-T044 — Validate Long-Form Light Reading Comfort
+
+Review sustained content reading rather than only component screenshots.
 
 **Priority:** P0
 
 ---
 
-## P02-T132 — Define Development Page Indexability
+# Workstream E — Dark Theme Rebuild
+
+## P01-T045 — Rebuild V2 Dark Application Background
+
+Create a comfortable dark foundation.
 
 **Priority:** P0
 
 ---
 
-## P02-T133 — Define Empty Page Indexability
+## P01-T046 — Rebuild Dark Surface Hierarchy
 
-Prevent empty pages from being submitted for indexing.
-
-**Priority:** P0
-
----
-
-## P02-T134 — Define Thin Generated Page Indexability
-
-Require minimum useful content.
+Avoid excessive layers of differently coloured dark cards.
 
 **Priority:** P0
 
 ---
 
-## P02-T135 — Implement Indexability Resolver
+## P01-T047 — Rebuild Dark Text Hierarchy
 
-Generate robots behavior from route policy.
-
-**Priority:** P0
-
----
-
-## P02-T136 — Prevent Conflicting Indexability Signals
-
-Avoid `noindex` pages appearing in sitemaps.
+Avoid both low contrast and excessively bright text.
 
 **Priority:** P0
 
 ---
 
-## P02-T137 — Prevent Indexable Pages from Being Robots-Blocked
+## P01-T048 — Rebuild Dark Border Treatment
 
-Ensure crawlers can access pages intended for indexing.
-
-**Priority:** P0
-
----
-
-## P02-T138 — Remove Accidental Noindex Directives
+Use restrained boundaries.
 
 **Priority:** P0
 
 ---
 
-## P02-T139 — Remove Accidental Nofollow Directives
+## P01-T049 — Rebuild Dark Interactive States
 
-**Priority:** P0
-
----
-
-# Workstream J — robots.txt Architecture
-
-## P02-T140 — Rebuild Canonical robots.txt
-
-Generate crawler rules intentionally.
-
-**Priority:** P0
-
----
-
-## P02-T141 — Reference Canonical Sitemap Location
-
-**Priority:** P0
-
----
-
-## P02-T142 — Allow Crawl of Public Indexable Content
-
-**Priority:** P0
-
----
-
-## P02-T143 — Block Truly Internal Crawl Surfaces Where Appropriate
+Create clear but calm interaction feedback.
 
 **Priority:** P1
 
 ---
 
-## P02-T144 — Avoid Blocking Resources Required for Rendering
+## P01-T050 — Rebuild Dark Code Presentation Foundation
 
-**Priority:** P0
-
----
-
-## P02-T145 — Remove Obsolete Robots Rules
+Ensure code remains readable without visual dominance.
 
 **Priority:** P1
 
 ---
 
-## P02-T146 — Validate Production robots.txt Separately from Development Behavior
+## P01-T051 — Rebuild Dark Educational Callout Foundation
 
-**Priority:** P0
-
----
-
-# Workstream K — Metadata Factory
-
-## P02-T147 — Build Canonical Metadata Factory
-
-Create one reusable metadata generation system.
-
-**Priority:** P0
-
----
-
-## P02-T148 — Define Site-Wide Metadata Defaults
-
-**Priority:** P0
-
----
-
-## P02-T149 — Define Metadata Fallback Hierarchy
-
-Prevent missing titles and descriptions.
-
-**Priority:** P0
-
----
-
-## P02-T150 — Generate Canonical Alternates Centrally
-
-**Priority:** P0
-
----
-
-## P02-T151 — Generate Robots Metadata from Indexability Policy
-
-**Priority:** P0
-
----
-
-## P02-T152 — Generate Open Graph Metadata Centrally
+Prevent bright semantic blocks from overwhelming pages.
 
 **Priority:** P1
 
 ---
 
-## P02-T153 — Generate Twitter Metadata Centrally
+## P01-T052 — Remove Near-Black Layer Proliferation
+
+Reduce unnecessary dark-surface nesting.
 
 **Priority:** P1
 
 ---
 
-## P02-T154 — Generate Metadata Base Correctly
+## P01-T053 — Validate Long-Form Dark Reading Comfort
+
+Test sustained reading and code-heavy pages.
 
 **Priority:** P0
 
 ---
 
-## P02-T155 — Prevent Undefined Metadata Values
+# Workstream F — Typography Architecture
+
+## P01-T054 — Establish Canonical UI Font Strategy
+
+Define the primary UI and body font loading strategy.
 
 **Priority:** P0
 
 ---
 
-## P02-T156 — Prevent Empty Metadata Values
+## P01-T055 — Establish Canonical Monospace Font Strategy
 
-**Priority:** P0
-
----
-
-## P02-T157 — Prevent Duplicate Site Name Suffixes
+Define code typography without excessive loading cost.
 
 **Priority:** P1
 
 ---
 
-## P02-T158 — Normalize Metadata Text
+## P01-T056 — Implement Display Typography Scale
 
-Remove malformed whitespace and rendering artifacts.
-
-**Priority:** P1
-
----
-
-## P02-T159 — Sanitize Metadata Derived from Rich Content
-
-Prevent markup from leaking into search snippets.
-
-**Priority:** P0
-
----
-
-## P02-T160 — Enforce Metadata Type Safety
+Standardize major page titles and marketing headings.
 
 **Priority:** P1
 
 ---
 
-## P02-T161 — Remove Duplicate Metadata Helpers
+## P01-T057 — Implement Content Heading Scale
+
+Define H1 through H6 behavior for educational content.
 
 **Priority:** P0
 
 ---
 
-## P02-T162 — Remove Hard-Coded Canonical Metadata from Shared Pages
+## P01-T058 — Implement Body Typography Scale
+
+Define canonical body sizes and line heights.
 
 **Priority:** P0
 
 ---
 
-# Workstream L — Title Architecture
+## P01-T059 — Implement Small Text Scale
 
-## P02-T163 — Establish Site Title Pattern
-
-**Priority:** P0
-
----
-
-## P02-T164 — Establish Homepage Title Strategy
-
-**Priority:** P0
-
----
-
-## P02-T165 — Establish Domain Title Template
-
-**Priority:** P0
-
----
-
-## P02-T166 — Establish Stack Title Template
-
-**Priority:** P0
-
----
-
-## P02-T167 — Establish Pillar Title Template
-
-**Priority:** P0
-
----
-
-## P02-T168 — Establish Module Title Template
-
-**Priority:** P0
-
----
-
-## P02-T169 — Establish Question Title Template
-
-Prioritize the actual interview query rather than keyword stuffing.
-
-**Priority:** P0
-
----
-
-## P02-T170 — Establish Topic Title Template
+Standardize secondary information.
 
 **Priority:** P1
 
 ---
 
-## P02-T171 — Establish Company Title Template
+## P01-T060 — Implement Metadata Typography
+
+Prevent metadata from competing with primary content.
 
 **Priority:** P1
 
 ---
 
-## P02-T172 — Establish Comparison Title Template
+## P01-T061 — Implement Label Typography
+
+Standardize form and UI labels.
 
 **Priority:** P1
 
 ---
 
-## P02-T173 — Establish Tool Title Template
+## P01-T062 — Implement Button Typography
 
-**Priority:** P1
-
----
-
-## P02-T174 — Establish Roadmap Title Template
-
-**Priority:** P1
-
----
-
-## P02-T175 — Establish Cheatsheet Title Template
-
-**Priority:** P1
-
----
-
-## P02-T176 — Establish DSA Title Templates
-
-**Priority:** P0
-
----
-
-## P02-T177 — Prevent Identical Titles Across Distinct Pages
-
-**Priority:** P0
-
----
-
-## P02-T178 — Prevent Excessively Generic Titles
-
-**Priority:** P0
-
----
-
-## P02-T179 — Prevent Programmatic Keyword Stuffing
-
-**Priority:** P0
-
----
-
-## P02-T180 — Preserve Human Readability in Generated Titles
-
-**Priority:** P0
-
----
-
-# Workstream M — Meta Description Architecture
-
-## P02-T181 — Establish Description Generation Strategy
-
-Use useful page-specific summaries.
-
-**Priority:** P0
-
----
-
-## P02-T182 — Establish Homepage Description
-
-**Priority:** P0
-
----
-
-## P02-T183 — Establish Domain Description Template
-
-**Priority:** P1
-
----
-
-## P02-T184 — Establish Stack Description Template
-
-**Priority:** P0
-
----
-
-## P02-T185 — Establish Pillar Description Template
-
-**Priority:** P0
-
----
-
-## P02-T186 — Establish Module Description Template
-
-**Priority:** P0
-
----
-
-## P02-T187 — Establish Question Description Strategy
-
-Use meaningful question-specific context.
-
-**Priority:** P0
-
----
-
-## P02-T188 — Establish Topic Description Strategy
-
-**Priority:** P1
-
----
-
-## P02-T189 — Establish Company Description Strategy
-
-**Priority:** P1
-
----
-
-## P02-T190 — Establish Comparison Description Strategy
-
-**Priority:** P1
-
----
-
-## P02-T191 — Establish Tool Description Strategy
-
-**Priority:** P1
-
----
-
-## P02-T192 — Establish Roadmap Description Strategy
-
-**Priority:** P1
-
----
-
-## P02-T193 — Establish Cheatsheet Description Strategy
-
-**Priority:** P1
-
----
-
-## P02-T194 — Establish DSA Description Strategy
-
-**Priority:** P0
-
----
-
-## P02-T195 — Prevent Identical Generated Descriptions at Scale
-
-**Priority:** P0
-
----
-
-## P02-T196 — Prevent Empty Description Fallbacks
-
-**Priority:** P0
-
----
-
-## P02-T197 — Prevent Raw Answer Markup in Descriptions
-
-**Priority:** P0
-
----
-
-## P02-T198 — Normalize Generated Description Length
-
-Avoid severe truncation or meaningless short descriptions.
-
-**Priority:** P1
-
----
-
-# Workstream N — Canonical Tag Architecture
-
-## P02-T199 — Generate Canonical Tags from Route Registry
-
-**Priority:** P0
-
----
-
-## P02-T200 — Ensure Canonical URLs Are Absolute
-
-**Priority:** P0
-
----
-
-## P02-T201 — Ensure Canonical URLs Use Production Origin
-
-**Priority:** P0
-
----
-
-## P02-T202 — Ensure Canonicals Use Final Public URLs
-
-**Priority:** P0
-
----
-
-## P02-T203 — Prevent Self-Canonicalization to Internal Routes
-
-**Priority:** P0
-
----
-
-## P02-T204 — Prevent Canonicalization to Redirecting URLs
-
-**Priority:** P0
-
----
-
-## P02-T205 — Prevent Canonicalization to 404 URLs
-
-**Priority:** P0
-
----
-
-## P02-T206 — Prevent Canonicalization Across Unrelated Content
-
-**Priority:** P0
-
----
-
-## P02-T207 — Ensure Paginated Canonical Behavior Is Deliberate
-
-**Priority:** P1
-
----
-
-## P02-T208 — Ensure Query Parameters Do Not Corrupt Canonicals
-
-**Priority:** P0
-
----
-
-## P02-T209 — Remove Duplicate Canonical Tags
-
-**Priority:** P0
-
----
-
-# Workstream O — Sitemap Architecture
-
-## P02-T210 — Rebuild Canonical Sitemap System
-
-Use the route registry and canonical entity sources.
-
-**Priority:** P0
-
----
-
-## P02-T211 — Define Sitemap Index Architecture
-
-Split large sitemap sets logically where needed.
-
-**Priority:** P0
-
----
-
-## P02-T212 — Build Static Page Sitemap
-
-**Priority:** P0
-
----
-
-## P02-T213 — Build Domain Sitemap
-
-**Priority:** P1
-
----
-
-## P02-T214 — Build Stack Sitemap
-
-**Priority:** P0
-
----
-
-## P02-T215 — Build Pillar Sitemap
-
-**Priority:** P0
-
----
-
-## P02-T216 — Build Module Sitemap
-
-**Priority:** P0
-
----
-
-## P02-T217 — Build Question Sitemap
-
-**Priority:** P0
-
----
-
-## P02-T218 — Build Topic Sitemap
-
-**Priority:** P1
-
----
-
-## P02-T219 — Build Company Sitemap
-
-**Priority:** P1
-
----
-
-## P02-T220 — Build Comparison Sitemap
-
-**Priority:** P1
-
----
-
-## P02-T221 — Build Tool Sitemap
-
-**Priority:** P1
-
----
-
-## P02-T222 — Build Roadmap Sitemap
-
-**Priority:** P1
-
----
-
-## P02-T223 — Build Cheatsheet Sitemap
-
-**Priority:** P1
-
----
-
-## P02-T224 — Build DSA Sitemap
-
-**Priority:** P0
-
----
-
-## P02-T225 — Exclude Authentication Routes
-
-**Priority:** P0
-
----
-
-## P02-T226 — Exclude Dashboard and Private Routes
-
-**Priority:** P0
-
----
-
-## P02-T227 — Exclude Internal Rendering Routes
-
-**Priority:** P0
-
----
-
-## P02-T228 — Exclude Development Routes
-
-**Priority:** P0
-
----
-
-## P02-T229 — Exclude Noindex Routes
-
-**Priority:** P0
-
----
-
-## P02-T230 — Exclude Empty Content Routes
-
-**Priority:** P0
-
----
-
-## P02-T231 — Exclude Redirecting URLs
-
-**Priority:** P0
-
----
-
-## P02-T232 — Exclude Noncanonical Aliases
-
-**Priority:** P0
-
----
-
-## P02-T233 — Deduplicate Sitemap URLs
-
-**Priority:** P0
-
----
-
-## P02-T234 — Normalize Sitemap URL Formatting
-
-**Priority:** P0
-
----
-
-## P02-T235 — Generate Accurate Last-Modified Values Where Reliable
-
-Do not fabricate meaningless timestamps.
-
-**Priority:** P1
-
----
-
-## P02-T236 — Remove Misleading Change Frequency Metadata
-
-Avoid unsupported signals.
+Standardize control text weight and sizing.
 
 **Priority:** P2
 
 ---
 
-## P02-T237 — Remove Misleading Priority Metadata
+## P01-T063 — Implement Code Typography
 
-Avoid arbitrary values.
+Define inline and block code sizing.
+
+**Priority:** P0
+
+---
+
+## P01-T064 — Standardize Font Weight Usage
+
+Limit uncontrolled weight variation.
+
+**Priority:** P1
+
+---
+
+## P01-T065 — Standardize Letter Spacing
+
+Remove arbitrary tracking choices.
 
 **Priority:** P2
 
 ---
 
-## P02-T238 — Validate Sitemap URL Count
+## P01-T066 — Standardize Heading Line Heights
 
-Compare generated counts against canonical content entities.
-
-**Priority:** P0
-
----
-
-## P02-T239 — Validate Every Sitemap URL Resolves
-
-**Priority:** P0
-
----
-
-## P02-T240 — Validate Every Sitemap URL Returns Canonical 200
-
-**Priority:** P0
-
----
-
-## P02-T241 — Validate Sitemap and Indexability Agreement
-
-**Priority:** P0
-
----
-
-## P02-T242 — Validate Sitemap and Canonical Agreement
-
-**Priority:** P0
-
----
-
-## P02-T243 — Prevent Sitemap Generation from Fragmented Sources
-
-Use authoritative content ownership.
-
-**Priority:** P0
-
----
-
-## P02-T244 — Remove Legacy Sitemap Generators
-
-**Priority:** P0
-
----
-
-# Workstream P — Sitemap Scale & Reliability
-
-## P02-T245 — Implement Sitemap Chunking Where Required
-
-Respect practical sitemap limits.
-
-**Priority:** P0
-
----
-
-## P02-T246 — Ensure Deterministic Sitemap Generation
-
-The same content state should produce the same URL set.
+Improve multiline heading readability.
 
 **Priority:** P1
 
 ---
 
-## P02-T247 — Prevent Duplicate URLs Across Sitemap Files
+## P01-T067 — Standardize Body Line Height
+
+Optimize long-form reading.
 
 **Priority:** P0
 
 ---
 
-## P02-T248 — Handle Sitemap Generation Failures Safely
+## P01-T068 — Standardize Paragraph Spacing
 
-Avoid silently publishing incomplete sets.
+Create consistent reading rhythm.
 
 **Priority:** P0
 
 ---
 
-## P02-T249 — Add Sitemap Generation Diagnostics
+## P01-T069 — Standardize Heading-to-Content Spacing
 
-Expose counts and failures during build or validation.
+Make content hierarchy visually understandable.
+
+**Priority:** P0
+
+---
+
+## P01-T070 — Remove Route-Specific Typography Hacks
+
+Migrate shared typography behavior to canonical styles.
 
 **Priority:** P1
 
 ---
 
-## P02-T250 — Add Sitemap Regression Comparison
+# Workstream G — Reading Experience Foundation
 
-Detect major unexpected URL loss or explosion.
+## P01-T071 — Define Canonical Reading Width
 
-**Priority:** P0
-
----
-
-# Workstream Q — Structured Data Architecture
-
-## P02-T251 — Build Canonical Structured Data System
-
-Create reusable schema generation utilities.
+Establish maximum line length for long-form answers.
 
 **Priority:** P0
 
 ---
 
-## P02-T252 — Establish WebSite Schema
+## P01-T072 — Define Wide Content Width
+
+Support tables, diagrams and code without forcing all prose to become wide.
+
+**Priority:** P0
+
+---
+
+## P01-T073 — Define Standard Page Width
+
+Create a canonical general-purpose page container.
+
+**Priority:** P0
+
+---
+
+## P01-T074 — Define Wide Application Width
+
+Support dashboards and complex application layouts.
 
 **Priority:** P1
 
 ---
 
-## P02-T253 — Establish Organization Schema Where Appropriate
+## P01-T075 — Separate Reading Width from Page Width
 
-**Priority:** P1
-
----
-
-## P02-T254 — Establish BreadcrumbList Schema
+Prevent long-form text from stretching across large displays.
 
 **Priority:** P0
 
 ---
 
-## P02-T255 — Establish WebPage Schema Foundation
+## P01-T076 — Implement Prose Rhythm Foundation
 
-**Priority:** P1
-
----
-
-## P02-T256 — Establish Article-Like Schema Policy
-
-Use only where content genuinely qualifies.
-
-**Priority:** P1
-
----
-
-## P02-T257 — Establish FAQ Schema Policy
-
-Do not apply FAQ schema indiscriminately.
+Standardize spacing between content elements.
 
 **Priority:** P0
 
 ---
 
-## P02-T258 — Establish Question-Content Schema Policy
+## P01-T077 — Implement Long-Form List Styling
 
-Use only schema types that accurately represent the page.
+Improve ordered, unordered and nested lists.
 
 **Priority:** P0
 
 ---
 
-## P02-T259 — Establish Software Tool Schema Policy
+## P01-T078 — Implement Blockquote Styling
 
-Apply only to genuine tool pages where appropriate.
+Create restrained quotation treatment.
 
 **Priority:** P2
 
 ---
 
-## P02-T260 — Establish Breadcrumb Entity Generation
+## P01-T079 — Implement Inline Code Styling
 
-Use canonical route hierarchy.
-
-**Priority:** P0
-
----
-
-## P02-T261 — Ensure Structured Data Uses Canonical URLs
-
-**Priority:** P0
-
----
-
-## P02-T262 — Ensure Structured Data Matches Visible Content
-
-**Priority:** P0
-
----
-
-## P02-T263 — Prevent Hidden SEO-Only Structured Content
-
-**Priority:** P0
-
----
-
-## P02-T264 — Prevent Duplicate Schema Blocks
-
-**Priority:** P0
-
----
-
-## P02-T265 — Prevent Conflicting Schema Identities
-
-**Priority:** P0
-
----
-
-## P02-T266 — Sanitize Structured Data Inputs
-
-**Priority:** P0
-
----
-
-## P02-T267 — Remove Invalid Legacy Structured Data
-
-**Priority:** P0
-
----
-
-# Workstream R — Breadcrumb Architecture
-
-## P02-T268 — Establish Canonical Breadcrumb Hierarchy
-
-Create one route-aware hierarchy.
-
-**Priority:** P0
-
----
-
-## P02-T269 — Generate Breadcrumbs from Canonical Entities
-
-**Priority:** P0
-
----
-
-## P02-T270 — Use Canonical URLs in Breadcrumb Links
-
-**Priority:** P0
-
----
-
-## P02-T271 — Align Visual Breadcrumbs with Breadcrumb Schema
-
-**Priority:** P0
-
----
-
-## P02-T272 — Prevent Duplicate Hierarchy Names
+Make inline technical terms readable without excessive emphasis.
 
 **Priority:** P1
 
 ---
 
-## P02-T273 — Handle Deep Question Hierarchies
+## P01-T080 — Implement Link Styling for Reading Content
 
-Maintain useful context without excessive breadcrumb length.
-
-**Priority:** P1
-
----
-
-## P02-T274 — Handle Mobile Breadcrumb Presentation
-
-Preserve semantic hierarchy while reducing visual clutter.
+Ensure links are identifiable without overwhelming paragraphs.
 
 **Priority:** P1
 
 ---
 
-## P02-T275 — Remove Duplicate Breadcrumb Generators
+## P01-T081 — Implement Strong and Emphasis Rules
 
-**Priority:** P0
-
----
-
-# Workstream S — Server Rendering & Crawlable Content
-
-## P02-T276 — Identify SEO-Critical Client-Only Rendering
-
-Find public content that depends unnecessarily on browser JavaScript.
-
-**Priority:** P0
-
----
-
-## P02-T277 — Move Primary Public Content to Server-Visible Rendering
-
-Ensure crawlers receive meaningful HTML.
-
-**Priority:** P0
-
----
-
-## P02-T278 — Ensure Question Titles Are Server-Rendered
-
-**Priority:** P0
-
----
-
-## P02-T279 — Ensure Question Answers Are Server-Available Where Architecture Allows
-
-Avoid unnecessary empty shells.
-
-**Priority:** P0
-
----
-
-## P02-T280 — Ensure Hierarchy Pages Render Meaningful Server Content
-
-**Priority:** P0
-
----
-
-## P02-T281 — Ensure Internal Links Exist in Rendered HTML
-
-Do not rely entirely on client interactions for discovery.
-
-**Priority:** P0
-
----
-
-## P02-T282 — Prevent Loading States from Becoming Primary Crawl Output
-
-**Priority:** P0
-
----
-
-## P02-T283 — Prevent Client Fetch Failure from Creating Empty Indexable Pages
-
-**Priority:** P0
-
----
-
-## P02-T284 — Reduce Unnecessary Client Boundaries on Public Pages
-
-**Priority:** P0
-
----
-
-## P02-T285 — Preserve Interactive Features as Client Islands
-
-Keep interactivity without making the whole page client-only.
+Prevent bold-heavy content from becoming visually noisy.
 
 **Priority:** P1
 
 ---
 
-# Workstream T — HTTP Status Correctness
+## P01-T082 — Implement Horizontal Rule Treatment
 
-## P02-T286 — Ensure Valid Public Pages Return 200
-
-**Priority:** P0
-
----
-
-## P02-T287 — Ensure Missing Pages Return 404
-
-**Priority:** P0
-
----
-
-## P02-T288 — Ensure Permanent Migrations Return Appropriate Redirect Status
-
-**Priority:** P0
-
----
-
-## P02-T289 — Ensure Temporary Redirects Are Used Only Intentionally
-
-**Priority:** P1
-
----
-
-## P02-T290 — Prevent Error Pages from Returning 200
-
-**Priority:** P0
-
----
-
-## P02-T291 — Prevent Authentication Failures from Affecting Public Content Status
-
-**Priority:** P0
-
----
-
-## P02-T292 — Prevent Backend Data Failures from Masquerading as Valid Empty Pages
-
-**Priority:** P0
-
----
-
-## P02-T293 — Define Temporary Upstream Failure Behavior
-
-Avoid accidental permanent deindexing during transient failures.
-
-**Priority:** P1
-
----
-
-# Workstream U — Internal Linking Architecture
-
-## P02-T294 — Establish Canonical Internal Linking Strategy
-
-Use links as both user navigation and crawl discovery.
-
-**Priority:** P0
-
----
-
-## P02-T295 — Link Homepage to Major Content Hubs
-
-**Priority:** P0
-
----
-
-## P02-T296 — Link Domain Pages to Relevant Stacks
-
-**Priority:** P0
-
----
-
-## P02-T297 — Link Stack Pages to Pillars
-
-**Priority:** P0
-
----
-
-## P02-T298 — Link Pillars to Modules
-
-**Priority:** P0
-
----
-
-## P02-T299 — Link Modules to Questions
-
-**Priority:** P0
-
----
-
-## P02-T300 — Link Questions to Parent Hierarchy
-
-**Priority:** P0
-
----
-
-## P02-T301 — Link Questions to Related Questions
-
-**Priority:** P0
-
----
-
-## P02-T302 — Link Questions to Previous and Next Questions
-
-**Priority:** P1
-
----
-
-## P02-T303 — Link Topics to Relevant Questions
-
-**Priority:** P1
-
----
-
-## P02-T304 — Link Companies to Relevant Interview Content
-
-**Priority:** P1
-
----
-
-## P02-T305 — Link Roadmaps to Relevant Learning Content
-
-**Priority:** P1
-
----
-
-## P02-T306 — Link Cheatsheets to Relevant Deep Content
-
-**Priority:** P1
-
----
-
-## P02-T307 — Link DSA Hierarchy Consistently
-
-**Priority:** P0
-
----
-
-## P02-T308 — Prevent Internal Links to Redirects
-
-**Priority:** P0
-
----
-
-## P02-T309 — Prevent Internal Links to Noncanonical Aliases
-
-**Priority:** P0
-
----
-
-## P02-T310 — Prevent Broken Internal Links
-
-**Priority:** P0
-
----
-
-## P02-T311 — Prevent Important Pages from Becoming Orphans
-
-**Priority:** P0
-
----
-
-## P02-T312 — Establish Maximum Crawl Depth Targets for Core Content
-
-Keep important pages discoverable through reasonable hierarchy depth.
-
-**Priority:** P1
-
----
-
-## P02-T313 — Avoid Excessive Site-Wide Link Spam
-
-Do not place thousands of low-context links on every page.
-
-**Priority:** P0
-
----
-
-## P02-T314 — Prefer Contextual Links Over Decorative Link Dumps
-
-**Priority:** P0
-
----
-
-# Workstream V — Content Hierarchy & Crawl Graph
-
-## P02-T315 — Build Canonical Crawl Graph Model
-
-Represent how crawlers move through the site.
-
-**Priority:** P0
-
----
-
-## P02-T316 — Ensure Every Indexable Question Has an Incoming Crawl Path
-
-**Priority:** P0
-
----
-
-## P02-T317 — Ensure Every Indexable Module Has an Incoming Crawl Path
-
-**Priority:** P0
-
----
-
-## P02-T318 — Ensure Every Indexable Pillar Has an Incoming Crawl Path
-
-**Priority:** P0
-
----
-
-## P02-T319 — Ensure Every Indexable Stack Has an Incoming Crawl Path
-
-**Priority:** P0
-
----
-
-## P02-T320 — Identify Deep Orphan Clusters
-
-**Priority:** P0
-
----
-
-## P02-T321 — Repair Broken Hierarchy Links
-
-**Priority:** P0
-
----
-
-## P02-T322 — Prevent Infinite Navigation Spaces
-
-Avoid crawler traps.
-
-**Priority:** P0
-
----
-
-## P02-T323 — Prevent Calendar-Like or Parameter-Based URL Explosion
-
-**Priority:** P0
-
----
-
-## P02-T324 — Prevent Search Filter Crawl Explosion
-
-**Priority:** P0
-
----
-
-# Workstream W — Duplicate Content Prevention
-
-## P02-T325 — Identify Duplicate Public Content Routes
-
-**Priority:** P0
-
----
-
-## P02-T326 — Consolidate Duplicate Question URLs
-
-**Priority:** P0
-
----
-
-## P02-T327 — Consolidate Duplicate Topic URLs
-
-**Priority:** P0
-
----
-
-## P02-T328 — Consolidate Duplicate Hierarchy Routes
-
-**Priority:** P0
-
----
-
-## P02-T329 — Prevent Query-Parameter Duplicate Pages
-
-**Priority:** P0
-
----
-
-## P02-T330 — Prevent Case-Variant Duplicate Pages
-
-**Priority:** P0
-
----
-
-## P02-T331 — Prevent Trailing-Slash Duplicate Pages
-
-**Priority:** P0
-
----
-
-## P02-T332 — Prevent WWW/Non-WWW Duplicate Pages
-
-**Priority:** P0
-
----
-
-## P02-T333 — Prevent HTTP/HTTPS Duplicate Indexing
-
-**Priority:** P0
-
----
-
-## P02-T334 — Prevent Internal Renderer Duplicate Indexing
-
-**Priority:** P0
-
----
-
-## P02-T335 — Prevent Duplicate Generated Taxonomy Pages
-
-**Priority:** P0
-
----
-
-## P02-T336 — Consolidate Near-Identical Programmatic Pages Where Necessary
-
-Avoid large-scale low-value duplication.
-
-**Priority:** P1
-
----
-
-# Workstream X — Thin Page Prevention
-
-## P02-T337 — Establish Minimum Public Page Value Criteria
-
-Define what makes an indexable page useful enough to exist.
-
-**Priority:** P0
-
----
-
-## P02-T338 — Prevent Empty Taxonomy Pages from Indexing
-
-**Priority:** P0
-
----
-
-## P02-T339 — Prevent Empty Company Pages from Indexing
-
-**Priority:** P0
-
----
-
-## P02-T340 — Prevent Empty Topic Pages from Indexing
-
-**Priority:** P0
-
----
-
-## P02-T341 — Prevent Placeholder Pages from Indexing
-
-**Priority:** P0
-
----
-
-## P02-T342 — Prevent Generated Pages with No Distinct Value from Indexing
-
-**Priority:** P0
-
----
-
-## P02-T343 — Define Minimum Question Page Completeness
-
-**Priority:** P0
-
----
-
-## P02-T344 — Define Minimum Hub Page Completeness
-
-**Priority:** P1
-
----
-
-## P02-T345 — Route Incomplete Content to Appropriate Draft or Noindex State
-
-**Priority:** P0
-
----
-
-# Workstream Y — Pagination & Faceted Navigation
-
-## P02-T346 — Establish Pagination URL Policy
-
-**Priority:** P1
-
----
-
-## P02-T347 — Establish Pagination Canonical Policy
-
-**Priority:** P1
-
----
-
-## P02-T348 — Ensure Paginated Content Remains Discoverable
-
-**Priority:** P1
-
----
-
-## P02-T349 — Establish Filter Parameter Policy
-
-**Priority:** P0
-
----
-
-## P02-T350 — Establish Sort Parameter Policy
-
-**Priority:** P0
-
----
-
-## P02-T351 — Prevent Filter Combinations from Creating Unlimited Indexable URLs
-
-**Priority:** P0
-
----
-
-## P02-T352 — Prevent Sort Variants from Becoming Duplicate Indexable Pages
-
-**Priority:** P0
-
----
-
-## P02-T353 — Ensure Filtered UI Still Links to Canonical Content Entities
-
-**Priority:** P0
-
----
-
-# Workstream Z — Search Engine Access & Rendering
-
-## P02-T354 — Validate Public Pages Without Authentication
-
-Search crawlers must not depend on user sessions.
-
-**Priority:** P0
-
----
-
-## P02-T355 — Remove Accidental Authentication Gates from Public Content
-
-**Priority:** P0
-
----
-
-## P02-T356 — Validate Public Pages Without Local Storage
-
-**Priority:** P0
-
----
-
-## P02-T357 — Validate Public Pages Without Client Hydration for Core Content
-
-**Priority:** P0
-
----
-
-## P02-T358 — Ensure Cookie Logic Does Not Hide Primary Public Content
-
-**Priority:** P0
-
----
-
-## P02-T359 — Ensure Consent UI Does Not Replace Crawlable Content
-
-**Priority:** P1
-
----
-
-## P02-T360 — Prevent Geolocation or Personalization from Changing Canonical Core Content
-
-**Priority:** P1
-
----
-
-# Workstream AA — Performance Foundations for SEO
-
-## P02-T361 — Reduce SEO-Critical Server Response Delays
-
-Prioritize public content routes.
-
-**Priority:** P0
-
----
-
-## P02-T362 — Prevent Slow Backend Dependencies from Blocking Static Public Content
-
-**Priority:** P0
-
----
-
-## P02-T363 — Cache Stable Public Content Appropriately
-
-**Priority:** P1
-
----
-
-## P02-T364 — Establish Public Route Revalidation Strategy
-
-**Priority:** P0
-
----
-
-## P02-T365 — Prevent Stale Canonical Metadata
-
-**Priority:** P0
-
----
-
-## P02-T366 — Prevent Stale Sitemap Data
-
-**Priority:** P0
-
----
-
-## P02-T367 — Prevent Unnecessary Dynamic Rendering
-
-Use static or cached rendering where appropriate.
-
-**Priority:** P0
-
----
-
-## P02-T368 — Preserve Freshness Where Content Actually Changes
-
-**Priority:** P1
-
----
-
-## P02-T369 — Optimize Metadata Data Fetching
-
-Avoid duplicate page and metadata fetches where possible.
-
-**Priority:** P1
-
----
-
-## P02-T370 — Optimize Sitemap Generation Cost
-
-Ensure large content volume remains manageable.
-
-**Priority:** P1
-
----
-
-# Workstream AB — Backend Support for SEO
-
-## P02-T371 — Identify SEO-Critical Backend Dependencies
-
-Determine which public pages require backend data.
-
-**Priority:** P0
-
----
-
-## P02-T372 — Stabilize Public Content API Contracts
-
-Prevent unstable responses from breaking indexable pages.
-
-**Priority:** P0
-
----
-
-## P02-T373 — Ensure Public Content APIs Do Not Require Authentication
-
-Where content is intentionally public.
-
-**Priority:** P0
-
----
-
-## P02-T374 — Ensure Public Content APIs Distinguish Missing Entities Correctly
-
-**Priority:** P0
-
----
-
-## P02-T375 — Ensure Public Content APIs Expose Stable Identifiers
-
-**Priority:** P0
-
----
-
-## P02-T376 — Ensure Public Content APIs Expose Canonical Slugs Where Required
-
-**Priority:** P0
-
----
-
-## P02-T377 — Remove Frontend Slug Guessing Caused by Weak API Contracts
-
-**Priority:** P0
-
----
-
-## P02-T378 — Optimize Backend Queries Used by Public Pages
-
-**Priority:** P1
-
----
-
-## P02-T379 — Prevent Backend Errors from Generating Indexable Empty Pages
-
-**Priority:** P0
-
----
-
-## P02-T380 — Establish Backend Caching for Stable Public Data Where Beneficial
-
-**Priority:** P1
-
----
-
-## P02-T381 — Preserve SEO Independence from User-Specific Backend State
-
-Public indexing should not depend on bookmarks or progress APIs.
-
-**Priority:** P0
-
----
-
-# Workstream AC — Content Source Integration
-
-## P02-T382 — Connect Route Registry to Canonical Content Source
-
-**Priority:** P0
-
----
-
-## P02-T383 — Connect Sitemap Generation to Canonical Content Source
-
-**Priority:** P0
-
----
-
-## P02-T384 — Connect Metadata Generation to Canonical Content Entities
-
-**Priority:** P0
-
----
-
-## P02-T385 — Connect Breadcrumb Generation to Canonical Hierarchy
-
-**Priority:** P0
-
----
-
-## P02-T386 — Connect Internal Linking to Canonical Entity Relationships
-
-**Priority:** P0
-
----
-
-## P02-T387 — Prevent Different SEO Systems from Reading Different Content Inventories
-
-**Priority:** P0
-
----
-
-## P02-T388 — Prevent Deleted Content from Remaining in Sitemaps
-
-**Priority:** P0
-
----
-
-## P02-T389 — Prevent New Content from Missing SEO Discovery Systems
-
-**Priority:** P0
-
----
-
-## P02-T390 — Establish Automatic SEO Participation for New Canonical Entities
-
-New valid content should automatically receive the correct route, metadata and sitemap behavior.
-
-**Priority:** P0
-
----
-
-# Workstream AD — Open Graph & Social Sharing
-
-## P02-T391 — Establish Canonical Open Graph Defaults
-
-**Priority:** P1
-
----
-
-## P02-T392 — Establish Open Graph Title Generation
-
-**Priority:** P1
-
----
-
-## P02-T393 — Establish Open Graph Description Generation
-
-**Priority:** P1
-
----
-
-## P02-T394 — Establish Open Graph Canonical URL Generation
-
-**Priority:** P1
-
----
-
-## P02-T395 — Establish Open Graph Image Strategy
+Use subtle content separation.
 
 **Priority:** P2
 
 ---
 
-## P02-T396 — Prevent Broken Social Image URLs
+## P01-T083 — Implement Anchor Offset Behavior
+
+Ensure heading links work correctly beneath sticky navigation.
 
 **Priority:** P1
 
 ---
 
-## P02-T397 — Establish Twitter Card Defaults
+## P01-T084 — Implement Long-Word Overflow Handling
+
+Prevent technical terms and URLs from breaking layouts.
+
+**Priority:** P0
+
+---
+
+## P01-T085 — Implement Mixed Prose-and-Code Layout Rules
+
+Allow code to use more width than surrounding prose when appropriate.
+
+**Priority:** P0
+
+---
+
+# Workstream H — Spacing & Density Architecture
+
+## P01-T086 — Establish Canonical Spacing Scale
+
+Define the permitted spacing system.
+
+**Priority:** P0
+
+---
+
+## P01-T087 — Establish Component Internal Padding Rules
+
+Standardize control and container padding.
+
+**Priority:** P0
+
+---
+
+## P01-T088 — Establish Section Spacing Rules
+
+Create consistent separation between major page regions.
+
+**Priority:** P0
+
+---
+
+## P01-T089 — Establish Content Element Spacing Rules
+
+Standardize paragraph, list, code and heading rhythm.
+
+**Priority:** P0
+
+---
+
+## P01-T090 — Establish Page Edge Padding
+
+Create consistent responsive horizontal gutters.
+
+**Priority:** P0
+
+---
+
+## P01-T091 — Remove Arbitrary Margin Proliferation
+
+Replace repeated one-off spacing fixes.
+
+**Priority:** P1
+
+---
+
+## P01-T092 — Remove Arbitrary Padding Proliferation
+
+Migrate reusable patterns to shared primitives.
+
+**Priority:** P1
+
+---
+
+## P01-T093 — Reduce Excessive Vertical Compression
+
+Increase breathing room where content currently feels crowded.
+
+**Priority:** P0
+
+---
+
+## P01-T094 — Reduce Excessive Decorative Whitespace
+
+Avoid oversized empty sections that harm information flow.
 
 **Priority:** P2
 
 ---
 
-## P02-T398 — Remove Duplicate Social Metadata Implementations
+## P01-T095 — Define Compact Density Mode for Data-Heavy UI
 
-**Priority:** P1
-
----
-
-# Workstream AE — Heading & Document Structure Foundation
-
-## P02-T399 — Establish One Primary H1 Policy
-
-**Priority:** P0
-
----
-
-## P02-T400 — Align H1 with Page Search Intent
-
-**Priority:** P0
-
----
-
-## P02-T401 — Establish Semantic Heading Hierarchy
-
-**Priority:** P0
-
----
-
-## P02-T402 — Prevent Heading Levels Used Only for Visual Styling
-
-**Priority:** P0
-
----
-
-## P02-T403 — Prevent Hidden Duplicate H1 Elements
-
-**Priority:** P0
-
----
-
-## P02-T404 — Ensure Question Pages Expose the Actual Question Prominently
-
-**Priority:** P0
-
----
-
-## P02-T405 — Ensure Hub Pages Explain Their Purpose in Visible Content
-
-**Priority:** P0
-
----
-
-# Workstream AF — Image & Media SEO Foundation
-
-## P02-T406 — Establish Meaningful Alt Text Policy
-
-**Priority:** P1
-
----
-
-## P02-T407 — Prevent Decorative Images from Receiving Keyword-Stuffed Alt Text
-
-**Priority:** P1
-
----
-
-## P02-T408 — Ensure Content Images Have Stable URLs
-
-**Priority:** P1
-
----
-
-## P02-T409 — Prevent Broken Images from Degrading Public Pages
-
-**Priority:** P1
-
----
-
-## P02-T410 — Establish Image Dimension Strategy
-
-Reduce layout shift.
-
-**Priority:** P1
-
----
-
-## P02-T411 — Optimize Large Public Content Images
-
-**Priority:** P1
-
----
-
-## P02-T412 — Ensure Diagrams Remain Understandable with Supporting Text
-
-**Priority:** P1
-
----
-
-# Workstream AG — Navigation SEO Foundation
-
-## P02-T413 — Ensure Primary Navigation Uses Crawlable Links
-
-**Priority:** P0
-
----
-
-## P02-T414 — Ensure Footer Navigation Uses Canonical Links
-
-**Priority:** P0
-
----
-
-## P02-T415 — Ensure Sidebar Navigation Uses Canonical Links
-
-**Priority:** P0
-
----
-
-## P02-T416 — Ensure Mobile Navigation Preserves Crawlable Architecture
-
-**Priority:** P0
-
----
-
-## P02-T417 — Avoid JavaScript-Only Navigation for Core Public Destinations
-
-**Priority:** P0
-
----
-
-## P02-T418 — Prevent Duplicate Navigation Link Variants
-
-**Priority:** P1
-
----
-
-# Workstream AH — 404 & Removed Content Architecture
-
-## P02-T419 — Rebuild SEO-Correct 404 Behavior
-
-**Priority:** P0
-
----
-
-## P02-T420 — Ensure 404 Pages Return 404 Status
-
-**Priority:** P0
-
----
-
-## P02-T421 — Provide Useful Recovery Links on 404 Pages
-
-**Priority:** P1
-
----
-
-## P02-T422 — Avoid Indexable 404-Like Pages
-
-**Priority:** P0
-
----
-
-## P02-T423 — Establish Removed Content Policy
-
-Choose between redirect, 404 and other appropriate handling.
-
-**Priority:** P0
-
----
-
-## P02-T424 — Prevent Deleted Entities from Resolving to Generic Content
-
-**Priority:** P0
-
----
-
-## P02-T425 — Remove Deleted Entities from Sitemaps
-
-**Priority:** P0
-
----
-
-## P02-T426 — Remove Internal Links to Deleted Entities
-
-**Priority:** P0
-
----
-
-# Workstream AI — Build-Time SEO Validation
-
-## P02-T427 — Build Route Registry Validator
-
-**Priority:** P0
-
----
-
-## P02-T428 — Build Duplicate Canonical URL Detector
-
-**Priority:** P0
-
----
-
-## P02-T429 — Build Duplicate Slug Detector
-
-**Priority:** P0
-
----
-
-## P02-T430 — Build Missing Canonical Detector
-
-**Priority:** P0
-
----
-
-## P02-T431 — Build Missing Metadata Detector
-
-**Priority:** P1
-
----
-
-## P02-T432 — Build Sitemap Duplication Detector
-
-**Priority:** P0
-
----
-
-## P02-T433 — Build Sitemap-to-Indexability Conflict Detector
-
-**Priority:** P0
-
----
-
-## P02-T434 — Build Sitemap-to-Canonical Conflict Detector
-
-**Priority:** P0
-
----
-
-## P02-T435 — Build Broken Internal Link Detector
-
-**Priority:** P0
-
----
-
-## P02-T436 — Build Orphan Page Detector Where Practical
-
-**Priority:** P1
-
----
-
-## P02-T437 — Build Redirect Chain Detector
-
-**Priority:** P0
-
----
-
-## P02-T438 — Build Internal Route Exposure Detector
-
-**Priority:** P0
-
----
-
-## P02-T439 — Build SEO Validation Summary
-
-Produce actionable failures rather than raw logs.
-
-**Priority:** P1
-
----
-
-# Workstream AJ — Runtime SEO Validation
-
-## P02-T440 — Validate Representative Public Pages in Production-Like Runtime
-
-**Priority:** P0
-
----
-
-## P02-T441 — Validate Canonical Tags from Rendered HTML
-
-**Priority:** P0
-
----
-
-## P02-T442 — Validate Robots Metadata from Rendered HTML
-
-**Priority:** P0
-
----
-
-## P02-T443 — Validate Structured Data from Rendered HTML
-
-**Priority:** P0
-
----
-
-## P02-T444 — Validate Primary Content in Initial HTML
-
-**Priority:** P0
-
----
-
-## P02-T445 — Validate HTTP Status Codes
-
-**Priority:** P0
-
----
-
-## P02-T446 — Validate Redirect Behavior
-
-**Priority:** P0
-
----
-
-## P02-T447 — Validate Sitemap Accessibility
-
-**Priority:** P0
-
----
-
-## P02-T448 — Validate robots.txt Accessibility
-
-**Priority:** P0
-
----
-
-## P02-T449 — Validate No Authentication Dependency for Public Pages
-
-**Priority:** P0
-
----
-
-# Workstream AK — Search Console & Indexing Readiness
-
-## P02-T450 — Establish Canonical Search Console Property Strategy
-
-Ensure the monitored property matches the canonical hostname architecture.
-
-**Priority:** P0
-
----
-
-## P02-T451 — Establish Sitemap Submission Strategy
-
-**Priority:** P0
-
----
-
-## P02-T452 — Establish Indexing Baseline Categories
-
-Track:
-
-* indexed,
-* discovered,
-* crawled not indexed,
-* duplicate,
-* redirect,
-* not found,
-* blocked,
-* noindex.
-
-**Priority:** P1
-
----
-
-## P02-T453 — Establish Representative URL Inspection Set
-
-Choose examples from every major route family.
-
-**Priority:** P1
-
----
-
-## P02-T454 — Establish Post-Deployment Indexing Monitoring Procedure
-
-**Priority:** P1
-
----
-
-## P02-T455 — Establish Sitemap URL Count Monitoring
-
-Detect unexpected growth or loss.
-
-**Priority:** P1
-
----
-
-## P02-T456 — Establish Indexed-Page Trend Monitoring
-
-**Priority:** P1
-
----
-
-## P02-T457 — Establish Crawl Error Monitoring
-
-**Priority:** P1
-
----
-
-## P02-T458 — Establish Impression Trend Monitoring by Route Family
-
-**Priority:** P1
-
----
-
-## P02-T459 — Establish Query Performance Monitoring
-
-Track emerging search queries.
+Allow legitimately dense application surfaces without affecting reading pages.
 
 **Priority:** P2
 
 ---
 
-## P02-T460 — Establish CTR Monitoring by Page Type
+# Workstream I — Surface, Border, Radius & Depth Architecture
+
+## P01-T096 — Define When a Surface Is Necessary
+
+Establish rules for when content should actually be placed inside a card or panel.
+
+**Priority:** P0
+
+---
+
+## P01-T097 — Define Flat Section Pattern
+
+Support grouping without boxes.
+
+**Priority:** P0
+
+---
+
+## P01-T098 — Define Bordered Section Pattern
+
+Use boundaries only where structural separation is useful.
+
+**Priority:** P1
+
+---
+
+## P01-T099 — Define Elevated Surface Pattern
+
+Reserve elevation for appropriate interactive or floating UI.
+
+**Priority:** P1
+
+---
+
+## P01-T100 — Establish Border Width Rules
+
+Prevent inconsistent boundary weights.
 
 **Priority:** P2
 
 ---
 
-# Workstream AL — Programmatic SEO Safety
+## P01-T101 — Establish Radius Scale
 
-## P02-T461 — Establish Programmatic Page Quality Rules
-
-Scale must not create low-value pages.
-
-**Priority:** P0
-
----
-
-## P02-T462 — Require Distinct Search Intent per Indexable Template
-
-**Priority:** P0
-
----
-
-## P02-T463 — Require Distinct Visible Content per Indexable Entity
-
-**Priority:** P0
-
----
-
-## P02-T464 — Prevent Metadata-Only Page Differentiation
-
-Changing only title and description is insufficient.
-
-**Priority:** P0
-
----
-
-## P02-T465 — Prevent Empty Taxonomy Expansion
-
-**Priority:** P0
-
----
-
-## P02-T466 — Prevent Combinatorial URL Generation
-
-**Priority:** P0
-
----
-
-## P02-T467 — Prevent Automatic Indexing of Every Database Record
-
-**Priority:** P0
-
----
-
-## P02-T468 — Establish Indexability Quality Gate for New Page Families
-
-**Priority:** P0
-
----
-
-## P02-T469 — Establish Programmatic Template Review Process
+Create a restrained radius system.
 
 **Priority:** P1
 
 ---
 
-# Workstream AM — Question SEO Foundation
+## P01-T102 — Remove Excessive Rounded-Rectangle Styling
 
-## P02-T470 — Define Canonical Question Identity
-
-Each question must have one stable public identity.
+Reduce the “everything is a pill/card” appearance.
 
 **Priority:** P0
 
 ---
 
-## P02-T471 — Define Question URL Hierarchy
+## P01-T103 — Establish Shadow Scale
 
-**Priority:** P0
-
----
-
-## P02-T472 — Define Question Metadata Input Contract
-
-**Priority:** P0
-
----
-
-## P02-T473 — Define Question Title Generation
-
-**Priority:** P0
-
----
-
-## P02-T474 — Define Question Description Generation
-
-**Priority:** P0
-
----
-
-## P02-T475 — Define Question Canonical Generation
-
-**Priority:** P0
-
----
-
-## P02-T476 — Define Question Breadcrumb Generation
-
-**Priority:** P0
-
----
-
-## P02-T477 — Define Question Structured Data Policy
-
-**Priority:** P0
-
----
-
-## P02-T478 — Define Question Sitemap Participation
-
-**Priority:** P0
-
----
-
-## P02-T479 — Define Question Internal-Link Requirements
-
-**Priority:** P0
-
----
-
-## P02-T480 — Define Question Indexability Quality Requirements
-
-**Priority:** P0
-
----
-
-## P02-T481 — Prevent Duplicate Questions from Producing Multiple Canonical Pages
-
-**Priority:** P0
-
----
-
-## P02-T482 — Preserve Existing Valuable Question URLs During Migration
-
-**Priority:** P0
-
----
-
-# Workstream AN — Hierarchy Page SEO Foundation
-
-## P02-T483 — Define Domain Page SEO Contract
-
-**Priority:** P0
-
----
-
-## P02-T484 — Define Stack Page SEO Contract
-
-**Priority:** P0
-
----
-
-## P02-T485 — Define Pillar Page SEO Contract
-
-**Priority:** P0
-
----
-
-## P02-T486 — Define Module Page SEO Contract
-
-**Priority:** P0
-
----
-
-## P02-T487 — Define Hierarchy Page Visible Introduction Requirements
-
-**Priority:** P0
-
----
-
-## P02-T488 — Define Hierarchy Page Child-Link Requirements
-
-**Priority:** P0
-
----
-
-## P02-T489 — Define Hierarchy Page Breadcrumb Requirements
-
-**Priority:** P0
-
----
-
-## P02-T490 — Define Hierarchy Page Sitemap Requirements
-
-**Priority:** P0
-
----
-
-## P02-T491 — Prevent Empty Hierarchy Pages from Indexing
-
-**Priority:** P0
-
----
-
-## P02-T492 — Prevent Duplicate Hierarchy Taxonomies
-
-**Priority:** P0
-
----
-
-# Workstream AO — SEO Security & Integrity
-
-## P02-T493 — Prevent User Input from Controlling Canonical URLs
-
-**Priority:** P0
-
----
-
-## P02-T494 — Prevent User Input from Injecting Metadata
-
-**Priority:** P0
-
----
-
-## P02-T495 — Prevent Unsafe Structured Data Serialization
-
-**Priority:** P0
-
----
-
-## P02-T496 — Prevent Open Redirects in SEO Routing Logic
-
-**Priority:** P0
-
----
-
-## P02-T497 — Prevent Host Header Manipulation of Canonical URLs
-
-**Priority:** P0
-
----
-
-## P02-T498 — Prevent Preview Content from Accidental Indexing
-
-**Priority:** P0
-
----
-
-## P02-T499 — Prevent Private User Data from Appearing in Public Metadata
-
-**Priority:** P0
-
----
-
-## P02-T500 — Prevent Private User Routes from Sitemap Inclusion
-
-**Priority:** P0
-
----
-
-# Workstream AP — SEO Legacy Cleanup
-
-## P02-T501 — Create Legacy SEO Replacement Map
-
-**Priority:** P0
-
----
-
-## P02-T502 — Consolidate Duplicate Metadata Utilities
-
-**Priority:** P0
-
----
-
-## P02-T503 — Consolidate Duplicate Canonical Utilities
-
-**Priority:** P0
-
----
-
-## P02-T504 — Consolidate Duplicate Sitemap Systems
-
-**Priority:** P0
-
----
-
-## P02-T505 — Consolidate Duplicate Structured Data Utilities
-
-**Priority:** P0
-
----
-
-## P02-T506 — Consolidate Duplicate Breadcrumb Generators
-
-**Priority:** P0
-
----
-
-## P02-T507 — Consolidate Duplicate Slug Utilities
-
-**Priority:** P0
-
----
-
-## P02-T508 — Consolidate Duplicate Route Constants
-
-**Priority:** P0
-
----
-
-## P02-T509 — Remove Hard-Coded Production Origins
-
-**Priority:** P0
-
----
-
-## P02-T510 — Remove Obsolete SEO Components
+Define minimal elevation levels.
 
 **Priority:** P1
 
 ---
 
-## P02-T511 — Remove Obsolete Sitemap Files
+## P01-T104 — Remove Decorative Shadow Overuse
 
-**Priority:** P0
-
----
-
-## P02-T512 — Remove Obsolete Redirect Rules
+Reduce visual heaviness.
 
 **Priority:** P1
 
 ---
 
-## P02-T513 — Remove Obsolete Rewrite Rules
+## P01-T105 — Remove Nested Surface Anti-Patterns
+
+Prevent card-inside-card-inside-card layouts.
+
+**Priority:** P0
+
+---
+
+# Workstream J — Layout Primitives
+
+## P01-T106 — Build Canonical Page Container
+
+Create the default V2 horizontal page boundary.
+
+**Priority:** P0
+
+---
+
+## P01-T107 — Build Canonical Reading Container
+
+Create the long-form content boundary.
+
+**Priority:** P0
+
+---
+
+## P01-T108 — Build Canonical Wide Container
+
+Support complex layouts and wide content.
+
+**Priority:** P0
+
+---
+
+## P01-T109 — Build Canonical Section Component
+
+Standardize vertical page grouping.
 
 **Priority:** P1
 
 ---
 
-## P02-T514 — Remove Legacy Indexability Hacks
+## P01-T110 — Build Canonical Stack Layout Primitive
 
-**Priority:** P0
-
----
-
-## P02-T515 — Prevent Legacy SEO Utility Reintroduction
+Standardize vertical spacing composition.
 
 **Priority:** P1
 
 ---
 
-# Workstream AQ — Representative Route Migration
+## P01-T111 — Build Canonical Inline Layout Primitive
 
-## P02-T516 — Migrate Homepage to Canonical SEO Architecture
+Standardize horizontal control grouping.
 
-**Priority:** P0
-
----
-
-## P02-T517 — Migrate One Domain Page to Canonical SEO Architecture
-
-**Priority:** P0
+**Priority:** P2
 
 ---
 
-## P02-T518 — Migrate One Stack Page to Canonical SEO Architecture
+## P01-T112 — Build Canonical Grid Primitive
 
-**Priority:** P0
-
----
-
-## P02-T519 — Migrate One Pillar Page to Canonical SEO Architecture
-
-**Priority:** P0
-
----
-
-## P02-T520 — Migrate One Module Page to Canonical SEO Architecture
-
-**Priority:** P0
-
----
-
-## P02-T521 — Migrate One Question Page to Canonical SEO Architecture
-
-**Priority:** P0
-
----
-
-## P02-T522 — Migrate One Topic Page to Canonical SEO Architecture
+Standardize responsive card and feature grids.
 
 **Priority:** P1
 
 ---
 
-## P02-T523 — Migrate One Company Page to Canonical SEO Architecture
+## P01-T113 — Build Canonical Split Layout
+
+Support main-content and secondary-content structures.
+
+**Priority:** P0
+
+---
+
+## P01-T114 — Build Canonical Sidebar Layout
+
+Support content navigation without forcing every page into a sidebar.
+
+**Priority:** P0
+
+---
+
+## P01-T115 — Build Canonical Sticky Region Primitive
+
+Standardize sticky behavior and offsets.
 
 **Priority:** P1
 
 ---
 
-## P02-T524 — Migrate One DSA Page to Canonical SEO Architecture
+## P01-T116 — Build Canonical Full-Width Breakout
 
-**Priority:** P0
-
----
-
-## P02-T525 — Validate Representative Route Family Consistency
-
-**Priority:** P0
-
----
-
-## P02-T526 — Fix Root Architecture Defects Found During Representative Migration
-
-Do not patch representative pages locally when the defect belongs to the SEO foundation.
-
-**Priority:** P0
-
----
-
-# Workstream AR — SEO Architecture Regression Protection
-
-## P02-T527 — Add Canonical URL Unit Coverage
-
-**Priority:** P0
-
----
-
-## P02-T528 — Add Route Registry Coverage
-
-**Priority:** P0
-
----
-
-## P02-T529 — Add Slug Normalization Coverage
+Allow wide code, diagrams or tables inside constrained reading layouts.
 
 **Priority:** P1
 
 ---
 
-## P02-T530 — Add Indexability Policy Coverage
+## P01-T117 — Build Canonical Responsive Visibility Utilities
 
-**Priority:** P0
-
----
-
-## P02-T531 — Add Metadata Factory Coverage
+Avoid duplicate breakpoint logic.
 
 **Priority:** P1
 
 ---
 
-## P02-T532 — Add Sitemap Generation Coverage
+## P01-T118 — Remove Duplicate Container Components
+
+Migrate overlapping container implementations.
 
 **Priority:** P0
 
 ---
 
-## P02-T533 — Add Redirect Registry Coverage
+# Workstream K — Button & Action System
+
+## P01-T119 — Rebuild Canonical Button Component
+
+Create the permanent V2 button primitive.
 
 **Priority:** P0
 
 ---
 
-## P02-T534 — Add Structured Data Coverage for Critical Templates
+## P01-T120 — Implement Primary Button Variant
+
+Use only for primary page actions.
+
+**Priority:** P0
+
+---
+
+## P01-T121 — Implement Secondary Button Variant
+
+Support lower-priority actions.
 
 **Priority:** P1
 
 ---
 
-## P02-T535 — Add Internal Link Integrity Coverage
+## P01-T122 — Implement Ghost Button Variant
 
-**Priority:** P0
-
----
-
-## P02-T536 — Add HTTP Status Regression Coverage
-
-**Priority:** P0
-
----
-
-## P02-T537 — Add Noindex/Sitemap Conflict Protection
-
-**Priority:** P0
-
----
-
-## P02-T538 — Add Canonical/Sitemap Conflict Protection
-
-**Priority:** P0
-
----
-
-# Workstream AS — Phase 02 Consolidation
-
-## P02-T539 — Produce Canonical Route Registry Documentation
-
-**Priority:** P0
-
----
-
-## P02-T540 — Produce Canonical URL Architecture Documentation
-
-**Priority:** P0
-
----
-
-## P02-T541 — Produce Indexability Policy Documentation
-
-**Priority:** P0
-
----
-
-## P02-T542 — Produce Metadata Template Documentation
+Support low-emphasis actions.
 
 **Priority:** P1
 
 ---
 
-## P02-T543 — Produce Sitemap Architecture Documentation
+## P01-T123 — Implement Destructive Button Variant
 
-**Priority:** P0
-
----
-
-## P02-T544 — Produce Structured Data Policy Documentation
+Standardize destructive operations.
 
 **Priority:** P1
 
 ---
 
-## P02-T545 — Produce Internal Linking Architecture Documentation
+## P01-T124 — Implement Icon Button Variant
 
-**Priority:** P0
-
----
-
-## P02-T546 — Publish Legacy-to-V2 SEO Migration Map
-
-**Priority:** P0
-
----
-
-## P02-T547 — Update V2 Technical Implementation Plan
-
-Record the implemented SEO architecture.
-
-**Priority:** P0
-
----
-
-## P02-T548 — Update V2 Decision Log
-
-Record major URL, indexing and SEO decisions.
+Standardize compact icon actions.
 
 **Priority:** P1
 
 ---
 
-## P02-T549 — Update V2 Issue Log
+## P01-T125 — Implement Button Loading State
 
-Record unresolved route-specific SEO defects.
+Prevent duplicate submissions and unclear waiting states.
 
 **Priority:** P1
 
 ---
 
-## P02-T550 — Produce Phase 02 Completion Report
+## P01-T126 — Implement Button Disabled State
+
+Ensure accessible disabled behavior.
+
+**Priority:** P1
+
+---
+
+## P01-T127 — Standardize Button Sizes
+
+Remove arbitrary button dimensions.
+
+**Priority:** P1
+
+---
+
+## P01-T128 — Standardize Icon Alignment in Buttons
+
+Fix inconsistent icon/text positioning.
+
+**Priority:** P2
+
+---
+
+## P01-T129 — Consolidate Duplicate Button Components
+
+Migrate shared consumers where safe.
+
+**Priority:** P0
+
+---
+
+## P01-T130 — Remove Legacy Button Implementations
+
+Delete confirmed obsolete versions after migration.
+
+**Priority:** P1
+
+---
+
+# Workstream L — Card, Panel & Section System
+
+## P01-T131 — Rebuild Canonical Card Component
+
+Create a restrained general-purpose card.
+
+**Priority:** P0
+
+---
+
+## P01-T132 — Implement Interactive Card Variant
+
+Provide clear but subtle interaction behavior.
+
+**Priority:** P1
+
+---
+
+## P01-T133 — Implement Static Information Card Variant
+
+Avoid hover effects on noninteractive content.
+
+**Priority:** P1
+
+---
+
+## P01-T134 — Implement Minimal Card Variant
+
+Support grouping with minimal visual chrome.
+
+**Priority:** P1
+
+---
+
+## P01-T135 — Implement Panel Component
+
+Separate application panels from generic cards.
+
+**Priority:** P1
+
+---
+
+## P01-T136 — Implement Section Header Pattern
+
+Standardize title, description and optional actions.
+
+**Priority:** P1
+
+---
+
+## P01-T137 — Remove Card Hover Effects from Noninteractive Content
+
+Eliminate misleading interaction cues.
+
+**Priority:** P0
+
+---
+
+## P01-T138 — Remove Universal Scale-on-Hover Behavior
+
+Avoid unnecessary motion and layout instability.
+
+**Priority:** P0
+
+---
+
+## P01-T139 — Reduce Card Usage in Reading Flows
+
+Prefer typography and spacing for content hierarchy.
+
+**Priority:** P0
+
+---
+
+## P01-T140 — Consolidate Duplicate Card Components
+
+Migrate shared implementations.
+
+**Priority:** P0
+
+---
+
+# Workstream M — Badge, Tag & Metadata System
+
+## P01-T141 — Rebuild Canonical Badge Component
+
+Create restrained semantic badges.
+
+**Priority:** P1
+
+---
+
+## P01-T142 — Implement Difficulty Badge Variants
+
+Standardize difficulty presentation.
+
+**Priority:** P1
+
+---
+
+## P01-T143 — Implement Status Badge Variants
+
+Support actual status semantics.
+
+**Priority:** P2
+
+---
+
+## P01-T144 — Implement Neutral Metadata Badge
+
+Support low-emphasis metadata where a badge is genuinely needed.
+
+**Priority:** P2
+
+---
+
+## P01-T145 — Build Tag Component
+
+Separate content tags from status badges.
+
+**Priority:** P1
+
+---
+
+## P01-T146 — Reduce Excessive Badge Usage
+
+Replace decorative badges with plain metadata text where appropriate.
+
+**Priority:** P0
+
+---
+
+## P01-T147 — Prevent Badge Colour Proliferation
+
+Restrict arbitrary category colours.
+
+**Priority:** P1
+
+---
+
+## P01-T148 — Consolidate Duplicate Badge Components
+
+Migrate shared consumers.
+
+**Priority:** P1
+
+---
+
+# Workstream N — Form & Input System
+
+## P01-T149 — Rebuild Canonical Input Component
+
+Standardize text input behavior.
+
+**Priority:** P0
+
+---
+
+## P01-T150 — Rebuild Canonical Textarea Component
+
+Support longer input consistently.
+
+**Priority:** P1
+
+---
+
+## P01-T151 — Rebuild Canonical Select Component
+
+Standardize selection controls.
+
+**Priority:** P1
+
+---
+
+## P01-T152 — Rebuild Canonical Checkbox Component
+
+Ensure clear states and accessibility.
+
+**Priority:** P1
+
+---
+
+## P01-T153 — Rebuild Canonical Radio Component
+
+Standardize exclusive selection.
+
+**Priority:** P2
+
+---
+
+## P01-T154 — Implement Form Label Component
+
+Create consistent accessible labels.
+
+**Priority:** P1
+
+---
+
+## P01-T155 — Implement Form Description Component
+
+Support contextual help.
+
+**Priority:** P2
+
+---
+
+## P01-T156 — Implement Field Error Component
+
+Standardize validation messages.
+
+**Priority:** P1
+
+---
+
+## P01-T157 — Implement Input Icon Pattern
+
+Support search and contextual inputs.
+
+**Priority:** P1
+
+---
+
+## P01-T158 — Standardize Input Heights
+
+Remove arbitrary control dimensions.
+
+**Priority:** P1
+
+---
+
+## P01-T159 — Standardize Form Focus States
+
+Create consistent keyboard visibility.
+
+**Priority:** P0
+
+---
+
+## P01-T160 — Consolidate Duplicate Form Components
+
+Migrate reusable implementations.
+
+**Priority:** P1
+
+---
+
+# Workstream O — Search Input Foundation
+
+## P01-T161 — Build Canonical Search Input
+
+Create the shared visual search primitive.
+
+**Priority:** P0
+
+---
+
+## P01-T162 — Implement Search Icon Treatment
+
+Standardize icon placement.
+
+**Priority:** P2
+
+---
+
+## P01-T163 — Implement Search Clear Action
+
+Support quick query reset.
+
+**Priority:** P1
+
+---
+
+## P01-T164 — Implement Search Loading State
+
+Communicate active search behavior.
+
+**Priority:** P1
+
+---
+
+## P01-T165 — Implement Search Empty Input State
+
+Create clear placeholder behavior.
+
+**Priority:** P2
+
+---
+
+## P01-T166 — Implement Search Keyboard Shortcut Hint
+
+Support desktop discoverability without clutter.
+
+**Priority:** P2
+
+---
+
+## P01-T167 — Ensure Search Input Mobile Usability
+
+Provide appropriate touch targets and sizing.
+
+**Priority:** P0
+
+---
+
+# Workstream P — Navigation Primitives
+
+## P01-T168 — Build Canonical Navigation Link
+
+Standardize navigation states.
+
+**Priority:** P0
+
+---
+
+## P01-T169 — Implement Active Navigation State
+
+Make current location clear without excessive colour.
+
+**Priority:** P0
+
+---
+
+## P01-T170 — Implement Nested Navigation Item
+
+Support content hierarchy.
+
+**Priority:** P1
+
+---
+
+## P01-T171 — Implement Navigation Group
+
+Standardize grouped links.
+
+**Priority:** P1
+
+---
+
+## P01-T172 — Build Canonical Breadcrumb Component
+
+Create accessible visual breadcrumb presentation.
+
+**Priority:** P0
+
+---
+
+## P01-T173 — Build Canonical Pagination Component
+
+Standardize multi-page navigation where required.
+
+**Priority:** P1
+
+---
+
+## P01-T174 — Build Canonical Previous/Next Navigation Primitive
+
+Support sequential learning flows.
+
+**Priority:** P1
+
+---
+
+## P01-T175 — Build Canonical Tab Navigation
+
+Support local content switching without misuse as global navigation.
+
+**Priority:** P1
+
+---
+
+## P01-T176 — Build Canonical Accordion Navigation
+
+Support progressive disclosure.
+
+**Priority:** P1
+
+---
+
+## P01-T177 — Build Canonical Tree Navigation Primitives
+
+Prepare for later content-tree consolidation.
+
+**Priority:** P0
+
+---
+
+# Workstream Q — Overlay & Floating UI
+
+## P01-T178 — Rebuild Canonical Dialog
+
+Standardize modal behavior.
+
+**Priority:** P1
+
+---
+
+## P01-T179 — Rebuild Canonical Drawer
+
+Support mobile and contextual panels.
+
+**Priority:** P0
+
+---
+
+## P01-T180 — Rebuild Canonical Dropdown Menu
+
+Standardize contextual actions.
+
+**Priority:** P1
+
+---
+
+## P01-T181 — Rebuild Canonical Popover
+
+Support lightweight contextual content.
+
+**Priority:** P2
+
+---
+
+## P01-T182 — Rebuild Canonical Tooltip
+
+Use tooltips only for genuinely unclear icon actions.
+
+**Priority:** P2
+
+---
+
+## P01-T183 — Standardize Overlay Backdrop
+
+Create consistent visual hierarchy.
+
+**Priority:** P1
+
+---
+
+## P01-T184 — Standardize Overlay Z-Index Architecture
+
+Prevent stacking conflicts.
+
+**Priority:** P0
+
+---
+
+## P01-T185 — Standardize Overlay Focus Management
+
+Ensure accessible keyboard behavior.
+
+**Priority:** P0
+
+---
+
+## P01-T186 — Standardize Overlay Mobile Behavior
+
+Prevent unusable desktop-style modals on small screens.
+
+**Priority:** P1
+
+---
+
+# Workstream R — Loading, Empty, Error & Feedback States
+
+## P01-T187 — Build Canonical Skeleton Primitive
+
+Create reusable loading placeholders.
+
+**Priority:** P1
+
+---
+
+## P01-T188 — Build Text Skeleton Pattern
+
+Support reading-content loading.
+
+**Priority:** P1
+
+---
+
+## P01-T189 — Build Card Skeleton Pattern
+
+Support structured content loading.
+
+**Priority:** P2
+
+---
+
+## P01-T190 — Build List Skeleton Pattern
+
+Support search and question-list loading.
+
+**Priority:** P1
+
+---
+
+## P01-T191 — Build Canonical Spinner
+
+Reserve spinner use for appropriate compact actions.
+
+**Priority:** P2
+
+---
+
+## P01-T192 — Replace Plain Loading Text in Shared Experiences
+
+Use context-appropriate loading feedback.
+
+**Priority:** P1
+
+---
+
+## P01-T193 — Build Canonical Empty State
+
+Create clear recovery-oriented empty states.
+
+**Priority:** P1
+
+---
+
+## P01-T194 — Build Canonical Error State
+
+Create understandable error recovery.
+
+**Priority:** P0
+
+---
+
+## P01-T195 — Build Inline Error Pattern
+
+Support component-level failures.
+
+**Priority:** P1
+
+---
+
+## P01-T196 — Build Success Feedback Pattern
+
+Provide restrained confirmation.
+
+**Priority:** P2
+
+---
+
+## P01-T197 — Standardize Toast Notifications
+
+Use transient feedback consistently.
+
+**Priority:** P2
+
+---
+
+## P01-T198 — Prevent Toast Overuse
+
+Keep persistent information in the interface when appropriate.
+
+**Priority:** P2
+
+---
+
+# Workstream S — Educational Content Components
+
+## P01-T199 — Build Canonical Prose Component
+
+Create the root long-form content renderer styling contract.
+
+**Priority:** P0
+
+---
+
+## P01-T200 — Build Canonical Code Block Shell
+
+Prepare reusable code presentation.
+
+**Priority:** P0
+
+---
+
+## P01-T201 — Build Canonical Code Header
+
+Support language labels and actions.
+
+**Priority:** P1
+
+---
+
+## P01-T202 — Build Canonical Copy-Code Action
+
+Provide consistent copy feedback.
+
+**Priority:** P1
+
+---
+
+## P01-T203 — Build Canonical Inline Code Style
+
+Standardize technical references.
+
+**Priority:** P0
+
+---
+
+## P01-T204 — Build Canonical Callout Component
+
+Create the base semantic callout.
+
+**Priority:** P0
+
+---
+
+## P01-T205 — Implement Note Callout
+
+Support neutral supplementary information.
+
+**Priority:** P1
+
+---
+
+## P01-T206 — Implement Tip Callout
+
+Support useful guidance without excessive colour.
+
+**Priority:** P1
+
+---
+
+## P01-T207 — Implement Warning Callout
+
+Reserve warning emphasis for meaningful caution.
+
+**Priority:** P1
+
+---
+
+## P01-T208 — Implement Example Block
+
+Create consistent worked-example presentation.
+
+**Priority:** P0
+
+---
+
+## P01-T209 — Implement Key Takeaway Block
+
+Support concise summary emphasis.
+
+**Priority:** P1
+
+---
+
+## P01-T210 — Build Canonical Table Wrapper
+
+Support responsive technical tables.
+
+**Priority:** P0
+
+---
+
+## P01-T211 — Implement Table Overflow Behavior
+
+Prevent mobile page overflow.
+
+**Priority:** P0
+
+---
+
+## P01-T212 — Implement Table Header Styling
+
+Improve scanability.
+
+**Priority:** P1
+
+---
+
+## P01-T213 — Implement Table Row Styling
+
+Avoid excessive striping and visual noise.
+
+**Priority:** P2
+
+---
+
+## P01-T214 — Build Canonical Diagram Container
+
+Support diagrams without forcing card styling.
+
+**Priority:** P1
+
+---
+
+## P01-T215 — Build Canonical Media Container
+
+Standardize images and visual content.
+
+**Priority:** P2
+
+---
+
+## P01-T216 — Build Canonical Content Caption
+
+Support diagrams, tables and media.
+
+**Priority:** P2
+
+---
+
+# Workstream T — Responsive Foundation
+
+## P01-T217 — Establish Canonical Breakpoint Strategy
+
+Standardize responsive behavior.
+
+**Priority:** P0
+
+---
+
+## P01-T218 — Establish Mobile-First Layout Rules
+
+Avoid desktop layouts patched down for phones.
+
+**Priority:** P0
+
+---
+
+## P01-T219 — Establish Responsive Page Gutters
+
+Standardize horizontal spacing.
+
+**Priority:** P0
+
+---
+
+## P01-T220 — Establish Responsive Typography Behavior
+
+Prevent oversized headings and cramped body text.
+
+**Priority:** P0
+
+---
+
+## P01-T221 — Establish Responsive Grid Rules
+
+Create predictable grid collapse behavior.
+
+**Priority:** P1
+
+---
+
+## P01-T222 — Establish Responsive Sidebar Rules
+
+Define when sidebars remain, collapse or move.
+
+**Priority:** P0
+
+---
+
+## P01-T223 — Establish Responsive Navigation Rules
+
+Prepare consistent global and content navigation behavior.
+
+**Priority:** P0
+
+---
+
+## P01-T224 — Establish Responsive Table Rules
+
+Prevent unusable data presentation.
+
+**Priority:** P0
+
+---
+
+## P01-T225 — Establish Responsive Code Block Rules
+
+Prevent code from breaking the viewport.
+
+**Priority:** P0
+
+---
+
+## P01-T226 — Establish Responsive Dialog and Drawer Rules
+
+Use appropriate interaction patterns by viewport.
+
+**Priority:** P1
+
+---
+
+## P01-T227 — Establish Touch Target Minimums
+
+Improve mobile usability.
+
+**Priority:** P0
+
+---
+
+## P01-T228 — Remove Shared Fixed-Width Mobile Breakage
+
+Fix reusable components that assume desktop width.
+
+**Priority:** P0
+
+---
+
+# Workstream U — Accessibility Foundation
+
+## P01-T229 — Establish Focus-Visible System
+
+Create consistent keyboard focus indicators.
+
+**Priority:** P0
+
+---
+
+## P01-T230 — Remove Focus Outline Suppression
+
+Eliminate inaccessible focus removal.
+
+**Priority:** P0
+
+---
+
+## P01-T231 — Establish Semantic Heading Rules
+
+Prevent visual heading styles from breaking document structure.
+
+**Priority:** P0
+
+---
+
+## P01-T232 — Establish Accessible Icon Button Rules
+
+Require accessible names.
+
+**Priority:** P0
+
+---
+
+## P01-T233 — Establish Form Accessibility Rules
+
+Standardize labels, descriptions and errors.
+
+**Priority:** P0
+
+---
+
+## P01-T234 — Establish Navigation Accessibility Rules
+
+Support semantic and keyboard navigation.
+
+**Priority:** P0
+
+---
+
+## P01-T235 — Establish Overlay Accessibility Rules
+
+Standardize focus trapping and restoration.
+
+**Priority:** P0
+
+---
+
+## P01-T236 — Establish Reduced Motion Support
+
+Respect user preferences.
+
+**Priority:** P1
+
+---
+
+## P01-T237 — Establish Screen Reader Utility Patterns
+
+Support visually hidden accessible content.
+
+**Priority:** P1
+
+---
+
+## P01-T238 — Establish Minimum Contrast Requirements
+
+Apply them to canonical tokens and components.
+
+**Priority:** P0
+
+---
+
+# Workstream V — Motion & Interaction Foundation
+
+## P01-T239 — Define Motion Principles
+
+Use motion to explain state changes rather than decorate everything.
+
+**Priority:** P1
+
+---
+
+## P01-T240 — Standardize Transition Durations
+
+Remove inconsistent animation timing.
+
+**Priority:** P2
+
+---
+
+## P01-T241 — Standardize Transition Easing
+
+Create consistent interaction feel.
+
+**Priority:** P2
+
+---
+
+## P01-T242 — Remove Universal Transition-All Usage Where Harmful
+
+Avoid unnecessary property animation.
+
+**Priority:** P1
+
+---
+
+## P01-T243 — Remove Unnecessary Hover Scaling
+
+Reduce visual instability.
+
+**Priority:** P0
+
+---
+
+## P01-T244 — Standardize Hover Feedback
+
+Use restrained colour, border or background changes.
+
+**Priority:** P1
+
+---
+
+## P01-T245 — Standardize Pressed and Active Feedback
+
+Improve control responsiveness.
+
+**Priority:** P2
+
+---
+
+## P01-T246 — Implement Reduced-Motion Alternatives
+
+Ensure essential interaction remains understandable.
+
+**Priority:** P1
+
+---
+
+# Workstream W — Icon Architecture
+
+## P01-T247 — Establish Canonical Icon Library
+
+Use one primary icon system.
+
+**Priority:** P1
+
+---
+
+## P01-T248 — Standardize Icon Sizes
+
+Create predictable sizing roles.
+
+**Priority:** P2
+
+---
+
+## P01-T249 — Standardize Icon Stroke Treatment
+
+Avoid inconsistent visual weight.
+
+**Priority:** P2
+
+---
+
+## P01-T250 — Remove Decorative Icon Overuse
+
+Use icons only where they improve comprehension.
+
+**Priority:** P1
+
+---
+
+## P01-T251 — Remove Mixed Icon Libraries Where Unnecessary
+
+Reduce inconsistency and bundle duplication.
+
+**Priority:** P1
+
+---
+
+## P01-T252 — Standardize Icon and Text Spacing
+
+Improve control alignment.
+
+**Priority:** P2
+
+---
+
+# Workstream X — Theme Infrastructure
+
+## P01-T253 — Consolidate Theme Provider Architecture
+
+Ensure one canonical theme system.
+
+**Priority:** P0
+
+---
+
+## P01-T254 — Implement System Theme Support
+
+Respect operating-system preference.
+
+**Priority:** P1
+
+---
+
+## P01-T255 — Prevent Theme Flash
+
+Reduce incorrect-theme rendering during load.
+
+**Priority:** P0
+
+---
+
+## P01-T256 — Standardize Theme Persistence
+
+Ensure predictable user preference behavior.
+
+**Priority:** P1
+
+---
+
+## P01-T257 — Remove Component-Level Theme Hacks
+
+Migrate components to semantic tokens.
+
+**Priority:** P0
+
+---
+
+## P01-T258 — Remove Duplicate Theme Detection Logic
+
+Use one canonical mechanism.
+
+**Priority:** P1
+
+---
+
+## P01-T259 — Validate Native Control Theme Behavior
+
+Ensure browser-native elements align with the selected theme.
+
+**Priority:** P2
+
+---
+
+# Workstream Y — Legacy UI Consolidation
+
+## P01-T260 — Build Legacy Component Replacement Map
+
+Map every major legacy shared component to its V2 replacement.
+
+**Priority:** P0
+
+---
+
+## P01-T261 — Consolidate Duplicate Button Systems
+
+Choose and migrate toward one canonical implementation.
+
+**Priority:** P0
+
+---
+
+## P01-T262 — Consolidate Duplicate Card Systems
+
+Reduce parallel card architectures.
+
+**Priority:** P0
+
+---
+
+## P01-T263 — Consolidate Duplicate Badge Systems
+
+Remove unnecessary variants and implementations.
+
+**Priority:** P1
+
+---
+
+## P01-T264 — Consolidate Duplicate Input Systems
+
+Create one shared form foundation.
+
+**Priority:** P1
+
+---
+
+## P01-T265 — Consolidate Duplicate Dialog Systems
+
+Standardize overlay behavior.
+
+**Priority:** P1
+
+---
+
+## P01-T266 — Consolidate Duplicate Drawer Systems
+
+Prepare for mobile navigation migration.
+
+**Priority:** P1
+
+---
+
+## P01-T267 — Consolidate Duplicate Breadcrumb Systems
+
+Prepare for unified UX and SEO hierarchy.
+
+**Priority:** P0
+
+---
+
+## P01-T268 — Consolidate Duplicate Loading Systems
+
+Create consistent feedback.
+
+**Priority:** P1
+
+---
+
+## P01-T269 — Consolidate Duplicate Empty-State Systems
+
+Remove route-specific reinvention.
+
+**Priority:** P2
+
+---
+
+## P01-T270 — Consolidate Duplicate Error-State Systems
+
+Standardize recovery patterns.
+
+**Priority:** P1
+
+---
+
+## P01-T271 — Consolidate Duplicate Code Block Shells
+
+Prepare for question-page migration.
+
+**Priority:** P0
+
+---
+
+## P01-T272 — Consolidate Duplicate Content Callouts
+
+Create one educational component family.
+
+**Priority:** P1
+
+---
+
+## P01-T273 — Remove Confirmed Dead Shared UI Components
+
+Delete only after usage verification.
+
+**Priority:** P1
+
+---
+
+## P01-T274 — Prevent Legacy Component Reintroduction
+
+Document replacement rules for active development.
+
+**Priority:** P1
+
+---
+
+# Workstream Z — Repository-Wide Root Style Migration
+
+## P01-T275 — Replace Shared Hard-Coded Background Colors
+
+Migrate common shared components to semantic tokens.
+
+**Priority:** P0
+
+---
+
+## P01-T276 — Replace Shared Hard-Coded Text Colors
+
+Migrate common shared components to semantic hierarchy.
+
+**Priority:** P0
+
+---
+
+## P01-T277 — Replace Shared Hard-Coded Border Colors
+
+Use canonical border tokens.
+
+**Priority:** P0
+
+---
+
+## P01-T278 — Replace Shared Arbitrary Border Radii
+
+Use the canonical radius scale.
+
+**Priority:** P1
+
+---
+
+## P01-T279 — Replace Shared Arbitrary Shadows
+
+Use canonical elevation roles.
+
+**Priority:** P1
+
+---
+
+## P01-T280 — Replace Shared Arbitrary Width Constraints
+
+Use canonical containers.
+
+**Priority:** P0
+
+---
+
+## P01-T281 — Replace Shared Arbitrary Spacing Patterns
+
+Use the canonical spacing system.
+
+**Priority:** P0
+
+---
+
+## P01-T282 — Replace Shared Arbitrary Typography
+
+Use canonical text roles.
+
+**Priority:** P0
+
+---
+
+## P01-T283 — Replace Shared Arbitrary Hover Effects
+
+Use canonical interaction behavior.
+
+**Priority:** P1
+
+---
+
+## P01-T284 — Replace Shared Arbitrary Focus States
+
+Use the global focus system.
+
+**Priority:** P0
+
+---
+
+## P01-T285 — Remove Shared Nested-Card Patterns
+
+Flatten reusable composition where possible.
+
+**Priority:** P0
+
+---
+
+## P01-T286 — Remove Shared Decorative Gradient Overuse
+
+Reserve gradients for intentional brand or hero use.
+
+**Priority:** P1
+
+---
+
+## P01-T287 — Remove Shared Excessive Border Usage
+
+Use whitespace and hierarchy where possible.
+
+**Priority:** P0
+
+---
+
+## P01-T288 — Remove Shared Excessive Badge Usage
+
+Reduce visual fragmentation.
+
+**Priority:** P0
+
+---
+
+## P01-T289 — Remove Shared Excessive Icon Usage
+
+Improve visual calm.
+
+**Priority:** P1
+
+---
+
+## P01-T290 — Remove Shared Unnecessary Motion
+
+Reduce distraction.
+
+**Priority:** P1
+
+---
+
+# Workstream AA — V2 UI Development & Review Surfaces
+
+## P01-T291 — Create V2 Primitive Review Surface
+
+Render canonical primitives together for rapid comparison.
+
+**Priority:** P1
+
+---
+
+## P01-T292 — Create Typography Review Surface
+
+Review headings, body text, lists and code.
+
+**Priority:** P1
+
+---
+
+## P01-T293 — Create Color and Surface Review Surface
+
+Review semantic hierarchy in both themes.
+
+**Priority:** P1
+
+---
+
+## P01-T294 — Create Form Component Review Surface
+
+Validate all states consistently.
+
+**Priority:** P2
+
+---
+
+## P01-T295 — Create Educational Content Review Surface
+
+Test prose, code, callouts, tables and diagrams.
+
+**Priority:** P0
+
+---
+
+## P01-T296 — Create Density Stress-Test Surface
+
+Test highly populated content without reverting to visual clutter.
+
+**Priority:** P0
+
+---
+
+## P01-T297 — Create Long-Reading Stress-Test Surface
+
+Test sustained reading in light and dark themes.
+
+**Priority:** P0
+
+---
+
+## P01-T298 — Create Mobile Component Stress-Test Surface
+
+Test narrow viewport behavior.
+
+**Priority:** P0
+
+---
+
+## P01-T299 — Create Wide Desktop Stress-Test Surface
+
+Ensure layouts do not become excessively stretched.
+
+**Priority:** P1
+
+---
+
+# Workstream AB — Root UI Performance
+
+## P01-T300 — Audit Design-System Bundle Cost
+
+Prevent the V2 component foundation from introducing excessive JavaScript.
+
+**Priority:** P1
+
+---
+
+## P01-T301 — Minimize Client-Only UI Primitives
+
+Keep static visual components server-compatible where possible.
+
+**Priority:** P0
+
+---
+
+## P01-T302 — Avoid Unnecessary Runtime Styling
+
+Prefer predictable build-time styling where appropriate.
+
+**Priority:** P1
+
+---
+
+## P01-T303 — Reduce Duplicate Icon Bundle Cost
+
+Consolidate icon usage.
+
+**Priority:** P2
+
+---
+
+## P01-T304 — Reduce Duplicate Component Dependencies
+
+Avoid multiple libraries solving the same UI problem.
+
+**Priority:** P1
+
+---
+
+## P01-T305 — Optimize Font Loading
+
+Avoid unnecessary weights and files.
+
+**Priority:** P0
+
+---
+
+## P01-T306 — Prevent Layout Shift from UI Foundation
+
+Stabilize font and component sizing.
+
+**Priority:** P0
+
+---
+
+# Workstream AC — Root UI Integration Protection
+
+## P01-T307 — Add Canonical Component Unit Coverage Where Valuable
+
+Protect complex shared behavior without testing trivial CSS implementation.
+
+**Priority:** P2
+
+---
+
+## P01-T308 — Add Interaction Coverage for Critical Primitives
+
+Protect dialogs, drawers, menus and form interactions.
+
+**Priority:** P1
+
+---
+
+## P01-T309 — Add Accessibility Checks for Canonical Components
+
+Catch shared accessibility regressions early.
+
+**Priority:** P0
+
+---
+
+## P01-T310 — Add Theme Regression Coverage for Critical Components
+
+Protect semantic token usage.
+
+**Priority:** P1
+
+---
+
+## P01-T311 — Add Responsive Regression Coverage for High-Risk Primitives
+
+Protect shared navigation and overflow-sensitive components.
+
+**Priority:** P1
+
+---
+
+## P01-T312 — Add Legacy Import Detection Where Practical
+
+Detect reintroduction of deprecated components.
+
+**Priority:** P2
+
+---
+
+# Workstream AD — Phase 01 Integration & Completion
+
+## P01-T313 — Migrate One Representative Simple Page to Root V2 System
+
+Verify the design foundation in a realistic page.
+
+**Priority:** P0
+
+---
+
+## P01-T314 — Migrate One Representative Dense Page to Root V2 System
+
+Test whether the new system genuinely solves density.
+
+**Priority:** P0
+
+---
+
+## P01-T315 — Migrate One Representative Long-Reading Page to Root V2 System
+
+Test typography and reading width.
+
+**Priority:** P0
+
+---
+
+## P01-T316 — Migrate One Representative Code-Heavy Surface
+
+Test technical content primitives.
+
+**Priority:** P0
+
+---
+
+## P01-T317 — Compare V1 and V2 Density
+
+Verify that V2 reduces unnecessary visual competition.
+
+**Priority:** P0
+
+---
+
+## P01-T318 — Compare V1 and V2 Reading Comfort
+
+Verify improvements in typography, width and spacing.
+
+**Priority:** P0
+
+---
+
+## P01-T319 — Resolve Root-Level UI Defects Found During Representative Migration
+
+Fix the system rather than patching representative pages locally.
+
+**Priority:** P0
+
+---
+
+## P01-T320 — Freeze Canonical V2 Design Tokens
+
+Prevent uncontrolled token changes during mass migration.
+
+**Priority:** P0
+
+---
+
+## P01-T321 — Freeze Canonical V2 Primitive APIs
+
+Stabilize shared component interfaces before broad adoption.
+
+**Priority:** P0
+
+---
+
+## P01-T322 — Publish Legacy-to-V2 Component Mapping
+
+Give later phases an explicit migration path.
+
+**Priority:** P0
+
+---
+
+## P01-T323 — Update V2 Technical Implementation Plan
+
+Record the actual implemented UI architecture.
+
+**Priority:** P1
+
+---
+
+## P01-T324 — Update V2 Decision Log
+
+Record important UI architecture decisions.
+
+**Priority:** P1
+
+---
+
+## P01-T325 — Update V2 Issue Log
+
+Record unresolved UI issues that belong to later route-specific phases.
+
+**Priority:** P1
+
+---
+
+## P01-T326 — Produce Phase 01 Completion Report
 
 Document:
 
-* canonical architecture,
-* route registry,
-* URL system,
-* metadata system,
-* sitemap system,
-* indexability system,
-* structured data,
-* internal linking,
-* remaining route migrations.
+* implemented root systems,
+* migrated primitives,
+* removed legacy systems,
+* remaining route-specific work,
+* known risks.
 
 **Priority:** P0
 
 ---
 
-## P02-T551 — Approve SEO Foundation for Mass Route Migration
+## P01-T327 — Approve Phase 01 Foundation for Mass Page Migration
 
-Confirm later phases can migrate pages without creating new SEO architectures.
+Confirm that later phases can build on the canonical V2 system rather than creating new visual architectures.
 
 **Priority:** P0
 
 ---
 
-# Phase 02 Exit Criteria
+# Phase 01 Exit Criteria
 
-Phase 02 is complete when Interview Explainer has:
+Phase 01 is complete when Interview Explainer has:
 
-* one canonical production origin,
-* one public route registry,
-* one URL-generation architecture,
-* one slug policy,
-* one entity-resolution model,
-* one redirect architecture,
-* one rewrite policy,
-* one indexability system,
-* one robots architecture,
-* one metadata factory,
-* one title architecture,
-* one description architecture,
-* one canonical-tag architecture,
-* one sitemap system,
-* one structured-data system,
-* one breadcrumb hierarchy,
-* crawlable server-visible public content,
-* correct HTTP status behavior,
-* one internal-linking architecture,
-* duplicate URL prevention,
-* thin-page protection,
-* programmatic SEO quality rules,
-* backend support where public SEO depends on backend data,
-* automated validation for major SEO failures,
-* representative route families proving the architecture works.
+* one canonical semantic color architecture,
+* one coherent light theme,
+* one coherent dark theme,
+* one typography system,
+* one reading-width architecture,
+* one spacing system,
+* one surface hierarchy,
+* one radius and shadow system,
+* canonical layout primitives,
+* canonical buttons,
+* canonical cards and panels,
+* canonical badges and tags,
+* canonical form components,
+* canonical search input foundation,
+* canonical navigation primitives,
+* canonical overlays,
+* canonical loading, empty and error states,
+* canonical educational content components,
+* responsive foundations,
+* accessibility foundations,
+* motion rules,
+* icon rules,
+* theme infrastructure,
+* a legacy component replacement map,
+* representative pages proving the system works.
 
-Phase 02 does **not** require every public route to be fully migrated.
+Phase 01 does not require every route to be visually migrated.
 
-That happens in later route-family and repository-wide SEO phases.
-
-Phase 02 creates the root architecture that makes correct SEO the default.
+It requires the **root system to be strong enough that every later route can be migrated without inventing another design language**.
 
 ---
 
-# Phase 02 Core Principle
+# Phase 01 Core Principle
 
 ```text
-DO NOT MANUALLY SEO 10,000+ PAGES
+DO NOT FIX 100 PAGES
+WITH 100 DIFFERENT CSS PATCHES
 
-BUILD A SYSTEM WHERE:
+FIX THE ROOT SYSTEM
 
-ONE CONTENT ENTITY
-        ↓
-ONE STABLE IDENTITY
-        ↓
-ONE CANONICAL URL
-        ↓
-ONE INDEXABILITY DECISION
-        ↓
-ONE METADATA CONTRACT
-        ↓
-ONE SITEMAP ENTRY
-        ↓
-ONE INTERNAL DISCOVERY GRAPH
+THEN MIGRATE 100 PAGES
+ONTO THAT SYSTEM
 ```
 
-The intended transformation is:
+The intended visual transformation is:
 
 ```text
-CURRENT RISK
+CURRENT
 
-Fragmented routes
-Multiple URL builders
-Potential aliases
-Incomplete sitemap coverage
-Low indexed-page coverage
-Possible orphan pages
-Scattered metadata
-Unclear canonical ownership
-Client-dependent content
-SEO fixes performed page by page
+Dense
+Boxed
+Highly coloured
+Competing surfaces
+Inconsistent widths
+Inconsistent typography
+Too many badges
+Too many borders
+Too many hover effects
+Parallel component systems
 
         ↓
 
 V2
 
-Canonical route registry
-Stable entity identity
-One URL per public entity
-Correct redirects
-Correct 404 behavior
-Central metadata generation
-Central indexability policy
-Canonical sitemap generation
-Server-visible public content
-Strong crawl hierarchy
-Automatic SEO participation for valid new content
-Automated detection of structural SEO failures
+Calm
+Readable
+Content-first
+Intentional hierarchy
+Controlled colour
+Strong typography
+Generous but efficient spacing
+Minimal unnecessary surfaces
+Consistent responsive behavior
+One reusable UI architecture
 ```
-
----
-
-# Important Boundary
-
-Phase 02 must not attempt to manipulate search engines into indexing every possible URL.
-
-The goal is:
-
-```text
-NOT
-
-MAXIMUM NUMBER OF URLS
-
-BUT
-
-MAXIMUM NUMBER OF
-USEFUL
-CANONICAL
-DISCOVERABLE
-INDEXABLE
-HIGH-VALUE PAGES
-```
-
-A technically indexable page is not automatically a page that should be indexed.
 
 ---
 
 # Next Phase
 
 ```text
-PHASE 03
+PHASE 02
 
-GLOBAL APPLICATION SHELL
-&
-SHARED COMPONENT MIGRATION
+ROOT SEO, INDEXING,
+ROUTING & URL ARCHITECTURE REBUILD
 ```
 
-Phase 03 takes the canonical UI system from Phase 01 and begins applying it to the actual global product shell:
-
-* root layout,
-* header,
-* desktop navigation,
-* mobile navigation,
-* global search entry,
-* breadcrumbs,
-* sidebars,
-* footer,
-* loading,
-* errors,
-* 404,
-* theme controls,
-* global responsive behavior.
+Phase 02 should be similarly implementation-heavy and should rebuild the root search-engine architecture before performing the later page-by-page SEO completion sweep.
