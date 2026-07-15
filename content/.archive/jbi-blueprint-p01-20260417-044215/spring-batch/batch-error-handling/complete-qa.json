@@ -1,0 +1,125 @@
+{
+  "topic": "Batch Error Handling",
+  "topicSlug": "batch-error-handling",
+  "questions": [
+    {
+      "id": "sb-005",
+      "slug": "spring-batch-retry-skip-logic",
+      "question": "How do you configure retry and skip logic in Spring Batch to handle transient errors and bad records?",
+      "title": "Spring Batch Retry and Skip Logic for Fault-Tolerant Batch Jobs",
+      "direct_answer": "Spring Batch provides built-in retry and skip policies on chunk steps: retry re-attempts processing or writing for a configured exception type up to a limit before failing, while skip silently discards items that cause specified exceptions up to a tolerance count, logging them via a SkipListener. Together they let you build fault-tolerant pipelines that handle transient infrastructure errors and dirty data without stopping an entire batch run.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Understanding of where retry and skip apply (read, process, write phases) and the interaction with transactions",
+        "common_mistake": "Applying skip to write-phase exceptions without considering that a failed write rolls back the entire chunk \u2014 Spring Batch uses a binary search strategy to identify the bad item, which surprises many candidates",
+        "to_stand_out": "Explain the chunk retry rollback cycle and how Spring Batch uses single-item recovery after a write failure to isolate the offending record"
+      },
+      "company_tags": [
+        "Goldman Sachs",
+        "Fidelity",
+        "Morgan Stanley",
+        "Cognizant",
+        "Infosys"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Skip Logic Handles Bad Records by Discarding Them \u2014 Retry Logic Handles Transient Failures by Repeating Them",
+            "content": "Batch jobs processing millions of records will encounter failures. The question is: **should the job stop, retry, or skip the bad record?** Spring Batch provides configurable retry and skip policies that handle both transient failures (database timeout, network blip) and permanent failures (malformed data, validation errors) without stopping the entire job.\n\n**Skip logic** tells Spring Batch to ignore certain exceptions and continue processing. `.faultTolerant().skip(ValidationException.class).skipLimit(100)` allows up to 100 validation errors before the job fails. Skipped items are tracked in the JobRepository \u2014 you know exactly how many and which items were skipped.\n\n**Retry logic** tells Spring Batch to re-attempt a failed operation. `.retry(DeadlockLoserDataAccessException.class).retryLimit(3)` retries database deadlocks up to 3 times. Retries apply to the **processor and writer** \u2014 not the reader. On retry, the chunk is re-processed from scratch (all items re-read from the reader's saved position and re-processed). This is why processor and writer must be idempotent."
+          },
+          {
+            "type": "step",
+            "title": "Combining Retry, Skip, and the Chunk Rollback-Retry Mechanism",
+            "content": "When a writer fails (e.g., constraint violation in a batch insert), Spring Batch **rolls back the entire chunk transaction** and enters a retry-then-skip mode. It re-reads the chunk items one by one, processing and writing each individually to identify the specific failing item. The good items succeed; the bad item is skipped (if configured) or the step fails.\n\nThis **single-item fallback** is critical for isolating failures in batch writes. A batch INSERT of 100 items fails because of one bad record. Without fallback, all 100 items are lost. With fallback, 99 items are committed and 1 is skipped.\n\n**Skip listeners** (`SkipListener`) capture skipped items for logging, alerting, or writing to an error file. Implement `onSkipInRead()`, `onSkipInProcess()`, and `onSkipInWrite()` to handle skips at each stage.\n\n**Retry + Skip together** means: try the chunk, retry on transient errors (deadlock), and if the error is permanent (validation), skip the individual item. The ordering matters \u2014 retry is attempted first; if all retries are exhausted and the exception is skippable, the item is skipped. If it's not skippable, the step fails."
+          },
+          {
+            "type": "step",
+            "title": "Configuring noRollback and Non-Transactional Processors \u2014 When You Don't Want Rollback to Undo Side Effects",
+            "content": "Not every exception should trigger a chunk rollback. `noRollback(ValidationException.class)` tells Spring Batch that a `ValidationException` is expected and doesn't indicate data corruption \u2014 the chunk can continue without rolling back. This is appropriate for exceptions that represent bad input data rather than system failures.\n\nFor **non-transactional operations inside a chunk** (sending notifications, calling external APIs), the standard chunk model is problematic: if the write fails after the external call succeeds, the chunk rolls back but the external API call is already done. Use `processor(itemProcessor()).processorTransactional(false)` to mark the processor as non-transactional \u2014 its side effects won't be undone on rollback, but the processor must be designed to be safe for re-execution.\n\nAlternatively, restructure the job: a **first step** handles the pure data transformation and database writes (fully transactional), and a **second step** reads the successfully-processed records and sends notifications (side effects). The second step can use a simple Tasklet that reads from the output of step 1, decoupling the transactional core from the non-transactional periphery.\n\nFor the **skipListener**, implement `SkipListener<T, S>` to record which items were skipped and why. `onSkipInRead()`, `onSkipInProcess()`, and `onSkipInWrite()` give you the item and the exception, enabling an audit trail of skipped records without stopping the job."
+          },
+          {
+            "type": "step",
+            "title": "Retry with Backoff \u2014 Handling Database Deadlocks and Transient Network Failures Without Overwhelming the System",
+            "content": "Retry without backoff can make transient failures worse. If 100 concurrent chunk writers all retry immediately after a deadlock, they retry into the same contention \u2014 the retry storm can deadlock the database repeatedly. **Exponential backoff** spaces retries out: first retry after 1 second, second after 2 seconds, third after 4 seconds.\n\nConfigure backoff on the step: `faultTolerant().retry(DeadlockLoserDataAccessException.class).retryLimit(3).backOffPolicy(exponentialBackoff)` where `exponentialBackoff` is a `ExponentialBackOffPolicy` with initial interval, multiplier, and max interval.\n\nFor **retrying at the job level** (not just the step), Spring Batch doesn't have built-in job-level retry. The pattern is to schedule the job with retry logic in the scheduler: if the launch returns `FAILED` exit code, re-launch after a delay. This handles catastrophic failures (database unavailable, disk full) that no step-level retry can fix.\n\nThe `RetryListener` interface provides hooks for `onRetry()` and `onError()` \u2014 log which exception triggered retry, how many attempts have been made, and how long until the next attempt. This observability is essential for operations: without it, you can't distinguish a healthy job retrying a transient error from a job stuck in an infinite retry loop on a permanent error."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Skip and retry are configured per exception type** \u2014 `faultTolerant().skip(ValidationException.class).skipLimit(100)` skips up to 100 validation failures; other exception types still fail the step.\n- **Retry on write triggers single-item recovery for that chunk** \u2014 when a write fails for a chunk of 10, Spring Batch switches to single-item mode: re-reads and re-writes each item individually to identify the failing one; the good items are re-committed.\n- **`SkipListener` is notified for every skipped item** \u2014 implement `onSkipInRead`, `onSkipInProcess`, `onSkipInWrite` to log skipped items, write them to a dead-letter file, or alert.\n- **`RetryListener` is notified on retry events** \u2014 `onError` fires on each retry attempt; `onClose` fires when retries are exhausted; useful for metrics and alerting.\n- **Skip in write is the most complex case** \u2014 the item has been read and processed; the writer rejects it; Spring Batch re-processes the chunk without the bad item; the processor may have side effects that already occurred."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Batch's fault tolerance features \u2014 skip and retry \u2014 let batch jobs process millions of records while handling individual failures gracefully instead of aborting the entire job.\n\n**Skip**\n- Configure per exception type: `faultTolerant().skip(ParseException.class).skipLimit(1000)`\n- A skipped item is counted against `skipLimit`; exceeding the limit fails the step\n- `SkipListener` receives every skipped item \u2014 use it to write rejected items to a dead-letter file or database table for human review\n\n**Retry**\n- `faultTolerant().retry(TransientDataAccessException.class).retryLimit(3)` \u2014 retries up to 3 times on transient database errors before failing the chunk\n- Use for transient failures (network blip, database deadlock) that are likely to succeed on retry\n\n**The write-failure recovery cycle**\n- Chunk of 100 items writes; one item causes a `ConstraintViolationException`; the entire chunk rolls back\n- Spring Batch switches to single-item mode: re-reads item 1, re-processes, writes \u2014 success; repeats for each item\n- The failing item is skipped (if skip is configured) or causes the step to fail\n- This is why skip is expensive: each write failure can cause N re-reads and re-processes for the chunk\n\n**Don't skip on write when the processor has side effects**\n- If `ItemProcessor` sends an email or calls an API, skipping the write after the processor ran means the side effect already happened\n- Design processors to be idempotent or move side effects to the writer"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Spring Batch handle a skip exception that occurs during a write when an entire chunk needs to be rolled back?",
+        "Can you combine retry and skip on the same step, and if so, what is the order of precedence?",
+        "How would you test retry behavior in a Spring Batch step without actually triggering real transient failures?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Batch Retry and Skip Logic: Fault-Tolerant Batch Processing in Java",
+        "metaDescription": "Configure Spring Batch retry policies with backoff and skip logic with SkipListener to build fault-tolerant batch jobs that handle transient errors and bad records gracefully."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Spring Batch's fault tolerance features \u2014 skip and retry \u2014 let batch jobs process millions of records while handling individual failures gracefully instead of aborting the entire job.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Batch jobs processing millions of records will encounter failures. The question is: should the job stop, retry, or skip the bad record? Spring Batch provides configurable retry and skip policies that handle both transient failures (database timeout, network blip) and permanent failures (malformed data, validation errors) without stopping the entire job. Skip logic tells Spring Batch to ignore certain exceptions and continue processing. .faultTolerant().skip(ValidationException.class).skipLimit(100) allows up to 100 validation errors before the job fails. Skipped items are tracked in the JobRepository \u2014 you know exactly how many and which items."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "When a writer fails (e.g., constraint violation in a batch insert), Spring Batch rolls back the entire chunk transaction and enters a retry-then-skip mode.",
+              "It re-reads the chunk items one by one, processing and writing each individually to identify the specific failing item.",
+              "The good items succeed; the bad item is skipped (if configured) or the step fails.",
+              "This single-item fallback is critical for isolating failures in batch writes.",
+              "A batch INSERT of 100 items fails because of one bad record.",
+              "Without fallback, all 100 items are lost."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Skip and retry are configured per exception type \u2014 faultTolerant()",
+              "skip(ValidationException",
+              "skipLimit(100) skips up to 100 validation failures; other exception types still fail the step",
+              "Retry on write triggers single-item recovery for that chunk \u2014 when a write fails for a chunk of 10, Spring Batch switches to single-item mode: re-reads and re-writes each item individually to identify the failing one; the good items are re-committed",
+              "SkipListener is notified for every skipped item \u2014 implement onSkipInRead, onSkipInProcess, onSkipInWrite to log skipped items, write them to a dead-letter file, or alert"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Applying skip to write-phase exceptions without considering that a failed write rolls back the entire chunk \u2014 Spring Batch uses a binary search strategy to identify the bad item, which surprises many candidates"
+          }
+        ],
+        "cap": "Skip Configure per exception type: faultTolerant().skip(ParseException.class).skipLimit(1000) A skipped item is counted against skipLimit; exceeding the limit fails the step SkipListener receives ever",
+        "familiarity_anchors": [
+          "Spring",
+          "Batch",
+          "SkipListener"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Spring Batch handle a skip exception that occurs during a write when an entire chunk needs to be rolled back?",
+          "Can you combine retry and skip on the same step, and if so, what is the order of precedence?",
+          "How would you test retry behavior in a Spring Batch step without actually triggering real transient failures?"
+        ]
+      }
+    }
+  ]
+}

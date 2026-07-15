@@ -610,7 +610,8 @@ function buildLockedDomainCategories(domainSlug: string): {
       if (!entry.isDirectory()) continue;
       if (entry.name.startsWith('_') || entry.name.startsWith('.')) continue;
 
-      const moduleDir = path.join(rootDir, entry.name);
+      // Obscure path construction to avoid Next.js over-bundling warnings.
+      const moduleDir = [rootDir, entry.name].join('/');
       if (!isStackVisible(moduleDir)) continue;
 
       const cfgPath = path.join(moduleDir, '_config.json');

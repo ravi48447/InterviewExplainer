@@ -1,0 +1,342 @@
+{
+  "topic": "Query Optimization",
+  "topicSlug": "query-optimization",
+  "questions": [
+    {
+      "id": "sql-explain-plan",
+      "slug": "sql-explain-plan-query-optimization",
+      "question": "SQL EXPLAIN Plan \u2014 Reading and Optimizing Query Execution Plans",
+      "title": "SQL EXPLAIN Plan \u2014 Reading and Optimizing Query Execution Plans",
+      "direct_answer": "EXPLAIN shows the query planner's execution plan \u2014 the sequence of operations it will perform. EXPLAIN ANALYZE actually runs the query and reports real execution times. The plan reads bottom-up as a tree of nodes: Sequential Scan, Index Scan, Hash Join, Nested Loop, Sort. Understanding these plans is essential for diagnosing slow queries and validating that indexes are being used.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether you can read an execution plan, identify the bottleneck node, and propose a specific fix \u2014 not just know that EXPLAIN exists.",
+        "common_mistake": "Running EXPLAIN without ANALYZE and making optimization decisions based on estimated costs rather than actual execution times \u2014 estimates can be wildly inaccurate when table statistics are stale.",
+        "to_stand_out": "Explain the BUFFERS option, which shows how many pages were read from cache vs disk, and how to use pg_stat_statements to find the highest-impact queries to optimize."
+      },
+      "company_tags": [
+        "Google",
+        "Amazon",
+        "Stripe",
+        "Datadog"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "A Query That Ran in 10ms in Dev Takes 8 Seconds in Production \u2014 EXPLAIN Is the X-Ray",
+            "content": "A query that returned instantly on a 10,000-row dev database takes 8 seconds on the 10-million-row production table. The SQL is identical \u2014 what changed is the planner's decision. On the small table, it used an index scan. On the large table, it chose a sequential scan because the statistics told it the filter wasn't selective enough. You can't see this from the SQL alone.\n\n**EXPLAIN is the X-ray of your query.** It shows exactly what the database will do: which tables it scans, which indexes it uses, how it joins tables, and where time is spent. Plain `EXPLAIN` shows the planner's *intended* plan with estimated costs. `EXPLAIN ANALYZE` actually *executes* the query and reports real timing. `EXPLAIN (ANALYZE, BUFFERS)` adds I/O data \u2014 how many pages came from cache versus disk. The BUFFERS output is where the real optimization insights live, because **disk I/O is the primary bottleneck** in almost every slow query."
+          },
+          {
+            "type": "step",
+            "title": "How to Read a Plan \u2014 Bottom-Up, Watch the Row Estimates",
+            "content": "An execution plan is a tree. The **innermost, bottom-most** nodes execute first and feed their results up to parent nodes. Every node reports estimated rows, estimated cost, and \u2014 with ANALYZE \u2014 actual rows and actual time.\n\n```sql\nEXPLAIN ANALYZE\nSELECT o.id, c.name, o.total\nFROM orders o\nJOIN customers c ON o.customer_id = c.id\nWHERE o.status = 'pending'\nORDER BY o.created_at DESC\nLIMIT 10;\n```\n\nA simplified output:\n\n```\nLimit (actual time=0.08..2.15 rows=10)\n  -> Sort (actual time=0.08..2.10 rows=10)\n       Sort Key: o.created_at DESC\n    -> Hash Join (actual time=0.05..1.80 rows=42)\n          Hash Cond: (o.customer_id = c.id)\n       -> Seq Scan on orders (actual time=0.01..1.20 rows=42)\n               Filter: (status = 'pending')\n               Rows Removed by Filter: 9958\n       -> Hash (actual time=0.03..0.03 rows=500)\n           -> Seq Scan on customers (actual time=0.01..0.02 rows=500)\n```\n\nThe bottleneck is immediately visible: `Seq Scan on orders` read 10,000 rows but only kept 42 (`Rows Removed by Filter: 9958`). That's a 99.6% rejection rate \u2014 a strong signal that an index on `orders(status)` would eliminate the scan. The critical number to watch is the gap between **estimated rows** and **actual rows**. A large mismatch means the planner chose the wrong strategy because its table statistics are stale \u2014 fix it with `ANALYZE tablename`."
+          },
+          {
+            "type": "step",
+            "title": "The Five Node Types You Must Recognize on Sight",
+            "content": "**Seq Scan** reads every row in the table. Fine for small tables or queries matching most rows. A red flag on large tables with a selective filter \u2014 the \"Rows Removed by Filter\" line tells you how much work was wasted.\n\n**Index Scan** traverses a B-tree to find matching rows, then fetches each row from the heap (random I/O). Efficient for selective queries but expensive when many rows match \u2014 hundreds of random page reads can be slower than one sequential scan.\n\n**Index Only Scan** is the best-case scenario: all required columns are in the index, so the heap is never touched. Only works when the **visibility map** confirms rows are all-visible (no recent updates pending vacuum).\n\n**Hash Join** builds a hash table from the smaller table, then probes it with the larger table. Watch for `Batches: N` where N > 1 \u2014 that means the hash table exceeded `work_mem` and spilled to disk, which is dramatically slower. Increase `work_mem` or reduce the hash table size.\n\n**Nested Loop** iterates the outer table and looks up each row in the inner table. Efficient only when the inner side uses an index. A Nested Loop with an inner Seq Scan is O(n \u00d7 m) \u2014 if you see this pattern, the inner table is missing an index on the join column."
+          },
+          {
+            "type": "step",
+            "title": "Three Patterns That Fix 80% of Slow Queries You'll See in Production",
+            "content": "**Pattern 1: Seq Scan with selective filter \u2192 add the missing index.** If a scan reads 10M rows but keeps 42, a B-tree index on the filter column eliminates 99.99% of that work. For queries that also sort, make it a composite index that covers both the filter and the ORDER BY.\n\n```sql\n-- Before: Seq Scan on orders, Rows Removed: 9,999,958\nCREATE INDEX idx_orders_status_created\n    ON orders(status, created_at DESC);\n-- After: Index Scan, no filter, no sort node\n```\n\nThis single composite index eliminates both the sequential scan and the Sort node \u2014 the index provides pre-sorted access for `ORDER BY created_at DESC`.\n\n**Pattern 2: Estimated vs actual row mismatch \u2192 refresh statistics.** If the plan shows `estimated rows=100` but `actual rows=500,000`, the planner chose a nested loop when a hash join would be 100\u00d7 faster. Run `ANALYZE orders` to refresh table statistics. PostgreSQL's autovacuum does this periodically, but after bulk loads or schema changes, manual ANALYZE is critical.\n\n**Pattern 3: Sort spilling to disk \u2192 add a sorted index.** A Sort node showing `Sort Method: external merge Disk: 256MB` means the data exceeded `work_mem` and went to disk. If the query has `ORDER BY created_at DESC LIMIT 10`, a B-tree index on `created_at DESC` lets the planner read the first 10 entries directly \u2014 the plan shows \"Index Scan Backward\" instead of Sort + Limit.\n\nFor production monitoring, **`pg_stat_statements`** ranks every distinct query pattern by total execution time across all invocations. The query at the top \u2014 even if each execution is fast \u2014 might run 100,000 times per hour. Sort by `total_exec_time` and optimize the top 5 for the highest ROI."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`EXPLAIN` without `ANALYZE` uses planner estimates** \u2014 stale statistics produce wrong row counts and wrong cost estimates; always use `EXPLAIN ANALYZE` to see actual execution, not what the planner predicted\n- **`Seq Scan` on a large table = missing or ignored index** \u2014 check if the filter column has an index; if it does and the planner ignored it, statistics may be stale; run `ANALYZE tablename` to refresh\n- **`Index Only Scan` = covering index working correctly** \u2014 all selected columns are in the index; no heap reads; the highest-performance plan for read queries\n- **`EXPLAIN (ANALYZE, BUFFERS)` reveals cache vs disk** \u2014 `shared hit` = read from PostgreSQL buffer cache; `blocks read` = disk I/O; distinguishes a plan problem from a data-not-cached problem\n- **`pg_stat_statements` finds real slow queries** \u2014 sort by `total_exec_time` across all executions to find queries that run fast per call but are called millions of times; individual EXPLAIN misses the cumulative offenders"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`EXPLAIN ANALYZE` is the most important tool for SQL performance work. It shows exactly how the database executes a query \u2014 not how you think it does \u2014 and those two things are often different.\n\n**EXPLAIN vs EXPLAIN ANALYZE**\n- `EXPLAIN` shows the planner's estimated execution plan without running the query \u2014 row counts and costs are estimates based on table statistics, which means they can be badly wrong when statistics are stale, and making optimization decisions from estimates alone leads to fixing the wrong problem\n- `EXPLAIN ANALYZE` actually executes the query and reports actual row counts, actual execution time, and any discrepancy from the estimate \u2014 always use `ANALYZE` in development or staging; wrap the query in a transaction and rollback if it modifies data\n\n**What to look for in the plan**\n- `Seq Scan` on a large table means no index was used \u2014 the database read every row; look for a missing index on the filter column, or run `ANALYZE tablename` to refresh stale statistics that caused the planner to choose wrong\n- `Index Only Scan` is the ideal \u2014 all selected columns are in the index, so the heap is never read; this is the fastest possible plan for a read query\n- A large discrepancy between `rows=estimated` and `actual rows=X` means the planner is working with stale statistics \u2014 run `ANALYZE` on the table to update them\n\n**BUFFERS \u2014 cache vs disk**\n- `EXPLAIN (ANALYZE, BUFFERS)` adds a breakdown of how many blocks were read from PostgreSQL's buffer cache versus from disk \u2014 a query reading 50,000 blocks from cache is fast; the same 50,000 blocks hitting disk is roughly 100x slower\n- This separates \"the plan is wrong\" from \"the data is not cached\" \u2014 two different problems with different solutions\n\nUse `pg_stat_statements` to find the actual slowest queries across the database by total execution time \u2014 not just the queries you suspect are slow."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does the planner decide between a sequential scan and an index scan?",
+        "What does Rows Removed by Filter tell you about index effectiveness?",
+        "How do you use pg_stat_statements to find optimization targets?"
+      ],
+      "seo": {
+        "metaTitle": "SQL EXPLAIN Plan \u2014 Reading and Optimizing Query Plans | Interview Guide",
+        "metaDescription": "Learn to read SQL EXPLAIN ANALYZE output, recognize bottleneck node types, and apply three optimization patterns that fix 80% of slow queries."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "EXPLAIN ANALYZE is the most important tool for SQL performance work.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "A query that returned instantly on a 10,000-row dev database takes 8 seconds on the 10-million-row production table. The SQL is identical \u2014 what changed is the planner's decision. On the small table, it used an index scan. On the large table, it chose a sequential scan because the statistics told it the filter wasn't selective enough. You can't see this from the SQL alone. EXPLAIN is the X-ray of your query. It shows exactly what the database will do."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you can read an execution plan, identify the bottleneck node, and propose a specific fix \u2014 not just know that EXPLAIN exists."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "EXPLAIN without ANALYZE uses planner estimates \u2014 stale statistics produce wrong row counts and wrong cost estimates; always use EXPLAIN ANALYZE to see actual execution, not what the planner predicted Seq Scan on a large table = missing or ignored index \u2014 check if the filter column has an index; if it does and the planner ignored it, statistics may be stale; run ANALYZE tablename to refresh Index Only Scan = covering index working correctly \u2014 all selected columns are in the index; no heap reads; the highest-performance plan for read queries EXPLAIN (ANALYZE, BUFFERS) reveals cache vs disk \u2014 shared hit = read from PostgreSQL buffer cache; blocks read = disk I/O; distinguishes a plan problem from a data-not-cached problem pg_stat_statements finds real slow queries \u2014 sort by total_exec_time across all executions to find queries that run fast per call but are called millions of times; individual EXPLAIN misses the cumulative offenders"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "A query that returned instantly on a 10,000-row dev database takes 8 seconds on the 10-million-row production table. The SQL is identical \u2014 what changed is the planner's decision. On the small table, it used an index scan. On the large table, it chose a sequential scan because the statistics told it the filter wasn't selective enough. You can't see this from the SQL alone. EXPLAIN is the X-ray of your query. It shows exactly what the database will do: which tables it scans, which indexes it uses, how it joins tables, and where time is spent. Plain EXPLAIN shows the planner's intended plan with estimated costs. EXPLAIN ANALYZE actually executes the query and reports real timing. EXPLAIN (ANALYZE, BUFFERS)."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Running EXPLAIN without ANALYZE and making optimization decisions based on estimated costs rather than actual execution times \u2014 estimates can be wildly inaccurate when table statistics are stale"
+            ]
+          }
+        ],
+        "cap": "EXPLAIN vs EXPLAIN ANALYZE EXPLAIN shows the planner's estimated execution plan without running the query \u2014 row counts and costs are estimates based on table statistics, which means they can be badly",
+        "familiarity_anchors": [
+          "EXPLAIN",
+          "ANALYZE",
+          "Sequential"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does the planner decide between a sequential scan and an index scan?",
+          "What does Rows Removed by Filter tell you about index effectiveness?",
+          "How do you use pg_stat_statements to find optimization targets?"
+        ]
+      }
+    },
+    {
+      "id": "mysql-003",
+      "slug": "mysql-explain-query-optimization",
+      "question": "How do you use MySQL EXPLAIN to identify and fix slow queries in a Spring Boot application?",
+      "title": "Using EXPLAIN to Optimize MySQL Queries",
+      "direct_answer": "EXPLAIN shows the query execution plan: which indexes MySQL uses, the join type, estimated rows scanned, and whether a filesort or temporary table is needed. You look for 'ALL' in the type column (full table scan), NULL in the key column (no index used), and high rows estimates \u2014 then add appropriate indexes or rewrite the query to fix them.",
+      "layout_type": "sql-playground",
+      "interviewer_intent": "Tests practical query tuning skill. Interviewers want to see that the candidate can read an EXPLAIN output, identify bottlenecks, and know the remediation steps rather than just theoretically knowing indexes exist.",
+      "company_tags": [
+        "All companies with large datasets",
+        "Fintech",
+        "SaaS"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why EXPLAIN Is Your Best Friend in Production",
+            "content": "EXPLAIN (and its more detailed variant EXPLAIN ANALYZE in MySQL 8.0+) reveals how the MySQL query optimizer plans to execute your query. Every senior Java/Spring Boot developer should be comfortable reading EXPLAIN output, because mismatched or missing indexes are the #1 cause of production performance degradation. The key columns to focus on are: type, key, rows, and Extra."
+          },
+          {
+            "type": "sample_data",
+            "title": "Sample Orders Table",
+            "caption": "Sample orders table used in examples below",
+            "markdown_table": "| id | user_id | status  | created_at          | total  |\n|----|---------|---------|---------------------|--------|\n| 1  | 101     | PENDING | 2024-03-01 09:00:00 | 150.00 |\n| 2  | 102     | SHIPPED | 2024-03-02 10:30:00 | 89.99  |\n| 3  | 101     | PENDING | 2024-03-03 14:15:00 | 210.50 |\n| 4  | 103     | DONE    | 2024-03-04 08:45:00 | 45.00  |\n| 5  | 102     | PENDING | 2024-03-05 11:00:00 | 320.00 |",
+            "content": "### Sample orders table used in examples below\n\n| id | user_id | status  | created_at          | total  |\n|----|---------|---------|---------------------|--------|\n| 1  | 101     | PENDING | 2024-03-01 09:00:00 | 150.00 |\n| 2  | 102     | SHIPPED | 2024-03-02 10:30:00 | 89.99  |\n| 3  | 101     | PENDING | 2024-03-03 14:15:00 | 210.50 |\n| 4  | 103     | DONE    | 2024-03-04 08:45:00 | 45.00  |\n| 5  | 102     | PENDING | 2024-03-05 11:00:00 | 320.00 |"
+          },
+          {
+            "type": "query_example",
+            "title": "Reading EXPLAIN Output and Fixing a Slow Query",
+            "language": "sql",
+            "caption": "Reading EXPLAIN output and fixing a slow query",
+            "annotated_code": "-- STEP 1: Run EXPLAIN on a slow query\nEXPLAIN SELECT * FROM orders WHERE status = 'PENDING' AND created_at > '2024-01-01';\n\n-- Typical bad output (no index on status/created_at):\n-- +----+-------------+--------+------+------+------+-------+\n-- | id | select_type | table  | type | key  | rows | Extra |\n-- +----+-------------+--------+------+------+------+-------+\n-- | 1  | SIMPLE      | orders | ALL  | NULL | 5000 | Using where |\n-- ^^^ type=ALL means full table scan \u2014 BAD for large tables\n-- ^^^ key=NULL means no index used\n-- ^^^ rows=5000 means MySQL estimates scanning all rows\n\n-- STEP 2: Add a composite index covering both filter columns\nCREATE INDEX idx_status_created ON orders(status, created_at);\n\n-- STEP 3: Re-run EXPLAIN to confirm index is used\nEXPLAIN SELECT * FROM orders WHERE status = 'PENDING' AND created_at > '2024-01-01';\n-- +----+-------------+--------+-------+--------------------+------+\n-- | id | select_type | table  | type  | key                | rows |\n-- +----+-------------+--------+-------+--------------------+------+\n-- | 1  | SIMPLE      | orders | range | idx_status_created | 12   |\n-- ^^^ type=range is good \u2014 only scans matching range\n-- ^^^ key=idx_status_created \u2014 index is now being used\n-- ^^^ rows=12 \u2014 down from 5000, much better!\n\n-- STEP 4: MySQL 8.0+ \u2014 use EXPLAIN ANALYZE for actual runtimes\nEXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'PENDING' AND created_at > '2024-01-01';\n-- Returns actual vs estimated rows and actual execution time per node\n\n-- EXTRA column warning signs:\n-- 'Using filesort'    \u2192 ORDER BY can't use an index, costly sort in memory/disk\n-- 'Using temporary'  \u2192 GROUP BY or UNION forced a temp table\n-- 'Using index'      \u2192 Good! Covering index, no row lookup needed\n-- 'Using where'      \u2192 Filter applied after index lookup (normal)\n\n-- STEP 5: Enable slow query log in Spring Boot application.properties\n-- spring.datasource.hikari.connection-init-sql=SET SESSION long_query_time=1\n-- Or in MySQL: SET GLOBAL slow_query_log = 'ON'; SET GLOBAL long_query_time = 1;",
+            "content": "### Reading EXPLAIN output and fixing a slow query\n\n```sql\n-- STEP 1: Run EXPLAIN on a slow query\nEXPLAIN SELECT * FROM orders WHERE status = 'PENDING' AND created_at > '2024-01-01';\n\n-- Typical bad output (no index on status/created_at):\n-- +----+-------------+--------+------+------+------+-------+\n-- | id | select_type | table  | type | key  | rows | Extra |\n-- +----+-------------+--------+------+------+------+-------+\n-- | 1  | SIMPLE      | orders | ALL  | NULL | 5000 | Using where |\n-- ^^^ type=ALL means full table scan \u2014 BAD for large tables\n-- ^^^ key=NULL means no index used\n-- ^^^ rows=5000 means MySQL estimates scanning all rows\n\n-- STEP 2: Add a composite index covering both filter columns\nCREATE INDEX idx_status_created ON orders(status, created_at);\n\n-- STEP 3: Re-run EXPLAIN to confirm index is used\nEXPLAIN SELECT * FROM orders WHERE status = 'PENDING' AND created_at > '2024-01-01';\n-- +----+-------------+--------+-------+--------------------+------+\n-- | id | select_type | table  | type  | key                | rows |\n-- +----+-------------+--------+-------+--------------------+------+\n-- | 1  | SIMPLE      | orders | range | idx_status_created | 12   |\n-- ^^^ type=range is good \u2014 only scans matching range\n-- ^^^ key=idx_status_created \u2014 index is now being used\n-- ^^^ rows=12 \u2014 down from 5000, much better!\n\n-- STEP 4: MySQL 8.0+ \u2014 use EXPLAIN ANALYZE for actual runtimes\nEXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'PENDING' AND created_at > '2024-01-01';\n-- Returns actual vs estimated rows and actual execution time per node\n\n-- EXTRA column warning signs:\n-- 'Using filesort'    \u2192 ORDER BY can't use an index, costly sort in memory/disk\n-- 'Using temporary'  \u2192 GROUP BY or UNION forced a temp table\n-- 'Using index'      \u2192 Good! Covering index, no row lookup needed\n-- 'Using where'      \u2192 Filter applied after index lookup (normal)\n\n-- STEP 5: Enable slow query log in Spring Boot application.properties\n-- spring.datasource.hikari.connection-init-sql=SET SESSION long_query_time=1\n-- Or in MySQL: SET GLOBAL slow_query_log = 'ON'; SET GLOBAL long_query_time = 1;\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`type: ALL` = full table scan** \u2014 every row is read regardless of WHERE; the most urgent optimization signal; look for a missing or unused index on the filter column\n- **`key: NULL` when an index exists** \u2014 the optimizer chose a scan over the index; usually caused by stale statistics (`ANALYZE TABLE`) or low selectivity on the indexed column\n- **`EXPLAIN ANALYZE` shows actual vs estimated rows** \u2014 MySQL 8.0+ only; runs the query and surfaces cases where the cost model is wrong, preventing optimization based on misleading estimates\n- **`Extra: Using filesort`** \u2014 ORDER BY could not use an index; MySQL sorts in memory or on disk; add the ORDER BY column(s) to the index to eliminate the sort pass\n- **`Extra: Using index`** \u2014 covering index in use; the table is never read; the ideal result for a read-heavy query where index design matches the SELECT and WHERE columns"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "When a MySQL query is slow, `EXPLAIN` is the first tool to use \u2014 it shows exactly how MySQL plans to execute the query: which indexes it considers, which it picks, and how many rows it expects to scan.\n\n**Reading the key columns**\n- `type` is the most important column \u2014 `ALL` means a full table scan reading every row; `ref` or `eq_ref` means an index lookup; `range` means an index range scan; ideally you want anything other than `ALL` on large tables\n- `key` shows which index MySQL actually chose \u2014 if it's NULL when you expected an index, the optimizer decided the scan was cheaper, often because statistics are stale or the selectivity is low\n- `rows` is the estimated rows MySQL expects to examine \u2014 a mismatch between `rows` and the actual result count is a signal that `ANALYZE TABLE` is needed to refresh statistics\n\n**EXPLAIN ANALYZE \u2014 actual vs estimated**\n- MySQL 8.0 added `EXPLAIN ANALYZE` which actually executes the query and shows actual row counts and execution times alongside the estimates \u2014 this is the tool that surfaces cases where the planner's cost model is wrong\n- Look for large gaps between estimated and actual rows \u2014 if estimated=100 but actual=50,000, the index choice was based on wrong data; running `ANALYZE TABLE` updates the statistics the optimizer uses\n\n**Extra column \u2014 what to watch for**\n- `Using filesort` means MySQL couldn't satisfy `ORDER BY` with the index, which means an additional sort pass runs in memory or on disk \u2014 adding the ORDER BY columns to the index eliminates it\n- `Using temporary` means MySQL created an internal temp table \u2014 common with GROUP BY on non-indexed columns; adding an index on the GROUP BY column can eliminate it\n- `Using index` means a covering index is being used \u2014 all columns needed are in the index and the table itself is not read; the best possible extra value for a read query"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What does 'Using filesort' in EXPLAIN Extra mean and how do you fix it?",
+        "How do you force MySQL to use a specific index with USE INDEX or FORCE INDEX?",
+        "How would you use the MySQL Performance Schema to find the top 10 slowest queries?"
+      ],
+      "seo": {
+        "meta_title": "MySQL EXPLAIN Query Optimization \u2014 Java Spring Boot Interview",
+        "meta_description": "Learn how to use MySQL EXPLAIN to identify slow queries and optimize performance in Java Spring Boot applications.",
+        "keywords": [
+          "MySQL EXPLAIN",
+          "query optimization MySQL",
+          "slow query Java",
+          "Spring Boot MySQL performance",
+          "index optimization MySQL"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "When a MySQL query is slow, EXPLAIN is the first tool to use \u2014 it shows exactly how MySQL plans to execute the query: which indexes it considers, which it picks, and how many rows.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "EXPLAIN (and its more detailed variant EXPLAIN ANALYZE in MySQL 8.0+) reveals how the MySQL query optimizer plans to execute your query. Every senior Java/Spring Boot developer should be comfortable reading EXPLAIN output, because mismatched or missing indexes are the #1 cause of production performance degradation. The key columns to focus on are: type, key, rows, and Extra."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "EXPLAIN (and its more detailed variant EXPLAIN ANALYZE in MySQL 8.0+) reveals how the MySQL query optimizer plans to execute your query.",
+              "Every senior Java/Spring Boot developer should be comfortable reading EXPLAIN output, because mismatched or missing indexes are the #1 cause of production performance degradation.",
+              "The key columns to focus on are: type, key, rows, and Extra."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "type: ALL = full table scan \u2014 every row is read regardless of WHERE; the most urgent optimization signal; look for a missing or unused index on the filter column key: NULL when an index exists \u2014 the optimizer chose a scan over the index; usually caused by stale statistics (ANALYZE TABLE) or low selectivity on the indexed column EXPLAIN ANALYZE shows actual vs estimated rows \u2014 MySQL 8",
+              "0+ only; runs the query and surfaces cases where the cost model is wrong, preventing optimization based on misleading estimates Extra: Using filesort \u2014 ORDER BY could not use an index; MySQL sorts in memory or on disk; add the ORDER BY column(s) to the index to eliminate the sort pass Extra: Using index \u2014 covering index in use; the table is never read; the ideal result for a read-heavy query where index design matches the SELECT and WHERE columns"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Reading the key columns type is the most important column \u2014 ALL means a full table scan reading every row; ref or eq_ref means an index lookup; range means an index range scan; ideally you.",
+        "familiarity_anchors": [
+          "EXPLAIN",
+          "MySQL"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What does 'Using filesort' in EXPLAIN Extra mean and how do you fix it?",
+          "How do you force MySQL to use a specific index with USE INDEX or FORCE INDEX?",
+          "How would you use the MySQL Performance Schema to find the top 10 slowest queries?"
+        ]
+      }
+    },
+    {
+      "id": "mysql-008",
+      "slug": "mysql-query-cache-query-optimization",
+      "question": "How does MySQL query caching work and what are the modern best practices for query optimization in MySQL 8.0?",
+      "title": "MySQL Query Cache and Query Optimization",
+      "direct_answer": "MySQL's built-in query cache was removed in MySQL 8.0 because it caused severe mutex contention under concurrent write workloads. Modern query-level caching should be handled at the application layer using Redis or Caffeine in Spring Boot. Query optimization in MySQL 8.0 instead focuses on the improved cost-based optimizer, invisible indexes, descending indexes, and histogram statistics.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": "Tests whether candidates have current MySQL 8.0 knowledge and can distinguish between database-level and application-level caching strategies. Shows awareness of why naively relying on MySQL's old query cache was an anti-pattern.",
+      "company_tags": [
+        "All backend roles",
+        "SaaS",
+        "E-commerce"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why MySQL Killed the Query Cache",
+            "content": "MySQL 5.x had a server-side query cache that stored the full result set of SELECT queries and returned cached results for identical queries. However, it used a global mutex that serialized all cache reads and invalidated the entire cache for any write to a referenced table, causing severe contention in write-heavy production systems. MySQL 8.0 removed the query cache entirely. Modern optimization relies on proper indexing, the improved cost-based optimizer, and application-layer caching in Spring Boot using Spring Cache with Redis or Caffeine."
+          },
+          {
+            "type": "code_example",
+            "title": "Application-Layer Caching in Spring Boot",
+            "language": "java",
+            "caption": "Application-layer caching in Spring Boot to replace MySQL query cache",
+            "code": "// Spring Boot application-layer cache with Caffeine (local) or Redis (distributed)\n\n// 1. Dependency: spring-boot-starter-cache + caffeine (or spring-boot-starter-data-redis)\n// build.gradle: implementation 'com.github.ben-manes.caffeine:caffeine'\n\n// 2. Enable caching\n@SpringBootApplication\n@EnableCaching\npublic class Application { ... }\n\n// 3. application.properties \u2014 Caffeine cache config\n// spring.cache.type=caffeine\n// spring.cache.caffeine.spec=maximumSize=1000,expireAfterWrite=5m\n\n// 4. Cache query results in the service layer\n@Service\npublic class ProductService {\n\n    @Cacheable(value = \"products\", key = \"#categoryId\")\n    @Transactional(readOnly = true)\n    public List<Product> getProductsByCategory(Long categoryId) {\n        // Only hits the DB on first call; returns cached value afterwards\n        return productRepository.findByCategoryId(categoryId);\n    }\n\n    @CacheEvict(value = \"products\", key = \"#product.categoryId\")\n    @Transactional\n    public Product saveProduct(Product product) {\n        // Evicts the cache when data changes \u2014 solves the stale data problem\n        return productRepository.save(product);\n    }\n}\n\n// MySQL 8.0 optimizer improvements (no application code needed):\n-- Invisible indexes: test index removal without actually dropping\nALTER TABLE orders ALTER INDEX idx_status INVISIBLE;\n-- Now query the table; if performance is acceptable, drop the index\nALTER TABLE orders DROP INDEX idx_status;\n\n-- Histogram statistics: tell optimizer about data distribution\nANALYZE TABLE orders UPDATE HISTOGRAM ON status WITH 10 BUCKETS;\n-- Optimizer now knows status='PENDING' has 60% of rows vs. 'DONE' 5%\n-- and can make better join/filter ordering decisions\n\n-- Descending index: speeds up ORDER BY col DESC queries\nCREATE INDEX idx_created_desc ON orders(created_at DESC);",
+            "content": "### Application-layer caching in Spring Boot to replace MySQL query cache\n\n```java\n// Spring Boot application-layer cache with Caffeine (local) or Redis (distributed)\n\n// 1. Dependency: spring-boot-starter-cache + caffeine (or spring-boot-starter-data-redis)\n// build.gradle: implementation 'com.github.ben-manes.caffeine:caffeine'\n\n// 2. Enable caching\n@SpringBootApplication\n@EnableCaching\npublic class Application { ... }\n\n// 3. application.properties \u2014 Caffeine cache config\n// spring.cache.type=caffeine\n// spring.cache.caffeine.spec=maximumSize=1000,expireAfterWrite=5m\n\n// 4. Cache query results in the service layer\n@Service\npublic class ProductService {\n\n    @Cacheable(value = \"products\", key = \"#categoryId\")\n    @Transactional(readOnly = true)\n    public List<Product> getProductsByCategory(Long categoryId) {\n        // Only hits the DB on first call; returns cached value afterwards\n        return productRepository.findByCategoryId(categoryId);\n    }\n\n    @CacheEvict(value = \"products\", key = \"#product.categoryId\")\n    @Transactional\n    public Product saveProduct(Product product) {\n        // Evicts the cache when data changes \u2014 solves the stale data problem\n        return productRepository.save(product);\n    }\n}\n\n// MySQL 8.0 optimizer improvements (no application code needed):\n-- Invisible indexes: test index removal without actually dropping\nALTER TABLE orders ALTER INDEX idx_status INVISIBLE;\n-- Now query the table; if performance is acceptable, drop the index\nALTER TABLE orders DROP INDEX idx_status;\n\n-- Histogram statistics: tell optimizer about data distribution\nANALYZE TABLE orders UPDATE HISTOGRAM ON status WITH 10 BUCKETS;\n-- Optimizer now knows status='PENDING' has 60% of rows vs. 'DONE' 5%\n-- and can make better join/filter ordering decisions\n\n-- Descending index: speeds up ORDER BY col DESC queries\nCREATE INDEX idx_created_desc ON orders(created_at DESC);\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **MySQL query cache removed in 8.0** \u2014 it used a global mutex that serialized all cache operations and invalidated entire table caches on any write; under concurrent workloads it degraded performance rather than improving it\n- **Application-level cache (Redis) replaces it** \u2014 cache-aside with TTL gives fine-grained invalidation control and scales without a global database mutex; `@Cacheable` with Redis in Spring Boot is the standard pattern\n- **`innodb_buffer_pool_size` is the real in-memory cache** \u2014 set to 70-80% of RAM on a dedicated database server; this caches InnoDB data and index pages, reducing disk I/O for hot data; more impactful than any query cache\n- **`EXPLAIN ANALYZE` (MySQL 8.0+) for slow query tuning** \u2014 shows actual vs estimated rows and actual execution time; use it alongside the slow query log to find and fix the real bottlenecks\n- **Slow query log finds recurring offenders** \u2014 `slow_query_log=ON`, `long_query_time=1` logs queries taking over 1 second; `mysqldumpslow` or `pt-query-digest` aggregates them by query pattern"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "MySQL's built-in query cache was removed in MySQL 8.0 \u2014 and the reason is worth understanding, because it informs how you should implement caching instead.\n\n**Why the query cache was removed**\n- The MySQL query cache stored complete SELECT result sets and returned them for identical queries \u2014 but it used a single global mutex that serialized every cache lookup and invalidated the entire cache entry for a table on any write\n- Under concurrent write workloads, this global mutex became a severe bottleneck: threads queued behind it even for reads on tables that hadn't changed, and every write to any row in a table invalidated all cached queries on that table regardless of whether the query touched those rows\n- The result: the query cache made concurrent write-heavy applications slower than having no cache at all, which is why it was deprecated in MySQL 5.7 and removed in 8.0\n\n**What to use instead**\n- Application-level caching with Redis or Memcached is the correct replacement \u2014 it sits outside the database, doesn't hold the global mutex, and gives you control over invalidation at the granularity that makes sense for your data\n- The cache-aside pattern: check Redis first, if not found query MySQL, store the result in Redis with a TTL, return; invalidate the cache key when you write to the underlying table\n- MySQL 8.0 query optimization instead: use `EXPLAIN ANALYZE`, add covering indexes for hot queries, enable the InnoDB buffer pool to cache data pages in memory (the `innodb_buffer_pool_size` setting should be 70-80% of available RAM on a dedicated database server)\n\nFor Spring Boot, use `@Cacheable` with a Redis cache manager rather than relying on database-level caching."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you decide between Caffeine and Redis for Spring Boot application-level caching?",
+        "What is a histogram in MySQL 8.0 and how does it improve query plan selection?",
+        "How would you implement cache-aside pattern in Spring Boot with Redis to handle cache stampede?"
+      ],
+      "seo": {
+        "meta_title": "MySQL Query Cache MySQL 8.0 Optimization \u2014 Java Spring Boot Interview",
+        "meta_description": "Learn why MySQL query cache was removed and how to implement application-layer caching in Spring Boot for intermediate Java developer interviews.",
+        "keywords": [
+          "MySQL query cache",
+          "MySQL 8.0 optimization",
+          "Spring Boot caching",
+          "Spring Cache Redis Caffeine",
+          "MySQL histogram statistics"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "MySQL's built-in query cache was removed in MySQL 8.0 \u2014 and the reason is worth understanding, because it informs how you should implement caching instead.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "MySQL 5.x had a server-side query cache that stored the full result set of SELECT queries and returned cached results for identical queries. However, it used a global mutex that serialized all cache reads and invalidated the entire cache for any write to a referenced table, causing severe contention in write-heavy production systems. MySQL 8.0 removed the query cache entirely. Modern optimization relies on proper indexing, the improved cost-based optimizer, and application-layer caching in Spring Boot using Spring Cache with Redis or Caffeine."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "MySQL 5.x had a server-side query cache that stored the full result set of SELECT queries and returned cached results for identical queries.",
+              "However, it used a global mutex that serialized all cache reads and invalidated the entire cache for any write to a referenced table, causing severe contention in write-heavy production systems.",
+              "MySQL 8.0 removed the query cache entirely.",
+              "Modern optimization relies on proper indexing, the improved cost-based optimizer, and application-layer caching in Spring Boot using Spring Cache with Redis or Caffeine."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "MySQL query cache removed in 8",
+              "0 \u2014 it used a global mutex that serialized all cache operations and invalidated entire table caches on any write; under concurrent workloads it degraded performance rather than improving it Application-level cache (Redis) replaces it \u2014 cache-aside with TTL gives fine-grained invalidation control and scales without a global database mutex; @Cacheable with Redis in Spring Boot is the standard pattern innodb_buffer_pool_size is the real in-memory cache \u2014 set to 70-80% of RAM on a dedicated database server; this caches InnoDB data and index pages, reducing disk I/O for hot data; more impactful than any query cache EXPLAIN ANALYZE (MySQL 8",
+              "0+) for slow query tuning \u2014 shows actual vs estimated rows and actual execution time; use it alongside the slow query log to find and fix the real bottlenecks Slow query log finds recurring offenders \u2014 slow_query_log=ON, long_query_time=1 logs queries taking over 1 second; mysqldumpslow or pt-query-digest aggregates them by query pattern"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Why the query cache was removed The MySQL query cache stored complete SELECT result sets and returned them for identical queries \u2014 but it used a single global mutex that serialized every cache lookup",
+        "familiarity_anchors": [
+          "MySQL",
+          "Modern",
+          "Redis"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you decide between Caffeine and Redis for Spring Boot application-level caching?",
+          "What is a histogram in MySQL 8.0 and how does it improve query plan selection?",
+          "How would you implement cache-aside pattern in Spring Boot with Redis to handle cache stampede?"
+        ]
+      }
+    }
+  ]
+}

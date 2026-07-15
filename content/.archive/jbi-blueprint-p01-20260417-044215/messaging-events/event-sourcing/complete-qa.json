@@ -1,0 +1,119 @@
+{
+  "topic": "Event Sourcing",
+  "topicSlug": "event-sourcing",
+  "questions": [
+    {
+      "id": "eda-004",
+      "slug": "event-sourcing-storing-state-as-events",
+      "question": "What is event sourcing and when should you use it in a Java application?",
+      "title": "Event Sourcing: Storing State as an Immutable Event Log",
+      "direct_answer": "Event sourcing stores the history of state changes as an immutable sequence of events rather than current state. To get current state, replay all events. Benefits include full audit trail, temporal queries (state at any point in time), and natural fit with event-driven systems. Costs include query complexity, eventual consistency, and the need for snapshots as event logs grow.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you understand the difference between storing state vs storing events, and can articulate real trade-offs",
+        "common_mistake": "Thinking event sourcing means just publishing events to Kafka \u2014 event sourcing specifically means the event log IS the source of truth for entity state",
+        "to_stand_out": "Discuss snapshots for performance, projections for read models, and mention that CQRS is a natural companion to event sourcing"
+      },
+      "company_tags": [
+        "netflix",
+        "grab",
+        "microsoft",
+        "eventstore"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-13",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Misconception: Event Sourcing Is Not Just Publishing Events",
+            "content": "Most developers hear \"event sourcing\" and think it means publishing domain events to Kafka. It doesn't. Publishing events is part of any event-driven architecture. Event sourcing is a specific persistence model where the **event log is the source of truth** for entity state \u2014 not a side effect of state changes, but the primary store.\n\nIn a traditional system, you `UPDATE orders SET status = 'SHIPPED' WHERE id = 123`. The previous status is gone forever. You know the order is shipped, but you don't know when it was placed, when payment was confirmed, when it was packed, or when the shipping label was printed. That history is lost because you overwrote it.\n\nWith event sourcing, you never update. You append: `OrderPlaced`, `PaymentConfirmed`, `ItemPacked`, `ShippingLabelPrinted`, `OrderShipped`. Current state is derived by replaying these events in sequence. The event log is an immutable, append-only record of everything that happened. Want to know the order's status? Replay all events. Want to know its status last Tuesday at 3pm? Replay events up to that timestamp.\n\nThis has profound consequences. You get a **complete audit trail** as the core mechanism, not as a bolt-on feature. You can answer temporal queries that are impossible in a traditional database. And since events are already persisted, publishing them to other systems is natural. But you also inherit serious operational complexity: reading current state requires replay (solved with snapshots), queries across entities require separate read models (CQRS), and schema evolution means dealing with immutable historical records that can never be retroactively changed."
+          },
+          {
+            "type": "phase",
+            "title": "How an Event-Sourced Aggregate Rebuilds Itself From History",
+            "content": "The aggregate is the domain object that owns a stream of events. When you load an aggregate, you don't read a row from a table \u2014 you load every event for that aggregate ID and replay them to reconstruct current state.\n\nThe `apply()` method is the core mechanism. Each event type modifies the aggregate's internal state. The aggregate itself carries no persistence annotations \u2014 it's a pure domain object that evolves through events.\n\n```java\npublic class Order {\n    private String id;\n    private OrderStatus status;\n    private List<Item> items;\n    private Money total;\n\n    public static Order reconstitute(List<OrderEvent> history) {\n        Order order = new Order();\n        history.forEach(order::apply);\n        return order;\n    }\n\n    private void apply(OrderEvent event) {\n        switch (event) {\n            case OrderPlaced e -> {\n                this.id = e.orderId();\n                this.items = e.items();\n                this.total = e.total();\n                this.status = OrderStatus.PLACED;\n            }\n            case PaymentConfirmed e -> this.status = OrderStatus.PAID;\n            case OrderShipped e -> this.status = OrderStatus.SHIPPED;\n            case OrderCancelled e -> this.status = OrderStatus.CANCELLED;\n        }\n    }\n}\n```\n\nLoading order #123 means calling `eventStore.loadEvents(\"123\")` and feeding the result through `reconstitute()`. The event store is append-only \u2014 you never update or delete events. New state changes append new events to the stream."
+          },
+          {
+            "type": "phase",
+            "title": "Snapshots \u2014 Why Replaying 10,000 Events Per Read Doesn't Scale",
+            "content": "An order with a 500-event history means replaying 500 state transitions before the aggregate is ready for a new command. For a shopping cart that's been modified hundreds of times, this reconstitution cost adds up fast on the read path.\n\n**Snapshots** solve this by periodically materializing the aggregate's current state alongside the event stream. The loading algorithm becomes: load the latest snapshot, then replay only events that occurred after the snapshot's sequence number. If you snapshot every 100 events, reconstitution replays at most 99 events instead of the full history.\n\nThe practical heuristic for snapshot frequency: profile your aggregate's `apply()` cost per event, then choose an interval where total replay time stays under 10ms. For a simple order aggregate where `apply()` takes 0.05ms, snapshotting every 200 events keeps replay under 10ms. For a complex financial ledger where `apply()` involves calculations, you might snapshot every 50.\n\n**Projection rebuilds** are the operational challenge teams underestimate. When you add a new query model or fix a bug in an existing projection, you must rebuild it from the complete event stream. For a system with millions of events, this can take hours. Design your projection infrastructure for parallel rebuilds: partition events by aggregate ID, process partitions concurrently, and write to a staging read model that swaps with the live model atomically once complete. Schema evolution in the event store requires **upcasters** \u2014 transformers that convert old event formats to the current schema during replay, since events are immutable historical records that cannot be retroactively changed."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Event log is the source of truth, not a side effect** \u2014 `UPDATE` overwrites history; event sourcing preserves every transition as the primary store.\n- **Replay cost grows with event count** \u2014 loading an aggregate with 500 events means 500 state transitions; snapshots every N events cap the read latency.\n- **CQRS is the natural companion** \u2014 the event store handles commands; separate read-side projections materialize query-friendly views.\n- **Immutable events mean upcasters, not migrations** \u2014 schema changes require transformers that convert old formats during replay.\n- **High-value domains justify the complexity** \u2014 banking, audit-critical systems benefit from full history."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Event sourcing is often confused with simply publishing events to Kafka. It is actually a persistence model where the event log is the source of truth for entity state. Instead of `UPDATE orders SET status = 'SHIPPED'` \u2014 which destroys history \u2014 you append an `OrderShipped` event. Current state is always derived by replaying the full event stream from the beginning.\n\n**The real benefits:**\n- A complete audit trail as the core mechanism, not an afterthought added later \u2014 every state transition is preserved by the fundamental design\n- Temporal queries become possible: \"what was this order's state last Tuesday at 3pm?\" \u2014 replay events up to that timestamp and you get the exact state\n- Since events are already persisted, publishing them to Kafka or other consumers requires no additional work \u2014 the event log IS the source\n\n**The real costs:**\n- Reading current state requires replaying all events for an aggregate \u2014 for an order with 500 events, that's 500 state transitions before you can handle a new command; snapshots solve this by periodically materializing state so you only replay events since the last snapshot\n- Queries are harder \u2014 you cannot write a SQL JOIN across event streams, so you build read-side projections (materialized views) optimized for specific queries; this is why event sourcing almost always comes paired with CQRS\n- Schema evolution requires upcasters \u2014 you cannot ALTER a historical event, so breaking schema changes need transformers that convert old formats during replay\n\n**When to use it:**\n- Domains where history is as important as current state: financial ledgers, order management, compliance-heavy systems\n- For standard CRUD with simple reporting needs, the operational complexity of snapshots, projections, and event schema evolution is not justified\n\nI recommend event sourcing only when the domain genuinely requires a complete audit trail or temporal queries \u2014 the operational overhead is real and should only be accepted when the domain benefit is proportional."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do snapshots work in an event-sourced system?",
+        "What is a projection and how does it differ from the event store?",
+        "How do you handle event schema evolution when events are immutable historical records?"
+      ],
+      "seo": {
+        "metaTitle": "Event Sourcing Java \u2014 Audit Trail and CQRS | InterviewExplainer",
+        "metaDescription": "Event sourcing in Java: storing state as immutable events, replaying for current state, snapshots, CQRS integration, and when to use vs avoid it."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Event sourcing is often confused with simply publishing events to Kafka.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Most developers hear \"event sourcing\" and think it means publishing domain events to Kafka. It doesn't. Publishing events is part of any event-driven architecture. Event sourcing is a specific persistence model where the event log is the source of truth for entity state \u2014 not a side effect of state changes, but the primary store. In a traditional system, you UPDATE orders SET status = 'SHIPPED' WHERE id = 123. The previous status is gone forever. You know the order."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the difference between storing state vs storing events, and can articulate real trade-offs"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Event log is the source of truth, not a side effect \u2014 UPDATE overwrites history; event sourcing preserves every transition as the primary store",
+              "Replay cost grows with event count \u2014 loading an aggregate with 500 events means 500 state transitions; snapshots every N events cap the read latency",
+              "CQRS is the natural companion \u2014 the event store handles commands; separate read-side projections materialize query-friendly views",
+              "Immutable events mean upcasters, not migrations \u2014 schema changes require transformers that convert old formats during replay",
+              "High-value domains justify the complexity \u2014 banking, audit-critical systems benefit from full history"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Most developers hear \"event sourcing\" and think it means publishing domain events to Kafka. It doesn't. Publishing events is part of any event-driven architecture. Event sourcing is a specific persistence model where the event log is the source of truth for entity state \u2014 not a side effect of state changes, but the primary store. In a traditional system, you UPDATE orders SET status = 'SHIPPED' WHERE id = 123. The previous status is gone forever. You know the order is shipped, but you don't know when it was placed, when payment was confirmed, when it was packed, or when the shipping label was printed. That history is lost because you overwrote it. With event sourcing, you never update. You."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Thinking event sourcing means just publishing events to Kafka \u2014 event sourcing specifically means the event log IS the source of truth for entity state"
+            ]
+          }
+        ],
+        "cap": "The real benefits: A complete audit trail as the core mechanism, not an afterthought added later \u2014 every state transition is preserved by the fundamental design Temporal queries become possible: \"what",
+        "familiarity_anchors": [
+          "Event",
+          "Benefits",
+          "Costs"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do snapshots work in an event-sourced system?",
+          "What is a projection and how does it differ from the event store?",
+          "How do you handle event schema evolution when events are immutable historical records?"
+        ]
+      }
+    }
+  ]
+}

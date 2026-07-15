@@ -1,0 +1,73 @@
+{
+  "topic": "Service Discovery",
+  "topicSlug": "service-discovery",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "microservices",
+  "questions": [
+    {
+      "id": "service-discovery-eureka",
+      "title": "Service Discovery with Eureka",
+      "slug": "service-discovery-eureka",
+      "question": "How does service discovery work in Spring Cloud using Eureka?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Service registry: central catalog of service instances and their addresses**\n- **Eureka server: registry; Eureka client: each service registers on startup**\n- **Client-side load balancing: Spring Cloud LoadBalancer picks instance from registry**\n- **Heartbeat: clients send heartbeats; registry evicts dead instances**\n- **`@LoadBalanced` + service name in URL: `http://ORDER-SERVICE/api/orders`**\n- **Alternative: Consul, Kubernetes native discovery (preferred in K8s environments)**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Service discovery solves the problem of dynamic service addresses. In a containerized environment, services spin up and down with different IPs and ports. Rather than hardcoding addresses, each service registers itself with a central registry (Eureka Server) including its host, port, and health status.\n\nWhen Service A needs to call Service B, instead of using a hardcoded URL, it asks the registry for instances of 'ORDER-SERVICE', gets back a list, and picks one (client-side load balancing). Spring Cloud makes this transparent: you just annotate your RestTemplate or WebClient with `@LoadBalanced` and use the service name as the hostname.\n\nIn Kubernetes, you'd typically use Kubernetes native service discovery (DNS-based, via Services and kube-dns) rather than Eureka, since K8s already provides this functionality built-in."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Eureka Server Setup\n\n```java\n// eureka-server/\n@SpringBootApplication\n@EnableEurekaServer\npublic class EurekaServerApplication {\n    public static void main(String[] args) {\n        SpringApplication.run(EurekaServerApplication.class, args);\n    }\n}\n```\n\n```yaml\n# eureka-server/application.yml\nserver:\n  port: 8761\n\neureka:\n  instance:\n    hostname: localhost\n  client:\n    registerWithEureka: false    # Don't register itself\n    fetchRegistry: false         # Don't fetch its own registry\n  server:\n    enableSelfPreservation: false  # Evict dead instances faster (dev/test)\n    evictionIntervalTimerInMs: 5000\n```\n\n## Eureka Client (Each Microservice)\n\n```java\n@SpringBootApplication\n@EnableDiscoveryClient\npublic class OrderServiceApplication {\n    public static void main(String[] args) {\n        SpringApplication.run(OrderServiceApplication.class, args);\n    }\n\n    // RestTemplate with load balancing:\n    @Bean\n    @LoadBalanced  // Intercept calls and resolve service names via Eureka\n    public RestTemplate restTemplate() {\n        return new RestTemplate();\n    }\n\n    // WebClient with load balancing:\n    @Bean\n    @LoadBalanced\n    public WebClient.Builder webClientBuilder() {\n        return WebClient.builder();\n    }\n}\n```\n\n```yaml\n# order-service/application.yml\nspring:\n  application:\n    name: ORDER-SERVICE  # This is the service name in the registry\n\neureka:\n  client:\n    serviceUrl:\n      defaultZone: http://localhost:8761/eureka/\n    registryFetchIntervalSeconds: 30   # How often to refresh registry cache\n    instanceInfoReplicationIntervalSeconds: 30\n  instance:\n    preferIpAddress: true              # Use IP instead of hostname\n    leaseRenewalIntervalInSeconds: 10  # Heartbeat every 10 seconds\n    leaseExpirationDurationInSeconds: 30  # Evicted if no heartbeat for 30s\n```\n\n## Calling Another Service by Name\n\n```java\n@Service\npublic class OrderService {\n\n    private final RestTemplate restTemplate;  // @LoadBalanced injected\n    private final WebClient.Builder webClientBuilder;\n\n    // RestTemplate \u2014 service name as hostname:\n    public UserInfo getUserInfo(Long userId) {\n        // 'USER-SERVICE' is resolved to a real instance by LoadBalancer:\n        return restTemplate.getForObject(\n            \"http://USER-SERVICE/api/users/{id}\",\n            UserInfo.class,\n            userId\n        );\n    }\n\n    // WebClient \u2014 reactive:\n    public Mono<InventoryStatus> getInventory(String productId) {\n        return webClientBuilder.build()\n            .get()\n            .uri(\"http://INVENTORY-SERVICE/api/inventory/{productId}\", productId)\n            .retrieve()\n            .bodyToMono(InventoryStatus.class);\n    }\n\n    // Using Feign client (declarative HTTP client):\n    // @FeignClient(name = \"USER-SERVICE\")\n    // public interface UserServiceClient {\n    //     @GetMapping(\"/api/users/{id}\")\n    //     UserInfo getUser(@PathVariable Long id);\n    // }\n}\n```\n\n## Registry Lifecycle\n\n```\n1. SERVICE STARTUP:\n   OrderService starts \u2192 registers with Eureka:\n   {\n     \"app\": \"ORDER-SERVICE\",\n     \"ipAddr\": \"10.0.0.5\",\n     \"port\": 8080,\n     \"status\": \"UP\",\n     \"healthCheckUrl\": \"http://10.0.0.5:8080/actuator/health\"\n   }\n\n2. HEARTBEAT:\n   Every 30s (default), OrderService sends heartbeat\n   Eureka resets expiry timer\n\n3. CLIENT CACHE:\n   Other services fetch registry every 30s\n   Client has LOCAL CACHE \u2014 doesn't call Eureka on every request\n   Consequence: takes ~60s (2 \u00d7 30s) to see new instance\n\n4. INSTANCE DIES:\n   No heartbeat for 90s (default) \u2192 evicted from registry\n   Next cache refresh \u2192 callers stop routing to dead instance\n\n5. SELF-PRESERVATION MODE:\n   If >85% of instances miss heartbeat, Eureka suspects network issue\n   Stops evicting (assumes it has connectivity problem, not clients)\n   Disable in dev: enableSelfPreservation: false\n```\n\n## Kubernetes Alternative\n\n```yaml\n# K8s Service \u2014 DNS-based discovery (no Eureka needed)\napiVersion: v1\nkind: Service\nmetadata:\n  name: order-service       # DNS name within cluster\n  namespace: production\nspec:\n  selector:\n    app: order-service\n  ports:\n    - port: 80\n      targetPort: 8080\n---\n# Other services call: http://order-service.production.svc.cluster.local\n# Or short: http://order-service  (within same namespace)\n# K8s kube-proxy handles load balancing automatically\n```\n\n## Production Reality\n\nIn Kubernetes, Eureka is largely redundant \u2014 K8s has built-in service discovery via DNS and Services. Use Eureka when deploying to traditional VMs or non-K8s environments. In K8s, just use Spring Cloud Kubernetes which integrates with K8s service discovery, ConfigMaps, and Secrets natively. The `@LoadBalanced` + service name pattern works the same regardless of the discovery mechanism underneath."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Service discovery solves the problem of dynamic service addresses.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "In Kubernetes, you'd typically use Kubernetes native service discovery (DNS-based, via Services and kube-dns) rather than Eureka, since K8s already provides this functionality built-in.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

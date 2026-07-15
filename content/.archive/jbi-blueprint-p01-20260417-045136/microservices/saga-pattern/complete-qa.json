@@ -1,0 +1,120 @@
+{
+  "topic": "Saga Pattern",
+  "topicSlug": "saga-pattern",
+  "questions": [
+    {
+      "id": "ms-008",
+      "slug": "saga-pattern-distributed-transactions",
+      "question": "How do you handle distributed transactions across microservices? Explain the Saga pattern.",
+      "title": "Saga Pattern \u2014 Distributed Transactions in Microservices",
+      "direct_answer": "You can't use ACID transactions across microservices. The Saga pattern breaks a distributed transaction into a sequence of local transactions coordinated by either events (choreography) or a central orchestrator.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Understanding of why 2PC fails at scale and how Saga solves it",
+        "common_mistake": "Thinking you can use a shared database to avoid the problem \u2014 that defeats microservices isolation",
+        "to_stand_out": "Explain compensating transactions and the difference between choreography and orchestration with concrete trade-offs"
+      },
+      "company_tags": [
+        "Amazon",
+        "Airbnb",
+        "Uber",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why `@Transactional` Stops Working Across Service Boundaries",
+            "content": "In a monolith, placing an order is one database transaction: insert the order, reserve inventory, charge payment, schedule shipping. If payment fails, everything rolls back automatically. `@Transactional` handles it because all four operations hit the same database.\n\nWith microservices, each service owns its own database. The order service has its database. Inventory has its own. Payments has its own. There's no shared transaction coordinator that can atomically commit across three separate PostgreSQL instances. You might think **two-phase commit (2PC)** solves this \u2014 a coordinator tells all participants to prepare, then commit. In theory, yes. In practice, 2PC has two fatal problems at scale: if the coordinator crashes between the prepare and commit phases, all participants are **blocked** holding locks until the coordinator recovers (minutes to hours), and the network round-trips required for the two phases add latency that compounds with every participant.\n\nThe Saga pattern takes a fundamentally different approach. Instead of one atomic transaction, it breaks the operation into a **sequence of local transactions**, each within a single service's database. Each local transaction publishes an event or sends a command to trigger the next step. If a step fails, the saga executes **compensating transactions** to undo the previous steps \u2014 not a database rollback, but explicit business logic that reverses the effect.\n\nThe mental shift is accepting that between steps, the system is in an **inconsistent state**. The order exists but payment hasn't been charged. Inventory is reserved but shipping hasn't been scheduled. The saga guarantees that the system will eventually reach a consistent state \u2014 either all steps succeed or all are compensated. This is **eventual consistency**, and your UI must be designed to show intermediate states (\"Processing your order...\") rather than a definitive success until the saga completes."
+          },
+          {
+            "type": "step",
+            "title": "Choreography \u2014 Events Without a Central Brain",
+            "content": "In choreography, each service listens for events and reacts by performing its local transaction and publishing the next event. There's no central coordinator \u2014 the workflow emerges from the chain of event reactions.\n\nThe order flow looks like this: the order service creates the order and publishes `OrderCreated`. The inventory service hears it, reserves stock, and publishes `InventoryReserved`. The payment service hears that, charges the card, and publishes `PaymentProcessed`. The notification service hears that and sends the confirmation email.\n\n```java\n@Service\npublic class InventoryService {\n\n    @KafkaListener(topics = \"order-events\",\n                   groupId = \"inventory-service\")\n    public void onOrderCreated(OrderCreatedEvent event) {\n        try {\n            inventoryRepo.reserve(event.getItems());\n            kafkaTemplate.send(\"inventory-events\",\n                new InventoryReservedEvent(\n                    event.getOrderId(), event.getItems()));\n        } catch (InsufficientStockException e) {\n            kafkaTemplate.send(\"inventory-events\",\n                new InventoryReservationFailedEvent(\n                    event.getOrderId(), e.getMessage()));\n        }\n    }\n}\n\n@Service\npublic class OrderService {\n\n    @KafkaListener(topics = \"payment-events\",\n                   groupId = \"order-service\")\n    public void onPaymentResult(PaymentEvent event) {\n        if (event instanceof PaymentFailedEvent) {\n            orderRepo.updateStatus(event.getOrderId(), CANCELLED);\n            kafkaTemplate.send(\"order-events\",\n                new OrderCancelledEvent(event.getOrderId()));\n        }\n    }\n}\n```\n\nChoreography's strength is simplicity and loose coupling \u2014 each service only knows about the events it consumes and produces. Adding a fraud-check step is one new consumer with no changes to existing services.\n\nThe weakness is that **nobody can see the whole workflow**. The saga's logic is distributed across 4 service codebases. When the flow breaks, tracing which service didn't emit its event requires checking logs across all participants. Past 5 services in a saga, choreography becomes difficult to reason about."
+          },
+          {
+            "type": "step",
+            "title": "Orchestration \u2014 A Central Coordinator That Knows the Whole Story",
+            "content": "In orchestration, a dedicated saga coordinator manages the workflow as an explicit state machine. It sends commands to each service and handles the responses. The workflow is visible in one place.\n\n```java\n@Service\npublic class OrderSagaOrchestrator {\n    private final StateMachine<SagaState, SagaEvent> stateMachine;\n\n    public void startSaga(CreateOrderRequest request) {\n        String sagaId = UUID.randomUUID().toString();\n        sagaRepo.save(new SagaRecord(sagaId, STARTED, request));\n\n        commandGateway.send(\n            new ReserveInventoryCommand(sagaId, request.getItems()));\n    }\n\n    @KafkaListener(topics = \"saga-responses\")\n    public void handleResponse(SagaResponse response) {\n        SagaRecord saga = sagaRepo.findById(response.getSagaId());\n\n        switch (saga.getState()) {\n            case AWAITING_INVENTORY:\n                if (response.isSuccess()) {\n                    saga.setState(AWAITING_PAYMENT);\n                    commandGateway.send(\n                        new ChargePaymentCommand(saga.getId(),\n                            saga.getRequest().getPayment()));\n                } else {\n                    saga.setState(COMPENSATING);\n                    compensate(saga);\n                }\n                break;\n            case AWAITING_PAYMENT:\n                if (response.isSuccess()) {\n                    saga.setState(COMPLETED);\n                    orderRepo.updateStatus(saga.getOrderId(), CONFIRMED);\n                } else {\n                    saga.setState(COMPENSATING);\n                    commandGateway.send(\n                        new ReleaseInventoryCommand(saga.getId(),\n                            saga.getRequest().getItems()));\n                }\n                break;\n        }\n        sagaRepo.save(saga);\n    }\n}\n```\n\nThe orchestrator persists its state to a database. If it crashes mid-saga, it resumes from the last persisted state on restart instead of replaying the entire workflow. This is critical \u2014 without persistence, a crash during the payment step leaves inventory reserved indefinitely.\n\nOrchestration's strength is visibility \u2014 the complete workflow is in one class, making it easy to understand, test, and debug. The weakness is the coordinator itself \u2014 it must be highly available, and it introduces a central coupling point that choreography avoids."
+          },
+          {
+            "type": "step",
+            "title": "Compensating Transactions \u2014 The Hard Part Nobody Talks About",
+            "content": "Compensating transactions are not database rollbacks. They're business logic that reverses the **semantic effect** of a step. Reserving inventory \u2192 releasing inventory. Charging a credit card \u2192 issuing a refund. Creating a shipping label \u2192 cancelling the shipment.\n\nThe subtlety is that compensation must be **idempotent**. In an at-least-once delivery system (Kafka, SQS), a compensation command may arrive twice. If the inventory release handler isn't idempotent, it could release stock that was already re-reserved for a different order.\n\n```java\n@Transactional\npublic void releaseInventory(ReleaseInventoryCommand cmd) {\n    Optional<Reservation> reservation =\n        reservationRepo.findBySagaIdAndStatus(\n            cmd.getSagaId(), RESERVED);\n    if (reservation.isEmpty()) {\n        log.info(\"Reservation already released for saga {}\",\n                 cmd.getSagaId());\n        return;  // idempotent \u2014 already compensated\n    }\n    Reservation r = reservation.get();\n    r.setStatus(RELEASED);\n    inventoryRepo.incrementStock(r.getProductId(), r.getQuantity());\n    reservationRepo.save(r);\n}\n```\n\nThe most dangerous failure mode is a **partially-compensated saga** \u2014 inventory released but refund not issued, or payment refunded but order still showing as confirmed. Every forward step must have a tested compensating transaction. Test the compensation paths more thoroughly than the happy path \u2014 the happy path is exercised constantly in production, but compensation paths may run once a month and discover bugs when they're needed most.\n\nMonitor saga completion rates and set SLAs on saga duration. Alert when a saga stays in an intermediate state (AWAITING_PAYMENT, COMPENSATING) for longer than expected \u2014 typically 1\u20135 minutes for an order flow. A stuck saga usually means a consumer crashed and the message is sitting in a dead-letter queue."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **2PC blocks on coordinator failure** \u2014 if coordinator crashes between prepare and commit, all participants hold locks indefinitely.\n- **Choreography: no coordinator, no visibility** \u2014 each service reacts to events; past 5 services the workflow becomes hard to trace.\n- **Orchestration: visible workflow, single dependency** \u2014 the coordinator shows the full state machine but must be persistent and highly available.\n- **Compensation \u2260 rollback** \u2014 reversing a credit card charge is a refund API call, not a database rollback; must be idempotent.\n- **Stuck sagas signal dead-letter problems** \u2014 alert when a saga stays in intermediate state beyond SLA; usually a message in a DLQ."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Distributed transactions are one of the hardest problems in microservices because `@Transactional` cannot span multiple databases. Two-phase commit technically works but holds locks across all participants until every database votes \u2014 unacceptable at scale. The Saga pattern replaces one atomic transaction with a sequence of local transactions, each within a single service's database.\n\n**Compensating transactions \u2014 the key insight:**\n- Compensation is not a database rollback \u2014 when payment succeeded but inventory is out of stock, you issue a refund, which is a new forward operation creating a credit record\n- Compensating transactions must be idempotent because at-least-once delivery can trigger them multiple times \u2014 a compensation command arriving twice must produce the same outcome as once\n- Every step in a saga must have a defined compensation that can be executed independently\n\n**Choreography vs orchestration:**\n- Choreography has no central coordinator \u2014 each service reacts to others' events; clean for 2\u20133 step flows but becomes unmanageable past 5 services where the interaction graph is invisible\n- Orchestration uses a dedicated state machine that sends commands, tracks which steps completed, and drives compensation when something fails \u2014 the workflow is in one class, easy to debug and test, but the coordinator needs to be highly available and persistent\n\n**Operational visibility:**\n- Monitor saga duration and alert when one stays in an intermediate state longer than your SLA (1\u20135 minutes for order flows) \u2014 the most common cause is a consumer crash with an unprocessed message in a dead-letter queue\n\nI recommend orchestration for business-critical sagas with conditional logic or many participants, and choreography only for simple linear flows with 2\u20133 services."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you implement the Outbox pattern to prevent event loss?",
+        "What is idempotency and why is it critical in Saga implementations?",
+        "How does the Saga pattern relate to eventual consistency?"
+      ],
+      "seo": {
+        "metaTitle": "Saga Pattern Distributed Transactions \u2014 Java Microservices Interview",
+        "metaDescription": "Saga pattern for distributed transactions in microservices. Choreography vs orchestration, compensating transactions, and Spring Kafka implementation."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Distributed transactions are one of the hardest problems in microservices because @Transactional cannot span multiple databases.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "In a monolith, placing an order is one database transaction: insert the order, reserve inventory, charge payment, schedule shipping. If payment fails, everything rolls back automatically. @Transactional handles it because all four operations hit the same database. With microservices, each service owns its own database. The order service has its database. Inventory has its own. Payments has its own. There's no shared transaction coordinator that can atomically commit across three separate PostgreSQL instances. You might think two-phase commit (2PC) solves this \u2014 a coordinator tells all participants to prepare, then."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "In choreography, each service listens for events and reacts by performing its local transaction and publishing the next event.",
+              "There's no central coordinator \u2014 the workflow emerges from the chain of event reactions.",
+              "The order flow looks like this: the order service creates the order and publishes OrderCreated.",
+              "The inventory service hears it, reserves stock, and publishes InventoryReserved.",
+              "The payment service hears that, charges the card, and publishes PaymentProcessed.",
+              "The notification service hears that and sends the confirmation email."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "2PC blocks on coordinator failure \u2014 if coordinator crashes between prepare and commit, all participants hold locks indefinitely",
+              "Choreography: no coordinator, no visibility \u2014 each service reacts to events; past 5 services the workflow becomes hard to trace",
+              "Orchestration: visible workflow, single dependency \u2014 the coordinator shows the full state machine but must be persistent and highly available",
+              "Compensation \u2260 rollback \u2014 reversing a credit card charge is a refund API call, not a database rollback; must be idempotent",
+              "Stuck sagas signal dead-letter problems \u2014 alert when a saga stays in intermediate state beyond SLA; usually a message in a DLQ"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Thinking you can use a shared database to avoid the problem \u2014 that defeats microservices isolation"
+          }
+        ],
+        "cap": "Compensating transactions \u2014 the key insight: Compensation is not a database rollback \u2014 when payment succeeded but inventory is out of stock, you issue a refund, which is a new forward operation creati",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you implement the Outbox pattern to prevent event loss?",
+          "What is idempotency and why is it critical in Saga implementations?",
+          "How does the Saga pattern relate to eventual consistency?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "topic": "Caching Strategy",
+  "topicSlug": "caching-strategy",
+  "domain": "java",
+  "stack": "backend",
+  "experience": "3-5",
+  "category": "system-design",
+  "questions": [
+    {
+      "id": "caching-patterns-design",
+      "title": "Caching Strategies for System Design",
+      "slug": "caching-patterns-design",
+      "question": "What are the different caching strategies and how do you choose the right one?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- **Cache-aside (lazy loading): app manages cache \u2014 most common**\n- **Write-through: update cache on every write \u2014 consistent but more writes**\n- **Write-behind: write to cache, async flush to DB \u2014 high write throughput, data loss risk**\n- **Read-through: cache fetches from DB on miss \u2014 transparent to application**\n- **Cache levels: browser \u2192 CDN \u2192 app cache (Caffeine) \u2192 distributed cache (Redis) \u2192 DB**\n- **Eviction: LRU (most common), LFU (frequency-based), TTL-based expiry**"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Caching strategy depends on read/write ratio and consistency requirements. Cache-aside (lazy loading) is the most common: the application checks the cache, loads from DB on a miss, and stores the result in cache. It's flexible but means the first request after a cache miss is slow, and you must manually handle cache invalidation.\n\nWrite-through caches update the cache synchronously on every write. This keeps the cache consistent with the database but doubles write latency. It makes sense for data that's read frequently right after being written.\n\nWrite-behind is the aggressive option: write to cache immediately, flush to DB asynchronously. Reads are fast, writes are fast, but you risk losing recent writes if the cache goes down before flushing. Only appropriate when some data loss is acceptable.\n\nBeyond strategy, cache hierarchy matters: serve from the browser cache first (free), then CDN for static content, then an in-process cache like Caffeine for hot data, then Redis for distributed state."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Cache-Aside (Lazy Loading) \u2014 Most Common\n\n```java\npublic Product getProduct(Long productId) {\n    // 1. Check cache:\n    String cacheKey = \"product:\" + productId;\n    Product cached = redis.get(cacheKey, Product.class);\n    if (cached != null) return cached;  // Cache HIT\n\n    // 2. Cache MISS \u2014 load from DB:\n    Product product = productRepo.findById(productId).orElseThrow();\n\n    // 3. Populate cache:\n    redis.setex(cacheKey, Duration.ofMinutes(30), product);\n\n    return product;\n}\n\npublic void updateProduct(Product product) {\n    productRepo.save(product);\n    redis.delete(\"product:\" + product.getId());  // Invalidate cache\n    // Next read will be a cache miss \u2192 fresh data loaded\n}\n\n// PROS: Simple, cache only what's needed, resilient (app works if Redis down)\n// CONS: Cache miss on first request (cold start), stale data window between\n//       write and cache invalidation if invalidation missed\n```\n\n## Write-Through \u2014 Consistent Cache\n\n```java\npublic void updateProduct(Product product) {\n    // Write to DB AND cache in same operation:\n    Product saved = productRepo.save(product);\n    redis.setex(\"product:\" + product.getId(),\n        Duration.ofMinutes(30), saved);  // Synchronous cache update\n    // Cache always has latest value after a write\n}\n\n// PROS: Cache always consistent with DB after writes\n//       No stale reads after your own writes\n// CONS: Writes go to both DB and Redis \u2192 2\u00d7 write latency\n//       Stores data you might never read (cache pollution)\n// USE WHEN: Users typically read data they just wrote\n//           (e.g., user profile updates \u2192 immediately view profile)\n```\n\n## Write-Behind (Write-Back) \u2014 Async Flush\n\n```java\n// WARNING: Risk of data loss \u2014 use carefully\npublic void updateViewCount(Long articleId) {\n    // Write to Redis immediately (fast):\n    redis.hincrby(\"article:\" + articleId, \"views\", 1);\n    // Queue async flush to DB (every 10 seconds via scheduler):\n    flushQueue.add(articleId);\n}\n\n@Scheduled(fixedDelay = 10000)\npublic void flushViewCounts() {\n    for (Long articleId : flushQueue.drain()) {\n        Long views = redis.hget(\"article:\" + articleId, \"views\", Long.class);\n        articleRepo.updateViewCount(articleId, views);\n    }\n}\n\n// PROS: Extremely fast writes, batching reduces DB write load\n// CONS: Data loss if Redis crashes before flush\n//       Harder to reason about consistency\n// USE FOR: View counts, like counts, metrics \u2014 where losing\n//          a few seconds of data is acceptable\n```\n\n## Cache Hierarchy \u2014 Levels\n\n```\nREQUEST FLOW (fastest to slowest):\n\n1. Browser Cache (HTTP cache headers)\n   - Cache-Control: max-age=3600 (1 hour for static assets)\n   - ETag + 304 Not Modified (for dynamic but occasionally-changing data)\n   - Latency: 0ms (client-side, no network)\n   - Cost: free\n\n2. CDN (Cloudflare, Fastly, CloudFront)\n   - Cache at the edge, geographically close to user\n   - Good for: product images, public HTML pages, API responses for public data\n   - Latency: 10-50ms (closest edge server)\n   - Invalidation: purge by URL or cache tag\n\n3. In-Process Cache (Caffeine, Guava Cache)\n   - Lives in JVM heap \u2014 no network call\n   - Limited size (can't exceed JVM heap)\n   - Not shared across instances (each app instance has its own)\n   - Latency: < 1\u03bcs (microseconds)\n   - Good for: configuration, reference data, computed values\n\n4. Distributed Cache (Redis)\n   - Shared across all app instances\n   - Network call required: ~0.5-2ms\n   - Survives app restarts\n   - Good for: user sessions, frequently-read data, distributed locks\n\n5. Database (PostgreSQL)\n   - Source of truth\n   - Slowest: 5-100ms for indexed queries\n   - Has its own page cache (buffer pool) in memory\n\nCASCADE:\n  Request \u2192 Browser Cache hit \u2192 done\n           \u2192 CDN hit \u2192 done\n           \u2192 Caffeine hit \u2192 done\n           \u2192 Redis hit \u2192 done\n           \u2192 DB \u2192 populate all cache layers \u2192 return\n```\n\n## Cache Invalidation Strategies\n\n```\n1. TTL-BASED EXPIRY (simplest)\n   Cache expires after N seconds automatically\n   Trade-off: stale for up to TTL; longer TTL = more staleness\n   Good for: product prices (5min TTL), exchange rates (1min TTL)\n\n2. EVENT-DRIVEN INVALIDATION (precise)\n   On write \u2192 publish event \u2192 cache subscriber deletes key\n   Zero stale window, but requires event infrastructure\n   Good for: user profile, orders (must always be fresh)\n\n3. CACHE-ASIDE WITH VERSIONING\n   Cache key includes version: \"product:42:v7\"\n   On update: increment version\n   Old cache keys naturally expire via TTL\n   Good for: avoiding thundering herd on popular items\n\n4. WRITE-THROUGH (preemptive)\n   Cache updated on every write \u2014 always current\n   Good for: session data, user preferences\n\nTHUNDERING HERD PROBLEM:\n  Popular item's cache expires \u2192 10,000 concurrent requests\n  all query DB simultaneously \u2192 DB overload\n\n  Solutions:\n  a) Mutex/lock: first thread loads DB, others wait for cache\n  b) Stale-while-revalidate: serve stale data, refresh async\n  c) Jitter on TTL: expire = base_ttl + random(0, 60s)\n     Prevents synchronized expiry of multiple items\n```\n\n## Production Reality\n\nThe hardest part of caching is invalidation. Phil Karlton famously said: \"There are only two hard things in computer science: cache invalidation and naming things.\" In practice, defaulting to TTL-based expiry with a reasonably short TTL (5-30 minutes) is often the right trade-off \u2014 predictable behavior, no complex invalidation logic, acceptable staleness. Use event-driven invalidation only for data that must be strongly consistent (balance, permissions). Monitor cache hit rate \u2014 below 80% suggests the TTL is too short or you're caching the wrong things."
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Caching strategy depends on read/write ratio and consistency requirements.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "Beyond strategy, cache hierarchy matters: serve from the browser cache first (free), then CDN for static content, then an in-process cache like Caffeine for hot data, then Redis for distributed state.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

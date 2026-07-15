@@ -1,0 +1,115 @@
+{
+  "topic": "Capacity Planning",
+  "topicSlug": "capacity-planning",
+  "questions": [
+    {
+      "id": "ops-009",
+      "slug": "capacity-planning-backend-service",
+      "question": "How do you do capacity planning for a backend service?",
+      "title": "Capacity Planning for a Backend Service",
+      "difficulty": "intermediate",
+      "layout_type": "concept-explainer",
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "company_tags": [
+        "Google",
+        "Uber",
+        "Stripe",
+        "Twilio"
+      ],
+      "interviewer_intent": {
+        "testing": "Whether you can translate business growth projections into infrastructure requirements using load testing data rather than guesswork.",
+        "common_mistake": "Estimating capacity by gut feel or doubling current resources 'just in case' rather than establishing baselines through load testing and working backwards from projections.",
+        "to_stand_out": "Mention the USE method (Utilization, Saturation, Errors) for resource analysis, establishing a throughput baseline with load tests, and accounting for peak multipliers and safety margins."
+      },
+      "direct_answer": "Capacity planning: baseline your throughput ceiling from load tests, project traffic growth, calculate required replicas with safety margin (headroom), and validate with regular load tests.",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Guessing Capacity Feels Safe and Is Always Wrong",
+            "content": "Capacity planning without load test data is guessing with spreadsheets. A team estimates they need 8 instances based on \"each instance should handle about 200 requests per second.\" Where does that number come from? Nobody knows \u2014 it was a rough estimate from someone who set up the service two years ago. The real ceiling might be 80 (because a slow database query dominates response time) or 400 (because the service is CPU-bound and the instances are oversized). Without measuring, you are either wasting money on overprovisioned infrastructure or one traffic spike away from an outage.\n\nThe process that replaces guessing has four steps: **measure** the throughput ceiling of a single instance through load testing, **project** future traffic from business growth data, **calculate** the required instance count with a safety margin, and **validate** the projection by re-running load tests after significant changes. Each step depends on the previous \u2014 skip the load test and every subsequent calculation is built on an assumption.\n\nThe second failure mode is planning for averages instead of peaks. A service handling 100 RPS on a typical Tuesday afternoon might see 500 RPS during a marketing campaign, a flash sale, or the first business day after a holiday weekend. Capacity planned for the average fails on the peak. The **USE method** (Utilization, Saturation, Errors) applied to each resource \u2014 CPU, memory, thread pools, database connections \u2014 reveals which resource hits its ceiling first under load, and that resource determines the true capacity."
+          },
+          {
+            "type": "step",
+            "title": "Establishing the Throughput Ceiling: Load Tests, Not Estimates",
+            "content": "A load test measures the maximum requests per second a single instance can handle while meeting your latency SLA. Run Gatling or k6 against a production-like environment (not a development laptop with a local database), gradually increasing concurrent users until p99 latency exceeds the SLA threshold or CPU utilization crosses 80%.\n\n```javascript\n// k6 load test with staged ramp-up\nimport http from 'k6/http';\nimport { check } from 'k6';\n\nexport const options = {\n  stages: [\n    { duration: '2m', target: 50 },   // warm up\n    { duration: '5m', target: 200 },   // steady load\n    { duration: '5m', target: 500 },   // find the ceiling\n  ],\n  thresholds: {\n    http_req_duration: ['p(99)<200'],  // p99 must stay under 200ms\n  },\n};\n\nexport default function () {\n  const res = http.get('https://staging-api.example.com/products');\n  check(res, { 'status 200': (r) => r.status === 200 });\n}\n```\n\nThe staged ramp reveals the ceiling precisely. At 50 concurrent users the service handles 300 RPS with p99 at 50ms. At 200 users it reaches 450 RPS with p99 at 120ms. At 500 users p99 jumps to 800ms and errors climb \u2014 the ceiling sits between 200 and 500 concurrent users. Bisect in follow-up tests to narrow the exact breaking point.\n\nThe critical detail: test the full request path including database queries, cache lookups, and downstream calls. A load test that hits a mock service measures the wrong bottleneck \u2014 HTTP throughput is rarely the limiting factor. The database usually is."
+          },
+          {
+            "type": "step",
+            "title": "From Ceiling to Capacity: The Arithmetic and the Safety Margin",
+            "content": "With the per-instance throughput ceiling measured, capacity planning becomes arithmetic.\n\n**Current peak traffic** comes from your APM dashboard \u2014 not the average, the peak. Look at the highest 5-minute RPS window in the last month. If that number is 1,200 RPS, that is the current peak.\n\n**Projected peak traffic** comes from business growth data. If the product team projects 3x user growth in 12 months and traffic scales linearly with users, the projected peak is 3,600 RPS. If traffic is seasonal (e-commerce holiday spikes), apply the seasonal multiplier on top \u2014 a 5x peak-to-average ratio is common for retail services.\n\n**Required instances** = ceiling(projected_peak / throughput_per_instance) x (1 + headroom). With a ceiling of 500 RPS per instance and a projected peak of 3,600 RPS: ceiling(3600 / 500) = 8 instances. Adding 30% headroom: 8 x 1.3 = 10.4, rounded to 11. The headroom absorbs spikes above projection and provides margin for gradual throughput degradation as the database grows.\n\nConfigure Kubernetes HPA between a minimum (cost floor during off-peak) and a maximum (capacity ceiling plus headroom). Set the CPU target to 70% \u2014 this triggers scale-out before saturation, giving new pods time to start and warm up before existing pods are overwhelmed."
+          },
+          {
+            "type": "step",
+            "title": "The USE Method: Finding the Real Bottleneck Before It Finds You",
+            "content": "The USE method \u2014 Utilization, Saturation, Errors \u2014 applied to each resource tells you what actually limits throughput. Without it, you might scale app pods while the real bottleneck is downstream.\n\n**CPU utilization** above 80% sustained means more CPU or more instances. But check the JVM first \u2014 a sudden CPU spike might be a full GC pause or JIT recompilation, not genuine application load. Compare CPU utilization with GC pause metrics from Micrometer to distinguish application work from JVM overhead.\n\n**Thread pool saturation** manifests as request queuing. Tomcat's default thread pool is 200 threads. If all 200 are occupied, new requests queue and the symptom is latency spikes \u2014 not errors, just slow responses. Monitor `tomcat.threads.busy` and alert when it exceeds 80% of the pool size.\n\n**Database connection pool saturation** is the most common hidden bottleneck. HikariCP defaults to 10 connections. A service handling 500 RPS with a 20ms average query time occupies 10 connections (500 x 0.02 = 10). At 600 RPS, requests queue for connections and latency spikes. Increasing the pool helps only until the database itself is saturated \u2014 then you need read replicas or query optimization. Monitor `hikaricp.connections.active` and `hikaricp.connections.pending` to catch pool exhaustion before users notice.\n\nRe-run load tests quarterly and after significant changes: new endpoints, ORM query changes, database growth, or dependency additions. The throughput ceiling is not static \u2014 a new endpoint with an unindexed query can drop the ceiling by 50%."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Load test first to get actual instance capacity** \u2014 ramp to degradation; peak throughput before P99 breaches SLO is the capacity ceiling; never plan from theoretical estimates\n- **Target 60-70% utilization per instance** \u2014 headroom for traffic spikes, rolling deployment (one instance unavailable), and GC pauses; 100% utilization leaves no room for any of these\n- **Peak multiplier matters more than average** \u2014 design for peak traffic (5-10x average); autoscaling handles the ramp from average to peak; under-provisioning at peak = outage\n- **`ceil(peak / (capacity x utilization))`** \u2014 the instance count formula; update quarterly as traffic grows and application performance changes from optimization or feature additions\n- **Autoscale on CPU or request queue depth, not response time** \u2014 CPU and queue depth are leading indicators; response time is a lagging indicator; scaling on response time delays the response until users already notice degradation"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Capacity planning without load tests is guessing with a spreadsheet. The number you need first is the maximum throughput one instance can handle under your expected workload \u2014 everything else is math from that baseline.\n\n**Step 1 \u2014 Baseline throughput with load tests**\n- Use Gatling, JMeter, or k6 to simulate realistic request patterns against one instance; ramp up load until P99 latency degrades past the SLO or error rate rises above 0.1%\n- The peak throughput before degradation is your instance capacity \u2014 if one instance handles 500 req/s before degrading, you know to run at 300-350 req/s per instance (60-70% of peak) to have headroom for traffic spikes\n\n**Step 2 \u2014 Project traffic**\n- Extrapolate from current traffic trends: if you're at 1,000 req/s today and growing 20% month-over-month, in 6 months you'll need capacity for 2,500 req/s\n- Don't forget peak multiplier \u2014 Black Friday, end-of-month billing, Monday morning \u2014 traffic peaks may be 5-10x the daily average; design for the peak, not the average\n\n**Step 3 \u2014 Instance count calculation**\n- `minimum instances = ceil(peak_traffic / (instance_capacity x target_utilization))` \u2014 at 2,500 req/s peak, 500 req/s per instance capacity, 70% target: `ceil(2500 / (500 x 0.7)) = ceil(7.14) = 8` minimum instances\n- Add buffer for rolling deployments (where one instance is unavailable) and headroom for unexpected spikes: 10-12 instances for this example\n\n**Step 4 \u2014 Autoscaling and monitoring**\n- Configure autoscaling to add instances when CPU or request queue depth crosses 70% \u2014 which means the fleet scales before users experience degradation rather than in response to it\n- Monitor actual utilization against the capacity model; update the model quarterly as traffic patterns change and application performance is tuned"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you use the USE method to identify resource bottlenecks?",
+        "How do you load test a Spring Boot service with Gatling?",
+        "How do you right-size Kubernetes resource requests and limits?"
+      ],
+      "seo": {
+        "metaTitle": "Capacity Planning for a Backend Service | Java SRE Interview Guide",
+        "metaDescription": "Learn how to do capacity planning for Java backend services: load testing, throughput baselines, traffic projections, safety margins, and Kubernetes HPA."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Capacity planning without load tests is guessing with a spreadsheet.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Capacity planning without load test data is guessing with spreadsheets. A team estimates they need 8 instances based on \"each instance should handle about 200 requests per second.\" Where does that number come from? Nobody knows \u2014 it was a rough estimate from someone who set up the service two years ago. The real ceiling might be 80 (because a slow database query dominates response time) or 400 (because the service is CPU-bound and the instances are oversized). Without measuring, you are either wasting money on overprovisioned infrastructure or one."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "A load test measures the maximum requests per second a single instance can handle while meeting your latency SLA.",
+              "Run Gatling or k6 against a production-like environment (not a development laptop with a local database), gradually increasing concurrent users until p99 latency exceeds the SLA threshold or CPU utilization crosses 80%.",
+              "``javascript // k6 load test with staged ramp-up import http from 'k6/http'; import { check } from 'k6'; export const options = { stages: [ { duration: '2m', target: 50 }, // warm up { duration: '5m', target: 200 }, // steady load { duration: '5m', target: 500 }, // find the ceiling ], thresholds: { http_req_duration: ['p(99)<200'], // p99 must stay under 200ms }, }; export default function () { const res = http.get('https://staging-api.example.com/products'); check(res, { 'status 200': (r) => r.status === 200 }); } `` The staged."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Load test first to get actual instance capacity \u2014 ramp to degradation; peak throughput before P99 breaches SLO is the capacity ceiling; never plan from theoretical estimates Target 60-70% utilization per instance \u2014 headroom for traffic spikes, rolling deployment (one instance unavailable), and GC pauses; 100% utilization leaves no room for any of these Peak multiplier matters more than average \u2014 design for peak traffic (5-10x average); autoscaling handles the ramp from average to peak; under-provisioning at peak = outage ceil(peak / (capacity x utilization)) \u2014 the instance count formula; update quarterly as traffic grows and application performance changes from optimization or feature additions Autoscale on CPU or request queue depth, not response time \u2014 CPU and queue depth are leading indicators; response time is a lagging indicator; scaling on response time delays the response until users already notice degradation"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Estimating capacity by gut feel or doubling current resources 'just in case' rather than establishing baselines through load testing and working backwards from projections."
+          }
+        ],
+        "cap": "Step 1 \u2014 Baseline throughput with load tests Use Gatling, JMeter, or k6 to simulate realistic request patterns against one instance; ramp up load until P99 latency degrades past the SLO or error rate",
+        "familiarity_anchors": [
+          "Capacity"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you use the USE method to identify resource bottlenecks?",
+          "How do you load test a Spring Boot service with Gatling?",
+          "How do you right-size Kubernetes resource requests and limits?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,445 @@
+{
+  "topic": "Scenario Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "eda-003",
+      "slug": "saga-pattern-distributed-transactions-choreography",
+      "question": "How does the Saga pattern handle distributed transactions \u2014 choreography vs orchestration?",
+      "title": "Saga Pattern: Distributed Transactions via Choreography and Orchestration",
+      "direct_answer": "The Saga pattern manages distributed transactions by breaking them into a sequence of local transactions, each publishing an event that triggers the next step. On failure, compensating transactions undo completed steps. Choreography uses direct event reactions with no central coordinator; orchestration uses a central saga orchestrator that explicitly controls the flow.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Whether you know how to maintain data consistency across microservices without distributed ACID transactions (which don't scale)",
+        "common_mistake": "Confusing Saga with 2-phase commit, or not knowing how compensating transactions differ from rollbacks (they're new forward transactions, not undos)",
+        "to_stand_out": "Explain the difference between choreography and orchestration, when each breaks down, and mention Axon Framework or Spring State Machine as orchestration implementations"
+      },
+      "company_tags": [
+        "amazon",
+        "netflix",
+        "uber",
+        "microsoft"
+      ],
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-13",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why You Can't Just Lock Rows Across Five Databases",
+            "content": "In a monolith, placing an order means one database transaction: deduct inventory, charge the card, create the shipment, send the confirmation \u2014 all committed or all rolled back with a single `ROLLBACK` statement. Move to microservices and each of those steps lives in a different service with its own database. There is no single transaction manager that can atomically coordinate commits across PostgreSQL in the order service, MySQL in inventory, and the payment gateway's API.\n\nTwo-phase commit (2PC) technically solves this by locking rows across all participants until every database votes \"yes.\" But those locks hold for the duration of the network round trips \u2014 if the coordinator crashes mid-protocol, every participant sits locked indefinitely. At Uber's scale of thousands of orders per second, 2PC turns distributed databases into a global mutex. It doesn't scale.\n\nThe Saga pattern takes a fundamentally different approach. Instead of one atomic transaction, you execute a **sequence of local transactions**, each committing independently. If the payment service charges the card successfully but the inventory service finds the item out of stock, you don't roll back \u2014 you can't, because the payment already committed. Instead, you issue a **compensating transaction**: a refund. It's a new forward operation that logically undoes the effect, not a database-level undo. This is the key insight that separates Sagas from 2PC \u2014 you trade ACID isolation for eventual consistency and independent scalability."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Choreography vs Orchestration \u2014 Where Each Breaks Down",
+            "content": "| Dimension | Choreography | Orchestration |\n|---|---|---|\n| Coordinator | None \u2014 services react to events | Central saga orchestrator |\n| Coupling | Services only know their own events | Orchestrator knows the full flow |\n| Visibility | No single place to see saga state | Central state machine shows current step |\n| Complexity ceiling | Becomes event spaghetti at 4+ steps | Scales to complex multi-step flows |\n| Failure tracing | Chase events across N services and topics | Orchestrator logs every step and outcome |\n| Testing | Integration tests across full event chain | Unit-test the orchestrator state machine |\n| Adding steps | Every service must know about new events | Only the orchestrator changes |\n| Java implementation | Spring Cloud Stream + Kafka | Axon Framework, Spring State Machine |"
+          },
+          {
+            "type": "step",
+            "title": "Choreography \u2014 Elegant Until the Fourth Service Joins",
+            "content": "In choreography, there is no central coordinator. Each service listens for events, does its work, and publishes its own event. The saga emerges from the chain of reactions.\n\nAn order placement saga with three services flows naturally: the order service publishes `OrderCreated`, the payment service reacts by charging the card and publishing `PaymentCompleted`, the inventory service reacts by reserving stock and publishing `InventoryReserved`, and the order service reacts to that final event by updating status to `CONFIRMED`.\n\n```java\n@Component\npublic class PaymentSagaParticipant {\n\n    @KafkaListener(topics = \"order-events\", groupId = \"payment-service\")\n    @Transactional\n    public void onOrderCreated(OrderCreatedEvent event) {\n        try {\n            PaymentResult result = gateway.charge(event.card(), event.total());\n            kafka.send(\"payment-events\",\n                new PaymentCompletedEvent(event.orderId(), result.transactionId()));\n        } catch (PaymentDeclinedException e) {\n            kafka.send(\"payment-events\",\n                new PaymentFailedEvent(event.orderId(), e.reason()));\n        }\n    }\n}\n```\n\nThe `PaymentFailedEvent` triggers compensation: the order service listens for it and cancels the order. With three services, this event chain is manageable. But add fraud detection, loyalty points, partner notifications, and warehouse routing \u2014 suddenly six services are reacting to each other's events, failure paths multiply combinatorially, and tracing which events were published in which order requires distributed tracing across a dozen topics. That's when choreography becomes **event spaghetti** and you need orchestration."
+          },
+          {
+            "type": "step",
+            "title": "Orchestration \u2014 A State Machine That Knows the Whole Story",
+            "content": "An orchestrator is a dedicated component that owns the saga's flow. It sends commands to participants, waits for responses, and drives compensation on failure. The full logic lives in one place, making it testable and debuggable.\n\nThe orchestrator tracks state explicitly. At any moment, you can query it and know: \"Order #456 is at step 3 (inventory reservation), payment already succeeded, fraud check passed.\" If the inventory step fails, the orchestrator knows exactly which compensations to run \u2014 refund the payment and update the order status \u2014 without relying on a chain of reactive events.\n\n```java\npublic class OrderSagaOrchestrator {\n    private final SagaStepExecutor executor;\n\n    public void execute(OrderSagaState state) {\n        try {\n            executor.run(\"charge-payment\", state,\n                () -> paymentClient.charge(state.card(), state.total()));\n            executor.run(\"reserve-inventory\", state,\n                () -> inventoryClient.reserve(state.items()));\n            executor.run(\"confirm-order\", state,\n                () -> orderClient.confirm(state.orderId()));\n        } catch (SagaStepFailedException e) {\n            compensate(state, e.failedStep());\n        }\n    }\n\n    private void compensate(OrderSagaState state, String failedStep) {\n        if (state.completedSteps().contains(\"charge-payment\")) {\n            paymentClient.refund(state.paymentId()); // forward op, not rollback\n        }\n        orderClient.cancel(state.orderId());\n    }\n}\n```\n\nThe compensating transaction is the concept most candidates get wrong. A refund is not a database rollback \u2014 it's a new transaction that creates a credit record, notifies the payment gateway, and updates the ledger. It moves the system forward to a consistent state rather than rewinding time. If the compensation itself fails (the refund API is down), you need a retry mechanism or manual intervention queue \u2014 compensations must eventually complete.\n\nFor Java, **Axon Framework** provides production-grade saga orchestration with persistent state, automatic retry, and deadline management. Spring State Machine works for simpler flows where you want explicit state transitions without a full framework."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Local commits only, no global locks** \u2014 each saga step uses one database; 2PC's cross-database locks create a global mutex that kills throughput at.\n- **Compensating transactions are forward operations** \u2014 a refund is a new credit record, not a `ROLLBACK`.\n- **Choreography breaks at 4+ services** \u2014 event chains become combinatorial; six services reacting to each other produce failure paths no one can trace.\n- **Orchestrator state machine is unit-testable** \u2014 test each step and compensation path without standing up Kafka or downstream services.\n- **Intermediate states are visible** \u2014 another request may read the order as CONFIRMED while inventory reservation is still pending."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The Saga pattern is how microservices achieve consistency across databases without distributed ACID transactions. Two-phase commit locks rows across all participants until every database votes \u2014 at thousands of operations per second, that becomes a global mutex that kills throughput. Sagas take a different approach: each service executes a local transaction and publishes an event. If a later step fails, compensating transactions undo the effect.\n\n**The key insight about compensation:**\n- Compensation is not a database rollback \u2014 when payment succeeded but inventory is out of stock, you issue a refund, which is a new forward transaction that creates a credit record, notifies the payment gateway, and updates the ledger\n- Compensating transactions must be idempotent because at-least-once delivery means a compensation command can arrive twice \u2014 \"release reserved inventory\" must be safe to call multiple times\n- Every step must have a defined compensation that can be executed independently of the system's current state\n\n**Choreography vs orchestration:**\n- Choreography has no central coordinator \u2014 services react to each other's events; clean for 2\u20133 step flows, but once you have six services reacting to each other's success and failure events, the interaction graph becomes unmanageable and tracing what happened requires following events across dozens of topics\n- Orchestration puts the flow in a dedicated state machine \u2014 it sends commands, tracks which steps completed, and drives compensation when something fails; you can query it at any moment and know exactly where the saga stands; for Java, Axon Framework provides this with persistent state and retry\n\n**Visibility and monitoring:**\n- Monitor saga duration and alert when one stays in an intermediate state beyond your SLA \u2014 the most common cause is a consumer crash with a message stuck in a dead-letter queue\n\nI recommend choreography for simple linear flows with 2\u20133 services, and orchestration for anything with conditional logic, many participants, or business-critical flows where operational visibility matters."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle a compensating transaction that itself fails?",
+        "What is the difference between a Saga and a Process Manager?",
+        "How does the Axon Framework implement the saga pattern in Java?"
+      ],
+      "seo": {
+        "metaTitle": "Saga Pattern Java \u2014 Choreography vs Orchestration | InterviewExplainer",
+        "metaDescription": "Saga pattern for distributed transactions in Java microservices. Choreography vs orchestration comparison, compensating transactions, and Axon Framework."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "The Saga pattern is how microservices achieve consistency across databases without distributed ACID transactions.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "In a monolith, placing an order means one database transaction: deduct inventory, charge the card, create the shipment, send the confirmation \u2014 all committed or all rolled back with a single ROLLBACK statement. Move to microservices and each of those steps lives in a different service with its own database. There is no single transaction manager that can atomically coordinate commits across PostgreSQL in the order service, MySQL in inventory."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "| Dimension | Choreography | Orchestration | |---|---|---| | Coordinator | None \u2014 services react to events | Central saga orchestrator | | Coupling | Services only know their own events | Orchestrator knows the full flow | | Visibility | No single place to see saga state | Central state machine shows current step | | Complexity ceiling | Becomes event spaghetti at 4+ steps | Scales to complex multi-step flows | | Failure tracing | Chase events across N services and topics | Orchestrator logs every step and outcome | | Testing | Integration tests across full event chain | Unit-test the orchestrator state machine | | Adding steps | Every service must know about new events | Only the orchestrator changes | | Java implementation | Spring Cloud Stream + Kafka | Axon Framework, Spring State Machine |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "In a monolith, placing an order means one database transaction: deduct inventory, charge the card, create the shipment, send the confirmation \u2014 all committed or all rolled back with a single ROLLBACK statement. Move to microservices and each of those steps lives in a different service with its own database. There is no single transaction manager that can atomically coordinate commits across PostgreSQL in the order service, MySQL in inventory, and the payment gateway's API. Two-phase commit (2PC) technically solves this by locking rows across all participants until every database."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "In a monolith, placing an order means one database transaction: deduct inventory, charge the card, create the shipment, send the confirmation \u2014 all committed or all rolled back with a single ROLLBACK statement. Move to microservices and each of those steps lives in a different service with its own database. There is no single transaction manager that can atomically coordinate."
+          }
+        ],
+        "cap": "The key insight about compensation: Compensation is not a database rollback \u2014 when payment succeeded but inventory is out of stock, you issue a refund, which is a new forward transaction that creates",
+        "familiarity_anchors": [
+          "Choreography"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle a compensating transaction that itself fails?",
+          "What is the difference between a Saga and a Process Manager?",
+          "How does the Axon Framework implement the saga pattern in Java?"
+        ]
+      }
+    },
+    {
+      "id": "eda-011",
+      "slug": "eventual-consistency-race-conditions-event-driven",
+      "question": "How do you handle race conditions and stale reads caused by eventual consistency in event-driven systems?",
+      "title": "Eventual Consistency: Handling Race Conditions in Event-Driven Systems",
+      "direct_answer": "Eventual consistency means reads may return stale data while events propagate. Handle this with: optimistic locking (version fields) to detect concurrent modifications, idempotent consumers to safely reprocess, read-your-own-writes patterns (read from write-ahead log or cache), and UI patterns that acknowledge async processing rather than showing stale state.",
+      "layout_type": "problem-detective",
+      "interviewer_intent": {
+        "testing": "Whether you understand the practical consequences of eventual consistency and have strategies for handling them in user-facing applications",
+        "common_mistake": "Assuming eventual consistency is always fine for users \u2014 without compensating UX or technical patterns, users see confusing inconsistent states",
+        "to_stand_out": "Discuss the read-your-own-writes problem specifically, explain optimistic locking with version numbers, and give a concrete UX strategy (pessimistic locking vs optimistic UI)"
+      },
+      "company_tags": [
+        "amazon",
+        "netflix",
+        "shopify",
+        "twitter"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-13",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "problem_statement",
+            "title": "The Order That Disappears When the User Refreshes",
+            "content": "A user places an order. The API returns `201 Created` with the order details. The user clicks \"My Orders\" to check the status. The order isn't there. They refresh. Still not there. They panic, try to place the order again \u2014 now they have two orders.\n\nThis isn't a bug in any single service. The order service saved the order and returned successfully. But the \"My Orders\" page reads from a **read replica** that consumes events asynchronously. The event hasn't been processed yet \u2014 maybe the consumer is lagging by 2 seconds, maybe the read model projection is rebuilding. The user's write went to the source of truth, but their read hit a stale view.\n\nThis is the **read-your-own-writes** problem, and it's the most user-visible consequence of eventual consistency. Without compensating patterns, users see confusing, contradictory states: orders that vanish, statuses that jump backward, modifications that seem to undo themselves. The system is eventually consistent, which means the read model will catch up \u2014 but \"eventually\" might be 500ms or 5 seconds or 30 seconds, and users don't wait patiently for convergence."
+          },
+          {
+            "type": "before_code",
+            "title": "The Broken Pattern \u2014 Re-Reading From a Stale Replica After Writing",
+            "content": "The root cause is straightforward: the API writes to one data store and immediately reads from another that hasn't caught up.\n\n```java\n@PostMapping(\"/orders\")\npublic ResponseEntity<Order> placeOrder(@RequestBody OrderRequest req) {\n    Order order = orderService.place(req); // writes to primary DB, publishes event\n    return ResponseEntity.created(URI.create(\"/orders/\" + order.getId()))\n        .body(order); // returns fresh data \u2014 this response is correct\n}\n\n@GetMapping(\"/orders\")\npublic List<OrderSummary> getMyOrders() {\n    // reads from CQRS read model \u2014 may not have processed the event yet\n    return orderReadService.findByUser(currentUser()); // ORDER MISSING\n}\n```\n\nThe `POST` response is always correct because it returns the entity the primary just wrote. The `GET` fails because the read model is a separate projection that consumes events asynchronously. Between the write and the read, there's a propagation delay \u2014 the event must travel through Kafka, be consumed by the projection service, and update the read store. During that window, the user sees stale state.\n\nThe same pattern produces a second problem: **concurrent modifications**. Two saga participants process events for the same order simultaneously. One sets status to `PAID`, the other sets status to `INVENTORY_RESERVED`. Without coordination, the last writer wins and one status update is silently lost."
+          },
+          {
+            "type": "diagnosis",
+            "title": "Three Failure Modes and Their Root Causes",
+            "content": "Eventual consistency creates three distinct failure modes, each requiring a different fix.\n\n**Read-your-own-writes** happens when a user's read hits a replica that hasn't processed their write. Root cause: the write path (primary DB + event publish) and read path (CQRS read model) are decoupled, with propagation delay between them. The user expects the read model to reflect their write immediately, but it lags by hundreds of milliseconds to seconds.\n\n**Concurrent modifications** happen when two consumers process events for the same entity at the same time. Root cause: multiple saga steps or event handlers update the same row without coordination. The inventory service and the payment service both update order #123 simultaneously \u2014 without version checking, the second write silently overwrites the first, and one state transition is lost.\n\n**Stale cache** happens when a cache serves data that the event stream has already superseded. Root cause: cache TTL hasn't expired, but an event changed the underlying state. The cache returns the old value, and the user sees outdated information.\n\nThe key diagnostic signal: if the problem is intermittent and duration-dependent (worse under load, resolves after a few seconds), it's a propagation delay issue. If the problem produces permanently wrong state (a status update that never appears), it's a concurrent modification issue. If the problem appears despite correct writes to the read model, it's a caching issue."
+          },
+          {
+            "type": "after_code",
+            "title": "Three Production-Tested Fixes That Match the Failure Mode",
+            "content": "**Fix 1 \u2014 Return the command result directly** for read-your-own-writes. Don't re-query after a write. The user already has fresh data from the POST response \u2014 use it.\n\n```java\n@PostMapping(\"/orders\")\npublic ResponseEntity<OrderResponse> placeOrder(@RequestBody OrderRequest req) {\n    Order order = orderService.place(req);\n    return ResponseEntity\n        .accepted()\n        .header(\"Location\", \"/orders/\" + order.getId() + \"/status\")\n        .body(OrderResponse.from(order)); // fresh from the write \u2014 always correct\n}\n```\n\nReturning `202 Accepted` with a `Location` header for status polling explicitly acknowledges that downstream processing is async. The client can poll the status endpoint until it transitions to `CONFIRMED` or `FAILED`.\n\n**Fix 2 \u2014 Optimistic locking with `@Version`** for concurrent modifications. JPA's `@Version` column auto-increments on save. If two transactions read version 3 and both try to save version 4, one succeeds and the other gets `OptimisticLockException` \u2014 forcing a retry instead of a silent overwrite.\n\n```java\n@Entity\npublic class InventoryItem {\n    @Version\n    private Long version;\n\n    public void reserve(int quantity) {\n        if (available < quantity) throw new InsufficientInventoryException();\n        this.available -= quantity;\n    }\n}\n```\n\nThis is cheaper than pessimistic locking (`SELECT ... FOR UPDATE`) for read-heavy systems because no row locks are held during processing. The trade-off: you must handle the retry logic when the optimistic lock fails.\n\n**Fix 3 \u2014 Event-driven cache invalidation** for stale caches. Instead of relying on TTL, subscribe to the same events that update the read model and invalidate cache entries when the relevant event arrives. This ties cache freshness to event propagation rather than an arbitrary timer."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Read-your-own-writes is the most common user-visible failure** \u2014 POST returns correct but GET hits a stale read model.\n- **`202 Accepted` + Location header** \u2014 explicitly models async processing; the client polls a status endpoint rather than assuming immediate completion.\n- **`@Version` optimistic locking catches concurrent overwrites** \u2014 two saga participants updating the same row.\n- **TTL-based caches lie under async propagation** \u2014 an event changed state 200ms ago but cache TTL is 60s.\n- **Intermittent vs permanent symptoms distinguish failure modes** \u2014 propagation delay resolves after seconds."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Eventual consistency creates real user-facing problems if you do not design for them explicitly. The most common is read-your-own-writes: a user places an order, gets a success response, navigates to their order list, and the order is not there \u2014 the write went to the primary database, but the order list reads from a CQRS projection that has not yet processed the event.\n\n**Fixing the read-your-own-writes problem:**\n- The simplest fix: don't re-query after a write; return the written data directly from the POST response so the user's browser has fresh data without hitting a potentially stale read model\n- For operations that take longer, return HTTP `202 Accepted` with a `Location` header pointing to a status endpoint, letting the client poll until processing completes\n- Optimistic UI patterns show the expected end state immediately and correct only if the event processing reveals an error\n\n**Concurrent modifications:**\n- Two services updating the same entity simultaneously can cause the \"last writer wins\" problem where one state transition is silently lost\n- `@Version` optimistic locking in JPA detects conflicts: if two transactions read version 3 and both try to save version 4, one gets `OptimisticLockException` and must retry\n- This is cheaper than pessimistic locking for read-heavy systems and prevents silent data loss from concurrent saga participants\n\n**Cache invalidation under async propagation:**\n- TTL-based expiration doesn't work well with event-driven updates \u2014 an event changed state 200ms ago, but the cache TTL is 60 seconds\n- The fix is event-driven cache invalidation: subscribe to the same events that update the read model and invalidate relevant cache entries when the event arrives\n\nI recommend the diagnostic rule: if the problem is intermittent and resolves after a few seconds, it's propagation delay; if the problem produces permanently wrong state, it's a concurrent modification issue \u2014 they require different fixes."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between optimistic locking and pessimistic locking in JPA?",
+        "How would you implement a read-your-own-writes guarantee across a distributed read model?",
+        "What is the 'lost update' problem and how does @Version prevent it?"
+      ],
+      "seo": {
+        "metaTitle": "Eventual Consistency Race Conditions Event-Driven Java | InterviewExplainer",
+        "metaDescription": "Handle eventual consistency in Java event-driven systems. Read-your-own-writes, optimistic locking, concurrent modifications, and HTTP 202 Accepted pattern."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Eventual consistency creates real user-facing problems if you do not design for them explicitly.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Eventual consistency means reads may return stale data while events propagate. Handle this with: optimistic locking (version fields) to detect concurrent modifications, idempotent consumers to safely reprocess, read-your-own-writes patterns (read from write-ahead log or cache), and UI patterns that acknowledge async processing rather than showing stale state."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Eventual consistency means reads may return stale data while events propagate.",
+              "Handle this with: optimistic locking (version fields) to detect concurrent modifications, idempotent consumers to safely reprocess, read-your-own-writes patterns (read from write-ahead log or cache), and UI patterns that acknowledge async processing rather than showing stale state."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Read-your-own-writes is the most common user-visible failure \u2014 POST returns correct but GET hits a stale read model",
+              "202 Accepted + Location header \u2014 explicitly models async processing; the client polls a status endpoint rather than assuming immediate completion",
+              "@Version optimistic locking catches concurrent overwrites \u2014 two saga participants updating the same row",
+              "TTL-based caches lie under async propagation \u2014 an event changed state 200ms ago but cache TTL is 60s",
+              "Intermittent vs permanent symptoms distinguish failure modes \u2014 propagation delay resolves after seconds"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Assuming eventual consistency is always fine for users \u2014 without compensating UX or technical patterns, users see confusing inconsistent states"
+          }
+        ],
+        "cap": "Fixing the read-your-own-writes problem: The simplest fix: don't re-query after a write; return the written data directly from the POST response so the user's browser has fresh data without hitting a",
+        "familiarity_anchors": [
+          "Eventual",
+          "Handle"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between optimistic locking and pessimistic locking in JPA?",
+          "How would you implement a read-your-own-writes guarantee across a distributed read model?",
+          "What is the 'lost update' problem and how does @Version prevent it?"
+        ]
+      }
+    },
+    {
+      "id": "rmq-008",
+      "slug": "competing-consumers-pattern",
+      "question": "What is the competing consumers pattern in RabbitMQ and how does it enable horizontal scaling?",
+      "title": "Competing Consumers Pattern in RabbitMQ",
+      "direct_answer": "The competing consumers pattern connects multiple consumer instances to the same queue. RabbitMQ delivers each message to exactly one consumer using round-robin dispatch by default. This allows horizontal scaling of processing capacity simply by adding more consumer instances, and naturally load-balances work across them.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Understanding of how RabbitMQ handles parallel processing and how to tune consumer concurrency for throughput.",
+        "common_mistake": "Confusing competing consumers with pub/sub (fanout). In competing consumers each message goes to ONE consumer; in pub/sub a copy goes to ALL subscribers.",
+        "to_stand_out": "Discuss prefetch count tuning to avoid slow-consumer starvation, mention consumer priority, and explain how competing consumers interact with message ordering guarantees."
+      },
+      "company_tags": [
+        "e-commerce",
+        "saas",
+        "data-engineering"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-13",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "One Queue, Many Workers \u2014 Why Round-Robin Is Only Half the Story",
+            "content": "Think of a RabbitMQ queue like a conveyor belt at an airport baggage claim. Each suitcase goes to exactly one person \u2014 two people don't grab the same bag. When the belt is full, adding more people (consumers) means bags get picked up faster. That's the competing consumers pattern in one sentence: multiple consumers subscribe to the same queue, and each message goes to exactly one of them.\n\nRabbitMQ dispatches messages to competing consumers using **round-robin** by default. With 3 consumers and 9 messages, each consumer gets 3 \u2014 regardless of how fast each consumer processes them. This is fair in theory but creates a problem in practice: if Consumer A processes messages in 10ms and Consumer B takes 2 seconds (because it calls a slow downstream API), the round-robin dispatcher still sends them alternating messages. Consumer A finishes its work instantly and sits idle. Consumer B has a backlog of messages it can't keep up with. The queue appears slow even though half the consumers have nothing to do.\n\nThe fix is **prefetch tuning** \u2014 the `basicQos` setting that limits how many unacknowledged messages a consumer holds. With prefetch=1, each consumer gets exactly one message at a time. When Consumer A finishes and acks, the broker immediately sends it the next available message. Consumer B is still working on its first message, so it doesn't get a second one until it acks. Messages flow to the fastest available consumer instead of being pre-distributed in fixed rotation. The trade-off: prefetch=1 adds a network round-trip per message (consumer must ack before getting the next one), which reduces maximum throughput. Prefetch=10\u201320 is the sweet spot for most workloads \u2014 enough buffering to keep the consumer busy, not so much that slow consumers hoard work.\n\nThe critical distinction from pub/sub: competing consumers deliver each message to **exactly one** consumer. Fanout pub/sub delivers a **copy** to every subscriber. Same message, completely different semantics."
+          },
+          {
+            "type": "step",
+            "title": "Scaling Consumers in Spring AMQP \u2014 Threads vs Pods",
+            "content": "Spring AMQP gives you two scaling axes. **Vertical scaling** increases consumer threads within a single application instance using the listener container's concurrency settings. **Horizontal scaling** deploys multiple application instances, each running their own `@RabbitListener` that subscribes to the same queue.\n\nVertically, configure concurrency on the listener container. Spring dynamically adjusts the thread count between `concurrency` (minimum) and `max-concurrency` (maximum) based on workload.\n\n```yaml\nspring:\n  rabbitmq:\n    listener:\n      simple:\n        concurrency: 3\n        max-concurrency: 10\n        prefetch: 10\n```\n\nFor per-listener control, use the `concurrency` attribute directly on `@RabbitListener`. This is useful when different queues have different processing profiles \u2014 image processing needs many threads while order validation needs few.\n\n```java\n@RabbitListener(queues = \"image.resize.queue\", concurrency = \"5-15\")\npublic void resizeImage(ImageTask task) {\n    imageService.process(task); // CPU-bound, benefits from parallelism\n}\n\n@RabbitListener(queues = \"order.validate.queue\", concurrency = \"2-5\")\npublic void validateOrder(Order order) {\n    validationService.validate(order); // IO-bound, lower concurrency\n}\n```\n\nHorizontally, deploy multiple instances of the same Spring Boot application \u2014 each creates its own consumer connection to the queue. RabbitMQ treats them identically in the round-robin. In Kubernetes, scaling is a replica count change. For automated scaling based on queue depth, **KEDA** (Kubernetes Event-Driven Autoscaling) watches the RabbitMQ queue and adjusts pod replicas when the message count exceeds a threshold \u2014 adding consumers when the queue backs up and removing them when it drains.\n\nOne thing that catches people: **message ordering is NOT guaranteed** across competing consumers. If messages A, B, C arrive in order, Consumer 1 might process A and C while Consumer 2 processes B. If B finishes before A, downstream sees B\u2192A\u2192C. If strict ordering matters, use a single consumer per queue, or partition messages by key into separate queues so each queue has one consumer."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Round-robin ignores consumer speed** \u2014 with default prefetch, the broker distributes messages evenly regardless of processing time.\n- **Prefetch=1 gives fairest dispatch** \u2014 each consumer holds one message at a time.\n- **Competing consumers \u2260 pub/sub** \u2014 competing consumers deliver each message to ONE consumer (task distribution).\n- **Message ordering breaks across consumers** \u2014 competing consumers process messages out of arrival order.\n- **KEDA + queue depth** \u2014 Kubernetes Event-Driven Autoscaling watches RabbitMQ queue depth and adjusts pod replicas automatically during traffic spikes."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The competing consumers pattern enables horizontal scaling of RabbitMQ processing. Multiple consumers subscribe to the same queue, and the broker delivers each message to exactly one consumer \u2014 they compete for work. This is fundamentally different from pub/sub, where each subscriber receives a copy.\n\n**The round-robin problem and the fix:**\n- By default, the broker distributes messages in round-robin regardless of consumer speed; a fast consumer and a slow one get alternating messages, leaving the fast one idle while the slow one builds a backlog\n- The fix is prefetch tuning: setting `basicQos` limits how many unacknowledged messages each consumer holds; prefetch=1 gives the fairest dispatch \u2014 each consumer gets one message, processes it, acks, then gets the next, so work naturally flows to the fastest consumer\n\n**Scaling in Spring AMQP:**\n- Within a single instance, set `concurrency` and `max-concurrency` on the listener container to control thread count; the container creates multiple consumers on the same queue within the JVM\n- Across instances, deploy multiple replicas in Kubernetes \u2014 each subscribes to the same queue and RabbitMQ treats them as additional competing consumers; KEDA can watch queue depth and adjust replicas automatically\n\n**The ordering caveat:**\n- Competing consumers break message ordering \u2014 Consumer A and Consumer B can process messages out of arrival sequence\n- If ordering matters, use a single consumer per queue or partition work by key into separate queues, each with its own consumer\n\nI recommend competing consumers as the default horizontal scaling strategy for task queues, with prefetch tuned to match your handler's processing capacity rather than relying on the default of 250."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does prefetch count affect message ordering and fairness in competing consumers?",
+        "How would you autoscale competing consumers based on queue depth in Kubernetes?",
+        "What is the difference between competing consumers on a single queue versus consumer groups in Kafka?"
+      ],
+      "seo": {
+        "meta_title": "Competing Consumers Pattern in RabbitMQ | Java Spring Interview",
+        "meta_description": "Learn the competing consumers pattern in RabbitMQ, how to configure concurrency in Spring AMQP, prefetch tuning, and horizontal scaling of message processing.",
+        "keywords": [
+          "competing consumers rabbitmq",
+          "rabbitmq horizontal scaling",
+          "spring amqp concurrency",
+          "rabbitmq prefetch",
+          "rabbitlistener concurrency",
+          "rabbitmq work queue"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "The competing consumers pattern enables horizontal scaling of RabbitMQ processing.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Think of a RabbitMQ queue like a conveyor belt at an airport baggage claim. Each suitcase goes to exactly one person \u2014 two people don't grab the same bag. When the belt is full, adding more people (consumers) means bags get picked up faster. That's the competing consumers pattern in one sentence: multiple consumers subscribe to the same queue, and each message goes to exactly one of them. RabbitMQ dispatches messages to competing consumers using round-robin by default. With 3 consumers and 9 messages, each consumer gets 3 \u2014 regardless."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Spring AMQP gives you two scaling axes.",
+              "Vertical scaling increases consumer threads within a single application instance using the listener container's concurrency settings.",
+              "Horizontal scaling deploys multiple application instances, each running their own @RabbitListener that subscribes to the same queue.",
+              "Vertically, configure concurrency on the listener container.",
+              "Spring dynamically adjusts the thread count between concurrency (minimum) and max-concurrency (maximum) based on workload.",
+              "``yaml spring: rabbitmq: listener: simple: concurrency: 3 max-concurrency: 10 prefetch: 10 ` For per-listener control, use the concurrency attribute directly on @RabbitListener."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Round-robin ignores consumer speed \u2014 with default prefetch, the broker distributes messages evenly regardless of processing time",
+              "Prefetch=1 gives fairest dispatch \u2014 each consumer holds one message at a time",
+              "Competing consumers \u2260 pub/sub \u2014 competing consumers deliver each message to ONE consumer (task distribution)",
+              "Message ordering breaks across consumers \u2014 competing consumers process messages out of arrival order",
+              "KEDA + queue depth \u2014 Kubernetes Event-Driven Autoscaling watches RabbitMQ queue depth and adjusts pod replicas automatically during traffic spikes"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Confusing competing consumers with pub/sub (fanout). In competing consumers each message goes to ONE consumer; in pub/sub a copy goes to ALL subscribers."
+          }
+        ],
+        "cap": "The round-robin problem and the fix: By default, the broker distributes messages in round-robin regardless of consumer speed; a fast consumer and a slow one get alternating messages, leaving the fast",
+        "familiarity_anchors": [
+          "RabbitMQ"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does prefetch count affect message ordering and fairness in competing consumers?",
+          "How would you autoscale competing consumers based on queue depth in Kubernetes?",
+          "What is the difference between competing consumers on a single queue versus consumer groups in Kafka?"
+        ]
+      }
+    },
+    {
+      "id": "sk-004",
+      "slug": "default-error-handler-seek-to-current",
+      "question": "What happens when a @KafkaListener throws an exception? How does Spring Kafka handle errors?",
+      "title": "Kafka Listener Error Handling \u2014 SeekToCurrentErrorHandler",
+      "direct_answer": "When a listener throws, Spring Kafka's DefaultErrorHandler retries the record up to a configurable limit, then sends it to a Dead Letter Topic (DLT) or logs and skips it. The error handler seeks the consumer back to the failing offset for retry.",
+      "layout_type": "problem-detective",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Practical knowledge of error handling to prevent consumer stuck-states",
+        "common_mistake": "Not configuring an error handler \u2014 infinite retry loops block the partition",
+        "to_stand_out": "Explain the difference between retryable and non-retryable exceptions, and the BackOff configuration"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Uber",
+        "Revolut"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "When a @KafkaListener Throws an Exception, the Default Behavior Is Retry 10 Times Then Log and Move On \u2014 The Message Is Lost",
+            "content": "The default error handler in Spring Kafka 3.x is `DefaultErrorHandler`. When a listener throws an exception, it retries the failed record up to 10 times with no backoff, then calls a **`ConsumerRecordRecoverer`** \u2014 which by default logs the failure and moves on. **The message is effectively lost** after exhausting retries unless you configure a recovery strategy.\n\nThe key insight is that Spring Kafka's error handling operates **within a single poll cycle.** The consumer polls a batch of records, processes them sequentially, and if one fails, the error handler retries that record. Other records in the batch wait. This is **blocking retry** \u2014 it holds up the consumer thread and can cause the consumer to exceed `max.poll.interval.ms`, triggering a rebalance.\n\nUnderstanding this default behavior is essential because most developers assume Kafka retries indefinitely or stores failed messages somewhere. It doesn't, unless you configure it. The two production-ready recovery strategies are **Dead Letter Topic (DLT)** publishing and **seek-to-current** (reprocess the same offset until it succeeds)."
+          },
+          {
+            "type": "step",
+            "title": "DeadLetterPublishingRecoverer and Custom Error Handlers",
+            "content": "**`DeadLetterPublishingRecoverer`** publishes the failed record to a Dead Letter Topic (by convention `{original-topic}.DLT`) after retry exhaustion. This preserves the message for later investigation or reprocessing.\n\nConfigure it by creating a `DefaultErrorHandler` bean with a custom backoff strategy and a DLT recoverer. `FixedBackOff(1000, 3)` retries 3 times with 1-second intervals. **`ExponentialBackOff`** is better for transient failures \u2014 1s, 2s, 4s, 8s \u2014 giving the downstream dependency time to recover.\n\nFor specific exception handling, **`addNotRetryableExceptions()`** marks certain exceptions as non-retryable. A `DeserializationException` (poison pill) should never be retried \u2014 the message is malformed and will never succeed. Send it directly to the DLT without wasting retry attempts.\n\nFor batch listeners (`@KafkaListener` with `batch = \"true\"`), error handling is different. The entire batch fails or succeeds. If one record fails, the `BatchListenerFailedException` tells Spring Kafka which record failed, and the error handler retries from that record forward."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "When a listener throws, Spring Kafka's `DefaultErrorHandler` **retries 10 times, then logs and moves on.** The message is effectively lost unless you configure recovery.\n\nRetries are **blocking** \u2014 they hold the consumer thread within the same poll cycle. If retries take too long, the consumer exceeds `max.poll.interval.ms` and triggers a rebalance.\n\nTwo production recovery strategies: **Dead Letter Topic** (publish failed messages to `{topic}.DLT` for later investigation) and **non-blocking retry** (`@RetryableTopic` with separate retry topics).\n\nMark poison pills (deserialization errors) as **non-retryable** \u2014 they'll never succeed. Send directly to DLT.\n\nFor batch listeners, `BatchListenerFailedException` identifies which record failed. The handler retries from that record forward.\n\nIn practice, I always replace the default handler with `DefaultErrorHandler` using `ExponentialBackOff` and `DeadLetterPublishingRecoverer`. No message should be silently lost."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Default behavior retries 10 times then discards the message** \u2014 `DefaultErrorHandler` logs the failure and moves on; the message is effectively lost unless a `DeadLetterPublishingRecoverer` is configured.\n- **Blocking retries hold the consumer thread** \u2014 retries happen within a single poll cycle; if total retry time exceeds `max.poll.interval.ms` (5 minutes), the consumer is evicted and triggers a rebalance.\n- **DeadLetterPublishingRecoverer sends failed records to {topic}.DLT** \u2014 preserves the original message with headers containing the exception and stack trace; enables later reprocessing.\n- **Deserialization exceptions should be marked non-retryable** \u2014 malformed messages (poison pills) never succeed; `addNotRetryableExceptions(DeserializationException.class)` sends them directly to DLT.\n- **ExponentialBackOff gives downstream dependencies time to recover** \u2014 1s, 2s, 4s, 8s between retries instead of immediate retry; reduces pressure on a temporarily unavailable database or API."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between DefaultErrorHandler and SeekToCurrentErrorHandler?",
+        "How do you replay messages from a Dead Letter Topic?",
+        "How do you configure different error handlers for different listeners?"
+      ],
+      "seo": {
+        "metaTitle": "Kafka Listener Error Handling Dead Letter Topic Spring Boot \u2014 Java Interview",
+        "metaDescription": "Kafka listener exception handling with DefaultErrorHandler and DeadLetterPublishingRecoverer. Retry backoff, non-retryable exceptions, and DLT pattern."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "When a listener throws, Spring Kafka's DefaultErrorHandler retries 10 times, then logs and moves on.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The default error handler in Spring Kafka 3.x is DefaultErrorHandler. When a listener throws an exception, it retries the failed record up to 10 times with no backoff, then calls a ConsumerRecordRecoverer \u2014 which by default logs the failure and moves on. The message is effectively lost after exhausting retries unless you configure a recovery strategy. The key insight is that Spring Kafka's error handling operates within a single poll cycle. The consumer polls a batch of records, processes them sequentially, and if one fails, the error handler retries that."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "DeadLetterPublishingRecoverer publishes the failed record to a Dead Letter Topic (by convention {original-topic}.DLT) after retry exhaustion.",
+              "This preserves the message for later investigation or reprocessing.",
+              "Configure it by creating a DefaultErrorHandler bean with a custom backoff strategy and a DLT recoverer.",
+              "FixedBackOff(1000, 3) retries 3 times with 1-second intervals.",
+              "ExponentialBackOff is better for transient failures \u2014 1s, 2s, 4s, 8s \u2014 giving the downstream dependency time to recover.",
+              "For specific exception handling, addNotRetryableExceptions() marks certain exceptions as non-retryable."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Default behavior retries 10 times then discards the message \u2014 DefaultErrorHandler logs the failure and moves on; the message is effectively lost unless a DeadLetterPublishingRecoverer is configured",
+              "Blocking retries hold the consumer thread \u2014 retries happen within a single poll cycle; if total retry time exceeds max",
+              "ms (5 minutes), the consumer is evicted and triggers a rebalance",
+              "DeadLetterPublishingRecoverer sends failed records to {topic}",
+              "DLT \u2014 preserves the original message with headers containing the exception and stack trace; enables later reprocessing"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Not configuring an error handler \u2014 infinite retry loops block the partition"
+          }
+        ],
+        "cap": "No message should be silently lost.",
+        "familiarity_anchors": [
+          "Spring",
+          "Kafka",
+          "DefaultErrorHandler"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between DefaultErrorHandler and SeekToCurrentErrorHandler?",
+          "How do you replay messages from a Dead Letter Topic?",
+          "How do you configure different error handlers for different listeners?"
+        ]
+      }
+    }
+  ]
+}

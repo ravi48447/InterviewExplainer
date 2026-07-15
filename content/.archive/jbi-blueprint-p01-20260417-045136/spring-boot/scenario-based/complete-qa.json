@@ -1,0 +1,506 @@
+{
+  "topic": "Scenario Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "sbo-012",
+      "slug": "spring-boot-docker-layered-jars",
+      "question": "How do you build optimized Docker images for Spring Boot applications using layered JARs?",
+      "title": "Spring Boot Docker \u2014 Building Optimized Images with Layered JARs",
+      "direct_answer": "Spring Boot 2.3+ supports layered JARs that split the JAR into four ordered layers \u2014 dependencies, spring-boot-loader, snapshot-dependencies, and application \u2014 so that Docker only rebuilds and re-pushes the layers that change. Combined with Spring Boot's Buildpacks support (./mvnw spring-boot:build-image) or a multi-stage Dockerfile that extracts layers, this dramatically reduces image push times and build durations for iterative development.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands Docker layer caching and can design a Dockerfile or buildpack workflow that minimises rebuild time.",
+        "common_mistake": "COPYing the fat JAR as a single layer so every code change invalidates the entire JAR layer and forces a full re-push of hundreds of megabytes.",
+        "to_stand_out": "Mention Cloud Native Buildpacks (spring-boot:build-image) as the preferred zero-Dockerfile approach, explain the four default layers, and describe how to define custom layers in layers.idx for monorepos or apps with frequent snapshot dependency changes."
+      },
+      "company_tags": [
+        "Amazon",
+        "Google",
+        "Spotify",
+        "Zalando",
+        "Klarna"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The 200MB Push That Should Be 500KB \u2014 Why Fat JARs Destroy Docker Build Caching",
+            "content": "The default approach \u2014 `COPY app.jar /app.jar` in a Dockerfile \u2014 creates a single Docker layer containing the entire fat JAR. Every code change, even a one-line fix, **invalidates the entire layer and forces a full re-push of 150\u2013200MB** to your container registry. In CI/CD pipelines that deploy dozens of times per day, this wastes bandwidth and slows deployments.\n\nDocker's layer caching only helps when the content of a layer doesn't change. A fat JAR bundles your application code (which changes frequently) with dependencies (which change rarely) into a single file. **Layered JARs separate these concerns** so that dependencies, Spring Boot loader, snapshot dependencies, and application code each live in their own Docker layer. When only your code changes, Docker rebuilds only the application layer \u2014 typically 500KB instead of 200MB.\n\nSpring Boot 2.3+ produces layered JARs by default. The `spring-boot:build-image` Maven/Gradle goal goes further \u2014 it uses **Cloud Native Buildpacks** to produce an optimized OCI image without a Dockerfile at all, applying the same layer separation automatically.\n\nThe intuition behind layered JARs is Docker's content-addressed storage: each layer is stored once by its content hash. When two images share the same dependency layer (same hash), the registry stores it once and both images reference it. In a microservices environment where 20 services use the same Spring Boot version and the same core dependencies, **the shared layers are pushed and stored only once**. Your CI pipeline pushes 500KB of application code per service instead of 200MB \u2014 a 400x reduction in bandwidth for typical deployments."
+          },
+          {
+            "type": "step",
+            "title": "The Four Default Layers and How to Extract Them in a Dockerfile",
+            "content": "Spring Boot organizes the fat JAR into four layers, ordered from least to most frequently changing:\n\n1. **dependencies** \u2014 third-party release JARs (changes only when you update a library)\n2. **spring-boot-loader** \u2014 Boot's launcher classes (changes only on Boot version upgrades)\n3. **snapshot-dependencies** \u2014 snapshot JARs (changes more often during development)\n4. **application** \u2014 your compiled classes and resources (changes on every build)\n\nThe Dockerfile uses a multi-stage build to extract and copy each layer separately.\n\n```dockerfile\nFROM eclipse-temurin:17-jre AS builder\nCOPY app.jar app.jar\nRUN java -Djarmode=layertools -jar app.jar extract\n\nFROM eclipse-temurin:17-jre\nCOPY --from=builder dependencies/ ./\nCOPY --from=builder spring-boot-loader/ ./\nCOPY --from=builder snapshot-dependencies/ ./\nCOPY --from=builder application/ ./\nENTRYPOINT [\"java\", \"org.springframework.boot.loader.launch.JarLauncher\"]\n```\n\nThe `COPY` order matters \u2014 Docker rebuilds from the first changed layer downward. Since dependencies change least often, they're first. **When only application code changes, Docker reuses the cached dependency layers and only rebuilds the last `COPY` step.**\n\nThe `-Djarmode=layertools -jar app.jar extract` command is a Spring Boot feature built into the JAR's manifest. It does not require any additional dependencies \u2014 the layer extraction tooling is embedded in the fat JAR itself. Inspect the layer structure with `java -Djarmode=layertools -jar app.jar list` to verify which files belong to which layer before building the image. This is especially useful in monorepos where internal shared libraries might land in `dependencies` (stable) or `snapshot-dependencies` (frequently changing) depending on their version string \u2014 SNAPSHOT versions go in `snapshot-dependencies`, release versions go in `dependencies`."
+          },
+          {
+            "type": "step",
+            "title": "Cloud Native Buildpacks \u2014 The Zero-Dockerfile Alternative That Spring Boot Recommends",
+            "content": "Instead of writing a Dockerfile, you can run `./mvnw spring-boot:build-image` or `./gradlew bootBuildImage`. This uses **Cloud Native Buildpacks (CNB)** to produce an OCI image with the same layer separation, plus additional optimizations: JVM memory calculation based on container limits, security patches applied automatically through base image updates, and reproducible builds.\n\nThe key advantage is that buildpacks handle concerns most Dockerfiles get wrong \u2014 choosing the right JRE base image, setting JVM flags for container-aware memory management (`-XX:MaxRAMPercentage`), and separating build-time tools from the runtime image.\n\n**Custom layer configuration** is available through `layers.xml` (Maven) or the `bootJar` DSL (Gradle) when the defaults don't fit. A common customization is separating internal company libraries from public dependencies so that internal library updates don't invalidate the public dependency cache layer.\n\nFor production pipelines, buildpacks also support **rebase operations** \u2014 updating the OS layer of existing images without rebuilding the application layers. This means security patches to the base OS can be applied across hundreds of deployed images in seconds.\n\nFor JVM memory configuration in containers, buildpacks handle one of the most common production footguns automatically: **JVM heap sizing based on container limits**. A naive Dockerfile with no JVM flags uses the host machine's memory for ergonomics calculations \u2014 in a container with a 512MB limit, the JVM may allocate 4GB of heap and immediately trigger an OOM kill. Buildpacks set `-XX:MaxRAMPercentage=75` (using 75% of the container's cgroup memory limit) by default. When using a custom Dockerfile, always add this flag explicitly.\n\nA final consideration for **CI build caching**: the layered Dockerfile approach only provides full benefit when Docker's build cache is preserved between CI runs. Ephemeral CI runners with no cache start from scratch on every build, negating the layer benefit. Either use a remote cache backend (BuildKit `--cache-from`/`--cache-to` with a registry), use persistent CI runners that keep the Docker daemon, or prefer buildpacks which have their own lifecycle caching separate from Docker layer caching."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Fat JAR as a single Docker layer = invalidate everything on every code change** \u2014 all dependencies (100MB+) rebuild in the image even when only one line of application code changed.\n- **Layered JARs split into 4 layers in dependency order** \u2014 `spring-boot-loader`, snapshot dependencies, regular dependencies (most stable), then application classes (most volatile); Docker caches the stable layers.\n- **`java -Djarmode=layertools -jar app.jar extract` unpacks the layered JAR** \u2014 use in a multi-stage Dockerfile to copy each layer separately.\n- **Cloud Native Buildpacks (`./mvnw spring-boot:build-image`) are the zero-Dockerfile alternative** \u2014 produces an OCI-compliant image with layering and security hardening automatically; no Dockerfile to maintain.\n- **Set `JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75`** \u2014 prevents the JVM from seeing the container's total host memory and allocating a heap larger than the container limit."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A standard fat JAR Docker image means every code change invalidates the entire layer \u2014 developers wait minutes for Docker to re-download and unpack hundreds of megabytes of unchanged dependencies. Layered JARs fix this by splitting the JAR into dependency-order layers that Docker caches independently.\n\n**The layer structure**\n- Layer 1: `spring-boot-loader` \u2014 almost never changes\n- Layer 2: snapshot dependencies \u2014 changes occasionally during development\n- Layer 3: regular dependencies \u2014 changes only when you update a library version\n- Layer 4: application classes \u2014 changes on every build\n- Docker caches layers 1-3; only layer 4 is rebuilt on a code change \u2014 a build that took 3 minutes drops to 10 seconds\n\n**Multi-stage Dockerfile approach**\n- Stage 1: extract the layered JAR with `java -Djarmode=layertools -jar app.jar extract`\n- Stage 2: copy each layer separately with `COPY --from=builder /extracted/dependencies ./`\n- Docker sees four separate `COPY` instructions and caches each independently\n\n**Buildpacks alternative**\n- `./mvnw spring-boot:build-image` produces a layered, secure, OCI-compliant image with no Dockerfile\n- Buildpacks apply OS patches and security hardening automatically \u2014 no manual base image updates"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you add a custom layer definition to separate internal shared libraries from external dependencies?",
+        "What are the security advantages of using Buildpacks over writing your own Dockerfile?",
+        "How would you configure JVM memory settings (heap, metaspace) when running a Spring Boot app in a container?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Boot Docker Layered JARs & Buildpacks | Java Intermediate Interview",
+        "metaDescription": "Build optimized Spring Boot Docker images using layered JARs and multi-stage Dockerfiles, or zero-config Cloud Native Buildpacks \u2014 explained for Java intermediate interviews."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "A standard fat JAR Docker image means every code change invalidates the entire layer \u2014 developers wait minutes for Docker to re-download and unpack hundreds of megabytes of unchanged dependencies.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The default approach \u2014 COPY app.jar /app.jar in a Dockerfile \u2014 creates a single Docker layer containing the entire fat JAR. Every code change, even a one-line fix, invalidates the entire layer and forces a full re-push of 150\u2013200MB to your container registry. In CI/CD pipelines that deploy dozens of times per day, this wastes bandwidth and slows deployments. Docker's layer caching only helps when the content of a layer doesn't change. A fat JAR bundles your application code (which changes frequently) with dependencies (which change rarely) into a single."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Spring Boot organizes the fat JAR into four layers, ordered from least to most frequently changing: 1.",
+              "dependencies \u2014 third-party release JARs (changes only when you update a library) 2.",
+              "spring-boot-loader \u2014 Boot's launcher classes (changes only on Boot version upgrades) 3.",
+              "snapshot-dependencies \u2014 snapshot JARs (changes more often during development) 4.",
+              "application \u2014 your compiled classes and resources (changes on every build) The Dockerfile uses a multi-stage build to extract and copy each layer separately.",
+              "``dockerfile FROM eclipse-temurin:17-jre AS builder COPY app.jar app.jar RUN java -Djarmode=layertools -jar app.jar extract FROM eclipse-temurin:17-jre COPY --from=builder dependencies/ ./ COPY --from=builder spring-boot-loader/ ./ COPY --from=builder snapshot-dependencies/ ./ COPY --from=builder application/ ./ ENTRYPOINT [\"java\", \"org.springframework.boot.loader.launch.JarLauncher\"] ` The COPY order matters \u2014 Docker rebuilds from the first changed layer downward."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Fat JAR as a single Docker layer = invalidate everything on every code change \u2014 all dependencies (100MB+) rebuild in the image even when only one line of application code changed",
+              "Layered JARs split into 4 layers in dependency order \u2014 spring-boot-loader, snapshot dependencies, regular dependencies (most stable), then application classes (most volatile); Docker caches the stable layers",
+              "java -Djarmode=layertools -jar app",
+              "jar extract unpacks the layered JAR \u2014 use in a multi-stage Dockerfile to copy each layer separately",
+              "Cloud Native Buildpacks ("
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "COPYing the fat JAR as a single layer so every code change invalidates the entire JAR layer and forces a full re-push of hundreds of megabytes."
+          }
+        ],
+        "cap": "The layer structure Layer 1: spring-boot-loader \u2014 almost never changes Layer 2: snapshot dependencies \u2014 changes occasionally during development Layer 3: regular dependencies \u2014 changes only when you up",
+        "familiarity_anchors": [
+          "Spring",
+          "Docker",
+          "Combined"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you add a custom layer definition to separate internal shared libraries from external dependencies?",
+          "What are the security advantages of using Buildpacks over writing your own Dockerfile?",
+          "How would you configure JVM memory settings (heap, metaspace) when running a Spring Boot app in a container?"
+        ]
+      }
+    },
+    {
+      "id": "sbo-scheduled",
+      "slug": "scheduled-annotation-spring-boot",
+      "question": "How does @Scheduled work in Spring Boot and what are the pitfalls of fixed-rate vs fixed-delay?",
+      "title": "@Scheduled \u2014 Cron Jobs and Fixed-Rate Tasks in Spring Boot",
+      "direct_answer": "@Scheduled enables method-level task scheduling in Spring Boot. fixedRate runs at a constant interval regardless of execution time, while fixedDelay waits for the previous execution to finish before starting the timer. The critical prerequisite is @EnableScheduling \u2014 without it, @Scheduled annotations are silently ignored. By default, all scheduled tasks share a single thread, meaning one slow task blocks all others.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the difference between fixedRate and fixedDelay and knows the single-thread default.",
+        "common_mistake": "Not realizing all @Scheduled methods run on a single thread by default, so one slow task delays all others.",
+        "to_stand_out": "Mention configuring a custom TaskScheduler with a thread pool, and explain why cron expressions use 6 fields (including seconds) unlike standard Unix cron."
+      },
+      "company_tags": [],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "One Thread for All Tasks \u2014 The Default That Silently Breaks Your Schedule",
+            "content": "The biggest surprise with `@Scheduled` isn't the syntax \u2014 it's that **all scheduled methods share a single thread by default.** If you have three scheduled tasks and one takes 30 seconds, the other two wait. There's no warning, no error \u2014 they just run late.\n\nThe prerequisite most tutorials bury in a footnote is `@EnableScheduling`. Without this annotation on a `@Configuration` class (or the main class), Spring silently ignores every `@Scheduled` annotation in your application. The method compiles, the bean is created, but the scheduler never triggers it. This is the number one reason for \"my scheduled task isn't running\" issues.\n\nSpring's scheduling supports three modes: `fixedRate` (run at a constant interval, regardless of execution duration), `fixedDelay` (wait for the previous execution to finish, then wait the delay), and `cron` (Unix-like expressions with a Spring-specific twist: **six fields including seconds**, not five like standard Unix cron). Choosing the wrong mode leads to task overlap or accumulating drift.\n\nA less obvious aspect of `@Scheduled` is that the annotation is processed by `ScheduledAnnotationBeanPostProcessor`. This means the scheduling infrastructure must exist in the application context \u2014 which it only does when `@EnableScheduling` is present. In a multi-module application where the `@Scheduled` methods are in a library module, **`@EnableScheduling` must be on the consuming application's configuration**, not inside the library. Putting it in a library creates a dependency nightmare where any consumer of the library gets scheduling infrastructure whether they want it or not."
+          },
+          {
+            "type": "step",
+            "title": "fixedRate vs fixedDelay \u2014 When Overlap Happens and When Drift Accumulates",
+            "content": "`fixedRate = 5000` means \"start every 5 seconds.\" If the task takes 3 seconds, you get 2 seconds of idle between runs. But if the task takes 8 seconds, **the next execution starts immediately after the previous one finishes** \u2014 on the single default thread, there's no actual overlap, but the schedule drifts. With a thread pool, overlap is possible and you need to handle concurrent access to shared state.\n\n`fixedDelay = 5000` means \"wait 5 seconds after the previous execution finishes.\" If the task takes 3 seconds, the gap between start times is 8 seconds (3 + 5). **This mode guarantees no overlap** because the timer doesn't start until the previous run completes. Use it when tasks should never run concurrently.\n\n```java\n@Scheduled(fixedRate = 5000)  // every 5s, may overlap with thread pool\npublic void pollExternalApi() { /* ... */ }\n\n@Scheduled(fixedDelay = 5000)  // 5s after previous finishes\npublic void processQueue() { /* ... */ }\n\n@Scheduled(cron = \"0 0 2 * * MON-FRI\")  // 2 AM weekdays (6 fields!)\npublic void generateReport() { /* ... */ }\n```\n\nThe cron expression uses **seconds as the first field** \u2014 `0 0 2 * * MON-FRI` is correct Spring cron, but the same expression in Unix crontab would mean something entirely different. This trips up developers coming from Linux administration.\n\nAnother mode worth knowing is `initialDelay` \u2014 the time to wait before the first execution. Without it, `fixedRate` tasks run immediately on startup. If your task queries an external service that might not be ready the moment your application starts, an `initialDelay = 30000` (30 seconds) gives the dependency time to become available before the first scheduled call.\n\nFor `@Scheduled` methods in clustered deployments (multiple instances of the same service), **every instance runs every scheduled task independently** \u2014 there is no built-in coordination. If a task must run exactly once across the cluster (e.g., a cleanup job), use ShedLock or a Quartz clustered scheduler. Without coordination, a cleanup task running on 5 instances simultaneously creates five competing database write operations, often causing lock contention and duplicate processing."
+          },
+          {
+            "type": "step",
+            "title": "Configuring a Thread Pool \u2014 The Fix for the Single-Thread Bottleneck",
+            "content": "To prevent one slow task from blocking all others, configure a custom `TaskScheduler` with a thread pool.\n\n```java\n@Bean\npublic TaskScheduler taskScheduler() {\n    ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();\n    scheduler.setPoolSize(4);\n    scheduler.setThreadNamePrefix(\"scheduled-\");\n    scheduler.setErrorHandler(t -> log.error(\"Scheduled task failed\", t));\n    return scheduler;\n}\n```\n\nThe pool size should match the number of concurrent scheduled tasks you expect. **Setting a custom `ErrorHandler` is equally important** \u2014 by default, exceptions in scheduled tasks are silently swallowed and logged to stderr. Without an error handler, a task can fail for weeks without anyone noticing.\n\nAn alternative is `spring.task.scheduling.pool.size=4` in `application.properties`, which configures the auto-configured scheduler without writing a bean. But the programmatic approach gives you the error handler, which is the piece most production configurations need.\n\n**Monitoring scheduled tasks** is the step most developers skip. Add Actuator and it exposes `/actuator/scheduledtasks` \u2014 a list of all registered scheduled tasks with their configuration. In production, this endpoint lets you verify that the cron expression is what you intended and that all expected tasks are registered. Combine this with Micrometer metrics to track execution time and failure counts per task.\n\nFor tasks that must not run concurrently within a single instance, add `@Async` with a single-threaded executor **and** `fixedDelay` together \u2014 `fixedRate` with a pool can still overlap if the task takes longer than the rate. `fixedDelay` with a pool of 1 guarantees sequential execution. But if you're going this far, consider whether a message queue (Kafka, SQS) with a single consumer would be a cleaner architecture than a scheduled task \u2014 queues give you persistence, retry, and visibility that cron jobs fundamentally lack."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **All `@Scheduled` methods share a single thread by default** \u2014 a long-running task blocks all other scheduled tasks; configure a custom `ThreadPoolTaskScheduler` with pool size > 1.\n- **`@EnableScheduling` is required** \u2014 `@SpringBootApplication` does not include it; without it, `@Scheduled` annotations are silently ignored.\n- **`fixedRate` vs `fixedDelay`** \u2014 `fixedRate` fires at a fixed interval regardless of completion time (can overlap if the task takes longer); `fixedDelay` waits the fixed period after the previous execution completes.\n- **`cron` uses 6 fields in Spring (seconds first)** \u2014 `@Scheduled(cron = \"0 0 8 * * MON-FRI\")` = 8 AM weekdays; standard Unix cron has 5 fields (no seconds); mixing them produces silent misconfiguration.\n- **`@Scheduled` + `@Async` = task runs on the async executor, not the scheduler thread** \u2014 the scheduler fires the task on schedule; `@Async` moves execution to the async thread pool, preventing scheduler starvation."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@Scheduled` is Spring's built-in mechanism for recurring tasks \u2014 cron jobs, periodic cache refreshes, health pings. The defaults hide a critical limitation: every scheduled task runs on the same single thread.\n\n**The single-thread problem**\n- Spring creates one scheduler thread by default \u2014 if a task takes 5 seconds and is scheduled every 3 seconds, subsequent firings queue up behind the running one\n- Configure a custom `ThreadPoolTaskScheduler` with a pool size matching the number of concurrent tasks you expect\n\n**`fixedRate` vs `fixedDelay`**\n- `fixedRate = 5000` \u2014 fires every 5 seconds from the previous start time; if the task takes 6 seconds, the next fires immediately after completion (no overlap by default)\n- `fixedDelay = 5000` \u2014 fires 5 seconds after the previous execution completes; total cycle time = task duration + delay\n- `fixedRate` is for metrics and health checks where timing regularity matters; `fixedDelay` is for sequential processing where overlap is unsafe\n\n**Cron expressions**\n- Spring uses a 6-field cron: seconds, minutes, hours, day-of-month, month, day-of-week\n- `@Scheduled(cron = \"0 0 8 * * MON-FRI\")` = 8:00 AM every weekday; note the leading `0` for seconds \u2014 Unix cron has no seconds field, a common copy-paste mistake\n\nAdd `@EnableScheduling` to a `@Configuration` class \u2014 without it, every `@Scheduled` annotation is silently ignored."
+          }
+        ]
+      },
+      "followup_questions": [],
+      "seo": {
+        "metaTitle": "@Scheduled \u2014 Cron Jobs and Fixed-Rate Tasks in Spring Boot",
+        "metaDescription": ""
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "@Scheduled is Spring's built-in mechanism for recurring tasks \u2014 cron jobs, periodic cache refreshes, health pings.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The biggest surprise with @Scheduled isn't the syntax \u2014 it's that all scheduled methods share a single thread by default. If you have three scheduled tasks and one takes 30 seconds, the other two wait. There's no warning, no error \u2014 they just run late. The prerequisite most tutorials bury in a footnote is @EnableScheduling. Without this annotation on a @Configuration class (or the main class), Spring silently ignores every."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "All @Scheduled methods share a single thread by default \u2014 a long-running task blocks all other scheduled tasks; configure a custom ThreadPoolTaskScheduler with pool size > 1",
+              "@EnableScheduling is required \u2014 @SpringBootApplication does not include it; without it, @Scheduled annotations are silently ignored",
+              "fixedRate vs fixedDelay \u2014 fixedRate fires at a fixed interval regardless of completion time (can overlap if the task takes longer); fixedDelay waits the fixed period after the previous execution completes",
+              "cron uses 6 fields in Spring (seconds first) \u2014 @Scheduled(cron = \"0 0 8 MON-FRI\") = 8 AM weekdays; standard Unix cron has 5 fields (no seconds); mixing them produces silent misconfiguration",
+              "@Scheduled + @Async = task runs on the async executor, not the scheduler thread \u2014 the scheduler fires the task on schedule; @Async moves execution to the async thread pool, preventing scheduler starvation"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "The biggest surprise with @Scheduled isn't the syntax \u2014 it's that all scheduled methods share a single thread by default. If you have three scheduled tasks and one takes 30 seconds, the other two wait. There's no warning, no error \u2014 they just run late. The prerequisite most tutorials bury in a footnote is @EnableScheduling. Without this annotation on a @Configuration class (or the main class), Spring silently ignores every @Scheduled annotation in your application. The method compiles, the bean is created, but the scheduler never triggers it. This is."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The biggest surprise with @Scheduled isn't the syntax \u2014 it's that all scheduled methods share a single thread by default. If you have three scheduled tasks and one takes 30 seconds, the other two wait. There's no warning, no error \u2014 they just run late. The prerequisite most tutorials bury in a footnote is @EnableScheduling. Without this annotation on a."
+          }
+        ],
+        "cap": "The single-thread problem Spring creates one scheduler thread by default \u2014 if a task takes 5 seconds and is scheduled every 3 seconds, subsequent firings queue up behind the running one Configure a cu",
+        "familiarity_anchors": [
+          "Scheduled",
+          "Spring",
+          "EnableScheduling"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "sbo-async",
+      "slug": "async-annotation-spring-boot",
+      "question": "How does @Async work in Spring Boot and what are the common pitfalls?",
+      "title": "@Async \u2014 Asynchronous Method Execution in Spring Boot",
+      "direct_answer": "@Async enables asynchronous method execution through proxy-based interception. Spring wraps the call in a Runnable/Callable and submits it to a TaskExecutor. The method returns immediately, and the actual work runs on a separate thread. The key pitfalls are: self-invocation bypasses the proxy (same as @Transactional), the default executor is SimpleAsyncTaskExecutor which creates unbounded threads, and exceptions in void methods are silently lost.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the proxy mechanism behind @Async and its limitations.",
+        "common_mistake": "Calling an @Async method from within the same class (self-invocation), which bypasses the proxy and runs synchronously.",
+        "to_stand_out": "Explain configuring a custom ThreadPoolTaskExecutor with bounded queue and rejection policy, and using AsyncUncaughtExceptionHandler for void methods."
+      },
+      "company_tags": [],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Your @Async Method Is Running Synchronously \u2014 The Proxy Trap That Hits Every Team",
+            "content": "The most common `@Async` bug is calling an async method from within the same class. The method runs synchronously with no warning because **`@Async` works through proxies, exactly like `@Transactional`.** When you call `this.sendEmail()` from another method in the same bean, the call goes directly to the target object, skipping the proxy that would submit the work to a thread pool.\n\nThe second trap is the default executor. Without explicit configuration, Spring uses `SimpleAsyncTaskExecutor` \u2014 which **creates a new thread for every invocation with no upper bound.** Under load, this can spawn thousands of threads, consuming all available memory and crashing the JVM with `OutOfMemoryError: unable to create native thread`.\n\nLike `@Scheduled`, `@Async` requires `@EnableAsync` on a configuration class. Without it, every `@Async` annotation is silently ignored \u2014 the method runs synchronously and your calling code has no way to detect this. When the method returns `CompletableFuture`, it returns a completed future on the caller's thread instead of an async one.\n\nThe **self-invocation trap** is the most common bug, and it's identical to the `@Transactional` self-invocation problem \u2014 for the same underlying reason. Both annotations work through CGLIB or JDK dynamic proxies. The proxy intercepts external calls and applies the aspect (transaction management, async dispatch). But when you call `this.method()` inside the same class, the call goes directly to the target object, not through the proxy. Spring cannot intercept it. The fix is the same pattern as `@Transactional`: inject a reference to the proxy by autowiring the bean into itself (using `@Lazy` to avoid circular dependency), or extract the `@Async` method into a separate Spring bean."
+          },
+          {
+            "type": "step",
+            "title": "Configuring a Bounded Executor \u2014 The Fix for Unbounded Thread Creation",
+            "content": "Replace the default executor with a `ThreadPoolTaskExecutor` that has explicit bounds on thread count and queue capacity.\n\n```java\n@Bean(\"asyncExecutor\")\npublic Executor asyncExecutor() {\n    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();\n    executor.setCorePoolSize(5);\n    executor.setMaxPoolSize(20);\n    executor.setQueueCapacity(100);\n    executor.setRejectedExecutionHandler(new CallerRunsPolicy());\n    executor.setThreadNamePrefix(\"async-\");\n    return executor;\n}\n```\n\n**`CallerRunsPolicy` is the safest rejection handler** \u2014 when the queue is full, the task runs on the caller's thread instead of being discarded. This provides natural backpressure: the caller slows down because it's doing the work itself, preventing the system from being overwhelmed.\n\nReference the executor by name with `@Async(\"asyncExecutor\")`. Without the qualifier, Spring uses the default executor \u2014 which may still be `SimpleAsyncTaskExecutor` if you haven't overridden the default globally.\n\nThe **`CallerRunsPolicy` rejection handler** is worth understanding in depth. When the thread pool is at `maxPoolSize` and the queue is at `queueCapacity`, the next submitted task triggers the rejection handler. `CallerRunsPolicy` runs the task on the caller's thread \u2014 the HTTP request thread in a web application. This means the endpoint becomes synchronous under extreme load, slowing down the caller instead of dropping work. It provides natural backpressure: the caller's thread is busy doing the async work, so it can't accept more requests as fast, which propagates backpressure to the load balancer. This is almost always the right choice compared to `AbortPolicy` (throws exception, loses work) or `DiscardPolicy` (silently drops work).\n\nFor **context propagation** \u2014 passing Spring Security's `SecurityContext`, MDC logging context, or request-scoped beans across thread boundaries \u2014 `@Async` does not propagate thread-local values by default. A `@Async` method executing in the thread pool starts with a blank security context and empty MDC. Implement `TaskDecorator` and register it with the executor to copy context from the submitting thread to the worker thread."
+          },
+          {
+            "type": "step",
+            "title": "Silent Exception Loss \u2014 Why Void @Async Methods Eat Errors Without a Trace",
+            "content": "When an `@Async` method returns `void`, **any exception it throws is silently lost.** The caller has already moved on \u2014 there's no `Future` to check, no join point to catch the error. The exception is logged by the executor's uncaught exception handler (usually just `System.err`), but most teams never notice until they realize background tasks have been failing for weeks.\n\nThe fix is `AsyncUncaughtExceptionHandler`. Implement this interface and register it via `AsyncConfigurer` to capture exceptions from void async methods and route them to your monitoring.\n\nFor methods returning `CompletableFuture`, the caller has explicit control \u2014 they can chain `.exceptionally()` or `.handle()` to process errors. **Always prefer returning `CompletableFuture` over void** unless the caller genuinely doesn't need the result. The lost exception from a void method is one of the hardest bugs to detect in production.\n\nTo implement `AsyncUncaughtExceptionHandler` for void methods, implement the `AsyncConfigurer` interface on your `@Configuration` class and override `getAsyncUncaughtExceptionHandler()`. This gives you the exception, the method, and the arguments \u2014 enough to log a meaningful alert. Route the exception to your monitoring system (Sentry, Datadog, PagerDuty) so failures surface immediately rather than accumulating silently.\n\nFor testing `@Async` methods, `@SpringBootTest` loads the full async infrastructure. Use `CompletableFuture.get()` with a timeout in tests to verify the async result and detect hanging tasks. When using `@Async` with `CompletableFuture`, the test thread blocks on `get()` waiting for the async thread to complete \u2014 this is the correct synchronization point. Never use `Thread.sleep()` in async tests, as it creates timing-dependent flakiness that's almost impossible to debug in CI."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@Async` requires `@EnableAsync`** \u2014 without it, the annotation is silently ignored and methods execute synchronously.\n- **Self-invocation bypasses `@Async`** \u2014 calling an `@Async` method from within the same class goes through `this`, not the proxy; the method runs synchronously.\n- **`@Async` methods must be in a different class than the caller** \u2014 Spring's proxy model only intercepts external calls; extract async methods to a separate `@Service` class.\n- **Configure a custom `ThreadPoolTaskExecutor` or `SimpleAsyncTaskExecutor` creates unbounded threads** \u2014 the default executor creates a new thread for every invocation; under load this exhausts JVM heap.\n- **Return `CompletableFuture<T>` or `Future<T>` to handle async results and exceptions** \u2014 `void` async methods swallow exceptions silently; use `AsyncUncaughtExceptionHandler` to capture them."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@Async` makes a method execute on a separate thread, freeing the caller to continue. Like `@Transactional`, it works through a proxy \u2014 which means the same self-invocation trap applies.\n\n**The proxy requirement**\n- `@Async` works by wrapping the bean in a proxy that submits the method to a thread pool executor\n- Calling `this.asyncMethod()` inside the same class bypasses the proxy and runs synchronously \u2014 no error, no warning, just unexpected synchronous behavior\n- Fix: move the async method to a separate Spring bean and inject it\n\n**The thread pool**\n- Spring Boot's default async executor is `SimpleAsyncTaskExecutor`, which creates a new thread for every call \u2014 not a pool\n- Under load, this creates hundreds of threads and exhausts heap memory\n- Define a `ThreadPoolTaskExecutor` bean named `taskExecutor` with `corePoolSize`, `maxPoolSize`, `queueCapacity`, and a rejection policy\n\n**Handling results and exceptions**\n- Return `CompletableFuture<T>` to let callers chain callbacks and handle exceptions\n- `void` return methods swallow exceptions silently; configure `AsyncUncaughtExceptionHandler` to log them\n\nAdd `@EnableAsync` to a `@Configuration` class \u2014 without it, `@Async` is silently ignored and every annotated method executes synchronously."
+          }
+        ]
+      },
+      "followup_questions": [],
+      "seo": {
+        "metaTitle": "@Async \u2014 Asynchronous Method Execution in Spring Boot",
+        "metaDescription": ""
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "@Async makes a method execute on a separate thread, freeing the caller to continue.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The most common @Async bug is calling an async method from within the same class. The method runs synchronously with no warning because @Async works through proxies, exactly like @Transactional. When you call this.sendEmail() from another method in the same bean, the call goes directly to the target object, skipping the proxy that would submit the work to a thread pool. The second trap is the default executor. Without explicit configuration, Spring uses SimpleAsyncTaskExecutor \u2014 which creates a new thread for every invocation with no upper bound. Under load, this."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Replace the default executor with a ThreadPoolTaskExecutor that has explicit bounds on thread count and queue capacity.",
+              "``java @Bean(\"asyncExecutor\") public Executor asyncExecutor() { ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor(); executor.setCorePoolSize(5); executor.setMaxPoolSize(20); executor.setQueueCapacity(100); executor.setRejectedExecutionHandler(new CallerRunsPolicy()); executor.setThreadNamePrefix(\"async-\"); return executor; } ` CallerRunsPolicy is the safest rejection handler \u2014 when the queue is full, the task runs on the caller's thread instead of being discarded.",
+              "This provides natural backpressure: the caller slows down because it's doing the work itself, preventing the system from being overwhelmed.",
+              "Reference the executor by name with @Async(\"asyncExecutor\").",
+              "Without the qualifier, Spring uses the default executor \u2014 which may still be SimpleAsyncTaskExecutor if you haven't overridden the default globally.",
+              "The CallerRunsPolicy rejection handler is worth understanding in depth."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "@Async requires @EnableAsync \u2014 without it, the annotation is silently ignored and methods execute synchronously",
+              "Self-invocation bypasses @Async \u2014 calling an @Async method from within the same class goes through this, not the proxy; the method runs synchronously",
+              "@Async methods must be in a different class than the caller \u2014 Spring's proxy model only intercepts external calls; extract async methods to a separate @Service class",
+              "Configure a custom ThreadPoolTaskExecutor or SimpleAsyncTaskExecutor creates unbounded threads \u2014 the default executor creates a new thread for every invocation; under load this exhausts JVM heap",
+              "Return CompletableFuture<T> or Future<T> to handle async results and exceptions \u2014 void async methods swallow exceptions silently; use AsyncUncaughtExceptionHandler to capture them"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Calling an @Async method from within the same class (self-invocation), which bypasses the proxy and runs synchronously."
+          }
+        ],
+        "cap": "The proxy requirement @Async works by wrapping the bean in a proxy that submits the method to a thread pool executor Calling this.asyncMethod() inside the same class bypasses the proxy and runs synchr",
+        "familiarity_anchors": [
+          "Async",
+          "Spring",
+          "Runnable"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "sbo-commandlinerunner",
+      "slug": "commandlinerunner-applicationrunner",
+      "question": "What is the difference between CommandLineRunner and ApplicationRunner in Spring Boot?",
+      "title": "CommandLineRunner vs ApplicationRunner \u2014 Running Code at Startup",
+      "direct_answer": "Both interfaces run code after the ApplicationContext is fully initialized. CommandLineRunner receives raw String[] args, while ApplicationRunner receives ApplicationArguments which parses --option=value pairs from non-option arguments. Use @Order to control execution sequence when multiple runners exist. If any runner throws an exception, the application startup fails.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows when runners execute in the lifecycle and the difference in argument handling.",
+        "common_mistake": "Using @PostConstruct for startup logic that depends on the full context being ready \u2014 @PostConstruct runs during bean initialization, not after all beans are created.",
+        "to_stand_out": "Mention that runners execute after ApplicationStartedEvent but before ApplicationReadyEvent, and explain @Order for controlling sequence."
+      },
+      "company_tags": [],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why @PostConstruct Is the Wrong Place for Startup Logic and Runners Exist",
+            "content": "The most common mistake isn't confusing the two runner types \u2014 it's putting startup logic in `@PostConstruct` instead of a runner. `@PostConstruct` runs during bean initialization, **inside context refresh**, when other beans may not exist yet and the web server hasn't started. If your initialization depends on the full application context being ready \u2014 loading a cache from the database, verifying external service connectivity \u2014 `@PostConstruct` is too early.\n\nBoth `CommandLineRunner` and `ApplicationRunner` execute after **all singleton beans are created, all `@PostConstruct` methods have run, and the server is bound to its port.** They run between `ApplicationStartedEvent` and `ApplicationReadyEvent` \u2014 the safe zone for one-time initialization.\n\nThe difference between the two is purely in argument handling. `CommandLineRunner` receives `String[] args` \u2014 raw command-line arguments as-is. `ApplicationRunner` receives `ApplicationArguments`, which parses option arguments (`--server.port=8081`) separately from non-option arguments. If your runner doesn't use arguments at all \u2014 which is most cases \u2014 the choice doesn't matter.\n\n**Why the lifecycle position matters so much:** runners execute after `ApplicationStartedEvent` but before `ApplicationReadyEvent`. The application is fully initialized but has not yet signaled readiness to the outside world. In Kubernetes, the readiness probe only passes after `ApplicationReadyEvent`. This means runner execution is part of the startup sequence \u2014 if you warm a cache in a runner, the pod does not receive production traffic until the cache is warm. This is exactly the behavior you want: no cold-cache requests on startup. Without runners, you'd either accept cold traffic or implement complex external coordination to delay service registration until initialization completes."
+          },
+          {
+            "type": "step",
+            "title": "Ordering Multiple Runners and What Happens When One Fails",
+            "content": "When you have multiple runners, use `@Order` to control their execution sequence \u2014 lower values run first. Without `@Order`, the execution order is undefined and may vary between restarts.\n\n```java\n@Component\n@Order(1)\npublic class DatabaseMigrationRunner implements CommandLineRunner {\n    public void run(String... args) { /* runs first */ }\n}\n\n@Component\n@Order(2)\npublic class CacheWarmupRunner implements ApplicationRunner {\n    public void run(ApplicationArguments args) { /* runs second */ }\n}\n```\n\n**If any runner throws an exception, the application startup fails** \u2014 Spring publishes `ApplicationFailedEvent` instead of `ApplicationReadyEvent`, and the context is closed. This is by design: a runner failure means initialization didn't complete, so the application shouldn't accept traffic. If your runner's failure should be non-fatal, catch the exception inside the runner and log it rather than letting it propagate."
+          },
+          {
+            "type": "comparison_table",
+            "title": "CommandLineRunner vs ApplicationRunner \u2014 The Practical Differences",
+            "content": "The two interfaces solve the same problem with slightly different argument-handling APIs. The right choice depends on how you use startup arguments.\n\n| Aspect | CommandLineRunner | ApplicationRunner |\n|---|---|---|\n| **Method signature** | `run(String... args)` | `run(ApplicationArguments args)` |\n| **Argument format** | Raw String array | Parsed `ApplicationArguments` object |\n| **Option args** | `--key=value` arrives as a raw string | Parsed: `args.getOptionValues(\"key\")` returns a list |\n| **Non-option args** | Mixed in with option args | Separate: `args.getNonOptionArgs()` |\n| **Ordering** | `@Order` supported | `@Order` supported |\n| **Use case** | Most startup tasks (arguments not needed) | When parsing `--flag=value` arguments |\n| **Testing** | Pass a string array | Pass a `DefaultApplicationArguments` object |\n\n**The practical rule:** if your runner ignores arguments entirely \u2014 loading a cache, warming up a connection, running a migration \u2014 use `CommandLineRunner`. If you're building a Spring Boot application that accepts meaningful command-line options (like a batch job with configurable date ranges), `ApplicationRunner` gives you structured access to those options without manual parsing. The majority of production runners use `CommandLineRunner` with no arguments at all."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Runners execute after the `ApplicationContext` is fully ready** \u2014 all beans created, web server started, health checks registered; safe to call any injected service.\n- **`ApplicationRunner` receives `ApplicationArguments`; `CommandLineRunner` receives `String[]`** \u2014 `ApplicationArguments` provides typed access to option args (`--name=value`) and non-option args separately.\n- **Multiple runners use `@Order(1)` for sequencing** \u2014 lower value = earlier execution; unordered runners execute in bean registration order.\n- **Runners execute before `ApplicationReadyEvent`** \u2014 `ApplicationReadyEvent` fires after all runners complete; Kubernetes readiness probes should check a flag set in `ApplicationReadyEvent`, not in a runner.\n- **An exception in a runner fails the startup** \u2014 wrap startup checks in try/catch and decide whether the failure should prevent startup or just log a warning."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`CommandLineRunner` and `ApplicationRunner` are Spring Boot's hooks for startup logic that needs the full application context \u2014 database seeding, integration health checks, cache preloading, feature flag registration.\n\n**When they run**\n- All beans are created and injected\n- The embedded web server is started\n- Runners execute\n- `ApplicationReadyEvent` fires \u2014 the application is now ready for traffic\n\n**`CommandLineRunner` vs `ApplicationRunner`**\n- `CommandLineRunner.run(String... args)` receives the raw command-line arguments as a string array\n- `ApplicationRunner.run(ApplicationArguments args)` receives a typed object \u2014 call `args.getOptionValues(\"name\")` for `--name=value` flags and `args.getNonOptionArgs()` for positional arguments\n- For most startup tasks the type does not matter; prefer `ApplicationRunner` when you need to inspect specific command-line flags\n\n**Sequencing**\n- `@Order(1)` on each runner class; lower values execute earlier\n- An exception in any runner propagates and fails the startup \u2014 wrap non-critical checks in try/catch\n\nDo not use `@PostConstruct` for logic that calls other services or triggers side effects \u2014 `@PostConstruct` fires during bean initialization, before the web server starts. Runners fire after everything is ready."
+          }
+        ]
+      },
+      "followup_questions": [],
+      "seo": {
+        "metaTitle": "CommandLineRunner vs ApplicationRunner \u2014 Running Code at Startup",
+        "metaDescription": ""
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P02",
+        "hook": "CommandLineRunner and ApplicationRunner are Spring Boot's hooks for startup logic that needs the full application context \u2014 database seeding, integration health checks, cache preloading, feature flag registration.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The most common mistake isn't confusing the two runner types \u2014 it's putting startup logic in @PostConstruct instead of a runner. @PostConstruct runs during bean initialization, inside context refresh, when other beans may not exist yet and the web server hasn't started. If your initialization depends on the full application context being ready \u2014 loading a cache from the database, verifying external service connectivity \u2014 @PostConstruct is too early. Both."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "The two interfaces solve the same problem with slightly different argument-handling APIs",
+              "The right choice depends on how you use startup arguments",
+              "| Aspect | CommandLineRunner | ApplicationRunner | |---|---|---| | Method signature | run(String",
+              "args) | run(ApplicationArguments args) | | Argument format | Raw String array | Parsed ApplicationArguments object | | Option args | --key=value arrives as a raw string | Parsed: args",
+              "getOptionValues(\"key\") returns a list | | Non-option args | Mixed in with option args | Separate: args"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "The most common mistake isn't confusing the two runner types \u2014 it's putting startup logic in @PostConstruct instead of a runner. @PostConstruct runs during bean initialization, inside context refresh, when other beans may not exist yet and the web server hasn't started. If your initialization depends on the full application context being ready \u2014 loading a cache from the database, verifying external service connectivity \u2014 @PostConstruct is too early. Both CommandLineRunner and ApplicationRunner execute after all singleton beans are created, all @PostConstruct methods have run, and the server is bound."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The most common mistake isn't confusing the two runner types \u2014 it's putting startup logic in @PostConstruct instead of a runner. @PostConstruct runs during bean initialization, inside context refresh, when other beans may not exist yet and the web server hasn't started. If your initialization depends on the full application context being ready \u2014 loading a cache from the database."
+          }
+        ],
+        "cap": "Runners fire after everything is ready.",
+        "familiarity_anchors": [
+          "ApplicationContext",
+          "CommandLineRunner",
+          "String"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "sbo-devtools",
+      "slug": "spring-boot-devtools",
+      "question": "What does Spring Boot DevTools do and why should it never be included in production?",
+      "title": "Spring Boot DevTools \u2014 Hot Reload and Live Restart in Development",
+      "direct_answer": "Spring Boot DevTools provides automatic restart on code changes, LiveReload browser integration, and relaxed caching for development. It uses two classloaders \u2014 a base classloader for dependencies (unchanged) and a restart classloader for application code (reloaded on change). DevTools is automatically disabled when running from a packaged JAR, but should be a development-only dependency to avoid accidental inclusion.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the restart mechanism and why DevTools is development-only.",
+        "common_mistake": "Including spring-boot-devtools as a regular dependency instead of marking it as developmentOnly/optional, risking production inclusion.",
+        "to_stand_out": "Explain the two-classloader restart mechanism and why it's faster than a cold restart, and mention that DevTools disables template caching automatically."
+      },
+      "company_tags": [],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Two Classloaders \u2014 Why DevTools Restart Is Faster Than a Cold Start",
+            "content": "The value of DevTools isn't just \"it restarts when you change code\" \u2014 it's **how** it restarts. A cold start loads every class from scratch: your code, Spring Framework, Hibernate, Jackson \u2014 everything. DevTools splits classes into two classloaders: a **base classloader** for third-party libraries (which rarely change) and a **restart classloader** for your application code.\n\nWhen you modify a class, DevTools throws away only the restart classloader and creates a new one. The base classloader \u2014 containing all your dependencies \u2014 stays loaded. This makes restart 2\u20135x faster than a full cold start because the expensive part (loading hundreds of framework classes) is skipped.\n\nDevTools also **disables template and static resource caching** automatically so you see changes immediately without manual cache invalidation. It enables the `/h2-console` path for embedded databases and activates LiveReload, which refreshes your browser automatically when resources change. All of these behaviors are development conveniences that **must never reach production** \u2014 disabled caching alone can destroy performance under real traffic."
+          },
+          {
+            "type": "step",
+            "title": "The Dependency Scope Mistake \u2014 How DevTools Accidentally Reaches Production",
+            "content": "DevTools is automatically disabled when running from a packaged JAR (`java -jar app.jar`) \u2014 Spring Boot detects the packaging and skips DevTools initialization. But relying on this safeguard is risky. **The correct approach is to mark it as a development-only dependency** so it's never included in the production artifact at all.\n\nIn Maven, use `<optional>true</optional>` so transitive consumers don't inherit it. In Gradle, use `developmentOnly 'org.springframework.boot:spring-boot-devtools'` \u2014 this configuration is excluded from the bootJar task automatically.\n\nIf DevTools accidentally activates in a production-like environment, the consequences include disabled caching (every template renders from disk), automatic restarts on file changes (which shouldn't happen in production but can if mounted volumes change), and exposed debug endpoints. **The safest practice is belt-and-suspenders:** correct dependency scope plus `spring.devtools.restart.enabled=false` in your production profile."
+          },
+          {
+            "type": "step",
+            "title": "Controlling What Triggers a Restart \u2014 Exclusions and Custom Watch Paths",
+            "content": "DevTools watches the classpath for changes and restarts the application when it detects a modification. By default, it watches compiled class output and `src/main/resources`. **Static resources and template files don't need a full restart** \u2014 DevTools detects this and handles them differently: template caching is already disabled (so Thymeleaf/FreeMarker re-reads from disk on each request), and static files under `static/` or `public/` are excluded from the restart trigger by default.\n\nYou can extend the exclusion list with `spring.devtools.restart.exclude=**/*.properties,**/*.yml` to prevent restarts on property file changes \u2014 useful if external tooling modifies these files during development and you don't want constant restarts.\n\n**The two-classloader mechanism** is why DevTools restart is 2\u20135x faster than a cold start: the base classloader (holding all third-party library classes) is never discarded. Only the restart classloader (holding your application classes) is thrown away and recreated. This means Hibernate's configuration, Jackson's type registry, and Spring Framework's own class hierarchy are only loaded once per JVM session, not on every restart.\n\nThe `spring.devtools.restart.additional-paths` property extends the watch paths to directories outside your project \u2014 useful for watching generated source directories in multi-module builds. Combine this with `spring.devtools.livereload.enabled=true` (the default) and the LiveReload browser extension to get automatic browser refresh on static asset changes without any restart at all, making CSS and JavaScript iteration instant."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Mark devtools as `<optional>true</optional>` in Maven** \u2014 `spring-boot:repackage` excludes optional dependencies from the fat JAR; devtools never reaches production even if developers forget to remove it.\n- **Two-classloader architecture makes restart faster than a cold start** \u2014 one classloader for libraries (frozen), one for application classes (reloaded); only the application classloader restarts, which is 2-5x faster than a full JVM restart.\n- **Full restart vs LiveReload** \u2014 code changes trigger a restart (JVM restart of the app classloader); static resource and Thymeleaf template changes trigger LiveReload (browser refresh, no restart).\n- **Devtools disables response caching by default** \u2014 sets `Cache-Control: no-cache` to prevent stale browser caches during development; never appropriate for production.\n- **H2 console is auto-enabled with devtools + H2** \u2014 accessible at `/h2-console` for in-memory database inspection; disabled automatically in production when devtools is absent."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Spring Boot DevTools speeds up the inner development loop \u2014 the cycle of make a change, rebuild, see the result. Its core trick is restarting only the application classes, not the entire JVM.\n\n**The two-classloader restart**\n- Classloader 1 (base): loads libraries, Spring Boot jars, everything that does not change \u2014 created once and never reloaded\n- Classloader 2 (restart): loads only your application classes \u2014 discarded and recreated on each code change\n- Result: a restart that takes 1-2 seconds instead of 15-30 seconds for a full JVM restart\n\n**Restart vs LiveReload**\n- Code changes (`.java` files) trigger a restart of the application classloader\n- Static resources, templates, and property files trigger a LiveReload signal to the browser \u2014 page refreshes without a JVM restart\n\n**Keeping devtools out of production**\n- Mark as `<optional>true</optional>` in Maven \u2014 the Spring Boot repackager excludes optional dependencies\n- Devtools also auto-disables itself when running from a packaged JAR via `java -jar` \u2014 but optional marking is the belt-and-suspenders approach\n\nSpring Boot DevTools also disables HTTP caching headers during development (so you always see the latest response) and enables the H2 web console when H2 is on the classpath."
+          }
+        ]
+      },
+      "followup_questions": [],
+      "seo": {
+        "metaTitle": "Spring Boot DevTools \u2014 Hot Reload and Live Restart in Development",
+        "metaDescription": ""
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "Spring Boot DevTools speeds up the inner development loop \u2014 the cycle of make a change, rebuild, see the result.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "The value of DevTools isn't just \"it restarts when you change code\" \u2014 it's how it restarts. A cold start loads every class from scratch: your code, Spring Framework, Hibernate, Jackson \u2014 everything. DevTools splits classes into two classloaders: a base classloader for third-party libraries (which rarely change) and a restart classloader for your application code. When you modify a class, DevTools throws away only the restart classloader and creates a new one. The base classloader \u2014 containing all your."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the restart mechanism and why DevTools is development-only."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Mark devtools as <optional>true</optional> in Maven \u2014 spring-boot:repackage excludes optional dependencies from the fat JAR; devtools never reaches production even if developers forget to remove it",
+              "Two-classloader architecture makes restart faster than a cold start \u2014 one classloader for libraries (frozen), one for application classes (reloaded); only the application classloader restarts, which is 2-5x faster than a full JVM restart",
+              "Full restart vs LiveReload \u2014 code changes trigger a restart (JVM restart of the app classloader); static resource and Thymeleaf template changes trigger LiveReload (browser refresh, no restart)",
+              "Devtools disables response caching by default \u2014 sets Cache-Control: no-cache to prevent stale browser caches during development; never appropriate for production",
+              "H2 console is auto-enabled with devtools + H2 \u2014 accessible at /h2-console for in-memory database inspection; disabled automatically in production when devtools is absent"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "The value of DevTools isn't just \"it restarts when you change code\" \u2014 it's how it restarts. A cold start loads every class from scratch: your code, Spring Framework, Hibernate, Jackson \u2014 everything. DevTools splits classes into two classloaders: a base classloader for third-party libraries (which rarely change) and a restart classloader for your application code. When you modify a class, DevTools throws away only the restart classloader and creates a new one. The base classloader \u2014 containing all your dependencies \u2014 stays loaded. This makes restart 2\u20135x faster than a full cold start because the expensive part (loading hundreds of framework classes) is skipped. DevTools also disables template and static resource caching automatically so you see changes immediately without."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Including spring-boot-devtools as a regular dependency instead of marking it as developmentOnly/optional, risking production inclusion"
+            ]
+          }
+        ],
+        "cap": "The two-classloader restart Classloader 1 (base): loads libraries, Spring Boot jars, everything that does not change \u2014 created once and never reloaded Classloader 2 (restart): loads only your applicat",
+        "familiarity_anchors": [
+          "Spring",
+          "DevTools",
+          "LiveReload"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

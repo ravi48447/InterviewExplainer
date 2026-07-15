@@ -1,0 +1,140 @@
+{
+  "topic": "Redis Data Structures",
+  "topicSlug": "redis-data-structures",
+  "questions": [
+    {
+      "id": "redis-001",
+      "slug": "redis-data-structures-overview",
+      "question": "What are the core Redis data structures and when would you use each one in a Java application?",
+      "title": "Redis Data Structures: String, Hash, List, Set, ZSet, and Stream",
+      "direct_answer": "Redis offers six primary data structures \u2014 String, Hash, List, Set, Sorted Set (ZSet), and Stream \u2014 each optimized for specific access patterns. Strings handle simple key-value caching and counters, Hashes model objects efficiently, Lists support queues and stacks, Sets enforce uniqueness, Sorted Sets power leaderboards and range queries, and Streams handle event sourcing. Choosing the right structure directly impacts memory usage and query performance.",
+      "layout_type": "reference-cards",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands Redis beyond simple string caching and can map data structures to real use cases.",
+        "common_mistake": "Candidates often default to using String for everything, missing memory savings and richer operations available from Hashes or Sets.",
+        "to_stand_out": "Mention time complexity for each structure's core operations and give a concrete Java/Spring example for at least two structures."
+      },
+      "company_tags": [
+        "Uber",
+        "Twitter",
+        "LinkedIn",
+        "Airbnb",
+        "Shopify"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "How it works under the hood",
+            "content": "Redis is fundamentally different from a plain key-value store because its value side supports rich data structures, each backed by purpose-built algorithms. Strings use simple dynamic strings (SDS) internally and support atomic increment, bit operations, and binary payloads up to 512 MB, making them the default for session tokens, counters, and serialized object caches. Hashes store field-value maps and use a compact listpack encoding when the field count stays below `hash-max-listpack-entries` (default 128), which saves roughly 10\u00d7 memory compared to individual String keys per field \u2014 a detail that matters at scale when you model millions of user profiles.\n\nLists are doubly-linked under the hood (quicklist of listpacks since Redis 7), giving O(1) push/pop at both ends while keeping small lists memory-efficient. This makes them natural candidates for notification feeds, recent-activity timelines, and simple work queues paired with `BRPOP` for blocking consumers. Sets use a hash table internally (or intset for small integer-only sets) and shine when you need uniqueness guarantees \u2014 tracking online users, computing mutual friends via `SINTER`, or tagging systems where tag membership must be deduplicated.\n\nSorted Sets combine a skip list with a hash table, yielding O(log N) insertion and O(log N + M) range queries. The dual index lets you look up a member's score in O(1) via the hash table while the skip list maintains order \u2014 this is why leaderboard rank lookups and score updates are both fast even with millions of members. Streams, added in Redis 5, model an append-only log with consumer group semantics inspired by Kafka: `XREADGROUP` delivers entries to consumers, `XACK` acknowledges processing, and the stream can be trimmed with `MAXLEN` or `MINID`. Choosing the right structure is the single most impactful design decision when integrating Redis, because it determines memory footprint, command complexity, and whether your access pattern can be served in a single round-trip or requires multiple commands."
+          },
+          {
+            "type": "reference_group",
+            "title": "String",
+            "content": "**Internal encoding:** Simple Dynamic String (SDS) up to 512 MB. Small integers use a shared object pool.\n\n**Core commands:** `SET`, `GET`, `INCR`, `DECR`, `MGET`, `MSET`, `SETNX`, `SETEX`\n\n**Time complexity:** O(1) for single-key ops, O(N) for multi-key\n\n**Best for:** Session tokens, serialized JSON blobs, counters, distributed locks, feature flags\n\n```java\n// Atomic counter \u2014 no DB round-trip needed\nredisTemplate.opsForValue().increment(\"page:views:\" + pageId);\n\n// Cache a serialized object with 30-min TTL\nredisTemplate.opsForValue().set(\n    \"user:\" + userId, userJson, Duration.ofMinutes(30)\n);\n```\n\n**Memory tip:** Strings holding integers < 10,000 share a global object pool, so millions of small counters cost almost nothing extra."
+          },
+          {
+            "type": "reference_group",
+            "title": "Hash",
+            "content": "**Internal encoding:** Listpack (< 128 fields) or hash table. Listpack saves ~10\u00d7 memory over individual String keys.\n\n**Core commands:** `HSET`, `HGET`, `HMSET`, `HGETALL`, `HDEL`, `HINCRBY`, `HEXISTS`\n\n**Time complexity:** O(1) for single-field ops, O(N) for `HGETALL`\n\n**Best for:** Object-shaped data (user profiles, product details), partial updates, structured caching\n\n```java\n// Store user profile as individual fields\nHashOperations<String, String, String> hash = redisTemplate.opsForHash();\nhash.put(\"user:42\", \"name\", \"Alice\");\nhash.put(\"user:42\", \"email\", \"alice@example.com\");\nhash.put(\"user:42\", \"loginCount\", \"0\");\n\n// Increment a single field without fetching the whole object\nhash.increment(\"user:42\", \"loginCount\", 1);\n\n// Fetch only the fields you need\nString name = hash.get(\"user:42\", \"name\");\n```\n\n**Memory tip:** Keep field count under `hash-max-listpack-entries` (default 128) to stay in compact encoding. One Hash with 20 fields uses far less RAM than 20 separate String keys."
+          },
+          {
+            "type": "reference_group",
+            "title": "List",
+            "content": "**Internal encoding:** Quicklist (linked list of listpacks) since Redis 7, giving O(1) ends with memory-efficient small segments.\n\n**Core commands:** `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`, `LLEN`, `BRPOP`, `LINDEX`\n\n**Time complexity:** O(1) push/pop, O(N) for index access or range\n\n**Best for:** Message queues, activity feeds, recent-N lists, job queues\n\n```java\n// Simple work queue: producer pushes, consumer blocks\nredisTemplate.opsForList().leftPush(\"jobs:email\", jobJson);\n\n// Blocking pop \u2014 consumer waits up to 30s for work\nString job = redisTemplate.opsForList()\n    .rightPop(\"jobs:email\", Duration.ofSeconds(30));\n\n// Recent activity feed \u2014 keep last 100 entries\nredisTemplate.opsForList().leftPush(\"feed:user:42\", activityJson);\nredisTemplate.opsForList().trim(\"feed:user:42\", 0, 99);\n```\n\n**Memory tip:** `LTRIM` after every push to cap list growth. Unbounded lists are the most common Redis memory leak in production."
+          },
+          {
+            "type": "reference_group",
+            "title": "Set",
+            "content": "**Internal encoding:** Intset (for small integer-only sets) or hash table.\n\n**Core commands:** `SADD`, `SREM`, `SISMEMBER`, `SMEMBERS`, `SINTER`, `SUNION`, `SDIFF`, `SCARD`\n\n**Time complexity:** O(1) for add/remove/membership, O(N) for full set ops\n\n**Best for:** Tag systems, unique visitor tracking, mutual friends, deduplication\n\n```java\n// Track online users \u2014 uniqueness enforced automatically\nredisTemplate.opsForSet().add(\"online:users\", userId);\nredisTemplate.opsForSet().remove(\"online:users\", userId);\n\n// Mutual friends between two users\nSet<String> mutual = redisTemplate.opsForSet()\n    .intersect(\"friends:alice\", \"friends:bob\");\n\n// Tags \u2014 find items tagged with BOTH \"java\" and \"redis\"\nSet<String> both = redisTemplate.opsForSet()\n    .intersect(\"tag:java\", \"tag:redis\");\n```\n\n**Memory tip:** Sets with only small integers (< 512 elements, values < `set-max-intset-entries`) use the ultra-compact intset encoding."
+          },
+          {
+            "type": "reference_group",
+            "title": "Sorted Set (ZSet)",
+            "content": "**Internal encoding:** Skip list + hash table dual index. Skip list maintains order; hash table provides O(1) score lookups.\n\n**Core commands:** `ZADD`, `ZINCRBY`, `ZRANGE`, `ZREVRANGE`, `ZRANK`, `ZREVRANK`, `ZSCORE`, `ZRANGEBYSCORE`\n\n**Time complexity:** O(log N) for add/rank, O(log N + M) for range queries\n\n**Best for:** Leaderboards, priority queues, time-series windows, rate limiting, scheduled tasks\n\n```java\n// Leaderboard \u2014 update score atomically\nredisTemplate.opsForZSet().incrementScore(\"leaderboard:daily\", playerId, points);\n\n// Top 10 players (highest scores first)\nSet<ZSetOperations.TypedTuple<String>> top10 = redisTemplate.opsForZSet()\n    .reverseRangeWithScores(\"leaderboard:daily\", 0, 9);\n\n// Player's current rank (0-based from top)\nLong rank = redisTemplate.opsForZSet()\n    .reverseRank(\"leaderboard:daily\", playerId);\n\n// Sliding window \u2014 events in the last 60 seconds\nlong now = System.currentTimeMillis();\nredisTemplate.opsForZSet()\n    .removeRangeByScore(\"ratelimit:\" + clientId, 0, now - 60_000);\n```\n\n**Memory tip:** Member strings dominate ZSet memory. Use short IDs as members and store metadata in a companion Hash."
+          },
+          {
+            "type": "reference_group",
+            "title": "Stream",
+            "content": "**Internal encoding:** Radix tree of stream entries with consumer group metadata.\n\n**Core commands:** `XADD`, `XREAD`, `XREADGROUP`, `XACK`, `XLEN`, `XRANGE`, `XTRIM`\n\n**Time complexity:** O(1) for `XADD`, O(N) for range reads\n\n**Best for:** Event sourcing, audit logs, lightweight message queues with consumer groups, change data capture\n\n```java\n// Produce an event\nMapRecord<String, String, String> record = StreamRecords\n    .newRecord()\n    .in(\"orders:events\")\n    .ofMap(Map.of(\"orderId\", \"123\", \"event\", \"PLACED\", \"amount\", \"59.99\"));\nredisTemplate.opsForStream().add(record);\n\n// Consumer group \u2014 create once\nredisTemplate.opsForStream()\n    .createGroup(\"orders:events\", \"order-processor\");\n\n// Consumer reads undelivered messages\nList<MapRecord<String, String, String>> messages = redisTemplate.opsForStream()\n    .read(Consumer.from(\"order-processor\", \"worker-1\"),\n          StreamReadOptions.empty().count(10).block(Duration.ofSeconds(5)),\n          StreamOffset.create(\"orders:events\", ReadOffset.lastConsumed()));\n\n// Acknowledge after processing\nmessages.forEach(msg ->\n    redisTemplate.opsForStream()\n        .acknowledge(\"orders:events\", \"order-processor\", msg.getId()));\n```\n\n**Memory tip:** Use `MAXLEN ~1000` on `XADD` or `XTRIM` to cap stream length and prevent unbounded growth."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **String with `INCR` for atomic counters** \u2014 `INCR` is atomic even under thousands of concurrent clients; the foundation for rate limiters, hit counters, and distributed sequence generators\n- **Hash for object field access without full deserialization** \u2014 `HGET user:123 email` retrieves one field; more efficient than deserializing a JSON blob when only one attribute is needed\n- **List with `BRPOP` as a simple job queue** \u2014 blocking pop waits for an item; producers `LPUSH`, consumers `BRPOP`; use Redis Streams when you need consumer groups and acknowledgment\n- **Sorted Set for ranked data** \u2014 `ZADD` with a score; `ZREVRANGE` returns members in descending score order; natural for leaderboards, priority queues, and expiring entries via timestamp score\n- **Stream for durable event logs with consumer groups** \u2014 each consumer group maintains its own read position; unacknowledged messages can be reclaimed; fills the gap between List queues and Kafka"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to explain this in an interview",
+            "content": "Redis provides six core data structures, and choosing the right one for a given problem is what separates effective Redis usage from treating it as a simple key-value store.\n\n**String \u2014 the universal type**\n- String is the most basic type \u2014 it holds text, numbers, or binary data up to 512MB; `SET key value EX 3600` stores a value with a 1-hour TTL in one command\n- `INCR` and `INCRBY` on string values are atomic \u2014 which means a rate limiter or counter can be safely incremented from thousands of concurrent clients without a race condition\n\n**Hash \u2014 for objects with multiple fields**\n- A Redis Hash maps field names to values within one key \u2014 `HSET user:123 name \"Alice\" email \"alice@example.com\"` stores multiple attributes under one key, allowing `HGET user:123 name` to retrieve individual fields without deserializing the whole object\n- More memory-efficient than storing a serialized JSON string when you need to update individual fields frequently\n\n**List \u2014 for queues and feeds**\n- List maintains insertion order; `LPUSH` and `RPUSH` add to left or right; `BRPOP` blocks until an item is available \u2014 which makes it a natural message queue pattern for background job dispatch\n\n**Set and Sorted Set (ZSet)**\n- Set holds unique members and supports set operations \u2014 `SADD`, `SUNION`, `SINTER`, `SDIFF` \u2014 useful for tags, friend lists, or deduplication\n- Sorted Set (ZSet) associates each member with a score and keeps members ordered by score \u2014 which means `ZADD leaderboard 4500 \"alice\"` then `ZREVRANGE leaderboard 0 9` returns the top 10 in one command; the natural structure for real-time rankings and scheduled tasks by timestamp\n\n**Stream \u2014 for event logs**\n- Stream provides a persistent, ordered log of entries with consumer group semantics \u2014 similar to a lightweight Kafka topic, useful for event sourcing, activity feeds, and reliable message delivery with acknowledgment"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Redis handle memory for a Hash with fewer than 128 fields vs a large Hash?",
+        "When would you choose a Sorted Set over a List for a queue?",
+        "How do Redis Streams differ from pub/sub?"
+      ],
+      "seo": {
+        "metaTitle": "Redis Data Structures for Java Developers | Interview Guide",
+        "metaDescription": "Learn Redis String, Hash, List, Set, ZSet, and Stream data structures with Java/Spring Boot examples and interview-ready explanations."
+      },
+      "speakable_v2": {
+        "archetype": "E",
+        "pillar": "P01",
+        "hook": "Redis provides six core data structures, and choosing the right one for a given problem is what separates effective Redis usage from treating it as a simple key-value store.",
+        "beats": [
+          {
+            "kind": "optimising_for",
+            "layout": "paragraph",
+            "text": "Redis is fundamentally different from a plain key-value store because its value side supports rich data structures, each backed by purpose-built algorithms. Strings use simple dynamic strings (SDS) internally and support atomic increment, bit operations, and binary payloads up to 512 MB, making them the."
+          },
+          {
+            "kind": "options",
+            "layout": "bullets",
+            "items": [
+              "String with INCR for atomic counters \u2014 INCR is atomic even under thousands of concurrent clients; the foundation for rate limiters, hit counters, and distributed sequence generators Hash for object field access without full deserialization \u2014 HGET user:123 email retrieves one field; more efficient than deserializing a JSON blob when only one attribute is needed List with BRPOP as a simple job queue \u2014 blocking pop waits for an item; producers LPUSH, consumers BRPOP; use Redis Streams when you need consumer groups and acknowledgment Sorted Set for ranked data \u2014 ZADD with a score; ZREVRANGE returns members in descending score order; natural for leaderboards, priority queues, and expiring entries via timestamp score Stream for durable event logs with consumer groups \u2014 each consumer group maintains its own read position; unacknowledged messages can be reclaimed; fills the gap between List queues and Kafka"
+            ]
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "bullets",
+            "items": [
+              "Redis is fundamentally different from a plain key-value store because its value side supports rich data structures, each backed by purpose-built algorithms",
+              "Strings use simple dynamic strings (SDS) internally and support atomic increment, bit operations, and binary payloads up to 512 MB, making them the default for session tokens, counters, and serialized object caches",
+              "Hashes store field-value maps and use a compact listpack encoding when the field count stays below hash-max-listpack-entries (default 128), which saves roughly 10\u00d7 memory compared to individual String keys per field \u2014 a detail that matters at scale when you model millions of user profiles",
+              "Lists are doubly-linked under the hood (quicklist of listpacks since Redis 7), giving O(1) push/pop at both ends while keeping small lists memory-efficient",
+              "This makes them natural candidates for notification feeds, recent-activity timelines, and simple work queues paired with BRPOP for blocking consumers"
+            ]
+          },
+          {
+            "kind": "decision",
+            "layout": "paragraph",
+            "text": "Redis offers six primary data structures \u2014 String, Hash, List, Set, Sorted Set (ZSet), and Stream \u2014 each optimized for specific access patterns."
+          },
+          {
+            "kind": "rethink_if",
+            "layout": "callout",
+            "text": "Mention time complexity for each structure's core operations and give a concrete Java/Spring example for at least two structures."
+          }
+        ],
+        "cap": "String \u2014 the universal type String is the most basic type \u2014 it holds text, numbers, or binary data up to 512MB; SET key value EX 3600 stores a value with a 1-hour TTL in.",
+        "familiarity_anchors": [
+          "Redis",
+          "String",
+          "Sorted"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Redis handle memory for a Hash with fewer than 128 fields vs a large Hash?",
+          "When would you choose a Sorted Set over a List for a queue?",
+          "How do Redis Streams differ from pub/sub?"
+        ]
+      }
+    }
+  ]
+}

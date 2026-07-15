@@ -1,0 +1,137 @@
+{
+  "topic": "Rate Limiter",
+  "topicSlug": "rate-limiter",
+  "questions": [
+    {
+      "id": "design-rate-limiter",
+      "slug": "design-rate-limiter",
+      "question": "Design a rate limiter for an API gateway handling 10 million requests per day.",
+      "title": "Design a Distributed Rate Limiter",
+      "direct_answer": "Use the Token Bucket algorithm backed by Redis for distributed state. Each API key gets a bucket in Redis with a Lua script for atomic check-and-decrement. Return 429 with Retry-After header when the bucket is empty. Deploy at the API gateway layer.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "System design thinking: requirements, algorithm trade-offs, distributed coordination",
+        "common_mistake": "Using a database instead of Redis \u2014 DB round-trips are too slow for per-request rate limiting",
+        "to_stand_out": "Mention the sliding window algorithm for precise limiting, multi-tier limits (per user + global), and graceful degradation if Redis is down"
+      },
+      "company_tags": [
+        "Stripe",
+        "Cloudflare",
+        "Amazon",
+        "Twilio"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Quantifying the Problem: Why This Can't Be a Database Lookup",
+            "content": "**10 million requests/day \u00f7 86,400 seconds \u2248 115 requests/second** average. But traffic isn't uniform \u2014 peaks run 10\u201350\u00d7 average, so the rate limiter must handle **1,000\u20135,000 requests/second**. The limiter sits in the hot path of every single request, which means it must add **less than 5ms overhead**. That constraint eliminates databases (1\u201310ms per query with row locks under concurrency) and points to **Redis** \u2014 sub-millisecond reads/writes, atomic operations via Lua scripting, and built-in key expiration.\n\nThe deeper constraint: multiple API gateway instances sit behind a load balancer. If each instance tracks limits locally, a client can multiply their quota by the number of instances. The rate limit state must be **centralized** \u2014 all instances checking the same counter. Redis serves as that shared state store.\n\nRate limiting solves three problems simultaneously: **protection** (one misbehaving client can't crash the service for everyone), **fairness** (shared infrastructure across thousands of consumers), and **cost control** (cloud bills scale linearly with unbounded traffic). It's also the first defense layer against DDoS \u2014 before WAF rules even evaluate, the rate limiter can reject known-abusive keys."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Algorithm Trade-offs: Why Token Bucket Wins for APIs",
+            "content": "Four algorithms appear in rate limiter design. The decision comes down to whether you need to **allow bursts** and how much **memory per client** you can afford.\n\n| Algorithm | How It Works | Burst Handling | Memory | Weakness |\n|---|---|---|---|---|\n| **Fixed Window** | Counter per client, reset each minute | Allows 2\u00d7 burst at window boundary | O(1) per client | Client sends 100 at :59, 100 at :00 = 200 in 2 sec |\n| **Sliding Window Log** | Stores every request timestamp, counts within sliding window | Precise, no boundary burst | O(N) per client \u2014 expensive | 100K clients \u00d7 100 timestamps = 10M entries |\n| **Sliding Window Counter** | Weighted average across current + previous window | Good approximation, low memory | O(1) per client | Approximation \u2014 not exact |\n| **Token Bucket** | Bucket with capacity C (burst), refill rate R (sustained) | Two independent knobs | O(1) per client | Slightly more complex to implement |\n\n**Token Bucket** is the industry standard \u2014 Amazon, Stripe, and Cloudflare all use it. The two-knob design separates burst behavior (capacity) from sustained throughput (refill rate). Example: capacity=10, refill=1/sec. A client can burst 10 requests instantly, then sustains 1/sec. No window boundaries, constant memory, intuitive configuration.\n\n**Fixed Window** is tempting because it's simple, but the boundary burst problem is disqualifying for production. A client with a 100/min limit can legally send 200 requests in 2 seconds by timing requests at the window edge."
+          },
+          {
+            "type": "step",
+            "title": "The Atomicity Problem: Why Redis Lua Scripts Are Non-Negotiable",
+            "content": "The token bucket algorithm requires three operations: read the current token count, calculate refill based on elapsed time, and decrement if tokens are available. If these execute as separate Redis commands, **two concurrent requests can both read `tokens=1` and both pass** \u2014 the same double-spending problem that plagues financial systems.\n\nRedis `MULTI`/`EXEC` transactions don't solve this because they can't branch on intermediate results \u2014 you can't read the token count and then decide whether to decrement within a transaction. The solution is a **Lua script** executed via `EVAL`, which runs atomically on the Redis server with no interleaving possible.\n\nThe script implements lazy refill \u2014 instead of a background process ticking tokens, it calculates earned tokens based on elapsed time since the last request. This means inactive keys cost zero CPU.\n\n```lua\nlocal key = KEYS[1]\nlocal capacity = tonumber(ARGV[1])\nlocal refill_rate = tonumber(ARGV[2])\nlocal now = tonumber(ARGV[3])\n\nlocal bucket = redis.call('HMGET', key, 'tokens', 'last_refill')\nlocal tokens = tonumber(bucket[1]) or capacity\nlocal last = tonumber(bucket[2]) or now\n\nlocal elapsed = (now - last) / 1000\ntokens = math.min(capacity, tokens + elapsed * refill_rate)\n\nif tokens >= 1 then\n    tokens = tokens - 1\n    redis.call('HMSET', key, 'tokens', tokens, 'last_refill', now)\n    redis.call('EXPIRE', key, 3600)          -- auto-cleanup inactive keys\n    return {1, math.floor(tokens)}           -- allowed, remaining\nelse\n    return {0, 0}                            -- denied\nend\n```\n\nThe `EXPIRE` on every call ensures that keys for clients who stop sending requests are automatically cleaned up. Without it, Redis memory grows unboundedly as new API keys accumulate."
+          },
+          {
+            "type": "step",
+            "title": "Fail-Open Design: When the Rate Limiter Itself Goes Down",
+            "content": "What happens when Redis is unreachable? Two options: **fail-closed** (reject all requests) or **fail-open** (allow all requests). Fail-open is almost always correct.\n\nFail-closed turns a Redis blip into a total API outage \u2014 every legitimate request is rejected because the protection layer is down. The rate limiter, designed to protect the system, becomes the thing that kills it. Fail-open allows unthrottled traffic for the duration of the Redis outage, which is a controlled risk \u2014 especially if the outage is measured in seconds.\n\nThe Java implementation wraps the Redis call in a try-catch and falls through to `chain.doFilter()` on any exception. Pair this with a **circuit breaker** on the Redis connection (Resilience4j) so the gateway stops hammering a dead Redis and switches to a local fallback counter that provides rough per-instance limiting.\n\n```java\ntry {\n    List<Long> result = redis.execute(luaScript,\n        List.of(\"rl:\" + apiKey), \"100\", \"1.67\",\n        String.valueOf(System.currentTimeMillis()));\n    response.setHeader(\"X-RateLimit-Remaining\",\n        String.valueOf(result.get(1)));\n    if (result.get(0) != 1) {\n        response.setHeader(\"Retry-After\", \"1\");\n        response.sendError(429, \"Rate limit exceeded\");\n        return;\n    }\n} catch (Exception e) {\n    log.error(\"Rate limiter Redis unavailable \u2014 failing open\", e);\n}\nchain.doFilter(request, response);\n```\n\nThe `X-RateLimit-Remaining` header on every response enables **client-side throttling** \u2014 well-built SDKs slow down before hitting the limit rather than waiting for a 429. Stripe, GitHub, and Twitter all return these headers as standard practice."
+          },
+          {
+            "type": "step",
+            "title": "Multi-Tier Limits and Production Operations",
+            "content": "Real systems need **multiple limit dimensions** enforced simultaneously. A single per-minute limit doesn't distinguish between a burst of 100 requests in 1 second (which might overwhelm a downstream service) and 100 requests spread across 60 seconds (which is fine).\n\n| Tier | /sec | /min | /hour |\n|---|---|---|---|\n| Free | 5 | 20 | 500 |\n| Pro | 20 | 100 | 5,000 |\n| Enterprise | 100 | 1,000 | 50,000 |\n\nEach dimension uses a separate Redis key with its own token bucket. A request is allowed only if **all buckets** have tokens. The `Retry-After` header reflects whichever limit resets soonest. Cache the API key \u2192 tier mapping locally (don't query the database per request).\n\n**Global rate limits** protect total infrastructure capacity independent of per-key limits. If the system can handle 50,000 req/sec total, a global limiter prevents 1,000 Enterprise clients from collectively exceeding that.\n\n**Monitoring** closes the loop: track `requests.total` (allowed/denied), `limiter.latency_p99` (must stay under 2ms), and `redis.errors`. Alert on Redis errors lasting more than 10 seconds. Dashboard the top keys by volume and by denial rate \u2014 a key consistently hitting limits either needs a higher tier or is misbehaving."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Token bucket allows controlled bursting** \u2014 the bucket refills at a fixed rate but can hold surplus tokens.\n- **Sliding window log prevents boundary exploitation** \u2014 fixed window allows 2\u00d7 the limit by sending 100 at 00:59 and 100 at 01:01.\n- **Redis INCR + EXPIRE for distributed state** \u2014 atomic increment with TTL in a single Lua script ensures the counter is consistent across all gateway.\n- **X-RateLimit response headers are a UX contract** \u2014 `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` let well-behaved clients back off.\n- **Warm-up exemption for new deployments** \u2014 cold instances behind a gateway should receive lower traffic for 30\u201360 seconds.\n- **Per-tier limits require composable limiters** \u2014 a single Redis key can't express \"100/sec global AND 10/sec per user AND 5/sec per expensive endpoint\"."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A rate limiter for an API gateway handling 10 million requests per day is roughly 115 requests per second average with peaks at 3\u20135\u00d7 \u2014 about 500\u2013600 req/sec. The design must handle this throughput with sub-millisecond overhead per request, state shared across all gateway instances, and graceful degradation that doesn't cascade failures into the API itself.\n\n**Choosing the algorithm:**\n- Token bucket is my default: the bucket refills at a fixed rate (the allowed limit) but can hold burst capacity above the sustained rate; a user with a 100 req/sec limit can burst to 200 for a short spike without being rejected, which is the realistic behavior for well-behaved API clients\n- Sliding window log is more precise for strict per-second enforcement: it counts requests in any trailing 60-second window, preventing the boundary exploit where 100 requests at 00:59 and 100 at 01:01 double the effective rate\n- Fixed window is the simplest but allows that boundary exploit; use only for coarse-grained tiers where the doubling risk is acceptable\n\n**Distributed state with Redis:**\n- A single gateway instance can hold limits in memory, but a fleet of 10 gateway servers needs shared state; Redis atomic INCR + EXPIRE in a Lua script ensures the counter is consistent across all instances without race conditions\n- The Lua script checks the current count, increments if below limit, and sets TTL atomically \u2014 this is the same approach Stripe and GitHub use in production\n- For 10 million req/day with multiple dimensions (per user, per endpoint, per API key), you need composable independent limiters \u2014 one Redis key can't express all constraints simultaneously\n\n**Response contract and graceful degradation:**\n- Always return `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers so clients can back off intelligently before hitting 429\n- When Redis is unavailable, fail open (allow traffic) rather than fail closed (block everything) \u2014 a temporary loss of rate limiting is less harmful than a complete API outage\n\nI recommend token bucket with Redis-backed distributed state, Lua script atomics, and a fallback to in-memory per-instance limits when Redis is unavailable \u2014 protecting the API against Redis failure while maintaining reasonable fairness."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement a sliding window rate limiter?",
+        "What happens if Redis goes down \u2014 how do you handle graceful degradation?",
+        "How do you set different rate limits for different API tiers (free vs paid)?"
+      ],
+      "seo": {
+        "metaTitle": "Design Rate Limiter System Design \u2014 Java Interview Guide",
+        "metaDescription": "Distributed rate limiter design with Token Bucket algorithm and Redis. Lua atomic operations, multi-tier limits, and graceful degradation."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "A rate limiter for an API gateway handling 10 million requests per day is roughly 115 requests per second average with peaks at 3\u20135\u00d7 \u2014 about 500\u2013600 req/sec.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "10 million requests/day \u00f7 86,400 seconds \u2248 115 requests/second average. But traffic isn't uniform \u2014 peaks run 10\u201350\u00d7 average, so the rate limiter must handle 1,000\u20135,000 requests/second. The limiter sits in the hot path of every single request, which means it must add less than 5ms overhead. That constraint eliminates databases (1\u201310ms per query with row locks under concurrency) and points to Redis \u2014 sub-millisecond reads/writes, atomic operations via Lua scripting, and built-in key expiration. The deeper constraint: multiple API gateway instances sit behind a load balancer. If each instance tracks limits locally, a client can multiply their quota by the number of instances. The rate limit state must be centralized \u2014 all instances checking the same counter. Redis serves."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "10 million requests/day \u00f7 86,400 seconds \u2248 115 requests/second average. But traffic isn't uniform \u2014 peaks run 10\u201350\u00d7 average, so the rate limiter must handle 1,000\u20135,000 requests/second. The limiter sits in the hot path of every single request, which means it must add less than 5ms overhead. That constraint eliminates databases (1\u201310ms per query with row locks under concurrency) and points to Redis \u2014 sub-millisecond reads/writes, atomic operations via Lua scripting, and built-in key expiration. The deeper constraint: multiple API gateway instances sit behind a load balancer. If each instance tracks limits locally, a client can multiply their quota by the number of instances. The rate limit state must be."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "The token bucket algorithm requires three operations: read the current token count, calculate refill based on elapsed time, and decrement if tokens are available",
+              "If these execute as separate Redis commands, two concurrent requests can both read tokens=1 and both pass \u2014 the same double-spending problem that plagues financial systems",
+              "Redis MULTI/EXEC transactions don't solve this because they can't branch on intermediate results \u2014 you can't read the token count and then decide whether to decrement within a transaction",
+              "The solution is a Lua script executed via EVAL, which runs atomically on the Redis server with no interleaving possible",
+              "The script implements lazy refill \u2014 instead of a background process ticking tokens, it calculates earned tokens based on elapsed time since the last request"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "10 million requests/day \u00f7 86,400 seconds \u2248 115 requests/second average. But traffic isn't uniform \u2014 peaks run 10\u201350\u00d7 average, so the rate limiter must handle 1,000\u20135,000 requests/second. The limiter sits in the hot path of every single request, which means it must add less than 5ms overhead. That constraint eliminates databases (1\u201310ms per query with row locks under concurrency) and points to Redis \u2014 sub-millisecond reads/writes, atomic operations via Lua scripting, and built-in key expiration. The deeper constraint: multiple API gateway instances sit behind a load balancer. If each instance tracks limits locally, a client can multiply their quota by the number of instances. The rate limit state must be centralized \u2014 all instances checking the same counter. Redis serves."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "10 million requests/day \u00f7 86,400 seconds \u2248 115 requests/second average. But traffic isn't uniform \u2014 peaks run 10\u201350\u00d7 average, so the rate limiter must handle 1,000\u20135,000 requests/second. The limiter sits in the hot path of every single request, which means it must add less than 5ms overhead. That constraint eliminates databases (1\u201310ms per query with row locks under concurrency) and points to Redis \u2014 sub-millisecond reads/writes, atomic operations via Lua scripting, and built-in key expiration. The deeper constraint: multiple API gateway instances sit behind a load balancer. If each instance tracks limits locally, a client can multiply their quota by the number of instances. The rate limit state must be centralized \u2014 all instances checking the same counter. Redis serves."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Using a database instead of Redis \u2014 DB round-trips are too slow for per-request rate limiting"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Token bucket allows controlled bursting \u2014 the bucket refills at a fixed rate but can hold surplus tokens. Sliding window log prevents boundary exploitation \u2014 fixed window allows 2\u00d7 the limit by sending 100 at 00:59 and 100 at 01:01. Redis INCR + EXPIRE for distributed state \u2014 atomic increment with TTL in a single Lua script ensures the counter is consistent across all gateway. X-RateLimit response headers are a UX contract \u2014 X-RateLimit-Remaining, X-RateLimit-Reset, and Retry-After let well-behaved clients back off. Warm-up exemption for."
+          }
+        ],
+        "cap": "Choosing the algorithm: Token bucket is my default: the bucket refills at a fixed rate (the allowed limit) but can hold burst capacity above the sustained rate; a user with a 100 req/sec limit can.",
+        "familiarity_anchors": [
+          "Token",
+          "Bucket",
+          "Redis"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement a sliding window rate limiter?",
+          "What happens if Redis goes down \u2014 how do you handle graceful degradation?",
+          "How do you set different rate limits for different API tiers (free vs paid)?"
+        ]
+      }
+    }
+  ]
+}

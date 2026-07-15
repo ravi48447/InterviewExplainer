@@ -1,0 +1,512 @@
+{
+  "topic": "Transactions And Acid",
+  "topicSlug": "transactions-and-acid",
+  "questions": [
+    {
+      "id": "sql-acid",
+      "slug": "acid-properties-transactions",
+      "question": "ACID Properties \u2014 Atomicity, Consistency, Isolation, Durability",
+      "title": "ACID Properties \u2014 Atomicity, Consistency, Isolation, Durability",
+      "direct_answer": "ACID is a set of four guarantees that database transactions must satisfy for reliable processing. Atomicity means a transaction fully completes or fully rolls back. Consistency ensures the database moves from one valid state to another, honoring all constraints. Isolation controls how concurrent transactions see each other's changes. Durability guarantees that committed data survives crashes.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether you understand what each ACID property actually prevents and can connect them to real failure scenarios, not just recite definitions.",
+        "common_mistake": "Treating the C in ACID as the same as the C in CAP theorem. ACID consistency means schema constraints are honored. CAP consistency means all nodes see the same data. They are completely different concepts.",
+        "to_stand_out": "Explain that isolation is the most expensive property and that databases offer multiple isolation levels as a performance trade-off \u2014 most applications run at Read Committed, not Serializable, accepting some anomalies for throughput."
+      },
+      "company_tags": [
+        "Amazon",
+        "Google",
+        "Stripe",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Four Guarantees That Prevent Four Different Categories of Data Corruption",
+            "content": "Imagine transferring $500 from account A to account B. The operation requires two SQL statements: debit A, credit B. If the system crashes between them \u2014 A is debited but B is not credited \u2014 $500 has vanished. If two transfers run simultaneously on the same account, both read the same balance and one overwrites the other. If the database confirms the transfer but loses it on restart, the customer\u2019s money is gone.\n\n**ACID exists to prevent exactly these failures.** Each property addresses a different category of data corruption that occurs naturally in concurrent, crash-prone systems. The four properties are not independent features \u2014 they interact. Atomicity without durability means a committed transaction can still be lost. Isolation without atomicity means a concurrent reader can see a half-finished transaction. Understanding ACID means understanding **what breaks when each property is missing.**"
+          },
+          {
+            "type": "step",
+            "title": "Atomicity \u2014 Why 'All or Nothing' Is Harder Than It Sounds",
+            "content": "Atomicity guarantees that if any part of a transaction fails, everything it did is undone. The database achieves this with a **write-ahead log (WAL)**: before modifying any data page, it writes the intended change to a sequential log on disk. If the system crashes mid-transaction, the recovery process replays the WAL and undoes any incomplete transactions.\n\n```sql\nBEGIN;\nUPDATE accounts SET balance = balance - 500 WHERE id = 1;  -- debit\nUPDATE accounts SET balance = balance + 500 WHERE id = 2;  -- credit\nCOMMIT;  -- only now are both changes visible\n-- If anything fails before COMMIT, both changes are rolled back\n```\n\nThe trap in application code: ORMs like Hibernate can flush queries mid-transaction. A `@Transactional` method that calls an external API between two database writes can leave the database in an inconsistent state if the API call succeeds but the second write fails. The external side-effect is orphaned \u2014 the database rolled back, but the API call didn\u2019t. Keep database operations and external side effects separate: commit first, then call the API, using an outbox pattern if the API call must be reliable."
+          },
+          {
+            "type": "step",
+            "title": "Consistency \u2014 The Most Misunderstood Property in All of Database Theory",
+            "content": "ACID consistency is **not** the same as CAP theorem consistency. Getting this wrong in an interview is an immediate signal of surface-level understanding.\n\n**ACID consistency** means the database enforces all declared constraints \u2014 CHECK constraints, UNIQUE constraints, foreign keys, NOT NULL \u2014 and no transaction can leave the database in a state that violates these rules. If you INSERT an order with a `customer_id` that doesn\u2019t exist in the `customers` table, the FK constraint rejects it. The database moves from one valid state to another valid state, never through an invalid one.\n\n**CAP consistency** means something completely different: every read returns the most recent write across all nodes in a distributed system. That\u2019s about replication and network partitions, not about schema constraints.\n\nACID consistency is partially the database\u2019s job and partially the application\u2019s. The database enforces schema-level constraints automatically. But business rules like \"account balance cannot be negative\" require either a CHECK constraint (`CHECK (balance >= 0)`) or application logic. If neither exists, consistency is violated silently \u2014 the database happily stores -500 because no rule told it not to."
+          },
+          {
+            "type": "step",
+            "title": "Isolation \u2014 The Expensive Property That Most Apps Deliberately Compromise",
+            "content": "Isolation determines what a running transaction can see of other concurrent transactions\u2019 changes. **Full isolation** (Serializable) means every transaction behaves as if it ran completely alone \u2014 no anomalies, but heavy locking or conflict detection overhead that crushes throughput.\n\nMost production databases default to a weaker level: **Read Committed** in PostgreSQL, **Repeatable Read** in MySQL InnoDB. Read Committed prevents dirty reads (seeing uncommitted data) but allows non-repeatable reads (a row changes between two SELECT statements in the same transaction) and phantom reads (new rows appear in a re-executed range query).\n\nThe trade-off is real and measurable: moving from Read Committed to Serializable can reduce throughput by **50% or more** in write-heavy workloads because of increased lock contention and serialization failures that require retries. Most applications accept Read Committed\u2019s anomalies because they rarely cause business-visible problems. The exceptions \u2014 financial ledgers, inventory systems, double-spending prevention \u2014 justify the cost of stronger isolation for specific critical operations, not for every query."
+          },
+          {
+            "type": "step",
+            "title": "Durability \u2014 The Property You Test in Disaster Recovery Drills",
+            "content": "Durability guarantees that once COMMIT returns success, the data survives power failures, crashes, and disk corruption. Databases achieve this by flushing the **WAL to disk** (via `fsync`) before acknowledging the commit. The actual data pages in memory may still be dirty \u2014 they\u2019ll be written during a checkpoint \u2014 but the WAL on disk contains enough information to reconstruct them.\n\nThe production gotcha: **`fsync=off`** in PostgreSQL or `innodb_flush_log_at_trx_commit=0` in MySQL disables synchronous disk writes for dramatic performance gains \u2014 but **sacrifices durability**. A power failure loses committed transactions that haven\u2019t been flushed. Some teams enable this on read replicas (where the primary provides durability) but never on the primary.\n\nThe less obvious durability risk: cloud storage volumes. An EBS volume in AWS replicates across availability zones, so individual disk failure is handled. But an entire-AZ outage can still cause data loss if the WAL wasn\u2019t replicated to the standby before the failure. This is why production databases use synchronous replication to at least one standby \u2014 durability is not just about one disk, it\u2019s about surviving the failure of the entire machine."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **ACID Consistency != CAP Consistency** \u2014 ACID C means schema constraints hold after every commit; CAP C means every read in a distributed system returns the latest write; confusing them is the most common mistake in this question\n- **Isolation is the most expensive property** \u2014 Serializable prevents all anomalies but requires predicate locks or MVCC overhead; most databases default to Read Committed as the performance compromise\n- **WAL enables both Atomicity and Durability** \u2014 changes are written to the log before application; crash recovery replays committed entries and rolls back uncommitted ones from the log\n- **`fsync = off` breaks Durability** \u2014 the commit succeeds in memory but a crash loses it; only acceptable for bulk loads where data can be fully reloaded from source\n- **Isolation level is per-transaction, not per-database** \u2014 `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE` applies to the current session only; the database default is unchanged for other connections"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "ACID is the set of four guarantees that make database transactions reliable. The bank transfer explains why all four matter \u2014 debit account A, credit account B \u2014 what happens if the system crashes between those two operations?\n\n**Atomicity \u2014 all or nothing**\n- Atomicity means the entire transaction commits or the entire transaction rolls back \u2014 so if the system crashes after debiting A but before crediting B, the debit is undone on recovery, which means no money disappears even during a crash\n- The database achieves this through a write-ahead log: changes are recorded in the WAL before being applied; crash recovery replays committed transactions and rolls back incomplete ones\n\n**Consistency \u2014 constraints are always satisfied**\n- Consistency means a transaction can only bring the database from one valid state to another \u2014 schema constraints, foreign keys, and CHECK constraints must all hold after every commit\n- This is not the same as the C in CAP theorem \u2014 CAP consistency means every read returns the latest write across distributed nodes; ACID consistency means schema rules are not violated within one database\n\n**Isolation \u2014 concurrent transactions don't interfere**\n- Isolation means transactions behave as if they ran sequentially, even when running concurrently \u2014 which makes it the most expensive property to enforce\n- Full isolation (Serializable) prevents all anomalies but adds significant overhead; most databases default to Read Committed, which allows non-repeatable reads; isolation is a dial controlled by the isolation level setting, not a binary switch\n\n**Durability \u2014 committed data survives crashes**\n- Once a transaction commits, the data must survive even a power failure \u2014 the database flushes the WAL to disk before acknowledging the commit\n- `fsync = off` in PostgreSQL disables this guarantee for speed \u2014 a commit succeeds in memory but a crash loses it; never do this in production on data you cannot reload\n\nIf an interviewer asks which property is most expensive: it's Isolation. The others are mostly about logging; Isolation requires lock management or MVCC overhead that directly impacts throughput."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between ACID consistency and CAP consistency?",
+        "How does the write-ahead log enable both atomicity and durability?",
+        "When would you use Serializable isolation instead of Read Committed?"
+      ],
+      "seo": {
+        "metaTitle": "ACID Properties Explained \u2014 Atomicity, Consistency, Isolation, Durability | Interview Guide",
+        "metaDescription": "Understand ACID properties with real failure scenarios. Covers WAL mechanics, the ACID-C vs CAP-C distinction, and isolation level trade-offs."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "ACID is the set of four guarantees that make database transactions reliable.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Imagine transferring $500 from account A to account B. The operation requires two SQL statements: debit A, credit B. If the system crashes between them \u2014 A is debited but B is not credited \u2014 $500 has vanished. If two transfers run simultaneously on the same account, both read the same balance and one overwrites the other. If the database confirms the transfer but loses it on restart, the customer\u2019s money is gone. ACID exists to prevent exactly these failures."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand what each ACID property actually prevents and can connect them to real failure scenarios, not just recite definitions."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "ACID Consistency != CAP Consistency \u2014 ACID C means schema constraints hold after every commit; CAP C means every read in a distributed system returns the latest write; confusing them is the most common mistake in this question Isolation is the most expensive property \u2014 Serializable prevents all anomalies but requires predicate locks or MVCC overhead; most databases default to Read Committed as the performance compromise WAL enables both Atomicity and Durability \u2014 changes are written to the log before application; crash recovery replays committed entries and rolls back uncommitted ones from the log fsync = off breaks Durability \u2014 the commit succeeds in memory but a crash loses it; only acceptable for bulk loads where data can be fully reloaded from source Isolation level is per-transaction, not per-database \u2014 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE applies to the current session only; the database default is unchanged for other connections"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Imagine transferring $500 from account A to account B. The operation requires two SQL statements: debit A, credit B. If the system crashes between them \u2014 A is debited but B is not credited \u2014 $500 has vanished. If two transfers run simultaneously on the same account, both read the same balance and one overwrites the other. If the database confirms the transfer but loses it on restart, the customer\u2019s money is gone. ACID exists to prevent exactly these failures. Each property addresses a different category of data corruption that occurs naturally in concurrent, crash-prone systems. The four properties are not independent features \u2014 they interact. Atomicity without durability means a committed transaction can still be lost. Isolation without atomicity."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Treating the C in ACID as the same as the C in CAP theorem",
+              "ACID consistency means schema constraints are honored",
+              "CAP consistency means all nodes see the same data",
+              "They are completely different concepts"
+            ]
+          }
+        ],
+        "cap": "The others are mostly about logging; Isolation requires lock management or MVCC overhead that directly impacts throughput.",
+        "familiarity_anchors": [
+          "Atomicity",
+          "Consistency",
+          "Isolation"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between ACID consistency and CAP consistency?",
+          "How does the write-ahead log enable both atomicity and durability?",
+          "When would you use Serializable isolation instead of Read Committed?"
+        ]
+      }
+    },
+    {
+      "id": "sql-isolation-levels",
+      "slug": "transaction-isolation-levels-sql",
+      "question": "Transaction Isolation Levels \u2014 Read Uncommitted to Serializable",
+      "title": "Transaction Isolation Levels \u2014 Read Uncommitted to Serializable",
+      "direct_answer": "SQL defines four transaction isolation levels that control what a transaction can see of other transactions' concurrent changes. Read Uncommitted allows dirty reads. Read Committed (PostgreSQL default) prevents dirty reads but allows non-repeatable reads. Repeatable Read (MySQL InnoDB default) additionally prevents non-repeatable reads using MVCC snapshots. Serializable prevents all anomalies including phantoms by making transactions behave as if they ran sequentially.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether you understand the specific anomalies each level prevents, can identify which level your application needs, and know the performance trade-offs.",
+        "common_mistake": "Assuming Repeatable Read in PostgreSQL works the same as in MySQL \u2014 PostgreSQL's Repeatable Read actually prevents phantom reads (it uses true snapshot isolation), while MySQL's uses gap locking with different edge cases.",
+        "to_stand_out": "Explain write skew \u2014 the anomaly that only Serializable prevents \u2014 where two transactions each read the same data, make valid decisions based on their snapshots, and each write to a different row, but the combined result violates a business invariant."
+      },
+      "company_tags": [
+        "Amazon",
+        "Google",
+        "Stripe",
+        "Netflix"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Isolation Levels Are the Knob Between Correctness and Throughput",
+            "content": "Two users simultaneously try to book the last seat on a flight. Both transactions read \"1 seat available,\" both proceed to book. If isolation is too weak, both succeed \u2014 overbooking. If isolation is too strong, one blocks the other for the entire duration, killing throughput for every concurrent booking on the system.\n\n**Isolation levels are the knob that controls this trade-off.** The SQL standard defines four levels as a hierarchy of which anomalies they permit. Each stronger level prevents one more class of anomaly at the cost of reduced concurrency. In practice, the two levels that matter most are **Read Committed** (the default in PostgreSQL and most production setups) and **Serializable** (used when correctness is non-negotiable). The middle levels exist in the spec but are rarely chosen deliberately \u2014 with one important exception: MySQL InnoDB defaults to Repeatable Read, which behaves differently from PostgreSQL\u2019s implementation of the same name."
+          },
+          {
+            "type": "comparison_table",
+            "title": "What Each Level Allows and Prevents",
+            "content": "| Level | Dirty Read | Non-Repeatable Read | Phantom Read | Write Skew | Performance |\n|---|---|---|---|---|---|\n| Read Uncommitted | Possible | Possible | Possible | Possible | Lowest overhead |\n| Read Committed | Prevented | Possible | Possible | Possible | Low (PG default) |\n| Repeatable Read | Prevented | Prevented | Possible* | Possible | Moderate (MySQL default) |\n| Serializable | Prevented | Prevented | Prevented | Prevented | Highest overhead |\n\n> *PostgreSQL\u2019s Repeatable Read actually prevents phantoms too \u2014 it implements true snapshot isolation, which is stronger than the SQL standard requires. MySQL\u2019s Repeatable Read uses gap locking, which has different behavior and edge cases."
+          },
+          {
+            "type": "phase",
+            "title": "Dirty Read and Non-Repeatable Read \u2014 The Anomalies Everyone Knows",
+            "content": "A **dirty read** occurs when Transaction A reads data that Transaction B has written but not yet committed. If B rolls back, A has acted on data that never existed. Read Uncommitted allows this; every other level prevents it. PostgreSQL doesn\u2019t even implement Read Uncommitted \u2014 setting it gives you Read Committed behavior.\n\n```sql\n-- Transaction B (uncommitted)\nUPDATE accounts SET balance = 0 WHERE id = 1; -- not committed yet\n\n-- Transaction A at Read Uncommitted sees balance = 0\n-- Transaction A at Read Committed sees the old committed value\n-- Transaction B rolls back: the 0 balance never existed\n```\n\nA **non-repeatable read** happens when a transaction reads the same row twice and gets different values because another transaction committed an update between the reads. Read Committed allows this because each statement sees the latest committed state. Repeatable Read prevents it by taking a **snapshot** at transaction start \u2014 all subsequent reads see data as it was at that snapshot point, regardless of concurrent commits. This is why Repeatable Read uses more memory: the database maintains the old row versions for the duration of the transaction."
+          },
+          {
+            "type": "phase",
+            "title": "Phantom Reads \u2014 When New Rows Appear Between Two Identical Queries",
+            "content": "A phantom read occurs when a transaction re-executes a range query and gets different rows because another transaction inserted or deleted rows matching the WHERE clause.\n\n```sql\n-- Transaction A\nSELECT COUNT(*) FROM orders WHERE status = 'pending';  -- returns 5\n\n-- Transaction B commits: INSERT INTO orders (status) VALUES ('pending');\n\n-- Transaction A re-runs the same query\nSELECT COUNT(*) FROM orders WHERE status = 'pending';  -- returns 6 (phantom!)\n```\n\nPreventing phantoms is expensive because the database must lock or track not just existing rows but **the gaps between rows** where new ones could be inserted. MySQL uses **next-key locking** (gap locks) at Repeatable Read to prevent inserts into scanned ranges. PostgreSQL takes a different approach: its Repeatable Read uses **Snapshot Isolation**, which actually prevents phantoms by showing the transaction a frozen view of the database. This is a significant implementation difference \u2014 PostgreSQL\u2019s Repeatable Read is strictly stronger than MySQL\u2019s for phantom prevention, a detail that matters when migrating between databases."
+          },
+          {
+            "type": "phase",
+            "title": "Write Skew \u2014 The Subtle Anomaly Only Serializable Prevents",
+            "content": "Write skew is the most insidious anomaly because each individual transaction is internally consistent \u2014 the problem only emerges from their combination. Two transactions read the same data, each makes a valid decision based on what it read, and each writes to a **different** row \u2014 but the combined result violates a business invariant.\n\nThe classic example: a hospital requires at least one doctor on call at all times. Two doctors are currently on call. Each checks \"are there at least 2 doctors on call?\" \u2014 yes. Each removes themselves. Result: zero doctors on call.\n\n```sql\n-- Doctor A                              -- Doctor B\nSELECT COUNT(*) FROM on_call             SELECT COUNT(*) FROM on_call\nWHERE shift = 'night';  -- 2             WHERE shift = 'night';  -- 2\n\nDELETE FROM on_call                      DELETE FROM on_call\nWHERE doctor = 'A'                       WHERE doctor = 'B'\nAND shift = 'night';                     AND shift = 'night';\n-- Both succeed. Zero doctors on call.\n```\n\nRepeatable Read doesn\u2019t prevent this because each transaction sees a consistent snapshot \u2014 neither sees the other\u2019s delete. Only **Serializable** detects the dependency cycle between the two transactions and aborts one, forcing a retry. PostgreSQL\u2019s Serializable Snapshot Isolation (SSI) achieves this through dependency tracking without actual serial execution \u2014 only conflicting transactions abort, not all concurrent ones. But your application **must implement retry logic**, because aborted transactions are an expected part of Serializable operation, not an exceptional error."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **PostgreSQL Repeatable Read prevents phantom reads; MySQL's does not** \u2014 PostgreSQL's MVCC snapshot handles phantoms without gap locks; MySQL Repeatable Read still has edge cases where phantoms slip through\n- **Write skew requires Serializable** \u2014 two transactions read overlapping state, make valid independent changes, both commit \u2014 combined result violates a multi-row invariant; Read Committed and Repeatable Read both allow this\n- **Read Committed is PostgreSQL/Oracle default; Repeatable Read is MySQL default** \u2014 this trips developers moving between databases who assume the same default anomaly behavior\n- **Isolation level is per-transaction** \u2014 `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE` applies to the current session only; the database default is unchanged for other connections\n- **Serializable has real throughput cost** \u2014 predicate locks or optimistic conflict detection; benchmark before using it as a default; Repeatable Read covers most correctness requirements at lower cost"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Isolation levels control how much a transaction can see of other concurrent transactions' changes. The four levels each prevent a different class of anomaly, and the higher the isolation, the more it costs in throughput.\n\n**Read Committed \u2014 the practical default**\n- Most databases (PostgreSQL, Oracle) default to Read Committed \u2014 a transaction sees only data committed before each statement runs, which protects against dirty reads but allows non-repeatable reads: reading the same row twice may return different values if another transaction commits in between\n- This is the right default for most OLTP workloads \u2014 the anomalies it allows are uncommon enough that the cost of stronger isolation is not justified\n\n**Repeatable Read \u2014 same snapshot for the whole transaction**\n- A transaction holds a consistent snapshot as of when it began \u2014 which means reading the same row twice always returns the same value, even if another transaction commits a change in between\n- The implementation trap: PostgreSQL's Repeatable Read also prevents phantom reads because MVCC handles it without gap locks; MySQL's Repeatable Read does not prevent phantoms in all edge cases \u2014 this is the most common cross-database portability mistake\n\n**Serializable \u2014 the only level that prevents write skew**\n- Write skew is the anomaly where two transactions each read overlapping data, make independent decisions based on it, and both commit \u2014 leaving a state that no serial execution could have produced\n- Classic example: two on-call doctors each check \"is anyone else on call?\" see yes, and both go off call \u2014 neither violated any row-level constraint, but the combined result is invalid; only Serializable prevents this\n\n**Read Uncommitted \u2014 almost never appropriate**\n- Allows reading uncommitted changes from other transactions \u2014 useful only for rough approximate counts on non-critical data where a small error is acceptable and blocking is not\n\nIn interviews: know which level prevents which anomaly, know the PostgreSQL vs MySQL default difference, and know write skew as the Serializable-only anomaly."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is write skew and how does Serializable isolation prevent it?",
+        "How does PostgreSQL's snapshot isolation differ from MySQL's Repeatable Read?",
+        "When would you choose Serializable isolation over Read Committed?"
+      ],
+      "seo": {
+        "metaTitle": "Transaction Isolation Levels \u2014 Read Uncommitted to Serializable | Interview Guide",
+        "metaDescription": "Master transaction isolation levels with concrete anomaly examples. Covers dirty reads, phantom reads, write skew, and PostgreSQL vs MySQL differences."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Isolation levels control how much a transaction can see of other concurrent transactions' changes.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Two users simultaneously try to book the last seat on a flight. Both transactions read \"1 seat available,\" both proceed to book. If isolation is too weak, both succeed \u2014 overbooking. If isolation is too strong, one blocks the other for the entire duration, killing throughput for every concurrent booking on the system. Isolation levels are the knob that controls this trade-off. The SQL standard defines four levels as a hierarchy of which anomalies they permit. Each stronger level prevents."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether you understand the specific anomalies each level prevents, can identify which level your application needs, and know the performance trade-offs."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "PostgreSQL Repeatable Read prevents phantom reads; MySQL's does not \u2014 PostgreSQL's MVCC snapshot handles phantoms without gap locks; MySQL Repeatable Read still has edge cases where phantoms slip through Write skew requires Serializable \u2014 two transactions read overlapping state, make valid independent changes, both commit \u2014 combined result violates a multi-row invariant; Read Committed and Repeatable Read both allow this Read Committed is PostgreSQL/Oracle default; Repeatable Read is MySQL default \u2014 this trips developers moving between databases who assume the same default anomaly behavior Isolation level is per-transaction \u2014 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE applies to the current session only; the database default is unchanged for other connections Serializable has real throughput cost \u2014 predicate locks or optimistic conflict detection; benchmark before using it as a default; Repeatable Read covers most correctness requirements at lower cost"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Two users simultaneously try to book the last seat on a flight. Both transactions read \"1 seat available,\" both proceed to book. If isolation is too weak, both succeed \u2014 overbooking. If isolation is too strong, one blocks the other for the entire duration, killing throughput for every concurrent booking on the system. Isolation levels are the knob that controls this trade-off. The SQL standard defines four levels as a hierarchy of which anomalies they permit. Each stronger level prevents one more class of anomaly at the cost of reduced concurrency. In practice, the two levels that matter most are Read Committed (the default in PostgreSQL and most production setups) and Serializable (used when correctness is non-negotiable). The middle levels."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Assuming Repeatable Read in PostgreSQL works the same as in MySQL \u2014 PostgreSQL's Repeatable Read actually prevents phantom reads (it uses true snapshot isolation), while MySQL's uses gap locking with different edge cases"
+            ]
+          }
+        ],
+        "cap": "Read Committed \u2014 the practical default Most databases (PostgreSQL, Oracle) default to Read Committed \u2014 a transaction sees only data committed before each statement runs, which protects against dirty r",
+        "familiarity_anchors": [
+          "Uncommitted",
+          "Committed",
+          "PostgreSQL"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is write skew and how does Serializable isolation prevent it?",
+          "How does PostgreSQL's snapshot isolation differ from MySQL's Repeatable Read?",
+          "When would you choose Serializable isolation over Read Committed?"
+        ]
+      }
+    },
+    {
+      "id": "mysql-004",
+      "slug": "mysql-transaction-isolation-levels",
+      "question": "What are MySQL transaction isolation levels and how do they affect concurrency in Spring Boot applications?",
+      "title": "MySQL Transaction Isolation Levels",
+      "direct_answer": "MySQL InnoDB supports four isolation levels: READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ (default), and SERIALIZABLE. Higher isolation prevents more concurrency anomalies (dirty reads, non-repeatable reads, phantom reads) but reduces throughput. Spring Boot's @Transactional annotation lets you configure isolation per method.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": "Assesses deep understanding of database concurrency. Interviewers want to know whether the candidate can reason about data consistency vs. performance trade-offs and configure Spring @Transactional correctly for their use case.",
+      "company_tags": [
+        "Fintech",
+        "Banking",
+        "E-commerce"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Concurrency vs Consistency Trade-off",
+            "content": "Transaction isolation defines how changes made by one transaction are visible to other concurrent transactions. The SQL standard defines three anomalies that isolation levels protect against: dirty reads (seeing uncommitted data), non-repeatable reads (same query returns different results in same transaction), and phantom reads (new rows appear in a repeated range query). MySQL InnoDB defaults to REPEATABLE READ, which uses MVCC to prevent most anomalies without full serialization."
+          },
+          {
+            "type": "comparison_table",
+            "title": "MySQL Isolation Levels vs Concurrency Anomalies",
+            "caption": "MySQL Isolation Levels vs. Concurrency Anomalies",
+            "headers": [
+              "Isolation Level",
+              "Dirty Read",
+              "Non-repeatable Read",
+              "Phantom Read",
+              "Spring Isolation Constant"
+            ],
+            "rows": [
+              [
+                "READ UNCOMMITTED",
+                "\u274c Possible",
+                "\u274c Possible",
+                "\u274c Possible",
+                "Isolation.READ_UNCOMMITTED"
+              ],
+              [
+                "READ COMMITTED",
+                "\u2705 Prevented",
+                "\u274c Possible",
+                "\u274c Possible",
+                "Isolation.READ_COMMITTED"
+              ],
+              [
+                "REPEATABLE READ (default)",
+                "\u2705 Prevented",
+                "\u2705 Prevented",
+                "\u26a0\ufe0f Partially prevented*",
+                "Isolation.REPEATABLE_READ"
+              ],
+              [
+                "SERIALIZABLE",
+                "\u2705 Prevented",
+                "\u2705 Prevented",
+                "\u2705 Prevented",
+                "Isolation.SERIALIZABLE"
+              ]
+            ],
+            "footnote": "* InnoDB REPEATABLE READ prevents phantom reads for snapshot reads (SELECT) via MVCC, but current reads (SELECT FOR UPDATE) can still see phantoms without gap locks.",
+            "content": "### MySQL Isolation Levels vs. Concurrency Anomalies\n\n| Isolation Level | Dirty Read | Non-repeatable Read | Phantom Read | Spring Isolation Constant |\n| --- | --- | --- | --- | --- |\n| READ UNCOMMITTED | \u274c Possible | \u274c Possible | \u274c Possible | Isolation.READ_UNCOMMITTED |\n| READ COMMITTED | \u2705 Prevented | \u274c Possible | \u274c Possible | Isolation.READ_COMMITTED |\n| REPEATABLE READ (default) | \u2705 Prevented | \u2705 Prevented | \u26a0\ufe0f Partially prevented* | Isolation.REPEATABLE_READ |\n| SERIALIZABLE | \u2705 Prevented | \u2705 Prevented | \u2705 Prevented | Isolation.SERIALIZABLE |\n\n* InnoDB REPEATABLE READ prevents phantom reads for snapshot reads (SELECT) via MVCC, but current reads (SELECT FOR UPDATE) can still see phantoms without gap locks."
+          },
+          {
+            "type": "step",
+            "title": "Production notes",
+            "content": "### How Spring developers feel isolation in real APIs\n\nA common pattern is a read-modify-write flow: load an aggregate, apply business rules, save. Under `READ COMMITTED`, another transaction can change rows between your SELECT and UPDATE, so you may need optimistic locking (`@Version`) or targeted `SELECT FOR UPDATE` anyway. Under InnoDB\u2019s default `REPEATABLE READ`, consistent reads see a stable snapshot for plain SELECTs, which simplifies many report-style transactions but still interacts with write locks on updates. For financial ledgers or inventory, interviewers often expect you to mention that application-level invariants may still require idempotency keys and careful transaction boundaries even when the database isolation level is strong."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **MySQL defaults to Repeatable Read; PostgreSQL defaults to Read Committed** \u2014 the same application running on both databases may behave differently under concurrent load without explicit isolation level settings\n- **Repeatable Read uses MVCC for consistent snapshots** \u2014 InnoDB takes a snapshot at transaction start; reads within the transaction always see that snapshot, avoiding read locks on rows being read\n- **Gap locks under Repeatable Read cause deadlocks** \u2014 `SELECT ... FOR UPDATE` on a range locks the gap; two transactions locking overlapping ranges and then inserting deadlock against each other; switch to Read Committed for insert-heavy workloads\n- **`SET TRANSACTION ISOLATION LEVEL` is per-session** \u2014 changes the current session only; the global default is set in `my.cnf` via `transaction-isolation`\n- **Serializable prevents phantom reads via predicate locks** \u2014 required when a transaction must guarantee that a range scan returns the same rows on second read; adds significant lock contention for concurrent writers"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "MySQL uses Repeatable Read as its default isolation level \u2014 different from PostgreSQL which defaults to Read Committed. That difference matters when porting code between databases or diagnosing unexpected query behavior.\n\n**The four levels and what they prevent**\n- Read Uncommitted allows dirty reads \u2014 your transaction can see another transaction's uncommitted changes, which means you might read data that gets rolled back; almost never appropriate\n- Read Committed prevents dirty reads \u2014 you only see committed data, but two reads of the same row in one transaction can return different values if another transaction commits between them (non-repeatable read)\n- Repeatable Read (MySQL default) holds a consistent snapshot from the start of the transaction \u2014 the same row returns the same value no matter how many times you read it within one transaction; InnoDB's MVCC makes this efficient without actually locking reads\n- Serializable adds predicate locks, preventing phantom rows \u2014 new rows inserted by other transactions won't appear in repeated range queries; the safest but highest contention\n\n**MySQL's Repeatable Read and gap locks**\n- Under Repeatable Read, InnoDB uses gap locks to prevent phantom inserts into the range you've read \u2014 which means `SELECT ... FOR UPDATE` on a range prevents concurrent inserts into that range, even if no rows match\n- This is the source of many unexpected deadlocks in Spring Boot applications where two transactions both lock ranges and then try to insert into them\n\n**When to change the isolation level**\n- Read Committed is often sufficient for reporting queries \u2014 it avoids the gap lock overhead and is fine for analytics where phantom reads don't matter\n- Serializable is rarely needed in web applications; most correctness requirements are covered by Repeatable Read plus application-level optimistic locking"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does InnoDB implement REPEATABLE READ using MVCC without acquiring read locks?",
+        "What is a phantom read and how does InnoDB's gap locking prevent it?",
+        "How would you configure different isolation levels for read vs. write transactions in Spring Boot?"
+      ],
+      "seo": {
+        "meta_title": "MySQL Transaction Isolation Levels \u2014 Java Spring Boot Interview",
+        "meta_description": "Understand MySQL InnoDB transaction isolation levels and how to configure them with Spring Boot @Transactional for intermediate developer interviews.",
+        "keywords": [
+          "MySQL isolation levels",
+          "transaction isolation Spring Boot",
+          "@Transactional isolation",
+          "REPEATABLE READ MySQL",
+          "MySQL concurrency"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "MySQL uses Repeatable Read as its default isolation level \u2014 different from PostgreSQL which defaults to Read Committed.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Transaction isolation defines how changes made by one transaction are visible to other concurrent transactions. The SQL standard defines three anomalies that isolation levels protect against: dirty reads (seeing uncommitted data), non-repeatable reads (same query returns different results in same transaction), and phantom reads (new rows appear in a repeated range query). MySQL InnoDB defaults to REPEATABLE READ, which uses MVCC to prevent most anomalies without full serialization."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "How Spring developers feel isolation in real APIs A common pattern is a read-modify-write flow: load an aggregate, apply business rules, save.",
+              "Under READ COMMITTED, another transaction can change rows between your SELECT and UPDATE, so you may need optimistic locking (@Version) or targeted SELECT FOR UPDATE anyway.",
+              "Under InnoDB\u2019s default REPEATABLE READ, consistent reads see a stable snapshot for plain SELECTs, which simplifies many report-style transactions but still interacts with write locks on updates.",
+              "For financial ledgers or inventory, interviewers often expect you to mention that application-level invariants may still require idempotency keys and careful transaction boundaries even when the database isolation level is strong."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "MySQL defaults to Repeatable Read; PostgreSQL defaults to Read Committed \u2014 the same application running on both databases may behave differently under concurrent load without explicit isolation level settings Repeatable Read uses MVCC for consistent snapshots \u2014 InnoDB takes a snapshot at transaction start; reads within the transaction always see that snapshot, avoiding read locks on rows being read Gap locks under Repeatable Read cause deadlocks \u2014 SELECT",
+              "FOR UPDATE on a range locks the gap; two transactions locking overlapping ranges and then inserting deadlock against each other; switch to Read Committed for insert-heavy workloads SET TRANSACTION ISOLATION LEVEL is per-session \u2014 changes the current session only; the global default is set in my",
+              "cnf via transaction-isolation Serializable prevents phantom reads via predicate locks \u2014 required when a transaction must guarantee that a range scan returns the same rows on second read; adds significant lock contention for concurrent writers"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "FOR UPDATE on a range prevents concurrent inserts into that range, even if no rows match This is the source of many unexpected deadlocks in Spring Boot applications where two transactions both lock ra",
+        "familiarity_anchors": [
+          "MySQL",
+          "InnoDB",
+          "UNCOMMITTED"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does InnoDB implement REPEATABLE READ using MVCC without acquiring read locks?",
+          "What is a phantom read and how does InnoDB's gap locking prevent it?",
+          "How would you configure different isolation levels for read vs. write transactions in Spring Boot?"
+        ]
+      }
+    },
+    {
+      "id": "mysql-005",
+      "slug": "innodb-locking-row-gap-next-key",
+      "question": "Explain InnoDB locking mechanisms: row locks, gap locks, and next-key locks. When does each apply?",
+      "title": "InnoDB Locking: Row Lock, Gap Lock, and Next-Key Lock",
+      "direct_answer": "InnoDB uses three lock granularities: row locks protect individual rows, gap locks protect the space between index values to prevent phantom inserts, and next-key locks (the default) combine both to lock a row plus the gap before it. Next-key locks are InnoDB's primary mechanism for preventing phantom reads under REPEATABLE READ without full SERIALIZABLE isolation.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": "Tests deep InnoDB knowledge. This question differentiates candidates who understand why deadlocks happen and how to diagnose them from those who only know surface-level SQL. Critical for fintech or high-concurrency applications.",
+      "company_tags": [
+        "Fintech",
+        "Banking",
+        "High-traffic SaaS"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "How InnoDB Locking Actually Works",
+            "content": "InnoDB implements row-level locking via its index-based lock system. All locks are attached to index entries, not physical rows. Understanding lock types is essential for diagnosing deadlocks in Spring Boot applications \u2014 the most common production incident caused by database concurrency issues. InnoDB automatically uses the appropriate lock type depending on the query, the isolation level, and whether the query is a snapshot read or a current (locking) read."
+          },
+          {
+            "type": "code_example",
+            "title": "InnoDB Lock Types in Practice",
+            "language": "sql",
+            "caption": "Demonstrating InnoDB lock types with practical examples",
+            "code": "-- Setup: orders table with an index on status\nCREATE TABLE orders (\n  id     INT PRIMARY KEY,\n  status VARCHAR(20),\n  total  DECIMAL(10,2),\n  INDEX  idx_status (status)\n);\nINSERT INTO orders VALUES (1,'PENDING',100),(5,'PENDING',200),(10,'DONE',50);\n\n-- 1. ROW LOCK: locks the exact index record\n--    Acquired by SELECT ... FOR UPDATE on a unique index hit\nSTART TRANSACTION;\nSELECT * FROM orders WHERE id = 5 FOR UPDATE;\n-- Locks only the row with id=5. Other transactions can still\n-- read/write id=1 or id=10 concurrently.\n\n-- 2. GAP LOCK: locks the gap BETWEEN index values, prevents inserts\n--    Acquired when searching a range on a non-unique index\nSTART TRANSACTION;\nSELECT * FROM orders WHERE status = 'PENDING' FOR UPDATE;\n-- Locks the gap before the first PENDING row and after the last PENDING row.\n-- Another transaction CANNOT insert a new PENDING order until this commits.\n-- Gap locks are SHARED \u2014 two transactions can both hold gap locks on same gap.\n\n-- 3. NEXT-KEY LOCK: row lock + gap lock before it (default InnoDB lock)\n--    Used for range scans to prevent phantoms\nSTART TRANSACTION;\nSELECT * FROM orders WHERE id BETWEEN 3 AND 8 FOR UPDATE;\n-- Acquires next-key lock on (id=5 row) + gap (1, 5] + gap (5, 10)\n-- Prevents: insert of id=4, id=6, id=7, or id=8 by other transactions\n\n-- DIAGNOSING DEADLOCKS in Spring Boot:\n-- InnoDB rolls back the lighter transaction and throws:\n-- com.mysql.cj.jdbc.exceptions.MySQLTransactionRollbackException\n-- (mapped to Spring's CannotAcquireLockException)\n\n-- Check the latest deadlock details:\nSHOW ENGINE INNODB STATUS;\n-- Look for 'LATEST DETECTED DEADLOCK' section\n\n-- Avoid deadlocks: always acquire locks in the same order across transactions\n-- Use @Retryable in Spring to retry on CannotAcquireLockException",
+            "content": "### Demonstrating InnoDB lock types with practical examples\n\n```sql\n-- Setup: orders table with an index on status\nCREATE TABLE orders (\n  id     INT PRIMARY KEY,\n  status VARCHAR(20),\n  total  DECIMAL(10,2),\n  INDEX  idx_status (status)\n);\nINSERT INTO orders VALUES (1,'PENDING',100),(5,'PENDING',200),(10,'DONE',50);\n\n-- 1. ROW LOCK: locks the exact index record\n--    Acquired by SELECT ... FOR UPDATE on a unique index hit\nSTART TRANSACTION;\nSELECT * FROM orders WHERE id = 5 FOR UPDATE;\n-- Locks only the row with id=5. Other transactions can still\n-- read/write id=1 or id=10 concurrently.\n\n-- 2. GAP LOCK: locks the gap BETWEEN index values, prevents inserts\n--    Acquired when searching a range on a non-unique index\nSTART TRANSACTION;\nSELECT * FROM orders WHERE status = 'PENDING' FOR UPDATE;\n-- Locks the gap before the first PENDING row and after the last PENDING row.\n-- Another transaction CANNOT insert a new PENDING order until this commits.\n-- Gap locks are SHARED \u2014 two transactions can both hold gap locks on same gap.\n\n-- 3. NEXT-KEY LOCK: row lock + gap lock before it (default InnoDB lock)\n--    Used for range scans to prevent phantoms\nSTART TRANSACTION;\nSELECT * FROM orders WHERE id BETWEEN 3 AND 8 FOR UPDATE;\n-- Acquires next-key lock on (id=5 row) + gap (1, 5] + gap (5, 10)\n-- Prevents: insert of id=4, id=6, id=7, or id=8 by other transactions\n\n-- DIAGNOSING DEADLOCKS in Spring Boot:\n-- InnoDB rolls back the lighter transaction and throws:\n-- com.mysql.cj.jdbc.exceptions.MySQLTransactionRollbackException\n-- (mapped to Spring's CannotAcquireLockException)\n\n-- Check the latest deadlock details:\nSHOW ENGINE INNODB STATUS;\n-- Look for 'LATEST DETECTED DEADLOCK' section\n\n-- Avoid deadlocks: always acquire locks in the same order across transactions\n-- Use @Retryable in Spring to retry on CannotAcquireLockException\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **InnoDB locks index entries, not physical rows** \u2014 a query on an unindexed column must lock every row's index entry it examines; always filter on indexed columns to minimize lock scope\n- **Gap locks prevent inserts into locked ranges** \u2014 `SELECT ... FOR UPDATE` on a range holds gap locks; concurrent inserts into that range block; only active under Repeatable Read\n- **Switching to Read Committed eliminates gap locks** \u2014 reduces deadlock frequency for insert-heavy workloads at the cost of allowing phantom reads in range scans\n- **`SELECT ... FOR UPDATE` vs `SELECT ... FOR SHARE`** \u2014 FOR UPDATE locks exclusively (blocks reads and writes); FOR SHARE locks shared (allows reads, blocks writes); use FOR SHARE when you only need to prevent modification, not concurrent reads\n- **`SHOW ENGINE INNODB STATUS` shows deadlock details** \u2014 the output lists the exact locks held and waited on by each deadlocked transaction; read it before guessing at the cause"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "InnoDB's locking system is more complex than most developers expect because locks don't attach to rows \u2014 they attach to index entries. That distinction is the root cause of most unexpected deadlock and blocking behaviors in Spring Boot applications.\n\n**Row locks \u2014 locking index entries**\n- InnoDB row locks are placed on index entries, not physical rows \u2014 which means if a query filters on an unindexed column, InnoDB must examine all rows and lock the entire table's index entries to guarantee no matching row is modified concurrently\n- Always filter on indexed columns in `SELECT ... FOR UPDATE` and `UPDATE WHERE` \u2014 queries that fall back to table scans hold far more locks than necessary\n\n**Gap locks \u2014 protecting ranges**\n- A gap lock prevents other transactions from inserting into the gap between two existing index values \u2014 so `SELECT * FROM orders WHERE id BETWEEN 10 AND 20 FOR UPDATE` locks not just rows 10-20, but the gaps between them, preventing any insert of id 11-19 from another transaction\n- Gap locks only exist under Repeatable Read; switching to Read Committed eliminates them, which reduces deadlock frequency in insert-heavy workloads\n\n**Next-key locks \u2014 the combination**\n- A next-key lock is a row lock plus a gap lock on the preceding gap \u2014 InnoDB's default locking mode under Repeatable Read combines both to prevent both row modification and phantom inserts in a scanned range\n- This is why two transactions that read the same range and then insert into it deadlock: each holds a gap lock the other needs for its insert\n\nWhen you see deadlocks in production, check `SHOW ENGINE INNODB STATUS` \u2014 the output shows the exact locks held and waited on by each transaction in the deadlock cycle."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is an intention lock in InnoDB and why does it exist?",
+        "How does READ COMMITTED isolation level change which locks InnoDB acquires?",
+        "How would you configure Spring Boot to automatically retry a transaction that failed due to a deadlock?"
+      ],
+      "seo": {
+        "meta_title": "InnoDB Row Lock Gap Lock Next-Key Lock \u2014 Java Spring Boot Interview",
+        "meta_description": "Understand InnoDB row locks, gap locks, and next-key locks and how to diagnose deadlocks in Spring Boot MySQL applications.",
+        "keywords": [
+          "InnoDB row lock",
+          "gap lock MySQL",
+          "next-key lock",
+          "MySQL deadlock Spring Boot",
+          "InnoDB locking"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "InnoDB's locking system is more complex than most developers expect because locks don't attach to rows \u2014 they attach to index entries.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "InnoDB implements row-level locking via its index-based lock system. All locks are attached to index entries, not physical rows. Understanding lock types is essential for diagnosing deadlocks in Spring Boot applications \u2014 the most common production incident caused by database concurrency issues. InnoDB automatically uses the appropriate lock type depending on the query, the isolation level, and whether the query is a snapshot read or a current (locking) read."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "InnoDB implements row-level locking via its index-based lock system. All locks are attached to index entries, not physical rows. Understanding lock types is essential for diagnosing deadlocks in Spring Boot applications \u2014 the most common production incident caused by database concurrency issues. InnoDB automatically uses the appropriate lock type depending on the query, the isolation level, and whether the query is a snapshot read or a current (locking) read."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "InnoDB locks index entries, not physical rows \u2014 a query on an unindexed column must lock every row's index entry it examines; always filter on indexed columns to minimize lock scope Gap locks prevent inserts into locked ranges \u2014 SELECT",
+              "FOR UPDATE on a range holds gap locks; concurrent inserts into that range block; only active under Repeatable Read Switching to Read Committed eliminates gap locks \u2014 reduces deadlock frequency for insert-heavy workloads at the cost of allowing phantom reads in range scans SELECT",
+              "FOR UPDATE vs SELECT",
+              "FOR SHARE \u2014 FOR UPDATE locks exclusively (blocks reads and writes); FOR SHARE locks shared (allows reads, blocks writes); use FOR SHARE when you only need to prevent modification, not concurrent reads SHOW ENGINE INNODB STATUS shows deadlock details \u2014 the output lists the exact locks held and waited on by each deadlocked transaction; read it before guessing at the cause"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Demonstrating InnoDB lock types with practical examples ``sql -- Setup: orders table with an index on status CREATE TABLE orders ( id INT PRIMARY KEY, status VARCHAR(20), total DECIMAL(10,2), INDEX idx_status (status) ); INSERT INTO orders VALUES (1,'PENDING',100),(5,'PENDING',200),(10,'DONE',50); -- 1. ROW LOCK: locks the exact index record -- Acquired by SELECT ... FOR UPDATE on a unique index hit START TRANSACTION; SELECT * FROM orders WHERE id = 5 FOR UPDATE; -- Locks only the row with id=5. Other transactions can still -- read/write id=1 or id=10 concurrently. -- 2. GAP LOCK: locks the gap BETWEEN index values, prevents inserts -- Acquired when searching a range on a non-unique index START TRANSACTION; SELECT * FROM orders WHERE status = 'PENDING'."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "InnoDB implements row-level locking via its index-based lock system",
+              "All locks are attached to index entries, not physical rows",
+              "Understanding lock types is essential for diagnosing deadlocks in Spring Boot applications \u2014 the most common production incident caused by database concurrency issues",
+              "InnoDB automatically uses the appropriate lock type depending on the query, the isolation level, and whether the query is a snapshot read or a current (locking) read"
+            ]
+          }
+        ],
+        "cap": "FOR UPDATE and UPDATE WHERE \u2014 queries that fall back to table scans hold far more locks than necessary Gap locks \u2014 protecting ranges A gap lock prevents other transactions from inserting into the gap",
+        "familiarity_anchors": [
+          "InnoDB",
+          "REPEATABLE",
+          "SERIALIZABLE"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is an intention lock in InnoDB and why does it exist?",
+          "How does READ COMMITTED isolation level change which locks InnoDB acquires?",
+          "How would you configure Spring Boot to automatically retry a transaction that failed due to a deadlock?"
+        ]
+      }
+    }
+  ]
+}

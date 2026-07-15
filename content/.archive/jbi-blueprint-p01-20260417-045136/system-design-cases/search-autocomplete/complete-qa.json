@@ -1,0 +1,132 @@
+{
+  "topic": "Search Autocomplete",
+  "topicSlug": "search-autocomplete",
+  "questions": [
+    {
+      "id": "sd-007",
+      "slug": "design-search-autocomplete",
+      "question": "Design a search autocomplete/typeahead feature for a 10 million product catalog.",
+      "title": "Design Search Autocomplete for a Product Catalog",
+      "direct_answer": "Pre-compute autocomplete suggestions using a trie or sorted set in Redis. For real-time search, use Elasticsearch with prefix queries and edge n-gram tokenization. Cache top suggestions per prefix. Update suggestions asynchronously from search analytics.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Understanding of prefix search data structures, caching, and search relevance",
+        "common_mistake": "Using LIKE 'query%' on a relational database \u2014 doesn't scale past 100k products",
+        "to_stand_out": "Explain edge n-gram tokenization for Elasticsearch prefix queries and how to weight suggestions by popularity"
+      },
+      "company_tags": [
+        "Amazon",
+        "Etsy",
+        "Shopify",
+        "eBay"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why LIKE 'query%' Breaks at 100K Products",
+            "content": "Autocomplete must respond in under **100ms** \u2014 users expect suggestions to appear as they type, and anything slower feels laggy. With a 10-million-product catalog, a naive SQL query (`SELECT name FROM products WHERE name LIKE 'lap%' ORDER BY popularity LIMIT 10`) scans a B-tree index for prefix matches. This works fine at 10,000 products. At 10 million, with concurrent users typing, the database buckles \u2014 each keystroke generates a query, and at 1,000 concurrent users typing at 3 characters/second, that's **3,000 queries/second** of full prefix scans.\n\nThe solution is a **purpose-built search index** \u2014 Elasticsearch with edge n-gram tokenization, or a Trie-based in-memory data structure. Both are optimized for prefix lookups: Elasticsearch pre-indexes every prefix at write time so reads are O(1) index lookups, while a Trie traverses the prefix path in O(k) where k is the query length.\n\nThe harder problem isn't just finding matches \u2014 it's **ranking** them. \"lap\" should return \"laptop\" before \"lapel pin\" because laptops are searched more frequently. Ranking combines prefix matching with popularity signals, recency, and personalization."
+          },
+          {
+            "type": "step",
+            "title": "Edge N-gram Indexing: How Elasticsearch Makes Prefix Search Fast",
+            "content": "Elasticsearch's **edge n-gram tokenizer** pre-computes prefixes at index time. When you index \"laptop\", the tokenizer generates: `l`, `la`, `lap`, `lapt`, `lapto`, `laptop`. Each prefix is stored in the inverted index. A search for \"lap\" is a simple term lookup \u2014 no prefix scanning, no wildcard matching.\n\nThe index configuration specifies the minimum and maximum n-gram lengths. Setting min to 2 and max to 10 means single-character queries aren't indexed (too broad), and terms longer than 10 characters are truncated. The configuration registers the tokenizer with separate analyzers for indexing and searching.\n\n```json\n{\n  \"settings\": {\n    \"analysis\": {\n      \"analyzer\": {\n        \"autocomplete_index\": {\n          \"type\": \"custom\",\n          \"tokenizer\": \"autocomplete_tokenizer\",\n          \"filter\": [\"lowercase\"]\n        },\n        \"autocomplete_search\": {\n          \"type\": \"custom\",\n          \"tokenizer\": \"standard\",\n          \"filter\": [\"lowercase\"]\n        }\n      },\n      \"tokenizer\": {\n        \"autocomplete_tokenizer\": {\n          \"type\": \"edge_ngram\",\n          \"min_gram\": 2,\n          \"max_gram\": 10\n        }\n      }\n    }\n  }\n}\n```\n\nThe key subtlety: use the edge n-gram analyzer for **indexing** but a standard analyzer for **searching**. If you use the edge n-gram analyzer for search, \"lap\" gets tokenized to `la` and `lap`, matching anything starting with \"la\" \u2014 far too broad. The standard analyzer keeps \"lap\" as-is, matching only the pre-indexed `lap` prefix."
+          },
+          {
+            "type": "step",
+            "title": "Ranking: Why the Most Popular Result Must Come First",
+            "content": "Returning all products matching \"lap\" alphabetically is useless. The user almost certainly wants \"laptop\" \u2014 the most popular match. Ranking combines multiple signals, weighted by importance.\n\n**Popularity score** (search frequency, purchase count) is the primary signal. Store a popularity counter per product, updated daily from analytics. Elasticsearch's `function_score` query multiplies the text match score by the popularity weight.\n\n**Recency** matters for trending products. A product launched this week with moderate search volume should rank above a discontinued product with historical popularity. Apply a decay function that reduces the score of older products.\n\n**Personalization** is the advanced tier. If the user previously browsed electronics, boost electronic products in autocomplete results. This requires a user profile service and adds latency \u2014 only worthwhile at scale.\n\nThe practical implementation scores results as `text_match * log(popularity + 1) * recency_decay`. The `log` prevents extremely popular products from completely dominating \u2014 a product with 10x the popularity should rank higher, but not 10x higher. Recency decay uses a half-life of 30 days: products older than 30 days get half the recency boost.\n\nCaching adds another layer \u2014 the top 1,000 most common queries are cached in Redis with a 5-minute TTL. Since autocomplete queries follow a power-law distribution (a few prefixes account for most traffic), this cache serves 60\u201380% of requests without hitting Elasticsearch."
+          },
+          {
+            "type": "step",
+            "title": "Client-Side Optimization: Debounce, Minimum Length, and Cancellation",
+            "content": "The autocomplete experience is as much about **what you don't send** as what you do. Three client-side optimizations reduce server load by 70\u201380%.\n\n**Debouncing** delays the API call until the user pauses typing \u2014 typically 200\u2013300ms. Without debounce, typing \"laptop\" fires 6 requests (\"l\", \"la\", \"lap\", \"lapt\", \"lapto\", \"laptop\"). With 300ms debounce, it fires 1 request (\"laptop\"). This single optimization eliminates the majority of autocomplete traffic.\n\n**Minimum query length** of 2\u20133 characters prevents uselessly broad queries. A search for \"l\" matches millions of products \u2014 the results are meaningless and the query is expensive. Only send requests after 2+ characters.\n\n**Request cancellation** aborts in-flight requests when the user types another character. If the user types \"la\" and then \"p\" before the \"la\" response arrives, cancel the \"la\" request \u2014 the results are already stale. In JavaScript, this uses `AbortController`; in mobile, cancel the Retrofit/URLSession request.\n\nThe combination of these three \u2014 debounce 300ms + min length 2 + cancellation \u2014 reduces autocomplete API calls by roughly 80% compared to sending a request on every keystroke. This is often the difference between needing 5 Elasticsearch nodes and needing 1."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Trie structure gives O(L) lookup where L = query length** \u2014 each node in the trie represents one character.\n- **Pre-compute top-N suggestions per prefix** \u2014 at query time you want to read the answer, not compute it.\n- **Prefix cache in Redis with serialized suggestion lists** \u2014 key is the lowercase prefix, value is a serialized list of {suggestion, score}.\n- **Client-side debounce (150\u2013200ms) reduces QPS by 3\u20135\u00d7** \u2014 users type faster than 100ms/character.\n- **Personalization layer adds recency bias** \u2014 blend global popularity score with user's own query history using weighted sum."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Autocomplete must respond in under 100 milliseconds \u2014 users expect suggestions to appear as they type, and any perceived lag causes users to stop using it. The system at 10 million users generates roughly 50K\u2013100K prefix queries per second at peak typing speed. This latency and throughput requirement drives every design decision.\n\n**The trie data structure and precomputation:**\n- A trie gives O(L) lookup time where L is the query length \u2014 O(1) per character regardless of total dictionary size; each node represents one character and points to children\n- But traversing the trie at query time to find and rank all matches is too slow at this scale; instead, pre-compute the top-N suggestions for each prefix offline\n- The analytics pipeline counts query frequencies hourly; the top 5 suggestions per prefix are written to Redis with the prefix as the key and a serialized ranked list as the value; query time is a single Redis GET\n\n**Serving the suggestions:**\n- A single Redis GET per prefix lookup takes ~1ms round-trip; for a 5-character query, you serve 5 Redis lookups (one per prefix length) in parallel or just the current prefix\n- Client-side debounce (150\u2013200ms) is the highest-leverage optimization: users type faster than 100ms per character, so debouncing reduces backend QPS by 3\u20135\u00d7 without any perceptible latency increase\n- CDN edge caching for common prefixes: \"ja\", \"py\", \"co\" \u2014 the top 1,000 most common prefixes handle 80% of queries; cache at the CDN edge for zero-latency serving\n\n**Personalization and freshness:**\n- Blend global popularity score with user's own recent query history using a weighted sum; prevents irrelevant suggestions for users with different vocabularies; fall back to global for new users\n- Refresh the Redis precomputed suggestions every 15 minutes from the analytics pipeline; trending topics appear in autocomplete within 15 minutes of spiking\n\nI recommend precomputed Redis serving with client-side debouncing as the core architecture, CDN caching for top common prefixes, and an offline analytics pipeline refreshing suggestions every 15 minutes."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle typos and fuzzy matching in autocomplete?",
+        "How do you personalize autocomplete suggestions per user?",
+        "How do you A/B test different ranking algorithms for autocomplete?"
+      ],
+      "seo": {
+        "metaTitle": "Design Search Autocomplete Typeahead \u2014 Java System Design Interview",
+        "metaDescription": "Search autocomplete design for large catalogs. Redis sorted sets, Elasticsearch edge n-gram, two-tier caching, and popularity-based ranking."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "Autocomplete must respond in under 100 milliseconds \u2014 users expect suggestions to appear as they type, and any perceived lag causes users to stop using it.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Autocomplete must respond in under 100ms \u2014 users expect suggestions to appear as they type, and anything slower feels laggy. With a 10-million-product catalog, a naive SQL query (SELECT name FROM products WHERE name LIKE 'lap%' ORDER BY popularity LIMIT 10) scans a B-tree index for prefix matches. This works fine at 10,000 products. At 10 million, with concurrent users typing, the database buckles \u2014 each keystroke generates a query, and at 1,000 concurrent users typing at 3 characters/second, that's 3,000 queries/second of full prefix scans. The solution is a purpose-built search index \u2014 Elasticsearch with edge n-gram tokenization, or a Trie-based in-memory data structure. Both are optimized for prefix lookups: Elasticsearch pre-indexes every prefix at write time so reads."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Autocomplete must respond in under 100ms \u2014 users expect suggestions to appear as they type, and anything slower feels laggy. With a 10-million-product catalog, a naive SQL query (SELECT name FROM products WHERE name LIKE 'lap%' ORDER BY popularity LIMIT 10) scans a B-tree index for prefix matches. This works fine at 10,000 products. At 10 million, with concurrent users typing, the database buckles \u2014 each keystroke generates a query, and at 1,000 concurrent users typing at 3 characters/second, that's 3,000 queries/second of full prefix scans. The solution is a purpose-built search index \u2014 Elasticsearch with edge n-gram tokenization, or a Trie-based in-memory data structure. Both are optimized for prefix."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Elasticsearch's edge n-gram tokenizer pre-computes prefixes at index time",
+              "When you index \"laptop\", the tokenizer generates: l, la, lap, lapt, lapto, laptop",
+              "Each prefix is stored in the inverted index",
+              "A search for \"lap\" is a simple term lookup \u2014 no prefix scanning, no wildcard matching",
+              "The index configuration specifies the minimum and maximum n-gram lengths"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Autocomplete must respond in under 100ms \u2014 users expect suggestions to appear as they type, and anything slower feels laggy. With a 10-million-product catalog, a naive SQL query (SELECT name FROM products WHERE name LIKE 'lap%' ORDER BY popularity LIMIT 10) scans a B-tree index for prefix matches. This works fine at 10,000 products. At 10 million, with concurrent users typing, the database buckles \u2014 each keystroke generates a query, and at 1,000 concurrent users typing at 3 characters/second, that's 3,000 queries/second of full prefix scans. The solution is a purpose-built search index \u2014 Elasticsearch with edge n-gram tokenization, or a Trie-based in-memory data structure. Both are optimized for prefix lookups: Elasticsearch pre-indexes every prefix at write time so reads."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Autocomplete must respond in under 100ms \u2014 users expect suggestions to appear as they type, and anything slower feels laggy. With a 10-million-product catalog, a naive SQL query (SELECT name FROM products WHERE name LIKE 'lap%' ORDER BY popularity LIMIT 10) scans a B-tree index for prefix matches. This works fine at 10,000 products. At 10 million, with concurrent users typing, the database buckles \u2014 each keystroke generates a query, and at 1,000 concurrent users typing at 3 characters/second, that's 3,000 queries/second of full prefix scans. The solution is a purpose-built search index \u2014 Elasticsearch with edge n-gram tokenization, or a Trie-based in-memory data structure. Both are optimized for prefix lookups: Elasticsearch pre-indexes every prefix at write time so reads."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Using LIKE 'query%' on a relational database \u2014 doesn't scale past 100k products"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Trie structure gives O(L) lookup where L = query length \u2014 each node in the trie represents one character. Pre-compute top-N suggestions per prefix \u2014 at query time you want to read the answer, not compute it. Prefix cache in Redis with serialized suggestion lists \u2014 key is the lowercase prefix, value is a serialized list of {suggestion, score}. Client-side debounce (150\u2013200ms) reduces QPS by 3\u20135\u00d7 \u2014 users type faster than 100ms/character. Personalization layer adds recency bias \u2014 blend global popularity score with user's own."
+          }
+        ],
+        "cap": "The trie data structure and precomputation: A trie gives O(L) lookup time where L is the query length \u2014 O(1) per character regardless of total dictionary size; each node represents one character and p",
+        "familiarity_anchors": [
+          "Redis",
+          "Elasticsearch",
+          "Cache"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle typos and fuzzy matching in autocomplete?",
+          "How do you personalize autocomplete suggestions per user?",
+          "How do you A/B test different ranking algorithms for autocomplete?"
+        ]
+      }
+    }
+  ]
+}

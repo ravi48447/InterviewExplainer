@@ -1,0 +1,132 @@
+{
+  "topic": "Notification Service",
+  "topicSlug": "notification-service",
+  "questions": [
+    {
+      "id": "sd-003",
+      "slug": "design-notification-service",
+      "question": "Design a notification service that sends email, SMS, and push notifications.",
+      "title": "Design a Notification Service (Email, SMS, Push)",
+      "direct_answer": "Decouple notification sending from business logic using a message queue. A notification service consumes events, determines channels, calls provider APIs (SendGrid, Twilio, FCM), and handles retries. Use per-channel queues for independent scaling and DLQ for failures.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Event-driven architecture, multi-channel routing, retry/failure handling, and provider abstraction",
+        "common_mistake": "Calling SendGrid/Twilio directly from the order service \u2014 couples business logic to notification delivery",
+        "to_stand_out": "Mention template management, user preferences (opt-out), deduplication for idempotency, and rate limiting per provider"
+      },
+      "company_tags": [
+        "Amazon",
+        "Twilio",
+        "SendGrid",
+        "Airbnb"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Notifications Can't Be a Direct API Call",
+            "content": "When an order is placed, the order service needs to send a confirmation email, an SMS, and a push notification. The naive approach \u2014 calling SendGrid, Twilio, and Firebase directly from the order service \u2014 creates three problems: the order service is now **coupled** to three external vendors, any vendor outage **blocks** order completion, and adding a new channel (WhatsApp, in-app) requires **modifying the order service**.\n\nA notification service decouples the business event from the delivery mechanism. The order service publishes an **event** (\"order.placed\"), and the notification service handles channel routing, template rendering, user preference checks, retry logic, and vendor API calls. The order service doesn't know or care how the user is notified.\n\nThe architecture is inherently **event-driven and asynchronous**. Notifications are not request-response \u2014 the user doesn't wait for the email to arrive before seeing their order confirmation. This means a message queue (Kafka or RabbitMQ) sits between the event producer and the notification service, providing durability, retry capability, and traffic buffering."
+          },
+          {
+            "type": "component",
+            "title": "The Four Components: Router, Renderer, Dispatcher, Tracker",
+            "content": "The notification service is composed of four distinct responsibilities, each handling one concern independently.\n\nThe **Router** consumes events from the message queue and determines which channels to use for each notification. It checks user preferences (email opt-out, push enabled), applies business rules (critical alerts always send SMS regardless of preferences), and filters duplicates. A deduplication key \u2014 typically `{event_type}:{entity_id}:{timestamp_window}` \u2014 prevents the same notification from being sent twice when an event is retried.\n\nThe **Template Renderer** fills notification templates with event-specific data. Templates are stored separately (database or file system) and versioned, so marketing can update email copy without deploying code. The renderer handles localization \u2014 selecting the correct template for the user's language. Template rendering must be **fast and stateless** \u2014 no database queries beyond fetching the template itself.\n\nThe **Dispatcher** makes the actual vendor API calls \u2014 SendGrid for email, Twilio for SMS, Firebase for push. Each channel has its own dispatcher with independent retry logic and circuit breakers. If SendGrid is down, SMS and push continue unaffected. Dispatchers run in separate thread pools (bulkhead pattern) so a slow vendor can't block other channels.\n\nThe **Tracker** records delivery status \u2014 sent, delivered, bounced, opened, clicked. Vendor webhooks feed status updates back into the tracker. This data powers delivery dashboards and identifies systematic problems (high bounce rate on a specific email template, push notification delivery degradation on Android)."
+          },
+          {
+            "type": "step",
+            "title": "Retry Strategy and Dead Letter Handling",
+            "content": "External vendor APIs fail \u2014 network timeouts, rate limits, transient 500 errors. The retry strategy must handle these without creating duplicate notifications or blocking the queue.\n\n**Exponential backoff with jitter** is the standard retry pattern. First retry after 1 second, then 2, 4, 8, with random jitter to prevent thundering herd when multiple notifications retry simultaneously. Cap at 5 retries for transient failures.\n\nThe retry implementation distinguishes between **retryable** and **non-retryable** failures. A 429 (rate limited) or 503 (service unavailable) is retryable. A 400 (bad request \u2014 invalid email address) is not \u2014 retrying will never succeed. Non-retryable failures go directly to a **dead letter queue** (DLQ) for manual review.\n\n```java\n@Retryable(maxAttempts = 5,\n    backoff = @Backoff(delay = 1000, multiplier = 2, maxDelay = 30000),\n    include = {RetryableException.class})\npublic void sendEmail(NotificationRequest request) {\n    try {\n        sendGridClient.send(request.toEmail());\n    } catch (RateLimitException e) {\n        throw new RetryableException(e);     // will retry\n    } catch (InvalidRecipientException e) {\n        dlqPublisher.send(request);           // permanent failure\n        throw new NonRetryableException(e);  // won't retry\n    }\n}\n```\n\nThe DLQ is monitored with alerts \u2014 more than 100 messages in 1 hour triggers investigation. A separate reconciliation job periodically replays DLQ messages after the root cause is fixed."
+          },
+          {
+            "type": "step",
+            "title": "Priority Queues and Rate Limiting at the Dispatch Layer",
+            "content": "Not all notifications are equal. A password reset email must arrive in seconds. A weekly digest can wait hours. **Priority queues** separate critical notifications (OTP, security alerts, payment confirmations) from bulk notifications (marketing, digests, recommendations).\n\nWith RabbitMQ, this means separate queues with different consumer counts \u2014 the critical queue has more consumers and is processed first. With Kafka, use separate topics or partitions with dedicated consumer groups. The key principle: a burst of marketing emails should never delay a password reset.\n\n**Vendor rate limiting** is the constraint most teams discover in production. SendGrid allows 100 emails/second on standard plans. Twilio charges premium rates above certain SMS volumes. The dispatch layer must **buffer and throttle** outbound calls to stay within vendor limits. This is a separate rate limiter from the API gateway limiter \u2014 it protects the vendor relationship, not the infrastructure.\n\nThe practical architecture at scale: critical notifications dispatch immediately through a high-priority path. Bulk notifications enter a **scheduled dispatch queue** that processes at a controlled rate, respecting vendor limits and user time zones (don't send marketing emails at 3 AM). This separation keeps critical notifications under 5 seconds end-to-end while bulk notifications accept minutes to hours of delay."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Queue per channel prevents slow SMS from blocking email** \u2014 a single queue means one overloaded provider delays all notifications.\n- **Exponential backoff + dead-letter queue for provider failures** \u2014 provider outages are temporary; retry with doubling delay (1s, 2s, 4s, 8s).\n- **Idempotency key per notification prevents duplicate sends** \u2014 at-least-once delivery means retries happen.\n- **Template rendering at publish time locks in the snapshot** \u2014 render \"Your order #123 ships tomorrow\" when the event fires.\n- **User preference service is a hard dependency** \u2014 check opt-out and contact info before routing to any channel.\n- **Provider failover routes to backup on primary failure** \u2014 if Twilio returns 5xx, route to MessageBird within one retry."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A notification service that sends email, SMS, and push notifications must decouple event production from message delivery. The core design principle is that the order service, payment service, and every other business service should publish a business event (\"order confirmed\") and never know or care which channels deliver it or how.\n\n**The event-driven architecture:**\n- Business services publish events to a Kafka topic; the notification service subscribes and routes to the appropriate channel based on user preferences and event type; adding a new notification channel requires zero changes to any business service\n- A separate preference service stores user contact info, opt-in/opt-out status, and preferred channels per event type; this is checked before routing to any channel \u2014 sending unsubscribed push notifications causes app uninstalls and regulatory risk\n\n**Channel isolation prevents cascading delays:**\n- A single shared queue means one SMS provider outage delays all email delivery; dedicate separate queues per channel \u2014 email queue, SMS queue, push queue \u2014 so each scales and fails independently\n- Each channel has a dedicated consumer group with concurrency tuned to provider rate limits; Mailgun accepts 1,000 emails/sec; Twilio's SMS API is capped differently; configure per-channel\n\n**Reliability patterns:**\n- Exponential backoff with dead-letter queue: on provider failure, retry with doubling delay (1s, 2s, 4s, 8s); after 5 attempts, route to DLQ for investigation and manual replay\n- Idempotency per notification: use a UUID tied to the triggering business event as the idempotency key; if the Kafka consumer processes the same event twice, the second attempt detects the duplicate and skips\n- Render templates at publish time, not delivery time: \"Your order #123 ships tomorrow\" should capture the data snapshot when the event fires; rendering at send time risks showing changed data\n\nI recommend the event-driven decoupled architecture with per-channel queues, idempotency keys on every notification, and template snapshots at event time \u2014 these three properties together prevent the majority of duplicate send and stale data production incidents."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle provider rate limits (e.g., SendGrid's hourly email limit)?",
+        "How do you implement user preference management (opt-outs)?",
+        "How do you track notification delivery status (sent vs delivered vs failed)?"
+      ],
+      "seo": {
+        "metaTitle": "Design Notification Service Email SMS Push \u2014 Java Interview",
+        "metaDescription": "Notification service system design. Event-driven architecture, per-channel queues, provider abstraction, deduplication, and user preference management."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "A notification service that sends email, SMS, and push notifications must decouple event production from message delivery.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "When an order is placed, the order service needs to send a confirmation email, an SMS, and a push notification. The naive approach \u2014 calling SendGrid, Twilio, and Firebase directly from the order service \u2014 creates three problems: the order service is now coupled to three external vendors, any vendor outage blocks order completion, and adding a new channel (WhatsApp, in-app) requires modifying the order service. A notification service decouples the business event from the delivery mechanism. The order service publishes an event (\"order.placed\"), and the notification service handles channel routing, template rendering, user preference checks, retry logic, and vendor API calls. The order service doesn't know or care how the user is notified. The architecture is inherently event-driven and."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "When an order is placed, the order service needs to send a confirmation email, an SMS, and a push notification. The naive approach \u2014 calling SendGrid, Twilio, and Firebase directly from the order service \u2014 creates three problems: the order service is now coupled to three external vendors, any vendor outage blocks order completion, and adding a new channel (WhatsApp, in-app) requires modifying the order service. A notification service decouples the business event from the delivery mechanism. The order service publishes an event (\"order.placed\"), and the notification service handles channel routing, template rendering, user preference checks, retry logic, and vendor API calls. The order service doesn't know or care how."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "External vendor APIs fail \u2014 network timeouts, rate limits, transient 500 errors",
+              "The retry strategy must handle these without creating duplicate notifications or blocking the queue",
+              "Exponential backoff with jitter is the standard retry pattern",
+              "First retry after 1 second, then 2, 4, 8, with random jitter to prevent thundering herd when multiple notifications retry simultaneously",
+              "Cap at 5 retries for transient failures"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "The notification service is composed of four distinct responsibilities, each handling one concern independently. The Router consumes events from the message queue and determines which channels to use for each notification. It checks user preferences (email opt-out, push enabled), applies business rules (critical alerts always send SMS regardless of preferences), and filters duplicates. A deduplication key \u2014 typically {event_type}:{entity_id}:{timestamp_window} \u2014 prevents the same notification from being sent twice when an event is retried. The Template Renderer fills notification templates with event-specific data. Templates are stored separately (database or file system) and versioned, so marketing can update email copy without deploying code. The renderer handles localization \u2014 selecting the correct template for the user's language. Template rendering must be fast and."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "When an order is placed, the order service needs to send a confirmation email, an SMS, and a push notification. The naive approach \u2014 calling SendGrid, Twilio, and Firebase directly from the order service \u2014 creates three problems: the order service is now coupled to three external vendors, any vendor outage blocks order completion, and adding a new channel (WhatsApp, in-app) requires modifying the order service. A notification service decouples the business event from the delivery mechanism. The order service publishes an event (\"order.placed\"), and the notification service handles channel routing, template rendering, user preference checks, retry logic, and vendor API calls. The order service doesn't know or care how the user is notified. The architecture is inherently event-driven and."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Calling SendGrid/Twilio directly from the order service \u2014 couples business logic to notification delivery"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Queue per channel prevents slow SMS from blocking email \u2014 a single queue means one overloaded provider delays all notifications. Exponential backoff + dead-letter queue for provider failures \u2014 provider outages are temporary; retry with doubling delay (1s, 2s, 4s, 8s). Idempotency key per notification prevents duplicate sends \u2014 at-least-once delivery means retries happen. Template rendering at publish time locks in the snapshot \u2014 render \"Your order #123 ships tomorrow\" when the event fires. User preference service is a hard dependency \u2014 check opt-out and."
+          }
+        ],
+        "cap": "The event-driven architecture: Business services publish events to a Kafka topic; the notification service subscribes and routes to the appropriate channel based on user preferences and event type; ad",
+        "familiarity_anchors": [
+          "Decouple",
+          "SendGrid",
+          "Twilio"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle provider rate limits (e.g., SendGrid's hourly email limit)?",
+          "How do you implement user preference management (opt-outs)?",
+          "How do you track notification delivery status (sent vs delivered vs failed)?"
+        ]
+      }
+    }
+  ]
+}

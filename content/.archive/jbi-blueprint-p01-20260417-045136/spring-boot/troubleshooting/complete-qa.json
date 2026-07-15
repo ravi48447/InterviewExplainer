@@ -1,0 +1,220 @@
+{
+  "topic": "Troubleshooting",
+  "topicSlug": "troubleshooting",
+  "questions": [
+    {
+      "id": "sbo-008",
+      "slug": "spring-boot-graceful-shutdown",
+      "question": "How do you configure and implement graceful shutdown in Spring Boot?",
+      "title": "Graceful Shutdown in Spring Boot",
+      "direct_answer": "Since Spring Boot 2.3, graceful shutdown is built in: set server.shutdown=graceful and optionally spring.lifecycle.timeout-per-shutdown-phase to control how long the application waits for in-flight requests to complete before forcing shutdown. When a SIGTERM is received, the embedded server stops accepting new requests while existing requests drain, then the Spring context closes in reverse bean-creation order.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether the candidate knows graceful shutdown is a first-class feature since 2.3 and understands the drain-then-close sequence, not just adding a shutdown hook manually.",
+        "common_mistake": "Implementing a custom ShutdownHook via Runtime.getRuntime().addShutdownHook() and missing the coordinated context close that Spring already provides.",
+        "to_stand_out": "Explain how Kubernetes SIGTERM plus terminationGracePeriodSeconds must be coordinated with spring.lifecycle.timeout-per-shutdown-phase, and mention SmartLifecycle for custom beans that need ordered shutdown."
+      },
+      "company_tags": [
+        "Amazon",
+        "Uber",
+        "Revolut",
+        "Klarna",
+        "Deliveroo"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Runtime.addShutdownHook Is Wrong and Spring's Coordinated Shutdown Exists",
+            "content": "The most common mistake is implementing graceful shutdown with `Runtime.getRuntime().addShutdownHook()` and trying to manually drain connections. This bypasses Spring's coordinated shutdown lifecycle entirely \u2014 your hook races against Spring's own context close, and you end up with beans destroyed while requests are still in flight. Database connections get closed while active transactions are running; message producer sessions get torn down before queued messages flush. The result is partial writes, lost acknowledgments, and clients receiving connection-reset errors instead of clean responses.\n\n**Spring Boot 2.3+ provides built-in graceful shutdown** with a single property: `server.shutdown=graceful`. When this is set, the embedded server stops accepting new requests on SIGTERM but continues processing in-flight requests until they complete or a timeout expires. The timeout is controlled by `spring.lifecycle.timeout-per-shutdown-phase`, which defaults to 30 seconds. This property applies per-phase \u2014 the drain phase and the context-close phase each get this budget independently.\n\nThis matters because modern deployments run in containers orchestrated by Kubernetes, ECS, or Docker Compose. When Kubernetes decides to terminate a pod, it sends SIGTERM and waits for `terminationGracePeriodSeconds` (default 30 seconds) before force-killing with SIGKILL. **Your Spring shutdown timeout must be shorter than the Kubernetes grace period** \u2014 otherwise Kubernetes kills the process before Spring finishes draining, and in-flight requests get hard-terminated. The correct pattern is to set `timeout-per-shutdown-phase` to at least 5 seconds less than `terminationGracePeriodSeconds`, leaving a buffer for OS-level process teardown between Spring completing its shutdown and Kubernetes giving up."
+          },
+          {
+            "type": "step",
+            "title": "How Spring's Shutdown Sequence Actually Works When SIGTERM Arrives",
+            "content": "When SIGTERM is received, Spring's shutdown follows a specific, deterministic order. **First, the embedded web server stops accepting new connections** \u2014 the server socket closes, any new TCP connections are refused, and the health check endpoint begins returning DOWN for readiness. Load balancers detecting this almost immediately stop routing new requests here.\n\nSecond, in-flight requests continue processing. Each request runs to completion or until the `timeout-per-shutdown-phase` budget expires. If a request hasn't finished by the timeout, Spring interrupts the thread \u2014 this is why long-running operations need cooperative cancellation logic. An `@Async` task that doesn't check thread interruption status will run past the timeout and get forcefully terminated by SIGKILL.\n\nThird, Spring publishes `ContextClosedEvent` and begins destroying beans in reverse creation order. `@PreDestroy` methods run here \u2014 closing database connection pools, flushing message queue producers, unregistering from service discovery registries. **This phase happens after complete request draining**, which is why `@PreDestroy` is safe for resource cleanup: no requests are active when connections are returned to pools.\n\n```yaml\nserver:\n  shutdown: graceful\nspring:\n  lifecycle:\n    timeout-per-shutdown-phase: 25s\n```\n\nFor beans that need fine-grained control over teardown order \u2014 for example, a message consumer that must stop consuming before the database connection pool closes \u2014 implement `SmartLifecycle`. Return a `phase` value from `getPhase()`: lower phase numbers stop first. `@PreDestroy` is sufficient for most cases, but `SmartLifecycle` gives you ordering guarantees that `@PreDestroy` cannot provide."
+          },
+          {
+            "type": "step",
+            "title": "The Kubernetes Timing Trap \u2014 When Your Grace Period Is Shorter Than Your Shutdown",
+            "content": "The most dangerous misconfiguration is setting `spring.lifecycle.timeout-per-shutdown-phase=60s` while Kubernetes has `terminationGracePeriodSeconds=30`. After 30 seconds, Kubernetes sends SIGKILL \u2014 your application is forcefully terminated mid-drain. Clients see connection resets, in-flight database transactions are rolled back, and message acknowledgments are never sent. This failure mode is invisible during local development because developers rarely test shutdown under realistic load with Kubernetes timing.\n\n**The readiness probe interval compounds the problem.** When SIGTERM arrives, Spring immediately marks the readiness probe as DOWN so Kubernetes stops routing new requests to the pod. But if your readiness probe `periodSeconds` is set to 30 (a common default), the load balancer won't discover the pod is unhealthy for up to 30 more seconds \u2014 during which it's still sending new requests while the application is trying to drain. Reduce `periodSeconds` to 5\u201310 seconds in production for fast de-registration.\n\nFor **WebSocket connections and Server-Sent Events**, Spring's built-in graceful shutdown handles HTTP request/response cycles only. Long-lived connections need explicit handling. Register an `ApplicationListener<ContextClosedEvent>` that iterates open WebSocket sessions and sends a proper close frame (`CloseStatus.GOING_AWAY`) before the connection infrastructure is torn down. Without this, clients receive an abrupt TCP disconnect instead of a clean WebSocket close handshake, triggering aggressive reconnect logic that may overwhelm the remaining healthy instances.\n\nA final production checklist: verify that `spring.lifecycle.timeout-per-shutdown-phase` is shorter than `terminationGracePeriodSeconds` by at least 5 seconds, readiness probe `periodSeconds` is 5\u201310 seconds, and any `@Async` tasks can be interrupted cleanly within the timeout window."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`server.shutdown=graceful` + `spring.lifecycle.timeout-per-shutdown-phase=30s`** \u2014 enables graceful shutdown; Spring Boot waits up to the configured timeout for in-flight requests to complete before closing.\n- **Do not register `Runtime.getRuntime().addShutdownHook()` manually** \u2014 Spring Boot already registers a JVM shutdown hook; adding another creates unpredictable ordering between your hook and Spring's context close.\n- **Kubernetes SIGTERM + `terminationGracePeriodSeconds` must align** \u2014 Kubernetes sends SIGTERM and waits `terminationGracePeriodSeconds` (default 30s) before SIGKILL; your `timeout-per-shutdown-phase` must be shorter than that value or pods are killed mid-drain.\n- **`@PreDestroy` runs during shutdown \u2014 after in-flight requests drain** \u2014 safe for releasing connection pools and deregistering from service registries.\n- **Actuator `/actuator/shutdown` must be explicitly enabled and secured** \u2014 `management.endpoint.shutdown.enabled=true`; never expose without authentication \u2014 it remotely terminates the application."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Graceful shutdown means the application stops accepting new requests and waits for in-flight ones to complete before closing \u2014 rather than killing active connections immediately on SIGTERM.\n\n**Enabling it**\n- `server.shutdown=graceful` \u2014 Spring Boot's web server stops accepting new connections but lets active requests finish\n- `spring.lifecycle.timeout-per-shutdown-phase=30s` \u2014 the maximum wait time; requests still active after this threshold are terminated\n\n**The Kubernetes integration pattern**\n- Kubernetes sends SIGTERM when a pod is removed; waits `terminationGracePeriodSeconds` before sending SIGKILL\n- Your `timeout-per-shutdown-phase` must be shorter than `terminationGracePeriodSeconds` \u2014 if Spring is still draining when Kubernetes sends SIGKILL, active requests are killed anyway\n- Typical setup: `terminationGracePeriodSeconds: 60`, `timeout-per-shutdown-phase: 50s` \u2014 Spring gets 50 seconds to drain, Kubernetes terminates at 60\n\n**What not to do**\n- Do not add `Runtime.getRuntime().addShutdownHook()` manually \u2014 Spring Boot already registers a shutdown hook that closes the `ApplicationContext`; a second hook creates race conditions between the two\n\n`@PreDestroy` methods on singleton beans execute during the Spring context close phase, which happens after the web server stops accepting requests. This is the correct place to release database connections, close Kafka producers, and deregister from service discovery."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does the readiness probe interact with graceful shutdown in Kubernetes?",
+        "What is the difference between @PreDestroy, DisposableBean, and SmartLifecycle for shutdown logic?",
+        "How would you test that your application actually handles graceful shutdown correctly in a CI pipeline?"
+      ],
+      "seo": {
+        "metaTitle": "Spring Boot Graceful Shutdown Configuration | Java Intermediate Interview",
+        "metaDescription": "Configure Spring Boot graceful shutdown with server.shutdown=graceful, Kubernetes terminationGracePeriodSeconds, and SmartLifecycle for ordered bean cleanup."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Graceful shutdown means the application stops accepting new requests and waits for in-flight ones to complete before closing \u2014 rather than killing active connections immediately on SIGTERM.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The most common mistake is implementing graceful shutdown with Runtime.getRuntime().addShutdownHook() and trying to manually drain connections. This bypasses Spring's coordinated shutdown lifecycle entirely \u2014 your hook races against Spring's own context close, and you end up with beans destroyed while requests are still in flight. Database connections get closed while active transactions are running; message producer sessions get torn down before queued messages flush. The result is partial writes, lost acknowledgments, and clients receiving connection-reset errors instead of clean responses. Spring Boot 2.3+ provides built-in graceful shutdown with a single."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "When SIGTERM is received, Spring's shutdown follows a specific, deterministic order.",
+              "First, the embedded web server stops accepting new connections \u2014 the server socket closes, any new TCP connections are refused, and the health check endpoint begins returning DOWN for readiness.",
+              "Load balancers detecting this almost immediately stop routing new requests here.",
+              "Second, in-flight requests continue processing.",
+              "Each request runs to completion or until the timeout-per-shutdown-phase budget expires.",
+              "If a request hasn't finished by the timeout, Spring interrupts the thread \u2014 this is why long-running operations need cooperative cancellation logic."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "shutdown=graceful + spring",
+              "timeout-per-shutdown-phase=30s \u2014 enables graceful shutdown; Spring Boot waits up to the configured timeout for in-flight requests to complete before closing",
+              "Do not register Runtime",
+              "getRuntime()",
+              "addShutdownHook() manually \u2014 Spring Boot already registers a JVM shutdown hook; adding another creates unpredictable ordering between your hook and Spring's context close"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Implementing a custom ShutdownHook via Runtime.getRuntime().addShutdownHook() and missing the coordinated context close that Spring already provides."
+          }
+        ],
+        "cap": "This is the correct place to release database connections, close Kafka producers, and deregister from service discovery.",
+        "familiarity_anchors": [
+          "Since",
+          "Spring",
+          "SIGTERM"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does the readiness probe interact with graceful shutdown in Kubernetes?",
+          "What is the difference between @PreDestroy, DisposableBean, and SmartLifecycle for shutdown logic?",
+          "How would you test that your application actually handles graceful shutdown correctly in a CI pipeline?"
+        ]
+      }
+    },
+    {
+      "id": "sbo-exception-handling",
+      "slug": "global-exception-handling-spring-boot",
+      "question": "How do you implement global exception handling in Spring Boot using @ControllerAdvice?",
+      "title": "Global Exception Handling with @ControllerAdvice and @ExceptionHandler",
+      "direct_answer": "@ControllerAdvice creates a global exception handler that applies to all controllers. @ExceptionHandler methods within it catch specific exception types and return structured error responses. This eliminates scattered try-catch blocks in controllers and ensures consistent error response format across the API. Spring Boot's ProblemDetail (RFC 7807) provides a standard error response structure.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the difference between local @ExceptionHandler and global @ControllerAdvice, and can design a consistent error response.",
+        "common_mistake": "Catching Exception.class too broadly in @ControllerAdvice, accidentally hiding real bugs by returning 400 Bad Request for server errors that should be 500.",
+        "to_stand_out": "Mention RFC 7807 ProblemDetail support in Spring Boot 3.x, and explain handler method resolution order when multiple handlers match."
+      },
+      "company_tags": [],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Try-Catch in Every Controller Is Wrong and @ControllerAdvice Exists",
+            "content": "Without global exception handling, every controller method needs its own try-catch block to convert exceptions into proper HTTP responses. This leads to scattered, inconsistent error handling \u2014 one endpoint returns `{\"error\": \"not found\"}`, another returns `{\"message\": \"Not Found\", \"code\": 404}`, and a third leaks a stack trace to the client. When a frontend developer integrates your API, they discover that every endpoint has a different error format and they need custom parsing logic for each one.\n\n**`@ControllerAdvice` centralizes exception handling** across all controllers. `@ExceptionHandler` methods inside it catch specific exception types and return structured error responses. The controllers stay clean \u2014 they throw exceptions naturally, and the advice translates them into HTTP responses with correct status codes and consistent body format.\n\nSpring Boot 3.x adds **RFC 7807 ProblemDetail** support \u2014 a standard error response format that includes `type`, `title`, `status`, `detail`, and `instance` fields. Adopting this standard means your API errors follow a format that clients and tools already understand, eliminating the debate over custom error schemas. Enable it with `spring.mvc.problemdetails.enabled=true` to get automatic ProblemDetail responses for Spring's built-in exceptions."
+          },
+          {
+            "type": "step",
+            "title": "Building a @ControllerAdvice \u2014 Handler Resolution and the Catch-All Trap",
+            "content": "A well-designed `@ControllerAdvice` handles specific exception types with appropriate HTTP status codes. The key design decision is which exceptions to handle explicitly versus which to let fall through to a catch-all. Business exceptions like `ResourceNotFoundException` deserve dedicated handlers with meaningful error messages. Framework exceptions like `MethodArgumentNotValidException` need handlers that extract field-level validation errors.\n\n```java\n@RestControllerAdvice\npublic class GlobalExceptionHandler {\n\n    @ExceptionHandler(ResourceNotFoundException.class)\n    @ResponseStatus(HttpStatus.NOT_FOUND)\n    public ProblemDetail handleNotFound(ResourceNotFoundException ex) {\n        ProblemDetail pd = ProblemDetail.forStatus(404);\n        pd.setTitle(\"Resource Not Found\");\n        pd.setDetail(ex.getMessage());\n        return pd;\n    }\n}\n```\n\nThe `ProblemDetail` object follows RFC 7807 \u2014 clients receive a consistent JSON structure regardless of which exception was thrown. The `setProperty()` method lets you add custom fields like validation errors without breaking the standard format.\n\n**The dangerous mistake is adding a catch-all `@ExceptionHandler(Exception.class)` that returns 400.** This hides genuine server errors \u2014 a `NullPointerException` becomes a 400 Bad Request instead of 500 Internal Server Error, and you never notice the bug. If you must have a catch-all, always return 500 for unrecognized exceptions and log the full stack trace.\n\nWhen multiple handlers match an exception, **Spring selects the most specific type.** A handler for `IllegalArgumentException` takes priority over one for `RuntimeException`. A handler defined in the controller itself takes priority over one in `@ControllerAdvice` \u2014 this lets individual controllers override global behavior for specific cases."
+          },
+          {
+            "type": "step",
+            "title": "Validation Errors, @RestControllerAdvice, and ProblemDetail Configuration",
+            "content": "**`@RestControllerAdvice` vs `@ControllerAdvice`** is a distinction that trips up teams building REST APIs. `@RestControllerAdvice` is a composed annotation that adds `@ResponseBody`, meaning handler methods serialize their return value as JSON automatically. With plain `@ControllerAdvice`, you must add `@ResponseBody` to each handler method or return `ResponseEntity<ProblemDetail>`. For REST APIs, always use `@RestControllerAdvice`.\n\nThe most common handler you'll add beyond `ResourceNotFoundException` is one for validation errors. When a request body fails `@Valid` validation, Spring throws `MethodArgumentNotValidException`. The default behavior is a 400 with Spring's own error format. A proper handler extracts field-level errors and returns them in a structured format.\n\n```java\n@ExceptionHandler(MethodArgumentNotValidException.class)\n@ResponseStatus(HttpStatus.BAD_REQUEST)\npublic ProblemDetail handleValidation(MethodArgumentNotValidException ex) {\n    ProblemDetail pd = ProblemDetail.forStatus(400);\n    pd.setTitle(\"Validation Failed\");\n    Map<String, String> errors = ex.getBindingResult().getFieldErrors().stream()\n        .collect(Collectors.toMap(FieldError::getField, FieldError::getDefaultMessage,\n                                   (a, b) -> a + \"; \" + b));\n    pd.setProperty(\"fieldErrors\", errors);\n    return pd;\n}\n```\n\nTo enable RFC 7807 ProblemDetail responses for Spring's own exceptions (like `HttpMessageNotReadableException`, `NoHandlerFoundException`), set `spring.mvc.problemdetails.enabled=true`. This one property standardizes all of Spring MVC's built-in error responses to the RFC 7807 format, making your API's error contract consistent without writing handlers for every framework exception. Combine it with your custom handlers that return `ProblemDetail` objects, and every error response from every source follows the same structure \u2014 a significant improvement in API client developer experience."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@ControllerAdvice` is global; `@ExceptionHandler` inside a `@Controller` is local** \u2014 local handlers take precedence for exceptions thrown by that controller; global advice catches everything else.\n- **Handler method priority: most specific exception type wins** \u2014 `@ExceptionHandler(ConstraintViolationException.class)` takes precedence over `@ExceptionHandler(Exception.class)`; order within the same advice is undefined.\n- **Spring Boot 3.x provides `ProblemDetail` (RFC 7807)** \u2014 `ResponseEntityExceptionHandler` returns `ProblemDetail` responses automatically; clients get a standardized error body with `type`, `title`, `status`, `detail`.\n- **Do not catch `Exception.class` too broadly** \u2014 accidentally catches `RuntimeException`, hiding bugs; catch only the specific exceptions you know how to handle.\n- **`ResponseEntityExceptionHandler` handles Spring MVC's built-in exceptions** \u2014 extend it in your `@ControllerAdvice` to customize the response for `MethodArgumentNotValidException`, `NoHandlerFoundException`, etc."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Centralized exception handling means one place decides what every error response looks like \u2014 consistent HTTP status codes, a standard error body, and no stack traces leaking to clients.\n\n**`@ControllerAdvice` vs local `@ExceptionHandler`**\n- `@ExceptionHandler` inside a `@Controller` applies only to exceptions from that controller\n- `@ControllerAdvice` (or `@RestControllerAdvice`) applies to all controllers \u2014 one class handles every unhandled exception\n- When both exist, the local handler takes precedence for its controller\n\n**Handler priority**\n- Spring picks the `@ExceptionHandler` with the most specific matching exception type\n- `ConstraintViolationException` handler wins over `Exception` handler for validation failures\n- Never catch `Exception.class` as the only handler \u2014 you accidentally suppress programming errors\n\n**Spring Boot 3.x ProblemDetail (RFC 7807)**\n- Extend `ResponseEntityExceptionHandler` and Spring Boot returns a standardized JSON error body automatically: `{\"type\": \"...\", \"title\": \"Bad Request\", \"status\": 400, \"detail\": \"...\"}`\n- Clients can rely on a predictable error format without parsing free-form messages\n\nReturn meaningful HTTP status codes: `400` for validation failures, `404` for missing resources, `409` for conflicts, `422` for business rule violations, `500` for unexpected errors. Never return `200` with an error payload."
+          }
+        ]
+      },
+      "followup_questions": [],
+      "seo": {
+        "metaTitle": "Global Exception Handling with @ControllerAdvice and @ExceptionHandler",
+        "metaDescription": ""
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "Centralized exception handling means one place decides what every error response looks like \u2014 consistent HTTP status codes, a standard error body, and no stack traces leaking to clients.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Without global exception handling, every controller method needs its own try-catch block to convert exceptions into proper HTTP responses. This leads to scattered, inconsistent error handling \u2014 one endpoint returns {\"error\": \"not found\"}, another returns {\"message\": \"Not Found\", \"code\": 404}, and a third leaks a stack trace to the client. When a frontend developer integrates your API, they discover that every endpoint has a different error format and they need custom parsing logic for each one. @ControllerAdvice centralizes exception handling across all controllers. @ExceptionHandler methods inside it catch specific exception."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "A well-designed @ControllerAdvice handles specific exception types with appropriate HTTP status codes.",
+              "The key design decision is which exceptions to handle explicitly versus which to let fall through to a catch-all.",
+              "Business exceptions like ResourceNotFoundException deserve dedicated handlers with meaningful error messages.",
+              "Framework exceptions like MethodArgumentNotValidException need handlers that extract field-level validation errors.",
+              "``java @RestControllerAdvice public class GlobalExceptionHandler { @ExceptionHandler(ResourceNotFoundException.class) @ResponseStatus(HttpStatus.NOT_FOUND) public ProblemDetail handleNotFound(ResourceNotFoundException ex) { ProblemDetail pd = ProblemDetail.forStatus(404); pd.setTitle(\"Resource Not Found\"); pd.setDetail(ex.getMessage()); return pd; } } ` The ProblemDetail object follows RFC 7807 \u2014 clients receive a consistent JSON structure regardless of which exception was thrown.",
+              "The setProperty() method lets you add custom fields like validation errors without breaking the standard format."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "@ControllerAdvice is global; @ExceptionHandler inside a @Controller is local \u2014 local handlers take precedence for exceptions thrown by that controller; global advice catches everything else",
+              "Handler method priority: most specific exception type wins \u2014 @ExceptionHandler(ConstraintViolationException",
+              "class) takes precedence over @ExceptionHandler(Exception",
+              "class); order within the same advice is undefined",
+              "Spring Boot 3"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Catching Exception.class too broadly in @ControllerAdvice, accidentally hiding real bugs by returning 400 Bad Request for server errors that should be 500."
+          }
+        ],
+        "cap": "Never return 200 with an error payload.",
+        "familiarity_anchors": [
+          "ControllerAdvice",
+          "ExceptionHandler",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

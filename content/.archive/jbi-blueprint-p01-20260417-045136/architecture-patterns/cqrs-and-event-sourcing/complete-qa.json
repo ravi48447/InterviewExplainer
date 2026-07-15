@@ -1,0 +1,124 @@
+{
+  "topic": "Cqrs And Event Sourcing",
+  "topicSlug": "cqrs-and-event-sourcing",
+  "questions": [
+    {
+      "id": "ap-event-sourcing",
+      "slug": "event-sourcing-pattern",
+      "question": "Event Sourcing Pattern \u2014 Storing State as a Sequence of Events",
+      "title": "Event Sourcing Pattern \u2014 Storing State as a Sequence of Events",
+      "direct_answer": "Event Sourcing stores every state change as an immutable event in an append-only log instead of overwriting the current state. Current state is derived by replaying events. This gives you a complete audit trail, time-travel debugging, and the ability to build new read models retroactively \u2014 but it adds complexity in querying current state, handling event schema evolution, and managing growing event streams.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the fundamental inversion \u2014 events are the source of truth, current state is a derived projection \u2014 and can articulate when this trade-off is worth the complexity",
+        "common_mistake": "Confusing Event Sourcing with just adding an audit log to a traditional database. The key insight is that events ARE the primary record \u2014 you don't have a separate 'real' state table that events supplement",
+        "to_stand_out": "Discuss snapshots for performance optimization, the relationship between Event Sourcing and CQRS, event schema versioning challenges, and name specific domains where Event Sourcing genuinely earns its complexity (finance, regulatory compliance)"
+      },
+      "company_tags": [
+        "fintech",
+        "banking",
+        "enterprise"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Difference Between Recording History and Being History",
+            "content": "Adding a `changes_log` table alongside your `accounts` table is not Event Sourcing. It's an audit log \u2014 a supplementary record that shadows the \"real\" data. The `balance` column in the `accounts` table is still the truth. If the audit log drifts or has gaps, you trust the column.\n\n**Event Sourcing eliminates the column entirely.** There is no `balance = $950` stored anywhere. What exists is a sequence of immutable facts: `AccountOpened(owner: \"Alice\")`, `MoneyDeposited($1000)`, `MoneyWithdrawn($50)`. The balance of $950 is a **computation** \u2014 replay those events through a state-transition function, and the balance emerges. The events are the truth. The balance is a derived view.\n\nThis distinction matters because it changes what's possible. Need the balance on March 15th? Replay events up to that date. Need a new metric \u2014 average daily balance \u2014 that didn't exist when the system was built? Replay the same events through a new projection function. Detected a bug in how fees were calculated six months ago? Replay events through the corrected logic and compare. None of this is possible when you overwrite state on every update \u2014 the history is gone.\n\nThe cost of this power is significant. You can't `SELECT balance FROM accounts WHERE id = ?` anymore \u2014 querying current state requires dedicated read-side projections (CQRS). Event streams grow continuously and need snapshots to avoid slow reconstitution. Event schemas are immutable once stored, so format changes require versioned upcasters. These aren't theoretical concerns \u2014 they're the engineering work that determines whether Event Sourcing succeeds or becomes a maintenance burden."
+          },
+          {
+            "type": "phase",
+            "title": "The Write Path: Command Validation, Event Production, Optimistic Append",
+            "content": "An event-sourced write operation follows a distinct sequence that differs fundamentally from CRUD. Walking through a bank account withdrawal makes the mechanics concrete.\n\nThe application receives a `WithdrawMoney` command. The aggregate repository loads the `BankAccount` by fetching all events for that aggregate ID from the event store. Events arrive in order: `AccountOpened`, `MoneyDeposited($1000)`, `MoneyWithdrawn($200)`. The aggregate replays each event through its `apply()` method \u2014 a pure state-transition function. `MoneyDeposited` adds to balance; `MoneyWithdrawn` subtracts. After replay, the aggregate knows: balance is $800, version is 3, status is ACTIVE.\n\nThe business method `withdraw($100)` validates against the derived state: is $100 \u2264 $800? Is the account active? If valid, it produces a new `MoneyWithdrawn($100)` event. This event is applied to update in-memory state (balance becomes $700) and added to an uncommitted events list.\n\nThe repository persists uncommitted events with **expected version = 3.** If another process appended an event since version 3, the store rejects the write \u2014 optimistic concurrency without database locks. The application retries: reload events (now including the concurrent change), re-derive state, re-validate, and attempt again.\n\n```java\npublic class BankAccount {\n    private BigDecimal balance = BigDecimal.ZERO;\n    private AccountStatus status;\n    private int version = 0;\n    private final List<DomainEvent> uncommitted = new ArrayList<>();\n\n    public void withdraw(BigDecimal amount) {\n        if (status != AccountStatus.ACTIVE)\n            throw new AccountNotActiveException(this.id);\n        if (balance.compareTo(amount) < 0)\n            throw new InsufficientFundsException(balance, amount);\n        record(new MoneyWithdrawn(this.id, amount, Instant.now()));\n    }\n\n    private void apply(DomainEvent event) {\n        switch (event) {\n            case AccountOpened e -> { this.status = AccountStatus.ACTIVE; }\n            case MoneyDeposited e -> this.balance = balance.add(e.amount());\n            case MoneyWithdrawn e -> this.balance = balance.subtract(e.amount());\n        }\n        this.version++;\n    }\n}\n```\n\nThe same `apply()` method processes both historical events during reconstitution and new events during business operations. This guarantee \u2014 that replay always produces the same state as original execution \u2014 is what makes the entire model trustworthy."
+          },
+          {
+            "type": "phase",
+            "title": "Snapshots: Taming Replay Performance for Long-Lived Aggregates",
+            "content": "An account opened five years ago might accumulate 50,000 events. Replaying all of them to process a $20 withdrawal is wasteful \u2014 each request would scan thousands of rows.\n\n**Snapshots** solve this by periodically serializing the aggregate's current state alongside its version number. Reconstitution loads the latest snapshot and replays only events that occurred after it. Instead of 50,000 events, you load a snapshot at version 49,800 and replay 200 events.\n\nThe snapshot strategy depends on the domain. **Count-based snapshots** (every N events, typically 100\u2013500) are the simplest. After every 200th event, store a snapshot of the aggregate's state. **Time-based snapshots** work for aggregates with bursty activity \u2014 snapshot after 24 hours of inactivity so the next access gets a warm start.\n\nThe implementation stores snapshots in a separate table or alongside the event stream. Each snapshot records the aggregate ID, the serialized state, and the version number it represents. The repository's load path becomes: fetch the latest snapshot, then fetch events with version > snapshot version, then replay those events on top of the snapshot state.\n\n**The critical design rule: snapshots are a performance optimization, never the source of truth.** If a snapshot is corrupted, you delete it and replay from the beginning. Event streams must never be truncated or garbage-collected \u2014 they are permanent history. Snapshots are disposable caches.\n\nIn practice, snapshot corruption is rare, but snapshot schema evolution is common. When you add a field to the aggregate, existing snapshots don't have it. The safest approach is to invalidate old snapshots after aggregate schema changes and let them rebuild from events \u2014 a temporary performance hit that guarantees correctness."
+          },
+          {
+            "type": "phase",
+            "title": "The Read Side: Why CQRS Becomes Event Sourcing's Mandatory Companion",
+            "content": "Event Sourcing stores data as streams of events per aggregate. Asking \"show all orders over $100 for customer X\" means replaying events across potentially thousands of order aggregates \u2014 impractical at any meaningful scale.\n\n**CQRS** separates the write model (event-sourced aggregates) from the read model (denormalized projections optimized for queries). A **projection processor** subscribes to the event stream and builds query-optimized tables. An `OrdersByCustomerProjection` listens for `OrderPlaced`, `OrderShipped`, and `OrderCancelled` events, maintaining a flat table in PostgreSQL or Elasticsearch with pre-computed fields that the query API reads directly.\n\nThe read model is **eventually consistent** with the write side. After an event is appended, there's a propagation delay \u2014 typically milliseconds to low seconds \u2014 before the projection reflects it. For most queries (dashboards, search, reports), this lag is invisible. For read-after-write scenarios (\"I just placed an order, show it to me\"), two strategies work: the UI optimistically renders the just-submitted data, or the API queries the event store directly for that specific aggregate.\n\nThe retroactive projection is Event Sourcing's hidden superpower. When the business needs a new dashboard that didn't exist six months ago, you write a new projector, replay the entire event stream through it, and the projection catches up to the present with complete historical data. No data migration scripts, no backfill jobs \u2014 the events already contain everything.\n\nThe cost is that every query model requires its own projection code, its own storage, and its own eventually-consistent semantics. For a system with 20 different query views, that's 20 projectors to maintain."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Events ARE the truth, not a supplement** \u2014 there is no `balance` column. Current state is computed by replaying events through a deterministic `apply()` method. \"CRUD plus audit log\" is a different pattern entirely\n- **Optimistic concurrency via version number** \u2014 each append includes the expected aggregate version. Concurrent writes fail with a version conflict, not a database lock. The application retries by reloading events and re-validating\n- **Snapshots every 100\u2013500 events** \u2014 serialize aggregate state periodically so reconstitution replays only recent events. Snapshots are disposable caches \u2014 they can be deleted and rebuilt from events without data loss\n- **CQRS is practically mandatory** \u2014 cross-aggregate queries can't be served by replaying event streams. Projection processors subscribe to events and build denormalized read models that are eventually consistent\n- **Event schema immutability is the hidden tax** \u2014 stored events can never be modified. Format changes require upcasters that transform old versions during reconstitution (V1\u2192V2\u2192V3). Upcasters compose, and the aggregate only sees the latest format"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The common misconception is that Event Sourcing means adding an audit log alongside your normal database. It's a fundamentally different data model. There is no `balance` column \u2014 the source of truth is a sequence of immutable events: `AccountOpened`, `MoneyDeposited($1000)`, `MoneyWithdrawn($50)`. Current state is **computed** by replaying those events through a deterministic state-transition function.\n\nThe write path loads an aggregate by replaying its event history, validates the business command against the derived state, produces a new event, and appends it to the store with an expected version number. If two concurrent operations try to append at the same version, one fails and retries \u2014 optimistic concurrency without locks.\n\nThe practical power comes from three things. Complete audit trails \u2014 every state change is an immutable fact. Time-travel \u2014 replay events to any timestamp to reconstruct past state. Retroactive projections \u2014 write a new projector and replay the entire history to build a view that didn't exist when the system launched.\n\nThe costs are equally concrete. Replaying 50,000 events for a long-lived aggregate is slow \u2014 **snapshots** every few hundred events fix this. Querying across aggregates requires **CQRS** with separate read-side projections that are eventually consistent. Event schemas are immutable once stored \u2014 format changes need versioned upcasters.\n\nEvent Sourcing earns its complexity in finance, healthcare, and compliance \u2014 domains where audit trails are regulatory requirements, temporal queries have business value, and the ability to replay history is genuinely useful. For a standard CRUD application, the engineering overhead doesn't pay for itself."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle event schema evolution when event formats need to change?",
+        "What is the relationship between Event Sourcing and CQRS?",
+        "How do snapshots work and when should you take them?"
+      ],
+      "seo": {
+        "metaTitle": "Event Sourcing Pattern in Java \u2014 Append-Only Events, Snapshots, CQRS Interview Guide",
+        "metaDescription": "Master Event Sourcing for Java interviews: append-only event logs, aggregate reconstitution, snapshots, CQRS projections, and when Event Sourcing earns its complexity."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "The common misconception is that Event Sourcing means adding an audit log alongside your normal database.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Adding a changes_log table alongside your accounts table is not Event Sourcing. It's an audit log \u2014 a supplementary record that shadows the \"real\" data. The balance column in the accounts table is still the truth. If the audit log drifts or has gaps, you trust the column. Event Sourcing eliminates the column entirely. There is no balance = $950 stored anywhere. What exists is a sequence of immutable facts: AccountOpened(owner: \"Alice\"), MoneyDeposited($1000), MoneyWithdrawn($50). The balance of $950 is a."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the fundamental inversion \u2014 events are the source of truth, current state is a derived projection \u2014 and can articulate when this trade-off is worth the complexity"
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Events ARE the truth, not a supplement \u2014 there is no balance column",
+              "Current state is computed by replaying events through a deterministic apply() method",
+              "\"CRUD plus audit log\" is a different pattern entirely Optimistic concurrency via version number \u2014 each append includes the expected aggregate version",
+              "Concurrent writes fail with a version conflict, not a database lock",
+              "The application retries by reloading events and re-validating Snapshots every 100\u2013500 events \u2014 serialize aggregate state periodically so reconstitution replays only recent events"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Adding a changes_log table alongside your accounts table is not Event Sourcing. It's an audit log \u2014 a supplementary record that shadows the \"real\" data. The balance column in the accounts table is still the truth. If the audit log drifts or has gaps, you trust the column. Event Sourcing eliminates the column entirely. There is no balance = $950 stored anywhere. What exists is a sequence of immutable facts: AccountOpened(owner: \"Alice\"), MoneyDeposited($1000), MoneyWithdrawn($50). The balance of $950 is a computation \u2014 replay those events through a state-transition function, and the balance emerges. The events are the truth. The balance is a derived view. This distinction matters because it changes what's possible. Need the balance on March 15th? Replay events."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing Event Sourcing with just adding an audit log to a traditional database",
+              "The key insight is that events ARE the primary record \u2014 you don't have a separate 'real' state table that events supplement"
+            ]
+          }
+        ],
+        "cap": "For a standard CRUD application, the engineering overhead doesn't pay for itself.",
+        "familiarity_anchors": [
+          "Event",
+          "Sourcing",
+          "Current"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle event schema evolution when event formats need to change?",
+          "What is the relationship between Event Sourcing and CQRS?",
+          "How do snapshots work and when should you take them?"
+        ]
+      }
+    }
+  ]
+}

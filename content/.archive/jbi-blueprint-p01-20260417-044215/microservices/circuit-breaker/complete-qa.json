@@ -1,0 +1,243 @@
+{
+  "topic": "Circuit Breaker",
+  "topicSlug": "circuit-breaker",
+  "questions": [
+    {
+      "id": "ms-005",
+      "slug": "circuit-breaker-resilience4j",
+      "question": "How does the Circuit Breaker pattern work? How do you implement it with Resilience4j?",
+      "title": "Circuit Breaker Pattern with Resilience4j",
+      "direct_answer": "Circuit Breaker prevents cascading failures by stopping calls to a failing service after a threshold is crossed. It has three states: CLOSED (normal), OPEN (fail fast), and HALF_OPEN (testing recovery).",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Understanding of the three states and the problem it solves (cascading failures)",
+        "common_mistake": "Confusing circuit breaker with retry \u2014 they're complementary, not alternatives",
+        "to_stand_out": "Mention the bulkhead pattern as a companion and the difference between count-based and time-based sliding windows"
+      },
+      "company_tags": [
+        "Netflix",
+        "Amazon",
+        "Uber",
+        "Revolut"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Thread-Pool Drain That Takes Down Your Entire Fleet",
+            "content": "Picture this: the inventory service starts responding in 8 seconds instead of 200ms. Without a circuit breaker, the order service keeps sending requests and each one occupies a thread for 8 seconds waiting for a response. At 50 requests per second, you have 400 threads blocked within a minute. The order service's thread pool is exhausted. Now it can't handle any requests \u2014 not even ones that don't touch inventory. Users see 503 errors on completely unrelated features. That's a **cascading failure**.\n\nThe circuit breaker pattern borrows from electrical engineering. When current exceeds a safe threshold, the breaker trips open and stops the flow \u2014 protecting the system from damage. In software, the \"current\" is the failure rate of a downstream dependency. When failures exceed a threshold, the breaker trips open and starts returning errors immediately (in microseconds, not seconds), giving the failing service time to recover while preventing the caller from drowning in blocked threads.\n\nThe pattern has three states that form a state machine. **CLOSED** is normal operation \u2014 all calls go through and the breaker records success/failure metrics. When the failure rate crosses a configured threshold (typically 50% over a sliding window), the breaker transitions to **OPEN** \u2014 all calls fail immediately without attempting the downstream call. After a configured wait duration (typically 10\u201330 seconds), the breaker moves to **HALF_OPEN** \u2014 a small number of probe calls are allowed through. If they succeed, the breaker returns to CLOSED. If they fail, it returns to OPEN.\n\nThe critical insight: a circuit breaker is **not** a retry mechanism. Retries amplify load on a struggling service. A circuit breaker does the opposite \u2014 it sheds load so the failing service can recover. In practice, you compose both: retry wraps the circuit breaker (outer), so the circuit breaker sees the aggregate result after retries, not each individual attempt."
+          },
+          {
+            "type": "step",
+            "title": "Implementing the Three-State Machine with Resilience4j",
+            "content": "Resilience4j is the standard resilience library for Spring Boot (replacing Netflix Hystrix, which is in maintenance mode). It uses AOP \u2014 annotate a method and Resilience4j wraps it with circuit breaker logic at runtime.\n\nThe configuration defines the breaker's sensitivity and recovery behavior. Every parameter maps to a real operational decision.\n\n```yaml\nresilience4j:\n  circuitbreaker:\n    instances:\n      inventoryService:\n        slidingWindowType: COUNT_BASED\n        slidingWindowSize: 20              # evaluate last 20 calls\n        failureRateThreshold: 50           # open at 50% failures\n        waitDurationInOpenState: 15s       # wait before probing\n        permittedNumberOfCallsInHalfOpenState: 5\n        slowCallDurationThreshold: 3s      # calls slower than 3s count as failures\n        slowCallRateThreshold: 80          # open if 80% of calls are slow\n        recordExceptions:\n          - java.io.IOException\n          - java.util.concurrent.TimeoutException\n        ignoreExceptions:\n          - com.example.BusinessValidationException\n```\n\nThe `recordExceptions` vs `ignoreExceptions` distinction is critical and often overlooked. A `BusinessValidationException` (\"invalid product ID\") is an expected response, not an infrastructure failure. If 100 users submit invalid product IDs in quick succession, that shouldn't trip the circuit breaker and block legitimate users. Only infrastructure failures \u2014 connection refused, timeout, 5xx responses \u2014 should count toward the failure rate.\n\nThe service method gets a single annotation with a fallback. The fallback must return a degraded response, not rethrow.\n\n```java\n@Service\npublic class OrderService {\n\n    @CircuitBreaker(name = \"inventoryService\",\n                    fallbackMethod = \"inventoryFallback\")\n    public StockResponse checkStock(String productId) {\n        return inventoryClient.getStock(productId);\n    }\n\n    private StockResponse inventoryFallback(String productId,\n                                            Throwable ex) {\n        log.warn(\"Inventory circuit open for product {}: {}\",\n                 productId, ex.getMessage());\n        return StockResponse.unknown(productId);\n    }\n}\n```\n\nThe fallback method must have the exact same parameter list plus a `Throwable` parameter. It should return stale cached data, a degraded response, or a default value \u2014 anything that lets the user continue rather than seeing a raw error."
+          },
+          {
+            "type": "step",
+            "title": "Count-Based vs Time-Based Windows \u2014 And Why It Matters",
+            "content": "The sliding window type changes how the breaker reacts to failure patterns. Choosing wrong means either false trips or missed outages.\n\n**Count-based** (e.g., last 20 calls) reacts quickly to consecutive failures but is sensitive to traffic volume. During a deployment at 3 AM when only 2 requests per minute hit the service, a count-based window of 20 takes 10 minutes to fill. Two legitimate timeout errors in that window give you a 10% failure rate \u2014 probably fine. But during peak at 500 RPS, those same 20 calls fill in 40ms, and a brief network blip that fails 10 out of 20 trips the breaker for thousands of users.\n\n**Time-based** (e.g., last 60 seconds) smooths out bursts by evaluating all calls within the time window. A 3-second network glitch that fails 50 out of 1000 calls shows a 5% failure rate \u2014 well below the threshold. The downside: a genuine outage where all calls fail takes the full window duration before the breaker trips. If your window is 60 seconds, users experience 60 seconds of failures before the breaker protects them.\n\nThe right choice depends on traffic patterns. **Count-based with a window of 10\u201320 calls** is the pragmatic default for most services because it reacts within a few hundred milliseconds of a real outage. Combine it with `slowCallDurationThreshold` to catch not just hard failures (exceptions) but also **degradation** \u2014 the inventory service responding in 5 seconds instead of 200ms is worse than a clean timeout because threads stay blocked longer.\n\nComposing with retries requires careful ordering. The retry should be the **outer** decorator so the circuit breaker sees the aggregate outcome after all retries, not each individual attempt.\n\n```java\n@Retry(name = \"inventoryService\", fallbackMethod = \"inventoryFallback\")\n@CircuitBreaker(name = \"inventoryService\")\npublic StockResponse checkStock(String productId) {\n    return inventoryClient.getStock(productId);\n}\n```\n\nIf you reverse the order \u2014 circuit breaker outer, retry inner \u2014 each retry attempt is counted independently, tripling the number of failures the breaker sees and causing premature trips."
+          },
+          {
+            "type": "step",
+            "title": "Production Monitoring \u2014 Alert on Transitions, Not Failure Rates",
+            "content": "The circuit breaker already handles transient failures \u2014 alerting on raw failure rates duplicates its job. Instead, monitor **state transitions**. A CLOSED\u2192OPEN event means the breaker has tripped, which deserves an alert because users are getting degraded responses. A HALF_OPEN\u2192OPEN event is more concerning \u2014 it means the downstream service attempted recovery and failed, suggesting a real outage rather than a transient blip.\n\nResilience4j exposes Micrometer metrics that integrate directly with Prometheus/Grafana.\n\n```java\n@Bean\npublic MeterRegistryCustomizer<MeterRegistry> circuitBreakerMetrics(\n        CircuitBreakerRegistry registry) {\n    return meterRegistry -> {\n        registry.getAllCircuitBreakers().forEach(cb ->\n            TaggedCircuitBreakerMetrics.ofCircuitBreaker(cb)\n                .bindTo(meterRegistry));\n    };\n}\n```\n\nThe key metrics to dashboard are `resilience4j_circuitbreaker_state` (current state per instance), `resilience4j_circuitbreaker_failure_rate` (percentage in the sliding window), and `resilience4j_circuitbreaker_slow_call_rate`. Set alerts on state=OPEN lasting more than 2 minutes and on HALF_OPEN\u2192OPEN transitions.\n\nPair the circuit breaker with a **bulkhead** to isolate thread pools per dependency. Without a bulkhead, the order service uses a single thread pool for calls to inventory, payments, and shipping. If inventory exhausts the pool, payments and shipping calls also fail. A bulkhead gives each dependency its own thread pool with a fixed maximum, containing the blast radius to a single dependency."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Circuit breaker \u2260 retry** \u2014 retries amplify load on struggling services; circuit breaker sheds load by failing fast.\n- **`recordExceptions` vs `ignoreExceptions`** \u2014 business validation errors should not count.\n- **Count-based window of 10\u201320 calls** \u2014 reacts within hundreds of milliseconds of a real outage; time-based adds seconds of delay.\n- **`slowCallDurationThreshold`** \u2014 catches degradation, not just hard failures; set to 2\u20133\u00d7 expected p99 latency.\n- **Alert on state transitions** \u2014 CLOSED\u2192OPEN means degraded responses; HALF_OPEN\u2192OPEN means recovery failed."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The circuit breaker pattern prevents cascading failures in synchronous microservice chains. When a downstream service degrades, the circuit breaker detects the pattern and starts failing fast \u2014 protecting the caller from exhausting its thread pool waiting for responses that won't arrive in time.\n\n**How Resilience4j's three-state machine works:**\n- CLOSED is normal \u2014 calls go through and failure metrics are recorded against a sliding window of the last N calls\n- When failure rate exceeds the threshold (typically 50%), it transitions to OPEN \u2014 every call returns immediately with the fallback response, no downstream attempt is made\n- After a wait duration (10\u201330 seconds), it moves to HALF_OPEN and lets a few probe calls through; success closes the breaker, failure reopens it\n\n**Critical configuration decisions:**\n- The `recordExceptions` filter is what most people miss \u2014 business validation errors like \"invalid product ID\" should NOT count as infrastructure failures and trip the breaker; only timeouts, connection refused, and 5xx should\n- `slowCallDurationThreshold` catches degradation before hard failures appear \u2014 a service responding in 5 seconds ties up threads just as badly as a timeout; set it to 2\u20133\u00d7 your expected p99 latency\n\n**Composing with other patterns:**\n- Always pair circuit breakers with bulkheads \u2014 separate thread pools per dependency so a failing inventory service can't exhaust the pool that payments and shipping also use\n- Compose with retry as the outer decorator so the circuit breaker sees the aggregate outcome, not each individual retry attempt\n\nI recommend alerting on state transitions (CLOSED\u2192OPEN) rather than failure rates \u2014 a transition means users are getting degraded responses, which is a production incident."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a circuit breaker and a retry?",
+        "How does the bulkhead pattern complement the circuit breaker?",
+        "What is the difference between count-based and time-based sliding windows?"
+      ],
+      "seo": {
+        "metaTitle": "Circuit Breaker Resilience4j Spring Boot \u2014 Java Interview",
+        "metaDescription": "Circuit breaker pattern with Resilience4j. Three states, Spring Boot configuration, fallback methods, and combination with retry."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "The circuit breaker pattern prevents cascading failures in synchronous microservice chains.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Picture this: the inventory service starts responding in 8 seconds instead of 200ms. Without a circuit breaker, the order service keeps sending requests and each one occupies a thread for 8 seconds waiting for a response. At 50 requests per second, you have 400 threads blocked within a minute. The order service's thread pool is exhausted. Now it can't handle any requests \u2014 not even ones that don't touch inventory. Users see 503 errors on completely unrelated features. That's a cascading failure. The circuit breaker pattern borrows from electrical engineering."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Resilience4j is the standard resilience library for Spring Boot (replacing Netflix Hystrix, which is in maintenance mode).",
+              "It uses AOP \u2014 annotate a method and Resilience4j wraps it with circuit breaker logic at runtime.",
+              "The configuration defines the breaker's sensitivity and recovery behavior.",
+              "Every parameter maps to a real operational decision.",
+              "``yaml resilience4j: circuitbreaker: instances: inventoryService: slidingWindowType: COUNT_BASED slidingWindowSize: 20 # evaluate last 20 calls failureRateThreshold: 50 # open at 50% failures waitDurationInOpenState: 15s # wait before probing permittedNumberOfCallsInHalfOpenState: 5 slowCallDurationThreshold: 3s # calls slower than 3s count as failures slowCallRateThreshold: 80 # open if 80% of calls are slow recordExceptions: java.io.IOException java.util.concurrent.TimeoutException ignoreExceptions: com.example.BusinessValidationException ` The recordExceptions vs ignoreExceptions distinction is critical and often overlooked.",
+              "A BusinessValidationException (\"invalid product ID\") is an expected response, not an infrastructure failure."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Circuit breaker \u2260 retry \u2014 retries amplify load on struggling services; circuit breaker sheds load by failing fast",
+              "recordExceptions vs ignoreExceptions \u2014 business validation errors should not count",
+              "Count-based window of 10\u201320 calls \u2014 reacts within hundreds of milliseconds of a real outage; time-based adds seconds of delay",
+              "slowCallDurationThreshold \u2014 catches degradation, not just hard failures; set to 2\u20133\u00d7 expected p99 latency",
+              "Alert on state transitions \u2014 CLOSED\u2192OPEN means degraded responses; HALF_OPEN\u2192OPEN means recovery failed"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Confusing circuit breaker with retry \u2014 they're complementary, not alternatives"
+          }
+        ],
+        "cap": "How Resilience4j's three-state machine works: CLOSED is normal \u2014 calls go through and failure metrics are recorded against a sliding window of the last N calls When failure rate exceeds the threshold",
+        "familiarity_anchors": [
+          "Circuit",
+          "Breaker",
+          "CLOSED"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a circuit breaker and a retry?",
+          "How does the bulkhead pattern complement the circuit breaker?",
+          "What is the difference between count-based and time-based sliding windows?"
+        ]
+      }
+    },
+    {
+      "id": "scc-004",
+      "slug": "resilience4j-circuit-breaker-spring-cloud",
+      "question": "How does Resilience4j circuit breaker work in a Spring Cloud application?",
+      "title": "Resilience4j Circuit Breaker in Spring Cloud",
+      "direct_answer": "Resilience4j's circuit breaker wraps calls to external services and tracks a sliding window of success/failure rates. It transitions from CLOSED (normal) to OPEN (rejecting calls immediately) when failures exceed a threshold, then to HALF_OPEN (probing) after a wait duration. In Spring Cloud it integrates via AOP annotations, programmatic API, or the Gateway CircuitBreaker filter.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you understand the three states and their transitions, what the sliding window types mean, and how to configure appropriate thresholds for production \u2014 not just copy-paste defaults",
+        "common_mistake": "Using COUNT_BASED sliding window with a small size (e.g. 5) and a 50% threshold \u2014 this makes the circuit trip on a single failed request in a low-traffic window; use TIME_BASED for production",
+        "to_stand_out": "Explain the difference between COUNT_BASED and TIME_BASED sliding windows, describe bulkhead and rate limiter integration, and discuss how to test circuit breakers in integration tests using Resilience4j's TestCircuitBreakerRegistry"
+      },
+      "company_tags": [
+        "netflix",
+        "amazon",
+        "stripe",
+        "square",
+        "revolut"
+      ],
+      "reading_time_minutes": 7,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "A Circuit Breaker Is a State Machine That Fails Fast \u2014 Not a Smarter Retry That Keeps Trying",
+            "content": "Most developers reach for a circuit breaker thinking of it as a retry with a limit: try, fail, try again, eventually give up. This mental model leads to misconfiguration and misdiagnosis. **A circuit breaker and a retry solve different problems.**\n\nA retry handles transient failures \u2014 network hiccups, brief overload, a single bad response. Try again; it might work. A circuit breaker handles **sustained failures** \u2014 a downstream service that is genuinely sick and will keep failing. Stop trying entirely. Give it time to recover. Then carefully probe before resuming full traffic.\n\nWithout a circuit breaker, a slow or failing downstream service doesn't just cause individual calls to fail. Every thread that calls the downstream service blocks, waiting for a response that takes 30 seconds to time out. As new requests arrive, more threads block. The thread pool exhausts. Your service becomes unresponsive \u2014 not because it's overloaded, but because it's waiting for someone else's problem. One sick dependency cascades into a system-wide outage.\n\nResilience4j's circuit breaker is a **state machine** with three states: CLOSED (normal operation, all calls pass through), OPEN (circuit tripped, all calls rejected immediately with no downstream call), and HALF_OPEN (recovery probe, a limited number of test calls allowed through). The transitions between states are driven by metrics tracked in a sliding window \u2014 not a guess, not a countdown timer. The circuit opens when the data shows the downstream service is failing, and it closes when the data shows it has recovered."
+          },
+          {
+            "type": "phase",
+            "title": "CLOSED State \u2014 The Sliding Window Evaluates Every Call and Decides When to Trip",
+            "content": "In CLOSED state, every call passes through to the downstream service. Resilience4j records each outcome \u2014 success, failure (exception thrown), or slow (response time exceeded threshold) \u2014 in a **sliding window**, a circular buffer of recent results. The failure rate and slow-call rate are computed from this window.\n\nTwo window types exist, and the choice matters significantly for production:\n\n- **COUNT_BASED:** evaluates the last N calls. `slidingWindowSize(10)` means the failure rate is calculated over the last 10 calls, regardless of how much time elapsed.\n- **TIME_BASED:** evaluates all calls in the last N seconds. `slidingWindowSize(10)` means all calls in the last 10 seconds.\n\nThe circuit trips from CLOSED to OPEN when the failure rate exceeds `failureRateThreshold`, or when the slow-call rate exceeds `slowCallRateThreshold`. Slow calls are calls that take longer than `slowCallDurationThreshold` \u2014 even if they eventually succeed.\n\n```java\nCircuitBreakerConfig config = CircuitBreakerConfig.custom()\n    .slidingWindowType(TIME_BASED)           // evaluate over time, not call count\n    .slidingWindowSize(10)                   // 10-second evaluation window\n    .failureRateThreshold(50)                // trip at 50% failure rate\n    .slowCallDurationThreshold(Duration.ofSeconds(2))  // >2s counts as slow\n    .slowCallRateThreshold(80)               // trip at 80% slow calls\n    .minimumNumberOfCalls(5)                 // don't trip on fewer than 5 calls\n    .build();\n```\n\n`minimumNumberOfCalls(5)` prevents the circuit from tripping before a statistically meaningful sample is collected. Without it, a single failure in the first call (100% failure rate) trips the circuit immediately \u2014 before there's any real signal."
+          },
+          {
+            "type": "phase",
+            "title": "OPEN to HALF_OPEN \u2014 Failing Fast Protects Threads, Then Probing Recovery Prevents Thundering Herd",
+            "content": "In OPEN state, Resilience4j rejects every call immediately with `CallNotPermittedException`. No downstream call is made. Threads are freed instantly rather than blocked for seconds waiting for a timeout. The fallback method runs instead, returning a degraded but valid response \u2014 cached data, empty list, service-specific default \u2014 that the caller can work with.\n\nAfter `waitDurationInOpenState` (typically 30\u201360 seconds), the circuit transitions automatically to **HALF_OPEN**. It doesn't close based on a timer \u2014 it *probes*. `permittedNumberOfCallsInHalfOpenState` (default: 10) determines how many test calls are allowed through to the downstream service.\n\nIf those test calls pass the failure and slow-call thresholds, the circuit closes and full traffic resumes. If they fail, the circuit reopens and the wait cycle starts again.\n\nThe probe-before-close design prevents the **thundering herd problem.** If a circuit opens during a traffic spike and then closes immediately, the full traffic surge hits the just-recovered downstream service simultaneously \u2014 potentially re-failing it. HALF_OPEN allows only `permittedNumberOfCallsInHalfOpenState` test calls, giving the downstream service a chance to demonstrate stable recovery before absorbing full load.\n\nThe fallback method is the key UX decision. It must have the same return type as the protected method, plus a `Throwable` parameter. It receives both `CallNotPermittedException` (circuit OPEN) and actual downstream exceptions (circuit CLOSED but call failed), so it must handle both cases gracefully.\n\n```java\n@CircuitBreaker(name = \"orderService\", fallbackMethod = \"fallbackOrder\")\npublic Order getOrder(String orderId) {\n    return orderClient.fetchOrder(orderId);\n}\n\nprivate Order fallbackOrder(String orderId, Throwable t) {\n    // Return a cached or default value \u2014 never propagate the error to the caller\n    return orderCache.getOrDefault(orderId, Order.empty());\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "COUNT_BASED Is a Production Trap in Low-Traffic Services \u2014 Use TIME_BASED and Test With Forced State Transitions",
+            "content": "The common mistake from the interviewer's perspective: COUNT_BASED with `slidingWindowSize(5)` and `failureRateThreshold(50)`. In a service that handles 2 requests per minute, that 5-call window spans 2.5 minutes. Three failures in a slow afternoon of low traffic trips the circuit \u2014 on what might be normal variance. The circuit stays OPEN through `waitDurationInOpenState`, rejecting calls while the downstream service is perfectly healthy. Users see errors; engineers investigate; nothing is wrong.\n\n**TIME_BASED** windows give a statistically meaningful sample that scales with traffic. High-traffic services get thousands of data points in 10 seconds; low-traffic services get the few calls that actually occurred. The circuit doesn't trip on 3 bad calls in a 5-call window; it trips when a genuine pattern of failures emerges over time.\n\nFor integration testing, Resilience4j provides `CircuitBreakerRegistry` with forced state transition methods \u2014 you don't need to manufacture the exact number of failures to trigger a transition:\n\n```java\n@Autowired CircuitBreakerRegistry circuitBreakerRegistry;\n\n@Test\nvoid fallback_returnsDefault_whenCircuitIsOpen() {\n    CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker(\"orderService\");\n    cb.transitionToOpenState(); // force OPEN \u2014 no need to trigger N failures\n\n    Order result = orderService.getOrder(\"order-123\");\n\n    assertThat(result).isEqualTo(Order.empty()); // fallback executed\n    cb.transitionToClosedState(); // restore for subsequent tests\n}\n```\n\nThis makes circuit breaker tests deterministic and fast. No need to mock exactly N failures, configure thresholds to trip on a single call, or sleep waiting for window evaluation. Force the state, test the behavior, restore the state. This is the testing pattern that demonstrates real production experience with Resilience4j."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Without a circuit breaker, a slow downstream service **exhausts your thread pool** waiting for responses, cascading the failure to your entire system.\n\nResilience4j's circuit breaker is a state machine: **CLOSED** (normal, calls pass through), **OPEN** (failing, calls rejected immediately with no downstream call), **HALF_OPEN** (testing recovery with a few calls).\n\nThe circuit trips when the failure rate exceeds the threshold \u2014 typically 50% of the last 10 calls. After a wait period, it enters HALF_OPEN to test recovery.\n\n**Slow call handling** is often overlooked. Configure a slow call threshold (e.g., 2 seconds) \u2014 even if calls eventually succeed, if 80% are slow, the circuit trips to prevent thread exhaustion.\n\nFallback methods return degraded responses: cached data, defaults, or partial results. The user gets something instead of an error.\n\nIn practice, I always configure both failure rate and slow call thresholds, expose circuit breaker metrics to Prometheus, and monitor state transitions to tune thresholds."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Circuit breaker has three states: CLOSED, OPEN, HALF_OPEN** \u2014 CLOSED allows all calls; OPEN rejects immediately without calling downstream; HALF_OPEN tests recovery with a limited number of calls.\n- **Slow call detection prevents thread pool exhaustion** \u2014 `slowCallDurationThreshold(2s)` marks calls over 2 seconds as slow; circuit trips at 80% slow calls even if they eventually succeed.\n- **Fallback methods must match the original method signature** \u2014 same return type plus a `Throwable` parameter; return cached data, defaults, or partial results instead of propagating errors.\n- **slidingWindowSize determines the evaluation window** \u2014 failure rate is calculated over the last N calls (count-based) or N seconds (time-based); too small causes premature tripping, too large delays detection.\n- **Circuit breaker metrics feed into Micrometer/Prometheus** \u2014 monitor state transitions, failure rates, and call durations to tune thresholds; too aggressive trips during normal variance, too lenient allows cascading failures."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between a circuit breaker and a retry in Resilience4j, and how do they interact?",
+        "How would you test that your circuit breaker fallback logic works correctly in a unit test?",
+        "What is a bulkhead in Resilience4j and how does it complement a circuit breaker?"
+      ],
+      "seo": {
+        "metaTitle": "Resilience4j Circuit Breaker Spring Cloud | Java Intermediate Interview | InterviewExplainer",
+        "metaDescription": "Resilience4j circuit breaker states, sliding windows, TIME_BASED vs COUNT_BASED, Spring Boot configuration, annotation usage, and fallback patterns for Java."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Without a circuit breaker, a slow downstream service exhausts your thread pool waiting for responses, cascading the failure to your entire system.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Most developers reach for a circuit breaker thinking of it as a retry with a limit: try, fail, try again, eventually give up. This mental model leads to misconfiguration and misdiagnosis. A circuit breaker and a retry solve different problems. A retry handles transient failures \u2014 network hiccups, brief overload, a single bad response. Try again; it might work. A circuit breaker handles sustained failures \u2014 a downstream service that is genuinely sick and will keep failing. Stop trying entirely. Give it time to recover. Then carefully probe before resuming."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The common mistake from the interviewer's perspective: COUNT_BASED with slidingWindowSize(5) and failureRateThreshold(50).",
+              "In a service that handles 2 requests per minute, that 5-call window spans 2.5 minutes.",
+              "Three failures in a slow afternoon of low traffic trips the circuit \u2014 on what might be normal variance.",
+              "The circuit stays OPEN through waitDurationInOpenState, rejecting calls while the downstream service is perfectly healthy.",
+              "Users see errors; engineers investigate; nothing is wrong.",
+              "TIME_BASED windows give a statistically meaningful sample that scales with traffic."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Circuit breaker has three states: CLOSED, OPEN, HALF_OPEN \u2014 CLOSED allows all calls; OPEN rejects immediately without calling downstream; HALF_OPEN tests recovery with a limited number of calls",
+              "Slow call detection prevents thread pool exhaustion \u2014 slowCallDurationThreshold(2s) marks calls over 2 seconds as slow; circuit trips at 80% slow calls even if they eventually succeed",
+              "Fallback methods must match the original method signature \u2014 same return type plus a Throwable parameter; return cached data, defaults, or partial results instead of propagating errors",
+              "slidingWindowSize determines the evaluation window \u2014 failure rate is calculated over the last N calls (count-based) or N seconds (time-based); too small causes premature tripping, too large delays detection",
+              "Circuit breaker metrics feed into Micrometer/Prometheus \u2014 monitor state transitions, failure rates, and call durations to tune thresholds; too aggressive trips during normal variance, too lenient allows cascading failures"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Using COUNT_BASED sliding window with a small size (e.g. 5) and a 50% threshold \u2014 this makes the circuit trip on a single failed request in a low-traffic window; use TIME_BASED for production"
+          }
+        ],
+        "cap": "In practice, I always configure both failure rate and slow call thresholds, expose circuit breaker metrics to Prometheus, and monitor state transitions to tune thresholds.",
+        "familiarity_anchors": [
+          "CLOSED",
+          "Spring",
+          "Cloud"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between a circuit breaker and a retry in Resilience4j, and how do they interact?",
+          "How would you test that your circuit breaker fallback logic works correctly in a unit test?",
+          "What is a bulkhead in Resilience4j and how does it complement a circuit breaker?"
+        ]
+      }
+    }
+  ]
+}

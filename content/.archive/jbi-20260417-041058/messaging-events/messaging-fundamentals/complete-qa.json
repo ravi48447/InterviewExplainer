@@ -1,0 +1,227 @@
+{
+  "topic": "Messaging Fundamentals",
+  "topicSlug": "messaging-fundamentals",
+  "questions": [
+    {
+      "id": "eda-001",
+      "slug": "event-driven-vs-request-driven-architecture",
+      "question": "What are the key trade-offs between event-driven and request-driven (synchronous) architecture?",
+      "title": "Event-Driven vs Request-Driven Architecture Trade-offs",
+      "direct_answer": "Event-driven architecture decouples producers from consumers via an event broker, enabling asynchronous processing, better scalability, and fault tolerance\u2014but introduces eventual consistency, harder debugging, and infrastructure complexity. Request-driven (REST/gRPC) is simpler, provides immediate consistency and error feedback, but couples services directly and limits scalability under load spikes.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Whether you understand when to choose async vs sync communication and can articulate the real trade-offs in production systems",
+        "common_mistake": "Saying 'event-driven is always better' without acknowledging the operational complexity, eventual consistency challenges, and debugging difficulty",
+        "to_stand_out": "Give a concrete example of a system you'd design each way, explain how you handle the 'dual write problem' in event-driven systems, and mention the Outbox pattern"
+      },
+      "company_tags": [
+        "netflix",
+        "uber",
+        "linkedin",
+        "amazon"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-13",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Cascade That Starts With One Slow Service",
+            "content": "When the inventory service starts responding in 5 seconds instead of 200ms, every service that calls it synchronously starts piling up threads waiting for responses. At 100 requests per second, you have 500 blocked threads within a minute. The order service's thread pool is exhausted \u2014 and now it can't serve requests that have nothing to do with inventory. One sick service took down three healthy ones. That's the fundamental problem synchronous request-driven architectures face at scale.\n\nEvent-driven architecture solves this by removing the direct dependency. Instead of calling the inventory service and waiting, the order service publishes an **OrderPlaced** event to a broker and moves on immediately. The inventory service picks it up whenever it's ready \u2014 seconds later, or after recovering from an outage. The order service never blocks.\n\nBut this decoupling isn't free. The moment you publish an event instead of making a direct call, you lose immediate consistency. The user placed the order, but the inventory hasn't been reserved yet. The payment hasn't been charged. If you naively tell the user \"order confirmed\" before downstream processing completes, you've made a promise you might not keep. The real question isn't which approach is better \u2014 it's which trade-off your specific use case can absorb."
+          },
+          {
+            "type": "comparison_table",
+            "title": "What Synchronous Coupling Costs vs What Eventual Consistency Costs",
+            "content": "| Dimension | Request-Driven (REST/gRPC) | Event-Driven (Kafka/RabbitMQ) |\n|---|---|---|\n| Coupling | Tight \u2014 caller blocks until callee responds | Loose \u2014 producer unaware of consumers |\n| Consistency | Immediate \u2014 success/failure in one round trip | Eventual \u2014 reads may lag writes |\n| Error handling | Immediate feedback, standard HTTP status codes | Requires DLQ, idempotency, consumer monitoring |\n| Scalability | Limited by slowest service in the chain | Consumers scale independently, broker absorbs bursts |\n| Throughput | Blocked by downstream latency | Producer never blocked by consumer speed |\n| Debugging | Stack trace from top to bottom | Distributed tracing across services and broker |\n| Ordering | Sequential by default | Per-partition only (Kafka) |\n| Infrastructure | Simple \u2014 HTTP between services | Broker cluster + schema registry + monitoring |\n| Fan-out cost | One HTTP call per downstream, linear latency | One publish, N consumer groups read independently |"
+          },
+          {
+            "type": "step",
+            "title": "The Pattern Production Systems Actually Use \u2014 Sync at the Edge, Async Behind It",
+            "content": "Real production systems at Netflix, Uber, and Amazon don't pick one approach exclusively. They draw a deliberate boundary: synchronous for user-facing operations where the user needs an immediate answer, asynchronous for everything that can tolerate a delay.\n\nConsider a checkout flow. Payment authorization must be synchronous \u2014 the user needs to know immediately if their card was declined. But after payment succeeds, the confirmation email, inventory reservation, analytics recording, and fraud scoring can all happen asynchronously via events. The API returns a success response while downstream services process independently.\n\n```java\n@RestController\npublic class CheckoutController {\n    private final PaymentGateway payments;\n    private final OrderRepository orders;\n    private final ApplicationEventPublisher events;\n\n    @PostMapping(\"/checkout\")\n    @Transactional\n    public ResponseEntity<OrderResponse> checkout(@RequestBody CheckoutRequest req) {\n        PaymentResult payment = payments.authorize(req.card()); // sync \u2014 200-500ms\n        if (payment.declined()) {\n            return ResponseEntity.badRequest().body(OrderResponse.declined());\n        }\n        Order order = orders.save(Order.confirmed(req, payment));\n        events.publishEvent(new OrderPaidEvent(order.getId())); // async after commit\n        return ResponseEntity.ok(OrderResponse.from(order));\n    }\n}\n```\n\nResponse time is bounded by the payment gateway latency regardless of how many downstream consumers exist. Adding a loyalty points service or partner notification requires zero changes to this controller.\n\nThe critical pitfall is the **dual-write problem**. If you save to the database and then publish to Kafka separately, a crash between those two lines means the order exists but the event was never published. Inventory was never reserved. The Outbox pattern solves this: write the event to an outbox table in the same database transaction as the order, then a separate process publishes from the outbox to Kafka. This guarantees atomicity without distributed transactions."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Broker absorption vs thread-pool drain** \u2014 synchronous calls to a slow downstream exhaust the caller's thread pool.\n- **Immediate consistency vs eventual consistency** \u2014 sync paths give the user a definitive answer in one round trip.\n- **Fan-out cost stays constant** \u2014 adding a fourth Kafka consumer group requires zero producer changes and no additional publish latency.\n- **Dual-write crash window** \u2014 saving to the database then publishing to Kafka leaves a gap.\n- **Operational surface area is multiplicative** \u2014 event-driven adds broker clusters, schema registries, DLQs, and consumer-lag dashboards that a REST call."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Event-driven and request-driven architectures represent fundamentally different approaches to service coupling. In synchronous REST or gRPC, the caller blocks until the downstream responds \u2014 both services must be healthy at the same moment. When the inventory service starts responding in 5 seconds instead of 200ms, the order service's threads pile up, and you get a cascading failure that takes down unrelated features.\n\n**Why event-driven breaks temporal coupling:**\n- The order service publishes an event to a broker and returns immediately \u2014 the inventory service processes it whenever it is ready, even minutes later after recovering from an outage\n- The producer is completely unaware of who consumes the event, so adding new consumers \u2014 analytics, fraud scoring, notifications \u2014 requires zero producer changes and no additional publish latency\n- Fan-out at scale: adding a fourth synchronous downstream call multiplies the failure surface and latency; adding a fourth Kafka consumer group costs nothing on the producer side\n\n**The consistency trade-off:**\n- Synchronous calls give you an immediate answer \u2014 the payment either worked or it didn't, and you can tell the user in the same HTTP response\n- With events, you get eventual consistency \u2014 the user placed an order but downstream services haven't finished processing; you need patterns like optimistic UI, polling endpoints, or WebSocket notifications to bridge that gap\n- The dual-write problem: saving to the database and then publishing to Kafka creates a crash window where the event is lost; the Outbox pattern writes both in one database transaction\n\n**How production systems use both:**\n- The user-facing request path is synchronous \u2014 payment authorization, search results, validation \u2014 because users need immediate answers\n- Everything behind that boundary is event-driven: emails, inventory updates, analytics, and fraud scoring process independently\n\nI recommend sync for user-facing feedback that requires an immediate answer, async for everything else, and always the Outbox pattern at the boundary between transactional writes and event publishing."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you handle a case where both the database write and event publish must succeed together?",
+        "What is the Outbox pattern and why does it solve the dual-write problem?",
+        "How do you ensure exactly-once processing in an event-driven system?"
+      ],
+      "seo": {
+        "metaTitle": "Event-Driven vs Request-Driven Architecture | Java Interview | InterviewExplainer",
+        "metaDescription": "Compare event-driven and synchronous request-driven architecture for Java backend systems. Trade-offs, when to use each, and interview talking points."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "Event-driven and request-driven architectures represent fundamentally different approaches to service coupling.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "When the inventory service starts responding in 5 seconds instead of 200ms, every service that calls it synchronously starts piling up threads waiting for responses. At 100 requests per second, you have 500 blocked threads within a minute. The order service's thread pool is exhausted \u2014 and now it can't serve requests that have nothing to do with inventory. One sick service took down three healthy ones. That's the fundamental problem synchronous request-driven architectures face at scale. Event-driven architecture solves this by removing the direct dependency. Instead of calling the inventory service and waiting, the order service publishes an OrderPlaced event to a broker and moves on immediately. The inventory service picks it up whenever it's ready \u2014 seconds later."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "When the inventory service starts responding in 5 seconds instead of 200ms, every service that calls it synchronously starts piling up threads waiting for responses. At 100 requests per second, you have 500 blocked threads within a minute. The order service's thread pool is exhausted \u2014 and now it can't serve requests that have nothing to do with inventory. One sick service took down three healthy ones. That's the fundamental problem synchronous request-driven architectures face at scale. Event-driven architecture solves this by removing the direct dependency. Instead of calling the inventory service and waiting, the order service publishes an OrderPlaced event to a broker and moves on immediately. The inventory."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Real production systems at Netflix, Uber, and Amazon don't pick one approach exclusively",
+              "They draw a deliberate boundary: synchronous for user-facing operations where the user needs an immediate answer, asynchronous for everything that can tolerate a delay",
+              "Consider a checkout flow",
+              "Payment authorization must be synchronous \u2014 the user needs to know immediately if their card was declined",
+              "But after payment succeeds, the confirmation email, inventory reservation, analytics recording, and fraud scoring can all happen asynchronously via events"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "When the inventory service starts responding in 5 seconds instead of 200ms, every service that calls it synchronously starts piling up threads waiting for responses. At 100 requests per second, you have 500 blocked threads within a minute. The order service's thread pool is exhausted \u2014 and now it can't serve requests that have nothing to do with inventory. One sick service took down three healthy ones. That's the fundamental problem synchronous request-driven architectures face at scale. Event-driven architecture solves this by removing the direct dependency. Instead of calling the inventory service and waiting, the order service publishes an OrderPlaced event to a broker and moves on immediately. The inventory service picks it up whenever it's ready \u2014 seconds later."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "When the inventory service starts responding in 5 seconds instead of 200ms, every service that calls it synchronously starts piling up threads waiting for responses. At 100 requests per second, you have 500 blocked threads within a minute. The order service's thread pool is exhausted \u2014 and now it can't serve requests that have nothing to do with inventory. One sick service took down three healthy ones. That's the fundamental problem synchronous request-driven architectures face at scale. Event-driven architecture solves this by removing the direct dependency. Instead of calling the inventory service and waiting, the order service publishes an OrderPlaced event to a broker and moves on immediately. The inventory service picks it up whenever it's ready \u2014 seconds later."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Saying 'event-driven is always better' without acknowledging the operational complexity, eventual consistency challenges, and debugging difficulty"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Broker absorption vs thread-pool drain \u2014 synchronous calls to a slow downstream exhaust the caller's thread pool. Immediate consistency vs eventual consistency \u2014 sync paths give the user a definitive answer in one round trip. Fan-out cost stays constant \u2014 adding a fourth Kafka consumer group requires zero producer changes and no additional publish latency. Dual-write crash window \u2014 saving to the database then publishing to Kafka leaves a gap. Operational surface area is multiplicative \u2014 event-driven adds broker clusters, schema registries, DLQs, and consumer-lag."
+          }
+        ],
+        "cap": "Why event-driven breaks temporal coupling: The order service publishes an event to a broker and returns immediately \u2014 the inventory service processes it whenever it is ready, even minutes later after",
+        "familiarity_anchors": [
+          "Event",
+          "Request"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you handle a case where both the database write and event publish must succeed together?",
+          "What is the Outbox pattern and why does it solve the dual-write problem?",
+          "How do you ensure exactly-once processing in an event-driven system?"
+        ]
+      }
+    },
+    {
+      "id": "eda-009",
+      "slug": "domain-events-vs-integration-events",
+      "question": "What is the difference between domain events and integration events?",
+      "title": "Domain Events vs Integration Events: When to Use Each",
+      "direct_answer": "Domain events are internal signals within a bounded context, carrying rich domain objects and published synchronously within the same transaction. Integration events cross bounded context boundaries, carry minimal data, are serialized for external consumption, and are published asynchronously via a broker. Domain events often trigger integration events.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "DDD knowledge and understanding of event boundaries in microservices architecture",
+        "common_mistake": "Using domain events across service boundaries \u2014 this creates tight coupling as external consumers depend on your internal domain model",
+        "to_stand_out": "Explain how domain events and integration events relate (domain event handler publishes integration event), reference DDD bounded context concept, and mention Spring's ApplicationEventPublisher for domain events"
+      },
+      "company_tags": [
+        "microsoft",
+        "netflix",
+        "amazon",
+        "thoughtworks"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Refactor That Broke Three Other Teams' Services",
+            "content": "Your team renames `Order.customerId` to `Order.buyerRef` \u2014 a routine refactor inside your bounded context. Tests pass. Deploy goes smoothly. Monday morning, three Slack channels are on fire: the analytics team's pipeline is throwing deserialization errors, the notification service stopped sending confirmations, and the fraud team's model is silently dropping events it can't parse. All because those teams were consuming your internal `OrderPlacedEvent` \u2014 complete with your domain objects, your field names, your internal structure.\n\nThis is what happens when domain events leak across service boundaries. The distinction between **domain events** and **integration events** exists precisely to prevent this. Domain events are internal signals within a single bounded context. They carry rich domain objects, reference internal entities, and can change as fast as the owning team refactors. Integration events are external contracts that cross service boundaries. They carry minimal, stable data \u2014 primitive types, stable IDs, no references to internal domain classes.\n\nThe boundary between them maps directly to DDD's concept of a **bounded context**. Inside a bounded context, you control everything \u2014 the domain model, the event shapes, the consumers. Outside, you control nothing. Other teams depend on your integration events the way they depend on your REST API \u2014 as a versioned contract you can't change without coordination. Domain events can move at the speed of your refactor cycle. Integration events move at the speed of cross-team communication."
+          },
+          {
+            "type": "comparison_table",
+            "title": "What Crosses the Boundary vs What Stays Inside",
+            "content": "| Dimension | Domain Event | Integration Event |\n|---|---|---|\n| Scope | Within one bounded context | Across service boundaries |\n| Consumers | Same service, same process | Other services, external systems |\n| Transport | In-memory (`ApplicationEventPublisher`) | Message broker (Kafka, RabbitMQ) |\n| Transaction | Same DB transaction as the trigger | Async, published after DB commit |\n| Payload | Rich domain objects, internal types | Minimal primitives, no internal classes |\n| Schema contract | Internal \u2014 changes freely with refactors | Public \u2014 breaking changes need versioning |\n| Coupling | Reduces coupling within the service | Reduces coupling between services |\n| Example | `OrderLineItemAdded` (updates totals internally) | `OrderPlaced` (triggers payment in another service) |"
+          },
+          {
+            "type": "step",
+            "title": "The Translation Layer \u2014 Domain Events Trigger Integration Events, Never Replace Them",
+            "content": "The pattern that prevents internal refactors from breaking external consumers is a **translation layer**: a domain event handler that converts rich internal events into minimal integration events.\n\nDomain events are raised by the aggregate root when a meaningful state transition occurs. Spring Data's `AbstractAggregateRoot` handles this elegantly \u2014 registered events are published automatically after `repository.save()`.\n\n```java\n@Entity\npublic class Order extends AbstractAggregateRoot<Order> {\n\n    public void addItem(OrderItem item) {\n        this.items.add(item);\n        this.total = recalculate();\n        registerEvent(new OrderItemAddedEvent(this.id, item, this.total));\n    }\n}\n```\n\nThe domain event `OrderItemAddedEvent` carries the full `OrderItem` domain object \u2014 internal type, internal structure. A handler within the same service catches this event and translates it to a minimal integration event for external consumption.\n\n```java\n@Component\npublic class OrderIntegrationEventPublisher {\n\n    @TransactionalEventListener(phase = AFTER_COMMIT)\n    public void onItemAdded(OrderItemAddedEvent event) {\n        outboxService.publish(new OrderUpdatedIntegration(\n            event.orderId().toString(),\n            event.newTotal().amount(),\n            Instant.now()\n        ));\n    }\n}\n\npublic record OrderUpdatedIntegration(\n    String orderId,\n    BigDecimal total,\n    Instant updatedAt\n) {}\n```\n\nThe integration event `OrderUpdatedIntegration` uses only primitive types and stable identifiers. It carries no reference to `OrderItem`, `Money`, or any internal class. External consumers compile against this minimal contract, not your domain model. When you refactor `OrderItem` next quarter, the integration event shape doesn't change.\n\nThe `@TransactionalEventListener(phase = AFTER_COMMIT)` is critical. It ensures the integration event is only published after the database transaction commits successfully. If the transaction rolls back, no integration event is published \u2014 preventing false notifications about state changes that didn't persist."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Bounded context boundary is the dividing line** \u2014 domain events carry rich internal types and change freely with refactors.\n- **`AbstractAggregateRoot.registerEvent()`** \u2014 Spring Data publishes domain events automatically after `save()`, keeping event raising inside the.\n- **`@TransactionalEventListener(phase = AFTER_COMMIT)`** \u2014 publishes integration events only after the database transaction commits.\n- **Integration payload hygiene** \u2014 stick to `String`, `BigDecimal`, `Instant`, and stable IDs.\n- **Outbox pattern at the translation boundary** \u2014 write the integration event to an outbox table in the after-commit handler so broker unavailability."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Domain events and integration events both represent facts that happened, but they serve different purposes and live at different system boundaries. Understanding the distinction prevents internal refactoring from breaking other teams' pipelines.\n\n**Domain events \u2014 internal signals:**\n- Raised by the domain model when something meaningful happens \u2014 an order item was added, a payment was validated \u2014 and consumed by handlers in the same service, often within the same transaction\n- Carry rich domain objects and are published in-memory via Spring's `ApplicationEventPublisher`; they can change as fast as you refactor your internal domain model\n- Spring Data's `AbstractAggregateRoot.registerEvent()` publishes them automatically after `save()`, keeping event raising inside the aggregate where the state transition occurs\n\n**Integration events \u2014 cross-boundary contracts:**\n- Cross service boundaries by being published to a message broker and consumed by other services\n- Payload hygiene is critical: only primitive types, stable IDs, no references to internal domain classes; other teams don't know your domain model and should not compile against it\n- A field rename in your internal domain model should never break another team's consumer \u2014 integration events prevent this by decoupling the wire format from the internal model\n\n**The translation pattern:**\n- A `@TransactionalEventListener` with `phase = AFTER_COMMIT` catches domain events and translates them into minimal integration events using the Outbox pattern\n- Waiting for the commit ensures you only publish integration events for state changes that actually persisted to the database\n\nI recommend treating integration events with the same versioning discipline as a public REST API \u2014 additive changes only, breaking changes require a migration strategy."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why should integration events never carry references to internal domain objects?",
+        "What is the role of @TransactionalEventListener vs @EventListener in Spring?",
+        "How does DDD's bounded context concept relate to event boundaries in microservices?"
+      ],
+      "seo": {
+        "metaTitle": "Domain Events vs Integration Events Java DDD | InterviewExplainer",
+        "metaDescription": "Difference between domain events and integration events in Java microservices. DDD bounded contexts, Spring ApplicationEventPublisher, and the Outbox pattern."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "Domain events and integration events both represent facts that happened, but they serve different purposes and live at different system boundaries.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Your team renames Order.customerId to Order.buyerRef \u2014 a routine refactor inside your bounded context. Tests pass. Deploy goes smoothly. Monday morning, three Slack channels are on fire: the analytics team's pipeline is throwing deserialization errors, the notification service stopped sending confirmations, and the fraud team's model is silently dropping events it can't parse. All because those teams were consuming your internal OrderPlacedEvent \u2014 complete with your domain objects, your field."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "| Dimension | Domain Event | Integration Event | |---|---|---| | Scope | Within one bounded context | Across service boundaries | | Consumers | Same service, same process | Other services, external systems | | Transport | In-memory (ApplicationEventPublisher) | Message broker (Kafka, RabbitMQ) | | Transaction | Same DB transaction as the trigger | Async, published after DB commit | | Payload | Rich domain objects, internal types | Minimal primitives, no internal classes | | Schema contract | Internal \u2014 changes freely with refactors | Public \u2014 breaking changes need versioning | | Coupling | Reduces coupling within the service | Reduces coupling between services | | Example | OrderLineItemAdded (updates totals internally) | OrderPlaced (triggers payment in another service) |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Your team renames Order.customerId to Order.buyerRef \u2014 a routine refactor inside your bounded context. Tests pass. Deploy goes smoothly. Monday morning, three Slack channels are on fire: the analytics team's pipeline is throwing deserialization errors, the notification service stopped sending confirmations, and the fraud team's model is silently dropping events it can't parse. All because those teams were consuming your internal OrderPlacedEvent \u2014 complete with your domain objects, your field names, your internal structure. This is what happens when domain events leak across service boundaries. The distinction between domain events."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Your team renames Order.customerId to Order.buyerRef \u2014 a routine refactor inside your bounded context. Tests pass. Deploy goes smoothly. Monday morning, three Slack channels are on fire: the analytics team's pipeline is throwing deserialization errors, the notification service stopped sending confirmations, and the fraud team's model is silently dropping events it can't parse. All because those teams were consuming your."
+          }
+        ],
+        "cap": "Domain events \u2014 internal signals: Raised by the domain model when something meaningful happens \u2014 an order item was added, a payment was validated \u2014 and consumed by handlers in the same service, often",
+        "familiarity_anchors": [
+          "Domain",
+          "Integration"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why should integration events never carry references to internal domain objects?",
+          "What is the role of @TransactionalEventListener vs @EventListener in Spring?",
+          "How does DDD's bounded context concept relate to event boundaries in microservices?"
+        ]
+      }
+    }
+  ]
+}

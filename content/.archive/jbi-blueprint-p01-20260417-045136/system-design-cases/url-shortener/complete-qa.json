@@ -1,0 +1,132 @@
+{
+  "topic": "Url Shortener",
+  "topicSlug": "url-shortener",
+  "questions": [
+    {
+      "id": "sd-002",
+      "slug": "design-url-shortener",
+      "question": "Design a URL shortener service like bit.ly.",
+      "title": "Design a URL Shortener (bit.ly)",
+      "direct_answer": "Generate a unique short code per URL using base62 encoding of a distributed ID (Snowflake). Store the mapping in a database with a cache layer for hot URLs. The redirect service resolves short codes to long URLs with sub-10ms p99.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Distributed ID generation, caching strategy, redirect performance, and analytics considerations",
+        "common_mistake": "Using a random short code without collision detection \u2014 use sequential IDs for guaranteed uniqueness",
+        "to_stand_out": "Explain Snowflake ID encoding to base62, cache-aside pattern for hot URLs, and geographic distribution with CDN"
+      },
+      "company_tags": [
+        "Bitly",
+        "TinyURL",
+        "Google",
+        "Twitter"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Scale Math That Drives Every Design Decision",
+            "content": "A URL shortener seems simple \u2014 map a short code to a long URL and redirect. But the scale numbers reveal the real engineering challenges. Bit.ly processes **billions of redirects per month**. At 1 billion redirects/month: **~400 reads/second average**, peaking at **2,000\u20134,000 reads/second**. If 10 million new URLs are shortened per month, that's **~4 writes/second** \u2014 reads dominate by 100:1.\n\nThis 100:1 read-to-write ratio drives the entire architecture: the read path must be **sub-10ms** (users click short links in browsers \u2014 slow redirects feel broken), which means aggressive caching. The write path can tolerate higher latency since shortening is an explicit API action.\n\nThe three core engineering problems: **generating globally unique short codes** without collisions or coordination, **serving redirects** at scale with low latency, and **handling analytics** (click counts, referrers, geography) without slowing down the redirect path. These three problems \u2014 unique ID generation, low-latency redirects, and non-blocking analytics \u2014 form the architectural backbone of every URL shortener at scale."
+          },
+          {
+            "type": "step",
+            "title": "Short Code Generation: Why Random Strings Are Dangerous",
+            "content": "A 7-character **base62** code (a-z, A-Z, 0-9) yields 62^7 \u2248 **3.5 trillion** unique combinations \u2014 far more than enough. The question is how to generate them without collisions.\n\n**Random generation + collision check** \u2014 generate a random 7-char string, check if it exists in the database, retry on collision. Simple but problematic: as the key space fills up, collision probability increases, and the check requires a database query per attempt. At billions of entries, this becomes a real performance problem.\n\n**Sequential ID + base62 encoding** is the production-standard approach. Generate a monotonically increasing 64-bit ID, then encode it to base62. ID `1000000` becomes `4C92` in base62. No collisions possible, no database check needed. The ID source must be globally unique across multiple servers.\n\n**Snowflake IDs** (Twitter's design) solve the distributed uniqueness problem: 41 bits timestamp + 10 bits machine ID + 12 bits sequence number = 64-bit ID. Each machine generates ~4,096 IDs/millisecond without coordination. The timestamp prefix means IDs are roughly time-ordered, which helps database index performance.\n\nThe base62 encoding is straightforward \u2014 repeatedly divide by 62 and map remainders to characters.\n\n```java\nprivate static final String CHARS =\n    \"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\";\n\npublic String encode(long id) {\n    StringBuilder sb = new StringBuilder();\n    while (id > 0) {\n        sb.append(CHARS.charAt((int)(id % 62)));\n        id /= 62;\n    }\n    return sb.reverse().toString();          // reverse for MSB-first\n}\n```\n\nThis produces variable-length codes (shorter for smaller IDs). If fixed length is required, left-pad with '0' characters. The advantage over random strings: guaranteed uniqueness, no collision checks, sortable by creation time."
+          },
+          {
+            "type": "step",
+            "title": "Read Path: Cache-Aside with Redis for Sub-10ms Redirects",
+            "content": "With a 100:1 read-to-write ratio, the redirect path must be heavily cached. The architecture is a classic **cache-aside** pattern: check Redis first, fall back to the database on a cache miss, populate the cache for future requests.\n\nShort URLs follow a **power-law distribution** \u2014 a small percentage of links receive the vast majority of clicks (viral content, popular services). This makes caching extremely effective. Caching just the top 20% of URLs by traffic serves ~80% of all requests from Redis without touching the database.\n\nThe redirect flow handles the lookup and serves the appropriate HTTP status code. A 301 (permanent redirect) tells browsers to cache the redirect and never ask again \u2014 good for performance but bad for analytics because subsequent visits bypass the server entirely. A **302 (temporary redirect)** ensures every click hits the server, enabling accurate click tracking.\n\n```java\n@GetMapping(\"/{shortCode}\")\npublic ResponseEntity<Void> redirect(@PathVariable String shortCode) {\n    String longUrl = redis.get(\"url:\" + shortCode);\n    if (longUrl == null) {\n        longUrl = urlRepository.findByShortCode(shortCode);\n        if (longUrl == null) return ResponseEntity.notFound().build();\n        redis.setex(\"url:\" + shortCode, 86400, longUrl);  // 24h TTL\n    }\n    analyticsQueue.send(new ClickEvent(shortCode));        // async\n    return ResponseEntity.status(302)\n        .location(URI.create(longUrl)).build();\n}\n```\n\nThe analytics event is published to a message queue (Kafka or RabbitMQ) asynchronously \u2014 never block the redirect to record a click. Analytics processing happens in a separate consumer that aggregates counts in batch."
+          },
+          {
+            "type": "step",
+            "title": "Storage, Partitioning, and Geographic Distribution",
+            "content": "**Storage estimation:** each URL mapping is approximately 500 bytes (short code + long URL up to 2048 chars + metadata). At 10M new URLs/month \u00d7 12 months \u00d7 5 years = **600M records \u00d7 500 bytes = 300 GB**. This fits comfortably on a single database server, so sharding is unnecessary for storage \u2014 but may be needed for read throughput at extreme scale.\n\nThe database schema is minimal: `short_code` (primary key, indexed), `long_url`, `created_at`, `user_id`, `expires_at`. Using the short code as the primary key means redirect lookups are primary key reads \u2014 the fastest possible database operation.\n\n**Geographic distribution** matters when users are global. A click from Mumbai to a server in Virginia adds 150ms of network latency. Two strategies: **deploy read replicas in multiple regions** with the cache tier (Redis) in each region, so redirects are served locally. Or use a **global CDN with edge caching** \u2014 CloudFront can cache redirect responses at edge locations, serving 302s from the nearest POP.\n\nFor **custom short domains** (brands wanting `brand.co/xyz`), the system maps domain \u2192 tenant and resolves the short code within that tenant's namespace. This is a multi-tenant extension that requires the domain in the cache key: `url:{domain}:{shortCode}`."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Base62 encoding of an auto-increment ID** \u2014 6 characters of base62 gives 56 billion unique codes.\n- **100:1 read-to-write ratio demands aggressive caching** \u2014 cache the short-code \u2192 URL mapping in Redis with a 24-hour TTL.\n- **301 (permanent) vs 302 (temporary) redirect** \u2014 301 tells browsers to cache the redirect permanently, reducing future load.\n- **Cassandra or DynamoDB for the URL store** \u2014 single-key lookups by short code; no relational requirements; high read throughput.\n- **Custom alias support requires collision detection** \u2014 user-provided aliases must check for existence before insertion."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A URL shortener maps short codes to long URLs and redirects users. The scale math shows the real challenge: the system needs to handle 10\u2013100\u00d7 more reads than writes because every shared link can be clicked millions of times. The architecture must optimize for the redirect hot path.\n\n**Code generation strategy:**\n- Base62 encoding of an auto-incrementing database ID is the cleanest approach: characters 0\u20139, a\u2013z, A\u2013Z give 62 characters; 6 characters gives 56 billion unique codes \u2014 more than enough for any realistic service\n- Auto-increment IDs are predictable (a feature, not a bug \u2014 no collision risk, no retry logic); the database primary key becomes the short code after encoding\n- Custom aliases require existence checks before insertion; use `INSERT ... IF NOT EXISTS` to avoid race conditions on popular custom names\n\n**The read-optimized architecture:**\n- With a 100:1 read-to-write ratio, 90%+ of redirect traffic can be served without touching the database; cache the short-code \u2192 URL mapping in Redis with a 24-hour TTL\n- The CDN layer handles the hottest links: a viral URL clicked 10 million times in an hour hits the CDN edge, which caches the 301 redirect response; origin sees only first-time requests from each CDN PoP\n- Cassandra or DynamoDB for the URL store: single-key lookups by short code, high read throughput, no relational requirements \u2014 wide-column stores are ideal here\n\n**The 301 vs 302 redirect decision:**\n- 301 (Moved Permanently) tells browsers to cache the redirect locally \u2014 future clicks go directly to the destination without hitting your service at all; dramatically reduces load but eliminates your ability to count clicks\n- 302 (Found/Temporary) forces every redirect through your service \u2014 enables click analytics, A/B testing, and link expiration at the cost of one server round-trip per click\n\nI recommend 302 redirects with Redis caching for any service that needs analytics, and 301 only for static marketing links where click tracking has no value and maximum CDN efficiency matters."
+          }
+        ]
+      },
+      "followup_questions": [
+        "Why use 301 vs 302 redirect for a URL shortener?",
+        "How would you implement URL expiration?",
+        "How do you scale analytics writes without slowing down the redirect path?"
+      ],
+      "seo": {
+        "metaTitle": "Design URL Shortener System Design \u2014 Java Interview Guide",
+        "metaDescription": "URL shortener system design. Snowflake ID + base62 encoding, Redis caching, redirect latency optimization, and click analytics at scale."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "A URL shortener maps short codes to long URLs and redirects users.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "A URL shortener seems simple \u2014 map a short code to a long URL and redirect. But the scale numbers reveal the real engineering challenges. Bit.ly processes billions of redirects per month. At 1 billion redirects/month: ~400 reads/second average, peaking at 2,000\u20134,000 reads/second. If 10 million new URLs are shortened per month, that's ~4 writes/second \u2014 reads dominate by 100:1. This 100:1 read-to-write ratio drives the entire architecture: the read path must be sub-10ms (users click short links in browsers \u2014 slow redirects feel broken), which means aggressive caching. The write path can tolerate higher latency since shortening is an explicit API action. The three core engineering problems: generating globally unique short codes without collisions or coordination, serving redirects at."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "A URL shortener seems simple \u2014 map a short code to a long URL and redirect. But the scale numbers reveal the real engineering challenges. Bit.ly processes billions of redirects per month. At 1 billion redirects/month: ~400 reads/second average, peaking at 2,000\u20134,000 reads/second. If 10 million new URLs are shortened per month, that's ~4 writes/second \u2014 reads dominate by 100:1. This 100:1 read-to-write ratio drives the entire architecture: the read path must be sub-10ms (users click short links in browsers \u2014 slow redirects feel broken), which means aggressive caching. The write path can tolerate higher latency since shortening is an explicit API action. The three core engineering problems: generating globally."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "A 7-character base62 code (a-z, A-Z, 0-9) yields 62^7 \u2248 3",
+              "5 trillion unique combinations \u2014 far more than enough",
+              "The question is how to generate them without collisions",
+              "Random generation + collision check \u2014 generate a random 7-char string, check if it exists in the database, retry on collision",
+              "Simple but problematic: as the key space fills up, collision probability increases, and the check requires a database query per attempt"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "A URL shortener seems simple \u2014 map a short code to a long URL and redirect. But the scale numbers reveal the real engineering challenges. Bit.ly processes billions of redirects per month. At 1 billion redirects/month: ~400 reads/second average, peaking at 2,000\u20134,000 reads/second. If 10 million new URLs are shortened per month, that's ~4 writes/second \u2014 reads dominate by 100:1. This 100:1 read-to-write ratio drives the entire architecture: the read path must be sub-10ms (users click short links in browsers \u2014 slow redirects feel broken), which means aggressive caching. The write path can tolerate higher latency since shortening is an explicit API action. The three core engineering problems: generating globally unique short codes without collisions or coordination, serving redirects at."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "A URL shortener seems simple \u2014 map a short code to a long URL and redirect. But the scale numbers reveal the real engineering challenges. Bit.ly processes billions of redirects per month. At 1 billion redirects/month: ~400 reads/second average, peaking at 2,000\u20134,000 reads/second. If 10 million new URLs are shortened per month, that's ~4 writes/second \u2014 reads dominate by 100:1. This 100:1 read-to-write ratio drives the entire architecture: the read path must be sub-10ms (users click short links in browsers \u2014 slow redirects feel broken), which means aggressive caching. The write path can tolerate higher latency since shortening is an explicit API action. The three core engineering problems: generating globally unique short codes without collisions or coordination, serving redirects at."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Using a random short code without collision detection \u2014 use sequential IDs for guaranteed uniqueness"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Base62 encoding of an auto-increment ID \u2014 6 characters of base62 gives 56 billion unique codes. 100:1 read-to-write ratio demands aggressive caching \u2014 cache the short-code \u2192 URL mapping in Redis with a 24-hour TTL. 301 (permanent) vs 302 (temporary) redirect \u2014 301 tells browsers to cache the redirect permanently, reducing future load. Cassandra or DynamoDB for the URL store \u2014 single-key lookups by short code; no relational requirements; high read throughput. Custom alias support requires collision detection \u2014 user-provided aliases must check for existence."
+          }
+        ],
+        "cap": "IF NOT EXISTS to avoid race conditions on popular custom names The read-optimized architecture: With a 100:1 read-to-write ratio, 90%+ of redirect traffic can be served without touching the database;",
+        "familiarity_anchors": [
+          "Generate",
+          "Snowflake",
+          "Store"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "Why use 301 vs 302 redirect for a URL shortener?",
+          "How would you implement URL expiration?",
+          "How do you scale analytics writes without slowing down the redirect path?"
+        ]
+      }
+    }
+  ]
+}

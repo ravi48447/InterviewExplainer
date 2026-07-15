@@ -1,0 +1,394 @@
+{
+  "topic": "Redis Caching Patterns",
+  "topicSlug": "caching-patterns",
+  "questions": [
+    {
+      "id": "cache-aside-pattern",
+      "title": "Cache-Aside Pattern with Spring",
+      "slug": "cache-aside-pattern",
+      "question": "How does the cache-aside pattern work and how do you implement it with Spring Cache and Redis?",
+      "difficulty": "easy",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Cache-aside (lazy loading): application checks cache first; on miss, loads from DB and populates cache\n- Spring @Cacheable: transparent caching \u2014 no manual cache logic needed\n- @CacheEvict: invalidate cache on update/delete to keep cache and DB consistent\n- @CachePut: update cache without eviction (used for write-through pattern)\n- TTL (Time-To-Live): expire cached entries \u2014 prevents serving stale data indefinitely\n- Cache key: default is method parameters; customize with SpEL expressions\n- Serialization: configure RedisTemplate to serialize objects as JSON (not Java serialization)\n- Null caching: avoid cache stampede \u2014 cache null results to prevent repeated DB hits"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Cache-aside, also called lazy loading, is the most common caching pattern. When the application needs data, it first checks the cache. If the data is there \u2014 a cache hit \u2014 it returns immediately without touching the database. If not \u2014 a cache miss \u2014 it fetches from the database, stores the result in the cache for future requests, and returns the data. This pattern is lazy: data only enters the cache when it's actually requested.\n\nSpring Cache makes this almost invisible. The @Cacheable annotation on a service method automatically implements the check-and-load logic. Spring checks if a result is cached for the given key; if so, returns it without executing the method; if not, executes the method and caches the result before returning. You write normal service code and the caching just works.\n\nThe critical counterpart is @CacheEvict for maintaining consistency. When you update or delete a user, the cached version is stale. Annotating the update method with @CacheEvict removes that entry from Redis, forcing the next read to fetch fresh data from the database. A common mistake is forgetting to evict on updates, which leads to users seeing outdated data until the TTL expires."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Spring Cache Configuration with Redis\n\n```java\n@Configuration\n@EnableCaching\npublic class CacheConfig {\n\n    @Bean\n    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {\n        // JSON serialization \u2014 human-readable, compatible across app restarts\n        var objectMapper = new ObjectMapper()\n            .registerModule(new JavaTimeModule())\n            .activateDefaultTyping(\n                BasicPolymorphicTypeValidator.builder().allowIfBaseType(Object.class).build(),\n                ObjectMapper.DefaultTyping.NON_FINAL\n            );\n\n        var jsonSerializer = new GenericJackson2JsonRedisSerializer(objectMapper);\n\n        var defaultConfig = RedisCacheConfiguration.defaultCacheConfig()\n            .entryTtl(Duration.ofMinutes(10))       // default TTL: 10 minutes\n            .serializeKeysWith(RedisSerializationContext.SerializationPair\n                .fromSerializer(new StringRedisSerializer()))\n            .serializeValuesWith(RedisSerializationContext.SerializationPair\n                .fromSerializer(jsonSerializer))\n            .disableCachingNullValues();             // don't cache null\n\n        // Per-cache TTL overrides\n        var cacheConfigs = Map.of(\n            \"users\",    defaultConfig.entryTtl(Duration.ofHours(1)),\n            \"products\", defaultConfig.entryTtl(Duration.ofMinutes(5)),\n            \"sessions\", defaultConfig.entryTtl(Duration.ofDays(1))\n        );\n\n        return RedisCacheManager.builder(connectionFactory)\n            .cacheDefaults(defaultConfig)\n            .withInitialCacheConfigurations(cacheConfigs)\n            .build();\n    }\n}\n```\n\n## Service Layer Caching\n\n```java\n@Service\npublic class UserService {\n\n    private final UserRepository userRepository;\n\n    // Cache result with key = userId parameter\n    // Key stored as: users::42 (cacheName::key)\n    @Cacheable(value = \"users\", key = \"#userId\")\n    public UserDTO getUserById(Long userId) {\n        // Only executes on cache miss\n        return userRepository.findById(userId)\n            .map(UserDTO::fromEntity)\n            .orElseThrow(() -> new NotFoundException(\"User not found: \" + userId));\n    }\n\n    // Cache multiple users by their IDs\n    @Cacheable(value = \"users\", key = \"#username.toLowerCase()\")\n    public UserDTO getUserByUsername(String username) {\n        return userRepository.findByUsername(username)\n            .map(UserDTO::fromEntity)\n            .orElseThrow();\n    }\n\n    // Update entity AND update cache (write-through)\n    @CachePut(value = \"users\", key = \"#result.id\")\n    public UserDTO updateUser(Long userId, UpdateUserRequest request) {\n        User user = userRepository.findById(userId).orElseThrow();\n        user.setEmail(request.getEmail());\n        return UserDTO.fromEntity(userRepository.save(user));\n    }\n\n    // Delete entity AND evict from cache\n    @CacheEvict(value = \"users\", key = \"#userId\")\n    public void deleteUser(Long userId) {\n        userRepository.deleteById(userId);\n    }\n\n    // Clear entire cache (use sparingly \u2014 expensive!)\n    @CacheEvict(value = \"users\", allEntries = true)\n    public void clearUserCache() {\n        log.info(\"Cleared all user cache entries\");\n    }\n\n    // Conditional caching \u2014 only cache active users\n    @Cacheable(value = \"users\", key = \"#userId\", condition = \"#userId > 0\",\n               unless = \"#result.status == 'DELETED'\")\n    public UserDTO getUserWithCondition(Long userId) {\n        return userRepository.findById(userId).map(UserDTO::fromEntity).orElseThrow();\n    }\n}\n```\n\n## Cache Stampede Prevention\n\n```java\n// Problem: many requests hit DB simultaneously when a popular cache entry expires\n// Solution: use a distributed lock or probabilistic early expiration\n\n@Service\npublic class ProductService {\n\n    private final StringRedisTemplate redisTemplate;\n    private final ProductRepository productRepository;\n    private static final String LOCK_PREFIX = \"lock:product:\";\n\n    public ProductDTO getPopularProduct(Long productId) {\n        String cacheKey = \"product:\" + productId;\n        String cached = redisTemplate.opsForValue().get(cacheKey);\n        if (cached != null) return deserialize(cached, ProductDTO.class);\n\n        // Acquire lock \u2014 only one request rebuilds cache\n        String lockKey = LOCK_PREFIX + productId;\n        Boolean acquired = redisTemplate.opsForValue()\n            .setIfAbsent(lockKey, \"1\", Duration.ofSeconds(5));\n\n        if (Boolean.TRUE.equals(acquired)) {\n            try {\n                ProductDTO product = productRepository.findById(productId)\n                    .map(ProductDTO::fromEntity).orElseThrow();\n                redisTemplate.opsForValue().set(cacheKey, serialize(product), Duration.ofMinutes(10));\n                return product;\n            } finally {\n                redisTemplate.delete(lockKey);\n            }\n        } else {\n            // Another thread is rebuilding \u2014 wait briefly and retry\n            Thread.sleep(100);\n            return getPopularProduct(productId);\n        }\n    }\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Cache-aside, also called lazy loading, is the most common caching pattern.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "A common mistake is forgetting to evict on updates, which leads to users seeing outdated data until the TTL expires.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "cache-invalidation-strategies",
+      "title": "Cache Invalidation Strategies",
+      "slug": "cache-invalidation-strategies",
+      "question": "What are the different cache invalidation strategies and when do you use each?",
+      "difficulty": "medium",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- TTL-based expiration: simplest \u2014 stale data accepted until TTL expires\n- Explicit invalidation: evict specific key on data change \u2014 consistent but complex\n- Write-through: update cache on every write \u2014 always fresh, higher write latency\n- Write-behind (write-back): write to cache immediately, sync to DB asynchronously \u2014 risk of data loss\n- Event-driven invalidation: publish event on data change \u2192 consumers evict cache \u2014 decoupled\n- Tag-based invalidation: group related keys by tag \u2192 invalidate entire group at once\n- Cache invalidation is 'one of the two hard things in CS' \u2014 understand the trade-offs"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Cache invalidation is famously one of the hardest problems in computer science because stale data in a cache can cause subtle, hard-to-debug bugs. The right strategy depends on how critical freshness is and how frequently data changes.\n\nTTL-based expiration is the simplest \u2014 you accept that cached data can be up to N minutes stale. This is fine for data that changes infrequently or where a short window of staleness doesn't matter, like a product catalog or user profile. The TTL acts as a backstop against serving permanently stale data if explicit invalidation fails.\n\nExplicit invalidation on writes gives you stronger consistency. When a user updates their profile, you immediately evict their cached entry. The next read misses the cache and fetches fresh data. This is what Spring's @CacheEvict implements. The challenge is keeping the invalidation logic in sync with all the ways data can change \u2014 if you add a new update path and forget to evict, you introduce a stale cache bug.\n\nFor microservices, event-driven invalidation is cleaner. The service that owns the data publishes an event when data changes. Cache consumers subscribe and evict the relevant key. This decouples the publisher from knowing which consumers have cached its data, and is resilient to adding new consumers without changing the publisher."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Invalidation Strategies Summary\n\n```\nStrategy          | When Data is Stale      | Complexity | Data Loss Risk\nTTL only          | Until TTL expires        | Low        | None\nExplicit evict    | Until eviction fails/missed | Medium   | None\nWrite-through     | Never (always fresh)     | Medium     | None\nWrite-behind      | Brief async delay        | High       | Possible (crash)\nEvent-driven      | Until event processed    | High       | None\n```\n\n## Write-Through Pattern\n\n```java\n@Service\npublic class InventoryService {\n\n    @CachePut(value = \"inventory\", key = \"#productId\")\n    @Transactional\n    public InventoryDTO updateStock(Long productId, int newQuantity) {\n        // 1. Update DB\n        Inventory inventory = inventoryRepository.findById(productId).orElseThrow();\n        inventory.setQuantity(newQuantity);\n        Inventory saved = inventoryRepository.save(inventory);\n\n        // 2. @CachePut automatically updates cache with returned value\n        return InventoryDTO.fromEntity(saved);\n        // Cache is always in sync with DB \u2014 slightly higher write latency\n    }\n}\n```\n\n## Event-Driven Invalidation (Pub/Sub)\n\n```java\n// Publisher \u2014 user-service\n@Service\npublic class UserCommandService {\n    private final ApplicationEventPublisher eventPublisher;\n\n    @Transactional\n    public void updateUser(Long userId, UpdateUserRequest request) {\n        User user = userRepository.findById(userId).orElseThrow();\n        user.update(request);\n        userRepository.save(user);\n\n        // Publish domain event AFTER transaction commits\n        eventPublisher.publishEvent(new UserUpdatedEvent(userId));\n    }\n}\n\n// Cache invalidation listener\n@Component\npublic class UserCacheInvalidator {\n    private final CacheManager cacheManager;\n\n    @EventListener\n    @Async\n    public void onUserUpdated(UserUpdatedEvent event) {\n        Cache userCache = cacheManager.getCache(\"users\");\n        if (userCache != null) {\n            userCache.evict(event.getUserId());\n            log.debug(\"Evicted user cache for userId={}\", event.getUserId());\n        }\n    }\n}\n\n// For cross-service cache invalidation via Kafka\n@KafkaListener(topics = \"user-events\", groupId = \"api-gateway-cache\")\npublic void onUserEvent(UserEvent event) {\n    if (\"USER_UPDATED\".equals(event.getType()) || \"USER_DELETED\".equals(event.getType())) {\n        cacheManager.getCache(\"users\").evict(event.getUserId());\n    }\n}\n```\n\n## Tag-Based Invalidation with Redis\n\n```java\n// Group related cache entries by tag \u2014 invalidate all at once\n@Service\npublic class CategoryCacheService {\n\n    private final StringRedisTemplate redis;\n\n    // Store cache entry AND add key to tag set\n    public void cacheWithTag(String tag, String key, Object value) {\n        String tagSetKey = \"cache_tag:\" + tag;\n        redis.opsForValue().set(key, serialize(value), Duration.ofHours(1));\n        redis.opsForSet().add(tagSetKey, key);\n        redis.expire(tagSetKey, Duration.ofHours(2));\n    }\n\n    // Invalidate all entries with this tag\n    public void invalidateByTag(String tag) {\n        String tagSetKey = \"cache_tag:\" + tag;\n        Set<String> keysToDelete = redis.opsForSet().members(tagSetKey);\n        if (keysToDelete != null && !keysToDelete.isEmpty()) {\n            redis.delete(keysToDelete);\n        }\n        redis.delete(tagSetKey);\n    }\n}\n\n// Usage: when a category changes, invalidate all cached products in that category\n// invalidateByTag(\"category:electronics\");\n// \u2192 removes: product:101, product:202, product:303, listing:electronics\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Cache invalidation is famously one of the hardest problems in computer science because stale data in a cache can cause subtle, hard-to-debug bugs.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          }
+        ],
+        "cap": "This decouples the publisher from knowing which consumers have cached its data, and is resilient to adding new consumers without changing the publisher.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "redis-session-rate-limiting",
+      "title": "Redis for Session Management and Rate Limiting",
+      "slug": "redis-session-rate-limiting",
+      "question": "How do you use Redis for distributed session management and rate limiting in a Spring Boot application?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Spring Session: store HTTP sessions in Redis \u2014 enables stateless, scalable backends behind load balancers\n- Session persistence: sessions survive server restarts and work across multiple app instances\n- Rate limiting: count requests per IP/user in a sliding window using Redis sorted sets or counter+TTL\n- Sliding window counter: Redis sorted set with timestamp as score; ZREMRANGEBYSCORE + ZCARD for count\n- Fixed window counter: INCR + EXPIRE \u2014 simpler, slight boundary burst allowed\n- Lua scripts: atomic rate limit operations (INCR + EXPIRE in single atomic call)\n- Redis Modules: RedisRateLimiter in Spring Cloud Gateway uses token bucket algorithm"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Spring Session with Redis solves a fundamental scalability problem. If HTTP sessions are stored in the application's memory, every request from a user must go to the same server instance \u2014 sticky sessions. If that instance fails, the session is lost. With Spring Session, sessions are stored in Redis, any server instance can handle any request, and sessions survive server restarts.\n\nFor rate limiting, Redis is the standard tool because of its atomic operations. The simplest approach is a counter per IP with a TTL \u2014 increment it on each request, set a TTL of the window duration on the first increment. If the counter exceeds the limit, reject the request. The limitation is a boundary burst: a user can exhaust their limit at the end of one window and immediately use the full limit at the start of the next.\n\nA sliding window counter using a sorted set is more accurate. You store each request timestamp as a member with the timestamp as the score. To count requests in the last minute, you remove entries older than 60 seconds and count remaining members. This prevents the boundary burst but uses more memory. For production rate limiting at scale, Spring Cloud Gateway's RedisRateLimiter uses a token bucket algorithm, which is a good off-the-shelf solution."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Spring Session with Redis\n\n```xml\n<!-- pom.xml -->\n<dependency>\n    <groupId>org.springframework.session</groupId>\n    <artifactId>spring-session-data-redis</artifactId>\n</dependency>\n```\n\n```yaml\n# application.yml\nspring:\n  session:\n    store-type: redis\n    timeout: 30m  # session TTL\n    redis:\n      namespace: myapp:session\n```\n\n```java\n@Configuration\n@EnableRedisHttpSession(maxInactiveIntervalInSeconds = 1800) // 30 minutes\npublic class SessionConfig {\n    // Sessions automatically stored in Redis\n    // Works seamlessly with @SessionAttribute, HttpSession\n}\n\n// Session usage is identical to regular HTTP session\n@RestController\npublic class UserController {\n    @PostMapping(\"/login\")\n    public ResponseEntity<Void> login(@RequestBody LoginRequest req, HttpSession session) {\n        User user = authService.authenticate(req.getUsername(), req.getPassword());\n        session.setAttribute(\"userId\", user.getId());  // stored in Redis\n        return ResponseEntity.ok().build();\n    }\n\n    @GetMapping(\"/profile\")\n    public UserDTO getProfile(HttpSession session) {\n        Long userId = (Long) session.getAttribute(\"userId\");  // fetched from Redis\n        return userService.getUserById(userId);\n    }\n}\n```\n\n## Sliding Window Rate Limiter\n\n```java\n@Component\npublic class RedisRateLimiter {\n\n    private final StringRedisTemplate redis;\n    private static final int MAX_REQUESTS = 100;\n    private static final Duration WINDOW = Duration.ofMinutes(1);\n\n    public boolean isAllowed(String identifier) {\n        String key = \"rate_limit:\" + identifier;\n        long now = System.currentTimeMillis();\n        long windowStart = now - WINDOW.toMillis();\n\n        // Atomic Lua script: remove old entries, add current, check count\n        String luaScript = \"\"\"\n            local key = KEYS[1]\n            local now = tonumber(ARGV[1])\n            local windowStart = tonumber(ARGV[2])\n            local maxRequests = tonumber(ARGV[3])\n            local windowMs = tonumber(ARGV[4])\n            \n            -- Remove requests outside the sliding window\n            redis.call('ZREMRANGEBYSCORE', key, 0, windowStart)\n            \n            -- Count current requests\n            local count = redis.call('ZCARD', key)\n            \n            if count < maxRequests then\n                -- Add this request\n                redis.call('ZADD', key, now, now .. '-' .. math.random())\n                redis.call('PEXPIRE', key, windowMs)\n                return 1  -- allowed\n            else\n                return 0  -- rate limited\n            end\n            \"\"\";\n\n        Long result = redis.execute(\n            new DefaultRedisScript<>(luaScript, Long.class),\n            List.of(key),\n            String.valueOf(now),\n            String.valueOf(windowStart),\n            String.valueOf(MAX_REQUESTS),\n            String.valueOf(WINDOW.toMillis())\n        );\n\n        return Long.valueOf(1L).equals(result);\n    }\n}\n\n// Filter applying rate limiting\n@Component\n@Order(1)\npublic class RateLimitFilter extends OncePerRequestFilter {\n\n    private final RedisRateLimiter rateLimiter;\n\n    @Override\n    protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,\n            FilterChain chain) throws IOException, ServletException {\n        String ip = req.getRemoteAddr();\n        if (!rateLimiter.isAllowed(ip)) {\n            res.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());\n            res.setHeader(\"Retry-After\", \"60\");\n            res.getWriter().write(\"{\\\"error\\\": \\\"Rate limit exceeded\\\"}\");\n            return;\n        }\n        chain.doFilter(req, res);\n    }\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Spring Session with Redis solves a fundamental scalability problem.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "For production rate limiting at scale, Spring Cloud Gateway's RedisRateLimiter uses a token bucket algorithm, which is a good off-the-shelf solution.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "write-through-write-behind",
+      "title": "Write-Through and Write-Behind Patterns",
+      "slug": "write-through-write-behind",
+      "question": "What are write-through and write-behind caching patterns and when do you use them?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Write-through: write to cache AND database synchronously on every write \u2014 cache always fresh\n- Write-behind (write-back): write to cache immediately, async write to DB later \u2014 lower write latency\n- Write-through: higher write latency (both cache + DB in sync), no stale data\n- Write-behind: risk of data loss if cache crashes before DB write; eventual consistency\n- Spring @CachePut: implements write-through \u2014 updates cache with return value\n- Write-behind in Spring: custom implementation needed; not provided out of the box\n- Use write-through when: reads must see fresh data immediately after writes\n- Use write-behind when: write throughput > what DB can handle; some data loss acceptable"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Write-through maintains cache and database in sync on every write. When an update happens, you update the database and update the cache in the same operation. Reads always hit the cache and see fresh data. The cost is slightly higher write latency \u2014 you're doing two writes instead of one \u2014 and more cache churn if many items are written but rarely read.\n\nWrite-behind trades consistency for write throughput. Updates go to the cache immediately, and a background process periodically flushes cached updates to the database. Reads are fast and writes feel fast. The risk is data loss \u2014 if the cache node crashes before the flush, those updates are gone. Write-behind requires durable cache storage and careful recovery design.\n\nFor most Spring Boot applications with a relational database, write-through via @CachePut is the right choice. The latency difference is minimal at the scale most applications operate, and the consistency guarantee is worth it. Write-behind is appropriate for time-series data, counters, or session activity logs where loss of a few seconds of data is acceptable."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Write-Through with @CachePut\n\n```java\n@Service\npublic class ProductService {\n\n    // @Cacheable: check cache first\n    @Cacheable(value = \"products\", key = \"#id\")\n    public ProductDTO getProduct(Long id) {\n        return productRepo.findById(id).map(ProductDTO::from).orElseThrow();\n    }\n\n    // @CachePut: ALWAYS write to cache with return value (write-through)\n    @CachePut(value = \"products\", key = \"#result.id\")\n    @Transactional\n    public ProductDTO updateProduct(Long id, UpdateProductRequest req) {\n        Product product = productRepo.findById(id).orElseThrow();\n        product.update(req);\n        Product saved = productRepo.save(product);  // write to DB\n        return ProductDTO.from(saved);              // returned value goes to cache\n        // Cache updated AFTER DB write \u2014 consistent\n    }\n\n    // @CacheEvict: remove from cache (for deletes)\n    @CacheEvict(value = \"products\", key = \"#id\")\n    @Transactional\n    public void deleteProduct(Long id) {\n        productRepo.deleteById(id);\n    }\n}\n```\n\n## Write-Behind Pattern (Custom Implementation)\n\n```java\n@Service\npublic class ViewCountService {\n\n    private final StringRedisTemplate redis;\n    private final ArticleRepository articleRepo;\n\n    // Write to cache immediately \u2014 fast return to caller\n    public long incrementViews(Long articleId) {\n        String key = \"article:views:\" + articleId;\n        return redis.opsForValue().increment(key);\n    }\n\n    // Background flush to DB \u2014 every 5 minutes\n    @Scheduled(fixedDelay = 300_000)\n    @Transactional\n    public void flushViewCounts() {\n        Set<String> keys = redis.keys(\"article:views:*\");\n        if (keys == null) return;\n\n        for (String key : keys) {\n            String articleIdStr = key.replace(\"article:views:\", \"\");\n            Long articleId = Long.parseLong(articleIdStr);\n            String countStr = redis.opsForValue().getAndDelete(key);\n\n            if (countStr != null && Long.parseLong(countStr) > 0) {\n                // Flush accumulated views to DB\n                articleRepo.incrementViewCount(articleId, Long.parseLong(countStr));\n            }\n        }\n    }\n}\n// Risk: if Redis crashes before flush, view counts for that period are lost\n// Acceptable for view counts; NOT acceptable for order data or financial transactions\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P01",
+        "hook": "Write-through maintains cache and database in sync on every write.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          }
+        ],
+        "cap": "Write-behind is appropriate for time-series data, counters, or session activity logs where loss of a few seconds of data is acceptable.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "distributed-lock-redis",
+      "title": "Distributed Locking with Redis",
+      "slug": "distributed-lock-redis",
+      "question": "How do you implement distributed locks with Redis for preventing concurrent execution across multiple app instances?",
+      "difficulty": "hard",
+      "importance": "high",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Problem: scheduled job runs on all instances simultaneously \u2014 race condition\n- SET NX EX: atomic set-if-not-exists with TTL \u2014 simple distributed lock\n- Must release lock: use finally block; include random token to verify ownership before delete\n- TTL: prevent deadlock if lock holder crashes \u2014 must exceed job execution time\n- Redlock: Redisson's algorithm \u2014 multi-node lock; more robust than single-node\n- Redisson: RLock implements java.util.concurrent.locks.Lock \u2014 familiar API\n- @SchedulerLock (ShedLock): distributed scheduling lock with DB or Redis backend\n- Watchdog: Redisson auto-extends TTL while lock is held \u2014 prevents expiry during work"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Distributed locks solve the concurrent execution problem when your application runs as multiple instances. A common example is scheduled jobs \u2014 if you have 3 app instances and a job that runs every minute, all three instances will trigger the job simultaneously without a lock.\n\nThe simplest implementation uses Redis SET with NX and EX flags \u2014 set the key only if it doesn't exist, with an expiry time. The first instance to set the key wins and executes the job. The key must expire automatically in case the winning instance crashes before releasing the lock, which would otherwise cause a deadlock.\n\nRedisson provides a more production-ready distributed lock implementation via RLock, which includes automatic TTL extension via a watchdog thread. The watchdog keeps extending the lock TTL as long as the lock holder is alive, preventing premature expiry of long-running operations. For scheduled jobs specifically, ShedLock is a purpose-built library that works with Redis, JDBC, or other backends."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Basic Redis Distributed Lock\n\n```java\n@Component\npublic class RedisDistributedLock {\n\n    private final StringRedisTemplate redis;\n\n    public boolean tryLock(String lockKey, String token, Duration ttl) {\n        // SET key token NX EX ttl \u2014 atomic: set only if not exists\n        Boolean acquired = redis.opsForValue()\n            .setIfAbsent(lockKey, token, ttl);\n        return Boolean.TRUE.equals(acquired);\n    }\n\n    public void releaseLock(String lockKey, String token) {\n        // Lua script: only delete if WE own it (token matches)\n        String luaScript = \"\"\"\n            if redis.call('get', KEYS[1]) == ARGV[1] then\n                return redis.call('del', KEYS[1])\n            else\n                return 0\n            end\n            \"\"\";\n        redis.execute(\n            new DefaultRedisScript<>(luaScript, Long.class),\n            List.of(lockKey), token\n        );\n    }\n}\n\n// Usage\n@Scheduled(fixedDelay = 60_000)\npublic void runScheduledJob() {\n    String token = UUID.randomUUID().toString();\n    String lockKey = \"lock:scheduled-job:data-sync\";\n    boolean locked = distributedLock.tryLock(lockKey, token, Duration.ofMinutes(5));\n    if (!locked) {\n        log.debug(\"Another instance holds the lock \u2014 skipping\");\n        return;\n    }\n    try {\n        performDataSync();  // max 5 min job\n    } finally {\n        distributedLock.releaseLock(lockKey, token);\n    }\n}\n```\n\n## Redisson RLock (Production Grade)\n\n```java\n@Bean\npublic RedissonClient redissonClient() {\n    Config config = new Config();\n    config.useSingleServer().setAddress(\"redis://\" + redisHost + \":6379\");\n    return Redisson.create(config);\n}\n\n@Service\npublic class SyncService {\n    private final RedissonClient redisson;\n\n    public void syncWithLock() {\n        RLock lock = redisson.getLock(\"sync:data-lock\");\n        try {\n            // Try acquiring, wait max 5s, hold max 10min\n            boolean acquired = lock.tryLock(5, 10 * 60, TimeUnit.SECONDS);\n            // Watchdog: auto-extends TTL while lock is held\n            if (acquired) {\n                performLongRunningSync();  // watchdog keeps lock alive\n            }\n        } catch (InterruptedException e) {\n            Thread.currentThread().interrupt();\n        } finally {\n            if (lock.isHeldByCurrentThread()) {\n                lock.unlock();\n            }\n        }\n    }\n}\n```\n\n## ShedLock for Scheduled Jobs\n\n```java\n// Simple, purpose-built for distributed scheduled jobs\n@Scheduled(fixedDelay = 60_000)\n@SchedulerLock(name = \"data-sync-job\",\n               lockAtLeastFor = \"PT30S\",  // hold at least 30s (prevent rapid re-run)\n               lockAtMostFor = \"PT5M\")    // release after 5min even if not explicitly released\npublic void syncData() {\n    // Only one instance runs this at a time\n    performDataSync();\n}\n// Configuration: @EnableSchedulerLock on @SpringBootApplication\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Distributed locks solve the concurrent execution problem when your application runs as multiple instances.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "For scheduled jobs specifically, ShedLock is a purpose-built library that works with Redis, JDBC, or other backends.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    },
+    {
+      "id": "cache-warming-preloading",
+      "title": "Cache Warming and Preloading Strategies",
+      "slug": "cache-warming-preloading",
+      "question": "How do you warm up a cache on application startup to avoid cold start performance issues?",
+      "difficulty": "medium",
+      "importance": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the Interviewer Wants to Hear",
+            "content": "- Cold cache: on startup or Redis restart, all requests miss \u2192 hit DB \u2192 thundering herd\n- Cache warming: proactively populate cache on startup before serving traffic\n- @PostConstruct or ApplicationReadyEvent: run warming logic at startup\n- Load hot data: top products, popular categories, application config\n- Thundering herd: many simultaneous cache misses \u2014 mitigate with locking or probabilistic approach\n- ECS/Kubernetes: warming in readiness probe logic \u2014 don't mark ready until cache is warm\n- Gradual rollout: canary deploy warms new instances before full traffic shift"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview Answer",
+            "content": "Cache warming is loading frequently accessed data into the cache before the application starts serving traffic. Without it, the first requests after deployment or a Redis restart cause a thundering herd \u2014 all cache misses simultaneously hitting the database, potentially overwhelming it and causing timeouts during exactly the period you're trying to handle traffic.\n\nFor Spring Boot, ApplicationReadyEvent fires after the application context is fully initialized and the application is ready to serve requests. This is the right place to run cache warming \u2014 after all beans are wired up but just before the load balancer starts routing traffic.\n\nIn Kubernetes, tie cache warming to the readiness probe. The pod only becomes ready after warming completes. ECS health checks serve the same purpose \u2014 the ECS service waits for the container's health check to pass before routing traffic. If your Spring Boot actuator /health endpoint includes a custom health indicator that reports unhealthy until warming is complete, you get this behavior automatically."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Concept Explained",
+            "content": "## Cache Warming on Startup\n\n```java\n@Component\npublic class CacheWarmupService implements ApplicationListener<ApplicationReadyEvent> {\n\n    private final CacheManager cacheManager;\n    private final ProductRepository productRepo;\n    private final CategoryRepository categoryRepo;\n    private volatile boolean warmed = false;\n\n    @Override\n    public void onApplicationEvent(ApplicationReadyEvent event) {\n        log.info(\"Starting cache warmup...\");\n        try {\n            warmProductCache();\n            warmCategoryCache();\n            warmed = true;\n            log.info(\"Cache warmup complete\");\n        } catch (Exception ex) {\n            log.error(\"Cache warmup failed \u2014 proceeding without warm cache\", ex);\n            warmed = true;  // don't block startup on warmup failure\n        }\n    }\n\n    private void warmProductCache() {\n        // Load top 1000 most-viewed products\n        List<Product> hotProducts = productRepo.findTop1000ByOrderByViewCountDesc();\n        Cache cache = cacheManager.getCache(\"products\");\n        hotProducts.forEach(p -> cache.put(p.getId(), ProductDTO.from(p)));\n        log.info(\"Warmed {} products into cache\", hotProducts.size());\n    }\n\n    private void warmCategoryCache() {\n        // Load all categories (small, changes rarely)\n        List<Category> categories = categoryRepo.findAll();\n        Cache cache = cacheManager.getCache(\"categories\");\n        categories.forEach(c -> cache.put(c.getSlug(), CategoryDTO.from(c)));\n    }\n\n    public boolean isWarmed() { return warmed; }\n}\n\n// Custom health indicator \u2014 reports down until cache is warm\n@Component\npublic class CacheWarmupHealthIndicator implements HealthIndicator {\n    private final CacheWarmupService warmupService;\n\n    @Override\n    public Health health() {\n        if (warmupService.isWarmed()) {\n            return Health.up().withDetail(\"cache\", \"warmed\").build();\n        }\n        return Health.down().withDetail(\"cache\", \"warming in progress\").build();\n    }\n}\n```"
+          }
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Cache warming is loading frequently accessed data into the cache before the application starts serving traffic.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": ""
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              ""
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              ""
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "The production failure mode here is unchecked state mutation under concurrent access."
+          }
+        ],
+        "cap": "If your Spring Boot actuator /health endpoint includes a custom health indicator that reports unhealthy until warming is complete, you get this behavior automatically.",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

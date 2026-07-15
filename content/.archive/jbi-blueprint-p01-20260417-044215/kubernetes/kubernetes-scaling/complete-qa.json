@@ -1,0 +1,120 @@
+{
+  "topic": "Kubernetes Scaling",
+  "topicSlug": "kubernetes-scaling",
+  "questions": [
+    {
+      "id": "k8s-008",
+      "slug": "horizontal-pod-autoscaler-spring-boot",
+      "question": "How do you configure Horizontal Pod Autoscaler for a Spring Boot service in Kubernetes?",
+      "title": "Horizontal Pod Autoscaler (HPA) for Spring Boot Services",
+      "direct_answer": "HPA automatically scales pod replicas based on CPU utilization, memory usage, or custom metrics. Requires resource requests set on the container. Configure with kubectl autoscale or a HPA YAML resource. For Spring Boot, expose custom metrics via Micrometer and Prometheus Adapter for traffic-based scaling (requests per second) rather than just CPU.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Knowledge of Kubernetes auto-scaling and its prerequisites (resource requests, metrics server)",
+        "common_mistake": "Not setting resource requests \u2014 HPA can't calculate CPU utilization percentage without a defined request baseline",
+        "to_stand_out": "Explain the metrics pipeline (Metrics Server for CPU/memory, Prometheus Adapter for custom metrics), discuss scale-down stabilization to prevent flapping, and mention KEDA for event-driven autoscaling"
+      },
+      "company_tags": [
+        "google",
+        "amazon",
+        "netflix",
+        "cloudflare"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why CPU-Based Scaling Misleads You About Spring Boot Traffic Load",
+            "content": "The Horizontal Pod Autoscaler's default metric \u2014 CPU utilization \u2014 works well for CPU-bound workloads like image processing or scientific computing. For a typical Spring Boot REST service, CPU tells you almost nothing about actual load. A service handling 500 requests per second might sit at 20% CPU because most of the latency is I/O wait on database calls. HPA sees low CPU, keeps the replica count low, and the service drowns in queued requests while CPU looks idle.\n\nThe fundamental problem is that **HPA calculates CPU utilization as a percentage of the resource request**. If you request 250m CPU and the pod uses 175m, HPA sees 70% utilization \u2014 regardless of whether the pod is handling 10 requests or 10,000. Without resource requests defined at all, HPA has no denominator for the calculation and simply cannot function. This is the prerequisite that most setup guides mention once and teams forget until they wonder why their pods never scale.\n\nCustom metrics \u2014 requests per second, response latency, queue depth \u2014 give HPA semantically meaningful inputs. Instead of asking \"is this pod using a lot of CPU?\" you ask \"is this pod handling more requests than it should?\" The metrics pipeline involves Spring Boot Micrometer exposing metrics, Prometheus scraping them, and Prometheus Adapter translating them into the Kubernetes custom metrics API that HPA queries."
+          },
+          {
+            "type": "step",
+            "title": "The Prerequisite Everyone Forgets: Resource Requests Are the Denominator",
+            "content": "HPA's CPU-based scaling formula is `current CPU usage / CPU request x 100`. Without a **CPU request** defined on the container, this formula has no denominator and HPA reports `<unknown>` for the target. The pods never scale up, even under massive load. Setting `resources.requests.cpu: 250m` gives HPA the baseline it needs.\n\nThe target utilization percentage \u2014 typically 70% \u2014 determines the scaling threshold. HPA continuously calculates the desired replica count: `desiredReplicas = ceil(currentReplicas x currentUtilization / targetUtilization)`. If 3 pods average 90% CPU utilization with a 70% target, HPA computes `ceil(3 x 90/70)` = 4 replicas and scales up.\n\nThe **`minReplicas` and `maxReplicas`** fields bound the scaling range. Always set `minReplicas` to at least 2 for availability \u2014 a single pod during a scale-down means a restart takes your service completely offline. Set `maxReplicas` to cap costs and prevent runaway scaling from feedback loops. The HPA configuration declares these constraints alongside the target metric.\n\n```yaml\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nspec:\n  scaleTargetRef:\n    apiVersion: apps/v1\n    kind: Deployment\n    name: spring-app\n  minReplicas: 2\n  maxReplicas: 20\n  metrics:\n    - type: Resource\n      resource:\n        name: cpu\n        target:\n          type: Utilization\n          averageUtilization: 70\n```\n\nThis HPA watches the `spring-app` Deployment and adjusts replicas between 2 and 20 to maintain approximately 70% average CPU utilization across all pods."
+          },
+          {
+            "type": "step",
+            "title": "Custom Metrics From Micrometer Give You Meaningful Scaling Triggers",
+            "content": "For Spring Boot services where CPU does not correlate with load, custom metrics through the Prometheus pipeline are essential. The pipeline works in three stages: your application exposes metrics via Micrometer, Prometheus scrapes them, and **Prometheus Adapter** translates them into the Kubernetes custom metrics API that HPA can query.\n\nMicrometer provides built-in HTTP request counters that require no custom code. The `http.server.requests` metric tracks request count, duration, and status for every endpoint. For more specific scaling signals, register a custom counter or gauge.\n\n```java\n@Component\npublic class OrderMetrics {\n    private final Counter orderCounter;\n    public OrderMetrics(MeterRegistry registry) {\n        orderCounter = Counter.builder(\"orders.processed.total\")\n            .description(\"Total orders processed\")\n            .register(registry);\n    }\n    public void recordOrder() { orderCounter.increment(); }\n}\n```\n\nWith Prometheus Adapter configured to expose this metric, the HPA can target a specific request rate per pod. Setting `averageValue: 100` tells HPA to scale up when each pod averages more than 100 orders per second \u2014 a directly meaningful threshold that correlates with actual business load rather than a CPU proxy.\n\nFor **event-driven workloads** like Kafka consumers or SQS processors, KEDA (Kubernetes Event-Driven Autoscaling) replaces HPA entirely. KEDA can scale from zero to N based on queue depth and back to zero when the queue is empty \u2014 something HPA cannot do since it requires at least `minReplicas` running."
+          },
+          {
+            "type": "step",
+            "title": "Stabilization Windows Prevent the Scale-Down Flapping Loop",
+            "content": "Without stabilization, HPA reacts to momentary metric changes. A brief traffic dip causes HPA to scale down, then traffic returns and HPA scales back up. Each scale-down terminates pods, losing their warm JVM caches and connection pools. Each scale-up starts cold pods that take 30+ seconds to initialize. This **flapping** wastes resources and degrades latency during every cycle.\n\nThe `behavior.scaleDown.stabilizationWindowSeconds` field solves this by requiring the metric to stay below the threshold for a sustained period before HPA removes replicas. A 300-second window (5 minutes) means HPA only scales down if average utilization has been below the target continuously for 5 minutes.\n\n```yaml\nbehavior:\n  scaleDown:\n    stabilizationWindowSeconds: 300\n    policies:\n      - type: Pods\n        value: 1\n        periodSeconds: 60\n  scaleUp:\n    stabilizationWindowSeconds: 0\n    policies:\n      - type: Percent\n        value: 100\n        periodSeconds: 15\n```\n\nScale-up is configured aggressively \u2014 no stabilization delay, doubling capacity every 15 seconds if needed. Scale-down is conservative \u2014 wait 5 minutes, then remove only 1 pod per minute. This **asymmetric behavior** matches the cost profile of scaling decisions: adding capacity is cheap and fast, but removing capacity prematurely costs you cache warmth and startup latency. In practice, 5 minutes of scale-down stabilization eliminates almost all flapping without noticeably increasing cost."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Resource requests are HPA's denominator** \u2014 without CPU requests defined, HPA reports `<unknown>` and never scales; this is the most common misconfiguration that blocks autoscaling entirely\n- **CPU utilization misleads for I/O-bound Spring Boot services** \u2014 a service at 20% CPU may be drowning in queued requests because latency is dominated by database I/O, not computation\n- **Custom metrics via Micrometer and Prometheus Adapter** \u2014 enables HPA to scale on requests per second or queue depth instead of CPU, giving semantically meaningful scaling triggers tied to actual load\n- **Scale-down stabilization prevents flapping** \u2014 `stabilizationWindowSeconds: 300` requires 5 minutes of sustained low utilization before removing pods, avoiding wasteful cycles that lose warm JVM caches\n- **KEDA scales from zero for event-driven workloads** \u2014 Kafka consumers and SQS processors benefit from queue-depth-based scaling that HPA cannot provide since HPA requires `minReplicas` of at least 1"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The Horizontal Pod Autoscaler watches a metric and adjusts the replica count to keep that metric near a target value. For Spring Boot APIs, CPU utilization is the standard starting point \u2014 when CPU climbs above the target, HPA adds replicas; when it drops, HPA removes them.\n\n**How HPA calculates scaling**\n- HPA divides the current metric value by the target: if target CPU is 50% and actual average CPU is 80%, the scaling factor is 80/50 = 1.6 \u2014 applied to 3 replicas this yields a desired 5 replicas (3 \u00d7 1.6, rounded up)\n- The metric server must be installed in the cluster for CPU and memory HPA to work \u2014 `kubectl top pods` working confirms the metrics pipeline is functional; HPA that shows `<unknown>` for current value means the metrics server is missing or misconfigured\n- HPA respects `minReplicas` and `maxReplicas` as hard bounds \u2014 it will never scale below or above these values regardless of what the metric says; set `minReplicas` high enough to handle sudden traffic spikes before autoscaling has time to react\n\n**Scaling down cooldown**\n- HPA scales up aggressively (within 15 seconds of metric crossing threshold) but scales down conservatively \u2014 by default it waits 5 minutes after the last scale-down decision before reducing replicas further; this prevents flapping under variable load\n- Adjust with `behavior.scaleDown.stabilizationWindowSeconds` \u2014 reduce it for stateless services that are cheap to restart; leave it longer for services with slow startup or warm-up costs\n- Scale-down removes the replica count from the Deployment but the actual Pod termination follows the `terminationGracePeriodSeconds` \u2014 ensure Spring Boot's graceful shutdown is configured so in-flight requests complete before the Pod dies\n\n**Custom metrics with KEDA**\n- KEDA (Kubernetes Event-Driven Autoscaling) scales on application-specific metrics: Kafka consumer lag, queue depth, RabbitMQ message count \u2014 better signals than CPU for I/O-bound Spring Boot consumers\n- A Kafka consumer whose consumer group lag is 10,000 messages needs more replicas even if CPU is at 5%; CPU-based HPA would never trigger; KEDA's Kafka scaler responds to the lag metric directly\n- KEDA installs as a custom controller and defines `ScaledObject` resources that reference your Deployment \u2014 it replaces the standard HPA for KEDA-managed targets"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the Kubernetes metrics-server and how does it differ from Prometheus?",
+        "What is KEDA and when is it better than HPA for Spring Boot services?",
+        "How does HPA interact with PodDisruptionBudget during scale-down?"
+      ],
+      "seo": {
+        "metaTitle": "Kubernetes HPA Horizontal Pod Autoscaler Spring Boot | InterviewExplainer",
+        "metaDescription": "Configure Horizontal Pod Autoscaler for Spring Boot in Kubernetes. CPU-based scaling, custom Micrometer metrics, scale-down stabilization, and KEDA."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P09",
+        "hook": "The Horizontal Pod Autoscaler watches a metric and adjusts the replica count to keep that metric near a target value.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The Horizontal Pod Autoscaler's default metric \u2014 CPU utilization \u2014 works well for CPU-bound workloads like image processing or scientific computing. For a typical Spring Boot REST service, CPU tells you almost nothing about actual load. A service handling 500 requests per second might sit at 20% CPU because most of the latency is I/O wait on database calls. HPA sees low CPU, keeps the replica count low, and the service drowns in queued requests while CPU looks idle. The fundamental problem is that HPA calculates CPU utilization as a."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "HPA's CPU-based scaling formula is current CPU usage / CPU request x 100.",
+              "Without a CPU request defined on the container, this formula has no denominator and HPA reports <unknown> for the target.",
+              "The pods never scale up, even under massive load.",
+              "Setting resources.requests.cpu: 250m gives HPA the baseline it needs.",
+              "The target utilization percentage \u2014 typically 70% \u2014 determines the scaling threshold.",
+              "HPA continuously calculates the desired replica count: desiredReplicas = ceil(currentReplicas x currentUtilization / targetUtilization)."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Resource requests are HPA's denominator \u2014 without CPU requests defined, HPA reports <unknown> and never scales; this is the most common misconfiguration that blocks autoscaling entirely CPU utilization misleads for I/O-bound Spring Boot services \u2014 a service at 20% CPU may be drowning in queued requests because latency is dominated by database I/O, not computation Custom metrics via Micrometer and Prometheus Adapter \u2014 enables HPA to scale on requests per second or queue depth instead of CPU, giving semantically meaningful scaling triggers tied to actual load Scale-down stabilization prevents flapping \u2014 stabilizationWindowSeconds: 300 requires 5 minutes of sustained low utilization before removing pods, avoiding wasteful cycles that lose warm JVM caches KEDA scales from zero for event-driven workloads \u2014 Kafka consumers and SQS processors benefit from queue-depth-based scaling that HPA cannot provide since HPA requires minReplicas of at least 1"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Not setting resource requests \u2014 HPA can't calculate CPU utilization percentage without a defined request baseline"
+          }
+        ],
+        "cap": "How HPA calculates scaling HPA divides the current metric value by the target: if target CPU is 50% and actual average CPU is 80%, the scaling factor is 80/50 = 1.6 \u2014 applied to 3.",
+        "familiarity_anchors": [
+          "Requires",
+          "Configure",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the Kubernetes metrics-server and how does it differ from Prometheus?",
+          "What is KEDA and when is it better than HPA for Spring Boot services?",
+          "How does HPA interact with PodDisruptionBudget during scale-down?"
+        ]
+      }
+    }
+  ]
+}

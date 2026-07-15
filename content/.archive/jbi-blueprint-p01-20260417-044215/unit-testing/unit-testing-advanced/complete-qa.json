@@ -1,0 +1,218 @@
+{
+  "topic": "Unit Testing Advanced",
+  "topicSlug": "unit-testing-advanced",
+  "questions": [
+    {
+      "id": "test-008",
+      "slug": "testing-async-completablefuture",
+      "question": "How do you test asynchronous code and CompletableFuture in Java?",
+      "title": "Testing Async / CompletableFuture Code",
+      "direct_answer": "For CompletableFuture, call .get() or .join() in the test to block until the result is available, then assert on it. For @Async Spring methods, either use CountDownLatch/CompletableFuture to wait, or test the underlying method directly without the async wrapper in unit tests. For reactive code (Mono/Flux), use StepVerifier. Avoid Thread.sleep() \u2014 it makes tests slow and flaky.",
+      "layout_type": "code-workshop",
+      "interviewer_intent": {
+        "testing": "Whether you understand the challenges of non-deterministic async execution in tests and how to avoid Thread.sleep()",
+        "common_mistake": "Using Thread.sleep() to wait for async results \u2014 it makes tests slow and still flaky; use blocking get() or Awaitility instead",
+        "to_stand_out": "Mention Awaitility for testing @Async side effects (like database writes triggered asynchronously) without sleep, and how to test exception propagation in CompletableFuture"
+      },
+      "company_tags": [
+        "Twitter",
+        "LinkedIn",
+        "Confluent"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Thread.sleep() in Async Tests Is a Bug, Not a Strategy",
+            "content": "Testing asynchronous code requires synchronization between the test thread and the async execution. The naive approach \u2014 `Thread.sleep(2000)` \u2014 is both slow (always waits the full duration) and flaky (fails when execution takes longer than expected on a loaded CI server).\n\n`CompletableFuture` testing is simpler than it appears because the future itself provides the synchronization point. Call `.get(5, TimeUnit.SECONDS)` or `.join()` with a timeout \u2014 the test blocks until the result is available or times out.\n\nThe harder case is testing `@Async` methods in Spring, where the method returns before the async work completes. Here you need an explicit synchronization mechanism: `CountDownLatch`, `Awaitility`, or a `CompletableFuture` that the async code completes. The test waits on this mechanism with a timeout, proceeding as soon as the async work finishes.\n\nThe key principle: **every async test needs an explicit synchronization point.** For `CompletableFuture`, the future itself is the synchronization. For `@Async void` methods, you create one \u2014 typically by observing a side effect (database write, event, flag). The test waits on this synchronization point with a timeout, never on a fixed sleep duration. Awaitility provides this pattern out of the box with `await().atMost().untilAsserted()`, polling the assertion until it passes or the timeout expires."
+          },
+          {
+            "type": "step",
+            "title": "Testing CompletableFuture \u2014 The Future IS the Synchronization",
+            "content": "For methods that return `CompletableFuture`, testing is straightforward: call the method, get the result with a timeout.\n\n```java\n@Test\nvoid shouldFetchUserAsync() {\n    CompletableFuture<User> future = userService.findByIdAsync(1L);\n    \n    User result = assertTimeout(Duration.ofSeconds(5), () -> future.get());\n    \n    assertThat(result.getName()).isEqualTo(\"John\");\n}\n\n@Test\nvoid shouldHandleAsyncFailure() {\n    CompletableFuture<User> future = userService.findByIdAsync(999L);\n    \n    assertThatThrownBy(() -> future.get(5, TimeUnit.SECONDS))\n        .hasCauseInstanceOf(UserNotFoundException.class);\n}\n```\n\nJUnit 5's `assertTimeout()` fails with a clear message if the future doesn't complete in time. For exception testing, `CompletableFuture.get()` wraps the original exception in `ExecutionException` \u2014 use `.hasCauseInstanceOf()` to assert on the actual cause.\n\nFor `CompletableFuture` chains (`thenApply`, `thenCompose`, `exceptionally`), test the final result, not intermediate stages. The chain's correctness is proven by the output, not by verifying each transformation step."
+          },
+          {
+            "type": "step",
+            "title": "Testing @Async Methods \u2014 When the Method Returns void",
+            "content": "Methods annotated with `@Async` that return `void` are the hardest to test \u2014 there's no future to wait on. The test must observe a side effect (database write, event publish) to know the async work completed.\n\n```java\n@SpringBootTest\nclass NotificationServiceTest {\n    @Autowired NotificationService notificationService;\n    @Autowired NotificationRepository notificationRepository;\n    \n    @Test\n    void shouldSendNotificationAsync() {\n        notificationService.sendAsync(new NotificationRequest(\"user@test.com\", \"Hello\"));\n        \n        await().atMost(Duration.ofSeconds(10))\n               .untilAsserted(() -> {\n                   List<Notification> sent = notificationRepository.findByEmail(\"user@test.com\");\n                   assertThat(sent).hasSize(1);\n                   assertThat(sent.get(0).getMessage()).isEqualTo(\"Hello\");\n               });\n    }\n}\n```\n\nAwaitility's `await().atMost().untilAsserted()` polls the assertion repeatedly until it passes or the timeout expires. This adapts to actual execution speed \u2014 fast locally, tolerant of CI slowness.\n\nNote: `@Async` requires `@EnableAsync` and a Spring context to work \u2014 you can't test it with plain Mockito. The `@SpringBootTest` is necessary because the async proxy is created by Spring's post-processor. Verify that your test configuration includes `@EnableAsync`, otherwise the method runs synchronously and the test passes for the wrong reason.\n\nFor testing `CompletableFuture.allOf()` or `anyOf()` compositions, use `assertTimeout()` on the composed future. Test both the success path (all futures complete) and failure path (one future fails and the composition handles it). This verifies that your composition logic propagates exceptions correctly and doesn't silently swallow failures."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "For `CompletableFuture`, the future itself is your synchronization point \u2014 call `.get(5, SECONDS)` and assert on the result. No `Thread.sleep()` needed. For failures, `future.get()` wraps the exception in `ExecutionException`, so assert on the cause.\n\nThe harder case is `@Async void` methods. There's no future to wait on, so you need to observe a side effect. **Awaitility** is the standard tool: `await().atMost(10, SECONDS).untilAsserted(() -> assertThat(...))`. It polls the assertion until it passes or times out \u2014 adapting to actual execution speed instead of sleeping for an arbitrary duration.\n\n`Thread.sleep()` is always wrong in tests. It's too slow (always waits the full duration) and too flaky (fails when CI is loaded). Every async test should use either the future's `.get()` or Awaitility.\n\nRemember: `@Async` requires Spring's proxy, so these tests need `@SpringBootTest` with `@EnableAsync`."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`Thread.sleep()` is always wrong in async tests** \u2014 too slow (always waits full duration) and too flaky (fails on loaded CI); use `future.get(timeout)` or Awaitility instead.\n- **`CompletableFuture.get()` IS the synchronization point** \u2014 blocks until result is available; JUnit 5's `assertTimeout(Duration.ofSeconds(5), () -> future.get())` provides clear failure messages.\n- **`await().atMost().untilAsserted()` polls until the assertion passes** \u2014 adapts to actual execution speed; fast locally, tolerant of CI slowness; standard for testing `@Async void` methods.\n- **`@Async` methods need `@SpringBootTest` + `@EnableAsync`** \u2014 the async proxy is created by Spring's post-processor; without a Spring context, the method runs synchronously and the test passes for the wrong reason.\n- **`future.get()` wraps exceptions in `ExecutionException`** \u2014 use `.hasCauseInstanceOf()` to assert on the actual exception; direct `assertThrows(UserNotFoundException.class)` won't match."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you test Spring WebFlux reactive pipelines with StepVerifier?",
+        "How do you configure a test executor that is synchronous to simplify @Async tests?",
+        "What is the difference between thenApply and thenCompose in CompletableFuture?"
+      ],
+      "seo": {
+        "metaTitle": "Testing Async CompletableFuture Java Spring Boot | Interview",
+        "metaDescription": "Learn how to test CompletableFuture and @Async methods in Java Spring Boot using .get(), Awaitility, and StepVerifier without Thread.sleep."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P08",
+        "hook": "For CompletableFuture, the future itself is your synchronization point \u2014 call .get(5, SECONDS) and assert on the result.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Testing asynchronous code requires synchronization between the test thread and the async execution. The naive approach \u2014 Thread.sleep(2000) \u2014 is both slow (always waits the full duration) and flaky (fails when execution takes longer than expected on a loaded CI server). CompletableFuture testing is simpler than it appears because the future itself provides the synchronization point. Call .get(5, TimeUnit.SECONDS) or .join() with a timeout \u2014 the test blocks until the result is available or times out. The harder case is testing @Async methods in Spring, where the method returns before."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "For methods that return CompletableFuture, testing is straightforward: call the method, get the result with a timeout.",
+              "``java @Test void shouldFetchUserAsync() { CompletableFuture<User> future = userService.findByIdAsync(1L); User result = assertTimeout(Duration.ofSeconds(5), () -> future.get()); assertThat(result.getName()).isEqualTo(\"John\"); } @Test void shouldHandleAsyncFailure() { CompletableFuture<User> future = userService.findByIdAsync(999L); assertThatThrownBy(() -> future.get(5, TimeUnit.SECONDS)) .hasCauseInstanceOf(UserNotFoundException.class); } ` JUnit 5's assertTimeout() fails with a clear message if the future doesn't complete in time.",
+              "For exception testing, CompletableFuture.get() wraps the original exception in ExecutionException \u2014 use .hasCauseInstanceOf() to assert on the actual cause.",
+              "For CompletableFuture chains (thenApply, thenCompose, exceptionally`), test the final result, not intermediate stages.",
+              "The chain's correctness is proven by the output, not by verifying each transformation step.",
+              "Methods annotated with @Async that return void are the hardest to test \u2014 there's no future to wait on."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "sleep() is always wrong in async tests \u2014 too slow (always waits full duration) and too flaky (fails on loaded CI); use future",
+              "get(timeout) or Awaitility instead",
+              "CompletableFuture",
+              "get() IS the synchronization point \u2014 blocks until result is available; JUnit 5's assertTimeout(Duration",
+              "ofSeconds(5), () -> future"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Using Thread.sleep() to wait for async results \u2014 it makes tests slow and still flaky; use blocking get() or Awaitility instead"
+          }
+        ],
+        "cap": "Remember: @Async requires Spring's proxy, so these tests need @SpringBootTest with @EnableAsync.",
+        "familiarity_anchors": [
+          "CompletableFuture",
+          "Async",
+          "Spring"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you test Spring WebFlux reactive pipelines with StepVerifier?",
+          "How do you configure a test executor that is synchronous to simplify @Async tests?",
+          "What is the difference between thenApply and thenCompose in CompletableFuture?"
+        ]
+      }
+    },
+    {
+      "id": "test-coverage",
+      "slug": "code-coverage-jacoco-spring-boot",
+      "question": "Code Coverage with JaCoCo \u2014 What to Measure and What to Ignore",
+      "title": "Code Coverage with JaCoCo \u2014 What to Measure and What to Ignore",
+      "direct_answer": "JaCoCo measures how much code is executed during tests. Line coverage counts executed lines. Branch coverage counts executed decision paths. Coverage measures test execution, not test quality.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands what code coverage measures, its limitations, and what coverage targets are meaningful.",
+        "common_mistake": "Chasing 100% coverage by testing getters, setters, and trivial code \u2014 this adds test maintenance cost without catching bugs.",
+        "to_stand_out": "Explain branch coverage vs line coverage, why coverage targets should differ by code type (80%+ for business logic, lower for configuration), and how JaCoCo exclusions prevent misleading metrics."
+      },
+      "company_tags": [],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "100% Coverage Doesn't Mean Zero Bugs \u2014 It Means Every Line Was Executed, Not Verified",
+            "content": "Code coverage measures what percentage of your code runs during tests. **Line coverage** counts lines executed. **Branch coverage** counts decision paths taken \u2014 both the `if` and `else` branches. JaCoCo is the standard coverage tool for Java projects, integrated into Maven/Gradle and CI pipelines.\n\nThe misconception: high coverage = good tests. A test that calls every method but asserts nothing has 100% coverage and catches zero bugs. Coverage measures **execution, not verification.** A line is \"covered\" if it ran during any test, regardless of whether the test checked the output.\n\nThe practical target: **80% line coverage for business logic, lower for configuration and boilerplate.** Chasing 100% means testing getters, setters, generated code, and exception paths that add maintenance cost without catching bugs. The last 20% of coverage typically requires 80% of the testing effort \u2014 and that effort is better spent on edge cases in critical code than on covering trivial code.\n\nBranch coverage is more valuable than line coverage. A method with an `if/else` can have 100% line coverage (both branches run) but if you only test the `true` branch, you miss bugs in the `false` path. JaCoCo tracks both and reports them separately."
+          },
+          {
+            "type": "step",
+            "title": "Configuring JaCoCo With Meaningful Exclusions",
+            "content": "JaCoCo integrates with Maven via the `jacoco-maven-plugin`. The key configuration is **exclusions** \u2014 removing code that shouldn't affect your coverage metric.\n\n```xml\n<plugin>\n    <groupId>org.jacoco</groupId>\n    <artifactId>jacoco-maven-plugin</artifactId>\n    <configuration>\n        <excludes>\n            <exclude>**/config/**</exclude>\n            <exclude>**/dto/**</exclude>\n            <exclude>**/*Application.class</exclude>\n            <exclude>**/generated/**</exclude>\n        </excludes>\n    </configuration>\n    <executions>\n        <execution>\n            <goals><goal>prepare-agent</goal></goals>\n        </execution>\n        <execution>\n            <id>report</id>\n            <phase>verify</phase>\n            <goals><goal>report</goal></goals>\n        </execution>\n    </executions>\n</plugin>\n```\n\nExclude configuration classes (pure Spring wiring), DTOs (data carriers with no logic), the main application class, and generated code (MapStruct, Lombok). Without exclusions, these inflate your coverage denominator \u2014 making it harder to reach meaningful coverage targets for actual business logic.\n\nFor enforcement, add a `check` goal with `BUNDLE` rules: `LINE` minimum 0.80, `BRANCH` minimum 0.70. JaCoCo fails the build if coverage drops below the threshold. Set thresholds per package if different areas have different complexity levels."
+          },
+          {
+            "type": "step",
+            "title": "What to Measure and What to Ignore \u2014 The Coverage Strategy",
+            "content": "**High coverage targets (80%+):** business logic services, domain models, validators, calculators. This is where bugs live and where tests provide the most value. Branch coverage matters here \u2014 every `if/else` decision path should be tested.\n\n**Moderate coverage (60-80%):** controllers, mappers, integration code. These are mostly wiring \u2014 the framework does most of the work. Test the important paths (validation, error handling) but don't force coverage on trivial mappings.\n\n**Low or excluded:** configuration classes, DTOs, generated code, the main class. Testing `@Bean` definitions and data carriers adds maintenance cost without catching bugs.\n\nThe coverage report should be a conversation tool, not a gate. A team that discusses uncovered branches in code review catches more bugs than a team that mandates 90% coverage and writes `@Test void testGetters()` to hit the number.\n\nOne metric worth tracking: **coverage of changed code.** CI tools like SonarQube measure \"coverage on new code\" separately. Requiring 80% coverage on new code is more effective than requiring 80% overall \u2014 it ensures new features are tested without forcing retroactive testing of legacy code."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "JaCoCo measures test execution, not test quality. A test that calls every method but asserts nothing has 100% coverage and catches zero bugs. Coverage tells you what code ran during tests \u2014 not whether the tests actually verified anything.\n\nBranch coverage is more valuable than line coverage. A method with `if/else` can show 100% line coverage while only testing the `true` branch. JaCoCo reports both separately.\n\nMy target: 80%+ for business logic, 60-80% for controllers and mappers, and exclude configuration classes and DTOs entirely. Chasing 100% means testing getters and generated code \u2014 maintenance cost with zero bug-catching value.\n\nThe most useful metric is **coverage on new code** \u2014 requiring 80% on changed files ensures new features are tested without forcing retroactive coverage of legacy code."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Coverage measures execution, not verification** \u2014 a line is \"covered\" if it ran during any test, regardless of assertions; 100% coverage with no assertions catches nothing.\n- **Branch coverage > line coverage** \u2014 `if/else` can show 100% line coverage while testing only one path; branch coverage ensures both decision paths are exercised.\n- **Exclude config, DTOs, generated code from coverage** \u2014 these inflate the denominator without representing testable logic; without exclusions, reaching 80% forces testing getters and setters.\n- **80%+ for business logic, lower for wiring code** \u2014 different code types warrant different targets; controllers and mappers are mostly framework code with less bug surface.\n- **\"Coverage on new code\" is the most actionable metric** \u2014 requiring 80% on changed files ensures new features are tested; avoids the retroactive testing problem with legacy code."
+          }
+        ]
+      },
+      "followup_questions": [],
+      "seo": {
+        "metaTitle": "Code Coverage with JaCoCo \u2014 What to Measure and What to Ignore",
+        "metaDescription": ""
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P08",
+        "hook": "JaCoCo measures test execution, not test quality.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Code coverage measures what percentage of your code runs during tests. Line coverage counts lines executed. Branch coverage counts decision paths taken \u2014 both the if and else branches. JaCoCo is the standard coverage tool for Java projects, integrated into Maven/Gradle and CI pipelines. The misconception: high coverage = good tests. A test that calls every method but asserts nothing has 100% coverage and catches zero bugs. Coverage measures execution, not verification. A line is \"covered\" if it ran during."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands what code coverage measures, its limitations, and what coverage targets are meaningful."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Coverage measures execution, not verification \u2014 a line is \"covered\" if it ran during any test, regardless of assertions; 100% coverage with no assertions catches nothing",
+              "Branch coverage > line coverage \u2014 if/else can show 100% line coverage while testing only one path; branch coverage ensures both decision paths are exercised",
+              "Exclude config, DTOs, generated code from coverage \u2014 these inflate the denominator without representing testable logic; without exclusions, reaching 80% forces testing getters and setters",
+              "80%+ for business logic, lower for wiring code \u2014 different code types warrant different targets; controllers and mappers are mostly framework code with less bug surface",
+              "\"Coverage on new code\" is the most actionable metric \u2014 requiring 80% on changed files ensures new features are tested; avoids the retroactive testing problem with legacy code"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Code coverage measures what percentage of your code runs during tests. Line coverage counts lines executed. Branch coverage counts decision paths taken \u2014 both the if and else branches. JaCoCo is the standard coverage tool for Java projects, integrated into Maven/Gradle and CI pipelines. The misconception: high coverage = good tests. A test that calls every method but asserts nothing has 100% coverage and catches zero bugs. Coverage measures execution, not verification. A line is \"covered\" if it ran during any test, regardless of whether the test checked the output. The practical target: 80% line coverage for business logic, lower for configuration and boilerplate. Chasing 100% means testing getters, setters, generated code, and exception paths that add maintenance cost without."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Chasing 100% coverage by testing getters, setters, and trivial code \u2014 this adds test maintenance cost without catching bugs"
+            ]
+          }
+        ],
+        "cap": "The most useful metric is coverage on new code \u2014 requiring 80% on changed files ensures new features are tested without forcing retroactive coverage of legacy code.",
+        "familiarity_anchors": [
+          "JaCoCo",
+          "Branch",
+          "Coverage"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

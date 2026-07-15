@@ -1,0 +1,617 @@
+{
+  "topic": "Scenario Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "sd-005",
+      "slug": "design-job-queue-system",
+      "question": "Design a background job processing system. How do you handle delayed jobs and retries?",
+      "title": "Design a Background Job Queue System",
+      "direct_answer": "Use a persistent job queue backed by PostgreSQL (for small scale) or dedicated queuing system like Redis/SQS (for large scale). Workers poll for jobs using SELECT FOR UPDATE SKIP LOCKED. Implement exponential backoff retry with a dead-letter queue for permanently failed jobs.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Persistent queue design, at-least-once delivery, retry strategy, and job status tracking",
+        "common_mistake": "Using an in-memory queue (e.g., ArrayBlockingQueue) \u2014 jobs are lost on restart",
+        "to_stand_out": "Explain the SKIP LOCKED pattern for concurrent workers, job visibility timeout, and the difference between at-least-once and exactly-once execution"
+      },
+      "company_tags": [
+        "Sidekiq",
+        "Celery",
+        "AWS SQS",
+        "Shopify"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Background Jobs Need Persistence",
+            "content": "Background job systems decouple work from HTTP request-response cycles: send email, resize images, generate reports, sync with external APIs. Requirements: persistence (no job loss on restart), retry on failure, status tracking, delayed execution.\n\nFrom a **Java / Spring Boot** production angle, I would connect this design to **observability** and **incremental rollout**: Micrometer metrics with trace IDs, Actuator health that reflects downstream dependencies, and feature flags or shadow traffic before flipping primary users. Mention **load and chaos testing** for the specific failure modes you described, plus on-call runbooks that spell out who owns remediation (platform vs product). Interviewers reward naming **SLOs**\u2014p99 latency, error budgets, and dollars per incident\u2014so tie architecture choices to those numbers instead of stopping at boxes and arrows.\n\nClose with **incident readiness**: synthetic probes, paging thresholds tied to user-visible impact, and blameless postmortems that capture detection time, mitigation time, and the guardrails you will add next. Mention **capacity spreadsheets**\u2014peak multiplier, cost per million requests, and headroom after losing an AZ\u2014so the design feels grounded in finance as well as algorithms."
+          },
+          {
+            "type": "requirements",
+            "title": "Core Requirements and Scale Estimates",
+            "content": "**Core requirements:**\n- Job persistence: survive process restarts and crashes\n- At-least-once execution: jobs retry if worker crashes mid-execution\n- Retry with backoff: don't hammer failing external services\n- Delayed/scheduled jobs: run at a specific time\n- Status tracking: pending, running, completed, failed\n- Dead letter queue: permanently failed jobs for investigation\n\n**Scale estimate:** 1M jobs/day = ~11 jobs/sec average. Peak 1000 jobs/sec. Small scale \u2192 PostgreSQL queue. Large scale \u2192 SQS or Redis Queue.\n\nAdd **Spring-centric** details where credible: validated configuration properties for timeouts and pool sizes, `@Scheduled` or Debezium-style hooks for background reconciliation, and defensive validation on every external boundary. Close with **security**: least-privilege service accounts, secrets rotation, and auditability of administrative actions that bypass normal user flows."
+          },
+          {
+            "type": "approach",
+            "title": "PostgreSQL-Based Queue (Small Scale)",
+            "content": "**PostgreSQL queue with SKIP LOCKED:**\n```sql\nCREATE TABLE jobs (\n    id              BIGSERIAL PRIMARY KEY,\n    job_type        TEXT NOT NULL,\n    payload         JSONB NOT NULL,\n    status          TEXT DEFAULT 'pending',  -- pending/running/completed/failed\n    attempts        INT DEFAULT 0,\n    max_attempts    INT DEFAULT 3,\n    run_at          TIMESTAMPTZ DEFAULT NOW(), -- for delayed jobs\n    locked_at       TIMESTAMPTZ,\n    locked_by       TEXT,       -- worker instance ID\n    last_error      TEXT,\n    created_at      TIMESTAMPTZ DEFAULT NOW()\n);\n\n-- Worker poll query (safe for multiple concurrent workers):\nUPDATE jobs\nSET status = 'running',\n    locked_at = NOW(),\n    locked_by = :workerId,\n    attempts = attempts + 1\nWHERE id = (\n    SELECT id FROM jobs\n    WHERE status = 'pending'\n      AND run_at <= NOW()       -- respect delayed jobs\n      AND attempts < max_attempts\n    ORDER BY run_at, id         -- FIFO within priority\n    LIMIT 1\n    FOR UPDATE SKIP LOCKED      -- no two workers get same job\n)\nRETURNING *;\n```"
+          },
+          {
+            "type": "design_diagram",
+            "title": "Worker Lifecycle and Retry Flow",
+            "content": "```\n// WORKER LIFECYCLE:\n\n@Component\npublic class JobWorker {\n\n    @Scheduled(fixedDelay = 1000) // poll every second\n    public void processNextJob() {\n        Optional<Job> job = jobQueue.fetchAndLock(workerId);\n        if (job.isEmpty()) return;\n\n        try {\n            jobExecutor.execute(job.get());\n            jobQueue.markCompleted(job.get().getId());\n\n        } catch (RetryableException e) {\n            // Exponential backoff: 2^attempt minutes\n            Duration backoff = Duration.ofMinutes(\n                (long) Math.pow(2, job.get().getAttempts()));\n            jobQueue.scheduleRetry(job.get().getId(),\n                Instant.now().plus(backoff),\n                e.getMessage());\n\n        } catch (FatalException e) {\n            // Non-retryable: mark failed immediately\n            jobQueue.markFailed(job.get().getId(), e.getMessage());\n        }\n    }\n}\n\n// VISIBILITY TIMEOUT (handles worker crash):\n// A job locked_at > 30 minutes ago but still 'running' = worker crashed\n// Cleanup job:\n@Scheduled(fixedDelay = 60_000)\npublic void recoverStalledJobs() {\n    jobQueue.unlockJobsOlderThan(Duration.ofMinutes(30));\n    // These jobs go back to 'pending' for other workers to pick up\n}\n\n// REDIS QUEUE (large scale alternative):\n// Use Redisson's RQueue or Spring's Redis task executor\n// BRPOPLPUSH for atomic dequeue: move from pending to processing list\n// Claim-check pattern with visibility timeout\n// Or: use AWS SQS (managed, auto-handles visibility timeout)\n```"
+          },
+          {
+            "type": "step",
+            "title": "Priorities, Ordering Guarantees, and Exactly-Once Nuance",
+            "content": "Real queues rarely stay FIFO-only. Introduce a **priority** column or separate queues for interactive vs batch workloads so user-visible jobs jump ahead of report generation. Document whether you guarantee strict ordering per user; most systems only provide best-effort ordering and rely on idempotent handlers instead of trying to build distributed serial execution.\n\n**Exactly-once** execution is impossible with external side effects; the achievable bar is **effectively-once** by making handlers idempotent with business keys and storing side-effect receipts. Mention that double delivery can still happen after visibility timeouts reclaim jobs.\n\nFor scheduled work, combine **run_at** indexes with leader-elected cron dispatchers to avoid thundering herds when midnight jobs fire. Large payloads should live in object storage with the row storing a pointer, keeping the relational table slim and fast to scan.\n\nMonitoring should include queue **age**, retry counts, DLQ growth rate, and saturation of worker thread pools. Autoscaling hooks can scale Kubernetes deployments off queue depth, but cap max workers to protect downstream databases from an accidental fork bomb of jobs.\n\nFinally, developer ergonomics matter: expose a typed SDK for enqueuing, standardized serialization, and local dev containers mirroring prod so teams trust the infrastructure.\n\nAdvanced scenarios include **cron deduplication** when multiple schedulers fire\u2014use advisory locks or lease tables so only one node enqueues the nightly report. For **FIFO per user**, add a grouping key column and teach workers to hash to queues so a single user cannot head-of-line block global throughput while still preserving relative order for that user.\n\nCost control is fair game: Postgres queues are simple but can become IO bound; mention **partitioning** by status or time and archiving completed rows. For cross-service sagas, pair the queue with an **outbox** table so business mutations and enqueue happen atomically, avoiding lost jobs when the API crashes after writing business data. That ties the queue story to distributed consistency patterns interviewers love.\n\nClose with **metrics**: track time-in-queue, processing latency, attempts histogram, and DLQ age so product teams see user-visible delays before customers tweet. Document **replay semantics**\u2014whether replays create new job IDs or reuse originals\u2014and how that interacts with idempotent handlers."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Durability before optimization** \u2014 `ArrayBlockingQueue` loses all in-flight jobs on restart.\n- **Job state machine: PENDING \u2192 RUNNING \u2192 COMPLETED/FAILED** \u2014 idempotent status transitions prevent double-execution when a worker crashes and the job is.\n- **Exponential backoff with jitter on retry** \u2014 doubling delay (1s, 2s, 4s...) with \u00b120% jitter prevents synchronized retry storms when a dependency.\n- **Worker heartbeat for stuck job detection** \u2014 a job marked RUNNING with no heartbeat update for >2\u00d7 the expected duration should be re-queued.\n- **Separate queues by priority and SLA** \u2014 a single queue means a low-priority batch job blocks a high-priority user-facing task."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A background job processing system decouples work from HTTP request-response cycles \u2014 sending emails, resizing images, generating reports, running scheduled analytics. The core design principle is that an HTTP handler should enqueue the work and return immediately; the job system handles execution, failure, and retry asynchronously.\n\n**Durability is the first requirement:**\n- An `ArrayBlockingQueue` or in-memory structure loses all in-flight jobs on application restart or crash; for anything business-critical, the queue must be backed by a durable store \u2014 a database table, Redis with persistence, or Kafka\n- The minimal viable approach is a `jobs` table in PostgreSQL with columns for type, payload, status, attempts, and next_retry_at; the application polls for PENDING jobs and updates status atomically with optimistic locking\n\n**The job state machine:**\n- Each job transitions through PENDING \u2192 RUNNING \u2192 COMPLETED or FAILED; transitions must be idempotent because a worker can crash mid-execution and the job will be re-queued\n- Worker heartbeat is essential: update a `last_heartbeat_at` timestamp every 30 seconds while the job runs; a background monitor re-queues any job in RUNNING state with no heartbeat update for more than 2\u00d7 its expected duration\n\n**Retry and failure handling:**\n- Retry with exponential backoff plus jitter: after failure, set `next_retry_at = NOW() + base \u00d7 2^attempts` with \u00b120% random jitter; jitter prevents all retried jobs from hitting a recovering dependency simultaneously\n- After a configurable max attempts, move the job to a dead-letter table for manual investigation \u2014 never silently drop failed jobs\n\nI recommend a database-backed job queue as the default (PostgreSQL advisory locks prevent double-execution), Kafka or Redis Streams for high-throughput volume, and always implementing worker heartbeats and dead-letter handling before adding any other features."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you implement priority queues in a job system?",
+        "What is idempotency in job execution and how do you achieve it?",
+        "How would you implement a distributed cron scheduler?"
+      ],
+      "seo": {
+        "metaTitle": "Design Background Job Queue System \u2014 Java Interview Guide",
+        "metaDescription": "Background job processing system design with PostgreSQL SKIP LOCKED. At-least-once delivery, exponential backoff retry, visibility timeout, and dead letter queue."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A background job processing system decouples work from HTTP request-response cycles \u2014 sending emails, resizing images, generating reports, running scheduled analytics.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Background job systems decouple work from HTTP request-response cycles: send email, resize images, generate reports, sync with external APIs. Requirements: persistence (no job loss on restart), retry on failure, status tracking, delayed execution. From a Java / Spring Boot production angle, I would connect this design to observability and incremental rollout: Micrometer metrics with trace IDs, Actuator health that reflects downstream dependencies, and feature flags or shadow traffic before flipping primary users. Mention load and chaos testing for the specific failure modes you described, plus on-call runbooks that spell out."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Real queues rarely stay FIFO-only.",
+              "Introduce a priority column or separate queues for interactive vs batch workloads so user-visible jobs jump ahead of report generation.",
+              "Document whether you guarantee strict ordering per user; most systems only provide best-effort ordering and rely on idempotent handlers instead of trying to build distributed serial execution.",
+              "Exactly-once execution is impossible with external side effects; the achievable bar is effectively-once by making handlers idempotent with business keys and storing side-effect receipts.",
+              "Mention that double delivery can still happen after visibility timeouts reclaim jobs.",
+              "For scheduled work, combine run_at indexes with leader-elected cron dispatchers to avoid thundering herds when midnight jobs fire."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Durability before optimization \u2014 ArrayBlockingQueue loses all in-flight jobs on restart",
+              "Job state machine: PENDING \u2192 RUNNING \u2192 COMPLETED/FAILED \u2014 idempotent status transitions prevent double-execution when a worker crashes and the job is",
+              "Exponential backoff with jitter on retry \u2014 doubling delay (1s, 2s, 4s",
+              ") with \u00b120% jitter prevents synchronized retry storms when a dependency",
+              "Worker heartbeat for stuck job detection \u2014 a job marked RUNNING with no heartbeat update for >2\u00d7 the expected duration should be re-queued"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Using an in-memory queue (e.g., ArrayBlockingQueue) \u2014 jobs are lost on restart"
+          }
+        ],
+        "cap": "Durability is the first requirement: An ArrayBlockingQueue or in-memory structure loses all in-flight jobs on application restart or crash; for anything business-critical, the queue must be backed by",
+        "familiarity_anchors": [
+          "PostgreSQL",
+          "Redis",
+          "Workers"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you implement priority queues in a job system?",
+          "What is idempotency in job execution and how do you achieve it?",
+          "How would you implement a distributed cron scheduler?"
+        ]
+      }
+    },
+    {
+      "id": "sd-006",
+      "slug": "design-read-write-separation-cqrs",
+      "question": "When and how do you implement read/write separation and CQRS in a Java application?",
+      "title": "Read/Write Separation and CQRS Pattern",
+      "direct_answer": "Read/write separation routes reads to replicas and writes to the primary. CQRS separates the command (write) model from the query (read) model entirely, often with different data stores optimized for each. Use CQRS when read and write access patterns are significantly different.",
+      "layout_type": "concept-explainer",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Understanding of scaling read-heavy applications and the CQRS trade-off",
+        "common_mistake": "Implementing CQRS everywhere \u2014 it adds complexity that only pays off for specific use cases",
+        "to_stand_out": "Explain replication lag as the consistency risk in read replicas and the Event Sourcing connection to CQRS"
+      },
+      "company_tags": [
+        "Amazon",
+        "LinkedIn",
+        "Netflix",
+        "Booking.com"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Separate Read and Write Paths",
+            "content": "Most applications have 10:1 read-to-write ratio. Routing reads to read replicas reduces primary load and enables horizontal read scaling. CQRS goes further: separate models, separate storage, separate code paths for reads vs writes.\n\nFrom a **Java / Spring Boot** production angle, I would connect this design to **observability** and **incremental rollout**: Micrometer metrics with trace IDs, Actuator health that reflects downstream dependencies, and feature flags or shadow traffic before flipping primary users. Mention **load and chaos testing** for the specific failure modes you described, plus on-call runbooks that spell out who owns remediation (platform vs product). Interviewers reward naming **SLOs**\u2014p99 latency, error budgets, and dollars per incident\u2014so tie architecture choices to those numbers instead of stopping at boxes and arrows."
+          },
+          {
+            "type": "step",
+            "title": "Replication Lag, Routing, and Spring Boot Practicalities",
+            "content": "Streaming replication in Postgres is asynchronous by default, meaning a read replica can lag the primary by milliseconds to minutes during bulk loads or noisy neighbors. Interviewers expect you to quantify the user-visible risk: an ecommerce customer might not see a just-placed order if the UI reads from a stale replica. Mitigations include **sticky sessions** to the primary for a short window after writes, tagging reads with **consistency tokens** returned from mutations, or routing session-critical queries to the leader while list views stay on replicas.\n\nSpring Boot wiring typically defines two **DataSource** beans plus a routing **AbstractRoutingDataSource** driven by `TransactionSynchronizationManager.isCurrentTransactionReadOnly()`. Connection pools must be sized independently: write pools stay small because writes are expensive, while read pools can be larger to absorb reporting traffic. Health checks should verify replica lag thresholds and automatically remove unhealthy replicas from the pool.\n\nSchema design still matters: long-running analytics queries should move to **read replicas** or OLAP stores instead of starving OLTP traffic on the primary. When teams add CQRS later, those replicas often evolve into the home for heavy historical queries while command traffic stays narrow.\n\nOperational tooling includes dashboards on replication lag, automatic promotion drills, and feature flags to fall back to the primary during incidents. Mentioning runbooks shows you think beyond the happy-path diagram.\n\nConnection storms deserve a callout: when a replica promotes, clients must **fail over** DNS or service discovery quickly without exhausting the primary pool. Pool libraries like HikariCP need tuned **maximumPoolSize** per role and separate metrics for waiting threads. For **multi-tenant** SaaS, consider per-tenant routing rules so noisy tenants cannot saturate shared replicas.\n\nWhen you introduce CQRS-lite without events, **database views** or scheduled ETL jobs can populate read tables; that is not full CQRS but often enough for reporting. Highlight the difference so interviewers know you are not over-engineering. Mention **Flyway/Liquibase** migrations for both models and how you sequence deploys so new columns exist before projectors write them."
+          },
+          {
+            "type": "code_example",
+            "title": "Read/Write Separation and CQRS in Spring Boot",
+            "language": "java",
+            "content": "// STEP 1: Read/Write Separation with Spring Boot + Multiple DataSources\n@Configuration\npublic class DataSourceConfig {\n\n    @Bean @Primary\n    @ConfigurationProperties(\"spring.datasource.write\")\n    public DataSource writeDataSource() {\n        return DataSourceBuilder.create().build(); // primary\n    }\n\n    @Bean\n    @ConfigurationProperties(\"spring.datasource.read\")\n    public DataSource readDataSource() {\n        return DataSourceBuilder.create().build(); // read replica\n    }\n}\n\n// Route based on @Transactional(readOnly = true)\n@Service\npublic class OrderService {\n\n    @Transactional(readOnly = false) // \u2192 uses write datasource\n    public Order createOrder(CreateOrderRequest req) { ... }\n\n    @Transactional(readOnly = true) // \u2192 uses read replica\n    public Page<OrderSummary> listOrders(Long userId, Pageable pageable) { ... }\n}\n\n// STEP 2: CQRS \u2014 Separate Read and Write Models\n// COMMAND SIDE: normalized relational model\n@Entity @Table(name = \"orders\")\npublic class Order { /* normalized domain entity */ }\n\n// QUERY SIDE: denormalized view table or separate store\n// Populated by domain events from the command side\n@Entity @Table(name = \"order_list_view\")\npublic class OrderListView {\n    // Pre-joined, pre-computed fields for the order list page\n    private Long orderId;\n    private String userName;        // denormalized from users table\n    private String productName;     // denormalized from products\n    private Integer itemCount;      // pre-aggregated\n    private OrderStatus status;\n    private LocalDateTime createdAt;\n}\n\n// Update read model via domain events:\n@EventListener\npublic void onOrderCreated(OrderCreatedEvent event) {\n    OrderListView view = new OrderListView();\n    view.setOrderId(event.getOrderId());\n    // enrich with user and product info\n    orderListViewRepository.save(view);\n}"
+          },
+          {
+            "type": "step",
+            "title": "CQRS Projections, Testing, and When to Stop",
+            "content": "CQRS read models are only valuable if you can **observe projector lag** and alert when consumers fall behind. Use integration tests that publish representative events and assert the denormalized tables match expectations, plus contract tests on event schemas so producers cannot silently break consumers.\n\nTesting strategy also covers **ordering**: single-partition Kafka ordering simplifies per-aggregate streams; if you rely on multiple partitions you must design for out-of-order arrival and idempotent handlers. Snapshot tables or **materialized views** in Postgres can accelerate dashboards without bespoke microservices when complexity is still modest.\n\nKnow when to stop: if your UI only needs one extra join, a database view or indexed covering query often beats maintaining asynchronous projections. Reserve full CQRS for bounded contexts where product velocity justifies the tax\u2014large ecommerce catalogs, financial ledgers, or multi-tenant SaaS reporting.\n\nTeam topology matters: assign clear ownership for command models, read models, and shared event contracts. Without that, dual models decay into inconsistent sources of truth. Mention **feature flags** to roll out new projections gradually and shadow-read compare old vs new queries before cutover.\n\nFinally, connect to **observability**: traces from HTTP request through event publish to projector completion help debug latency spikes that users feel as \"the dashboard is stale.\" That end-to-end story closes the loop for interviewers asking about operations.\n\nAdd **replay tooling** for support engineers: given an aggregate ID, dump ordered events and the resulting read model row to explain discrepancies. Document **compensating transactions** when a projector bug shipped: sometimes you must rebuild tables from a known good offset or snapshot.\n\nPerformance-wise, batch consumers with **micro-batching** (e.g., 50 events or 20ms windows) smooth writes without sacrificing freshness SLAs. For **GDPR deletes**, wire tombstone events through the same pipeline so read models scrub PII while append-only command history stays legally compliant via redaction strategies."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Read replicas for read-scaling, not consistency** \u2014 `@Transactional(readOnly=true)` routes to replicas via AbstractRoutingDataSource.\n- **CQRS separates write model from read model** \u2014 commands mutate the normalized write store.\n- **Read-your-own-writes requires routing writes back to primary** \u2014 after a write, route the user's next read to the primary for a configurable window (5.\n- **Event sourcing is the natural complement to CQRS** \u2014 the write model appends events.\n- **Don't CQRS prematurely** \u2014 read replicas alone solve 80% of read scaling problems with no additional complexity."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Read/write separation and CQRS address the most common database scaling problem: a 10:1 read-to-write ratio where one primary database handles everything. The solutions exist on a spectrum from simple replica routing to full event-sourced CQRS, and matching the solution to the actual problem prevents over-engineering.\n\n**Read replicas \u2014 the right first step:**\n- Route read-only transactions to async replicas using Spring's `AbstractRoutingDataSource`; annotate service methods with `@Transactional(readOnly=true)` and route them to the replica data source\n- Replica lag is the critical concern: replicas may be 10\u2013100ms behind the primary; this is acceptable for product catalogs and analytics but not for post-write reads where the user expects to see their own changes\n- Read-your-own-writes pattern: after a write, route the same user's subsequent reads to the primary for a configurable window (5\u201330 seconds); this prevents users from seeing stale state after their own updates\n\n**CQRS \u2014 when query shapes fundamentally diverge:**\n- The command side handles writes to the normalized relational store; the query side reads from denormalized projections optimized for specific query shapes\n- A Kafka consumer maintains the read model: every write event flows to the consumer, which updates the projection database (often Elasticsearch or a wide-column store) with the denormalized query-optimized view\n- The projections are eventually consistent with the write model; this is acceptable for most read scenarios and enables independent scaling of read and write paths\n\n**When not to use CQRS:**\n- If your application's read and write models look similar, read replicas alone solve the problem at far lower complexity; CQRS adds projections, consumers, and eventual consistency to manage\n\nI recommend read replicas as the first solution for read-heavy workloads, CQRS only when query shapes genuinely diverge from the write model, and always handling read-your-own-writes explicitly rather than assuming replica lag is acceptable everywhere."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you handle replication lag in read/write separation?",
+        "What is Event Sourcing and how does it relate to CQRS?",
+        "How do you keep CQRS read models synchronized after multiple failures?"
+      ],
+      "seo": {
+        "metaTitle": "CQRS Read Write Separation Spring Boot \u2014 Java Interview",
+        "metaDescription": "CQRS and read/write separation patterns for Java Spring Boot. Multiple DataSources, CQRS read models, replication lag handling, and when to apply CQRS."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Read/write separation and CQRS address the most common database scaling problem: a 10:1 read-to-write ratio where one primary database handles everything.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Most applications have 10:1 read-to-write ratio. Routing reads to read replicas reduces primary load and enables horizontal read scaling. CQRS goes further: separate models, separate storage, separate code paths for reads vs writes. From a Java / Spring Boot production angle, I would connect this design to observability and incremental rollout: Micrometer metrics with trace IDs, Actuator health that reflects downstream dependencies, and feature flags or shadow traffic before flipping primary users. Mention load and chaos testing for the specific failure modes you described, plus on-call runbooks that spell out."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Streaming replication in Postgres is asynchronous by default, meaning a read replica can lag the primary by milliseconds to minutes during bulk loads or noisy neighbors.",
+              "Interviewers expect you to quantify the user-visible risk: an ecommerce customer might not see a just-placed order if the UI reads from a stale replica.",
+              "Mitigations include sticky sessions to the primary for a short window after writes, tagging reads with consistency tokens returned from mutations, or routing session-critical queries to the leader while list views stay on replicas.",
+              "Spring Boot wiring typically defines two DataSource beans plus a routing AbstractRoutingDataSource driven by TransactionSynchronizationManager.isCurrentTransactionReadOnly().",
+              "Connection pools must be sized independently: write pools stay small because writes are expensive, while read pools can be larger to absorb reporting traffic.",
+              "Health checks should verify replica lag thresholds and automatically remove unhealthy replicas from the pool."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Read replicas for read-scaling, not consistency \u2014 @Transactional(readOnly=true) routes to replicas via AbstractRoutingDataSource",
+              "CQRS separates write model from read model \u2014 commands mutate the normalized write store",
+              "Read-your-own-writes requires routing writes back to primary \u2014 after a write, route the user's next read to the primary for a configurable window (5",
+              "Event sourcing is the natural complement to CQRS \u2014 the write model appends events",
+              "Don't CQRS prematurely \u2014 read replicas alone solve 80% of read scaling problems with no additional complexity"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Implementing CQRS everywhere \u2014 it adds complexity that only pays off for specific use cases"
+          }
+        ],
+        "cap": "Read replicas \u2014 the right first step: Route read-only transactions to async replicas using Spring's AbstractRoutingDataSource; annotate service methods with @Transactional(readOnly=true) and route the",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you handle replication lag in read/write separation?",
+          "What is Event Sourcing and how does it relate to CQRS?",
+          "How do you keep CQRS read models synchronized after multiple failures?"
+        ]
+      }
+    },
+    {
+      "id": "sdl-002",
+      "slug": "design-task-scheduler-job-queue-java",
+      "question": "Design a task scheduler that supports delayed, periodic, and priority-based task execution in Java.",
+      "title": "Design a Task Scheduler / Job Queue in Java",
+      "direct_answer": "Build around a PriorityBlockingQueue ordered by next-execution time, drained by a thread pool. Delayed tasks set a future execution time; periodic tasks re-enqueue themselves after each run. Priority is a secondary sort key within the same time bucket. This mirrors ScheduledThreadPoolExecutor internals but lets you add persistence, retry, and observability.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Priority queue mechanics, DelayQueue vs PriorityBlockingQueue trade-offs, thread pool sizing, and handling tasks that outlive the scheduler restart",
+        "common_mistake": "Using Thread.sleep() in a loop to check task readiness \u2014 burns CPU and drifts under load; use the blocking take() pattern instead",
+        "to_stand_out": "Compare your design to ScheduledThreadPoolExecutor internals, discuss leader-follower pattern for reducing unnecessary wake-ups, and explain tick-based vs calendar-based scheduling"
+      },
+      "company_tags": [
+        "Amazon",
+        "Uber",
+        "Netflix",
+        "Quartz Scheduler"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Build a Custom Task Scheduler",
+            "content": "Java ships with `ScheduledThreadPoolExecutor`, but interviewers ask you to design one because the problem exposes **priority queues**, **thread coordination**, and **failure recovery** \u2014 three pillars of concurrent system design.\n\nA scheduler must solve three sub-problems: *when* to run a task (delay / cron), *which* task to run next (priority ordering), and *how many* tasks to run concurrently (thread pool sizing). The naive approach \u2014 spin-polling a list \u2014 wastes CPU. The correct approach uses a **blocking priority queue** so the dispatcher thread sleeps until the next task is ready, waking exactly when needed.\n\nProduction systems like **Quartz** add persistence (survive restarts), clustering (multi-node), and misfire policies (handle overdue tasks). The interview answer demonstrates the in-memory core and acknowledges persistence as a follow-up."
+          },
+          {
+            "type": "step",
+            "title": "Task Abstraction and Priority Ordering",
+            "content": "The `ScheduledTask` class wraps a `Runnable` with scheduling metadata. It implements `Delayed` so it can sit in a `DelayQueue`, and `Comparable` for priority ordering within the same time window.\n\n```java\npublic class ScheduledTask implements Delayed, Comparable<ScheduledTask> {\n\n    private final String taskId;\n    private final Runnable command;\n    private final int priority;          // lower = higher priority\n    private long nextExecutionNanos;      // absolute nanoTime\n    private final long periodNanos;       // 0 = one-shot, >0 = periodic\n    private volatile boolean cancelled = false;\n\n    public ScheduledTask(String taskId, Runnable command,\n                         int priority, long delayMs, long periodMs) {\n        this.taskId = taskId;\n        this.command = command;\n        this.priority = priority;\n        this.nextExecutionNanos = System.nanoTime()\n            + TimeUnit.MILLISECONDS.toNanos(delayMs);\n        this.periodNanos = TimeUnit.MILLISECONDS.toNanos(periodMs);\n    }\n\n    @Override\n    public long getDelay(TimeUnit unit) {\n        return unit.convert(\n            nextExecutionNanos - System.nanoTime(), TimeUnit.NANOSECONDS);\n    }\n\n    @Override\n    public int compareTo(ScheduledTask other) {\n        // Primary: execution time. Secondary: priority.\n        int timeCmp = Long.compare(this.nextExecutionNanos,\n                                    other.nextExecutionNanos);\n        return timeCmp != 0 ? timeCmp\n            : Integer.compare(this.priority, other.priority);\n    }\n\n    public boolean isPeriodic() { return periodNanos > 0; }\n\n    public void advanceExecution() {\n        nextExecutionNanos += periodNanos; // fixed-rate scheduling\n    }\n\n    public void cancel() { this.cancelled = true; }\n    public boolean isCancelled() { return cancelled; }\n    public Runnable getCommand() { return command; }\n    public String getTaskId() { return taskId; }\n}\n```\n\nUsing `System.nanoTime()` instead of `System.currentTimeMillis()` avoids clock skew from NTP adjustments. Periodic tasks call `advanceExecution()` to set the next fire time, which implements **fixed-rate** scheduling. For **fixed-delay**, you would set `nextExecutionNanos = System.nanoTime() + periodNanos` after each run completes."
+          },
+          {
+            "type": "code_example",
+            "title": "The Scheduler Engine with Dispatcher Thread",
+            "language": "java",
+            "content": "public class TaskScheduler {\n\n    private final DelayQueue<ScheduledTask> queue = new DelayQueue<>();\n    private final ExecutorService workerPool;\n    private volatile boolean running = true;\n\n    public TaskScheduler(int poolSize) {\n        this.workerPool = Executors.newFixedThreadPool(poolSize);\n        Thread dispatcher = new Thread(this::dispatchLoop,\n                                        \"scheduler-dispatcher\");\n        dispatcher.setDaemon(true);  // don't block JVM shutdown\n        dispatcher.start();\n    }\n\n    public void schedule(ScheduledTask task) {\n        queue.put(task);  // thread-safe, non-blocking\n    }\n\n    private void dispatchLoop() {\n        while (running) {\n            try {\n                // Blocks until a task's delay expires\n                ScheduledTask task = queue.take();\n\n                if (task.isCancelled()) continue;\n\n                workerPool.submit(() -> {\n                    try {\n                        task.getCommand().run();\n                    } catch (Exception e) {\n                        // Log but don't kill the scheduler\n                        System.err.println(\"Task \"\n                            + task.getTaskId() + \" failed: \" + e);\n                    } finally {\n                        if (task.isPeriodic() && !task.isCancelled()) {\n                            task.advanceExecution();\n                            queue.put(task);  // re-enqueue\n                        }\n                    }\n                });\n            } catch (InterruptedException e) {\n                Thread.currentThread().interrupt();\n                break;\n            }\n        }\n    }\n\n    public void shutdown() {\n        running = false;\n        workerPool.shutdown();\n    }\n}"
+          },
+          {
+            "type": "step",
+            "title": "Thread Safety Analysis and Complexity",
+            "content": "**Thread safety:** `DelayQueue` is internally synchronized \u2014 multiple threads can call `put` concurrently. The single dispatcher thread calls `take()`, which blocks safely. Worker threads only touch their own `ScheduledTask` instance. The `cancelled` flag is volatile for cross-thread visibility.\n\n**Time complexity:** `schedule()` is O(log n) \u2014 DelayQueue is backed by a binary heap. `take()` is O(log n) for heap extraction. **Space:** O(n) for n pending tasks.\n\n**Production considerations:** A single dispatcher is a bottleneck if task submission rate exceeds heap drain rate. The JDK's `ScheduledThreadPoolExecutor` uses a **leader-follower** pattern: only one thread waits on the queue while others are idle, reducing unnecessary wake-ups. For persistence, write accepted tasks to a database with `run_at` and poll on startup to recover missed executions \u2014 this is exactly what Quartz does with its `QRTZ_TRIGGERS` table.\n\nError handling is critical: wrap every `run()` in try-catch so a failing task never kills the dispatcher or poisons the pool. For periodic tasks, decide whether failures should stop rescheduling (fail-stop) or continue (resilient) \u2014 document the policy explicitly."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`DelayQueue<ScheduledTask>`** \u2014 backed by a binary heap; `take()` blocks until the head element's delay has expired.\n- **`ScheduledThreadPoolExecutor` for real usage** \u2014 the JDK implementation handles thread management, exception isolation, and periodic re-scheduling.\n- **Periodic task re-queuing after execution** \u2014 after each run, compute the next fire time and re-insert into the queue.\n- **Exception isolation per task** \u2014 an uncaught exception in one task must not terminate the scheduler thread; wrap task execution in try-catch and log.\n- **Priority queue ordering** \u2014 tasks with equal next-fire-time must break ties by insertion order or explicit priority to prevent non-deterministic."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A task scheduler that supports delayed, periodic, and priority execution needs a data structure that can efficiently find the task with the earliest fire time on every tick. The right choice is a priority queue backed by a binary heap \u2014 O(log N) insertion, O(log N) removal, O(1) peek at the minimum-time task.\n\n**The DelayQueue-based design:**\n- `DelayQueue<ScheduledTask>` from the JDK implements exactly this: tasks implement `Delayed`, the queue's `take()` blocks until the head element's delay expires and then returns it\n- A thread pool of worker threads calls `queue.take()` in a loop; when a task fires, a worker thread picks it up and executes it; the number of worker threads limits concurrency\n- Periodic tasks re-queue themselves after execution: compute the next fire time based on the period, create a new `ScheduledTask` with that time, and insert it back into the queue; always use absolute next-fire-time rather than relative delay to prevent drift accumulation over many cycles\n\n**Exception isolation:**\n- An uncaught exception in a task handler must not kill the scheduler thread; wrap every task execution in try-catch and log the exception; the scheduler must continue running for all other tasks regardless of individual task failures\n- Tasks that consistently throw exceptions should eventually be disabled; track consecutive failure counts and suspend tasks that fail more than N times\n\n**Priority within the same fire time:**\n- When multiple tasks have the same next-fire-time, a secondary priority determines execution order; implement `Comparable<ScheduledTask>` with a tiebreaker on explicit priority or insertion order\n\nI recommend `ScheduledThreadPoolExecutor` for any real production scheduler \u2014 it handles all these concerns with battle-tested JDK code; only implement from scratch when the interviewer explicitly requires it or when you need a custom scheduling policy the JDK doesn't support."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between fixed-rate and fixed-delay scheduling?",
+        "How does ScheduledThreadPoolExecutor implement the leader-follower pattern?",
+        "How would you add persistence so tasks survive a JVM restart?"
+      ],
+      "seo": {
+        "metaTitle": "Task Scheduler Job Queue Java \u2014 LLD Interview Guide",
+        "metaDescription": "Design a task scheduler in Java with DelayQueue, priority ordering, periodic execution, and thread pool dispatch. Includes ScheduledThreadPoolExecutor comparison."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "A task scheduler that supports delayed, periodic, and priority execution needs a data structure that can efficiently find the task with the earliest fire time on every tick.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Java ships with ScheduledThreadPoolExecutor, but interviewers ask you to design one because the problem exposes priority queues, thread coordination, and failure recovery \u2014 three pillars of concurrent system design. A scheduler must solve three sub-problems: when to run a task (delay / cron), which task to run next (priority ordering), and how many tasks to run concurrently (thread pool sizing). The naive approach \u2014 spin-polling a list \u2014 wastes CPU. The correct approach uses a blocking priority queue so the dispatcher thread sleeps until the next task is ready, waking exactly when needed. Production systems like Quartz add persistence (survive restarts), clustering (multi-node), and misfire policies (handle overdue tasks). The interview answer demonstrates the in-memory core and acknowledges persistence as."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Java ships with ScheduledThreadPoolExecutor, but interviewers ask you to design one because the problem exposes priority queues, thread coordination, and failure recovery \u2014 three pillars of concurrent system design. A scheduler must solve three sub-problems: when to run a task (delay / cron), which task to run next (priority ordering), and how many tasks to run concurrently (thread pool sizing). The naive approach \u2014 spin-polling a list \u2014 wastes CPU. The correct approach uses a blocking priority queue so the dispatcher thread sleeps until the next task is ready, waking exactly when needed. Production systems like Quartz add persistence (survive restarts), clustering (multi-node), and misfire policies (handle overdue tasks). The."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "The ScheduledTask class wraps a Runnable with scheduling metadata",
+              "It implements Delayed so it can sit in a DelayQueue, and Comparable for priority ordering within the same time window",
+              "``java public class ScheduledTask implements Delayed, Comparable<ScheduledTask> { private final String taskId; private final Runnable command; private final int priority; // lower = higher priority private long nextExecutionNanos; // absolute nanoTime private final long periodNanos; // 0 = one-shot, >0 = periodic private volatile boolean cancelled = false; public ScheduledTask(String taskId, Runnable command, int priority, long delayMs, long periodMs) { this",
+              "taskId = taskId; this",
+              "command = command; this"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Java ships with ScheduledThreadPoolExecutor, but interviewers ask you to design one because the problem exposes priority queues, thread coordination, and failure recovery \u2014 three pillars of concurrent system design. A scheduler must solve three sub-problems: when to run a task (delay / cron), which task to run next (priority ordering), and how many tasks to run concurrently (thread pool sizing). The naive approach \u2014 spin-polling a list \u2014 wastes CPU. The correct approach uses a blocking priority queue so the dispatcher thread sleeps until the next task is ready, waking exactly when needed. Production systems like Quartz add persistence (survive restarts), clustering (multi-node), and misfire policies (handle overdue tasks). The interview answer demonstrates the in-memory core and acknowledges persistence as."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Java ships with ScheduledThreadPoolExecutor, but interviewers ask you to design one because the problem exposes priority queues, thread coordination, and failure recovery \u2014 three pillars of concurrent system design. A scheduler must solve three sub-problems: when to run a task (delay / cron), which task to run next (priority ordering), and how many tasks to run concurrently (thread pool sizing). The naive approach \u2014 spin-polling a list \u2014 wastes CPU. The correct approach uses a blocking priority queue so the dispatcher thread sleeps until the next task is ready, waking exactly when needed. Production systems like Quartz add persistence (survive restarts), clustering (multi-node), and misfire policies (handle overdue tasks). The interview answer demonstrates the in-memory core and acknowledges persistence as."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Using Thread.sleep() in a loop to check task readiness \u2014 burns CPU and drifts under load; use the blocking take() pattern instead"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "DelayQueue<ScheduledTask> \u2014 backed by a binary heap; take() blocks until the head element's delay has expired. ScheduledThreadPoolExecutor for real usage \u2014 the JDK implementation handles thread management, exception isolation, and periodic re-scheduling. Periodic task re-queuing after execution \u2014 after each run, compute the next fire time and re-insert into the queue. Exception isolation per task \u2014 an uncaught exception in one task must not terminate the scheduler thread; wrap task execution in try-catch and log. Priority queue ordering \u2014 tasks with equal next-fire-time must break."
+          }
+        ],
+        "cap": "The DelayQueue-based design: DelayQueue<ScheduledTask> from the JDK implements exactly this: tasks implement Delayed, the queue's take() blocks until the head element's delay expires and then returns",
+        "familiarity_anchors": [
+          "Build",
+          "PriorityBlockingQueue",
+          "Delayed"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between fixed-rate and fixed-delay scheduling?",
+          "How does ScheduledThreadPoolExecutor implement the leader-follower pattern?",
+          "How would you add persistence so tasks survive a JVM restart?"
+        ]
+      }
+    },
+    {
+      "id": "sdl-003",
+      "slug": "design-connection-pool-manager-java",
+      "question": "Design a database connection pool manager in Java. How do you handle pool sizing, health checks, and connection leaks?",
+      "title": "Design a Connection Pool Manager in Java",
+      "direct_answer": "Maintain a bounded pool of reusable database connections using a Semaphore for capacity control and a ConcurrentLinkedDeque as the idle-connection stack. Validate connections before handing them out (test-on-borrow) or in a background thread (test-while-idle). Detect leaks by tracking checkout timestamps and logging connections not returned within a threshold.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Resource lifecycle management, semaphore-based bounded access, connection validation strategies, and leak detection",
+        "common_mistake": "Creating a new connection for every request \u2014 TCP handshake + TLS + auth takes 30-100ms per connection; pooling amortizes this to near zero",
+        "to_stand_out": "Reference HikariCP's design choices: ConcurrentBag with thread-local affinity, why ArrayList outperforms LinkedList for small pools, and the importance of connection.isValid() over legacy driver-level pings"
+      },
+      "company_tags": [
+        "HikariCP",
+        "Oracle",
+        "Amazon",
+        "Tomcat JDBC"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Connection Pools Exist",
+            "content": "Opening a database connection involves TCP handshake, TLS negotiation, and authentication \u2014 easily 30\u2013100 ms per connection. Under load, creating connections on demand exhausts database limits and adds latency to every query. A **connection pool** pre-creates a set of connections and lends them to callers, reclaiming them after use.\n\nThe design challenge is threefold: **bounding** (never exceed the database's max_connections), **health** (don't hand out dead connections), and **leak detection** (find code paths that borrow but never return). HikariCP \u2014 the de facto standard in Spring Boot \u2014 solves all three with a ConcurrentBag data structure and sub-microsecond borrow latency. Understanding its internals shows interviewers you think about infrastructure at the right level."
+          },
+          {
+            "type": "code_example",
+            "title": "Core Pool Implementation with Semaphore Bounding",
+            "language": "java",
+            "content": "public class ConnectionPool {\n\n    private final ConcurrentLinkedDeque<PooledConnection> idle\n        = new ConcurrentLinkedDeque<>();\n    private final Set<PooledConnection> active\n        = ConcurrentHashMap.newKeySet();  // track active for leak detection\n    private final Semaphore permits;       // bounds total connections\n    private final String jdbcUrl;\n    private final int maxSize;\n    private final long borrowTimeoutMs;\n\n    public ConnectionPool(String jdbcUrl, int maxSize,\n                          long borrowTimeoutMs) {\n        this.jdbcUrl = jdbcUrl;\n        this.maxSize = maxSize;\n        this.borrowTimeoutMs = borrowTimeoutMs;\n        this.permits = new Semaphore(maxSize, true); // fair ordering\n    }\n\n    public Connection borrow() throws SQLException {\n        try {\n            // Block if all connections are in use\n            if (!permits.tryAcquire(borrowTimeoutMs,\n                                     TimeUnit.MILLISECONDS)) {\n                throw new SQLException(\n                    \"Connection pool exhausted, waited \"\n                    + borrowTimeoutMs + \"ms\");\n            }\n        } catch (InterruptedException e) {\n            Thread.currentThread().interrupt();\n            throw new SQLException(\"Interrupted waiting for connection\");\n        }\n\n        PooledConnection conn = idle.pollFirst();\n\n        // No idle connection available \u2192 create new one\n        if (conn == null || !conn.isHealthy()) {\n            conn = createNewConnection();\n        }\n\n        conn.markBorrowed();  // record checkout timestamp\n        active.add(conn);\n        return conn.getConnection();\n    }\n\n    public void release(Connection connection) {\n        PooledConnection pooled = findPooled(connection);\n        active.remove(pooled);\n        pooled.markReturned();\n\n        if (pooled.isHealthy()) {\n            idle.addFirst(pooled);  // LIFO: reuse hot connections\n        } else {\n            pooled.closeQuietly();  // discard and allow new creation\n        }\n        permits.release();  // allow another thread to borrow\n    }\n\n    private PooledConnection createNewConnection()\n            throws SQLException {\n        Connection raw = DriverManager.getConnection(jdbcUrl);\n        return new PooledConnection(raw);\n    }\n}"
+          },
+          {
+            "type": "step",
+            "title": "Health Checks, Leak Detection, and LIFO Ordering",
+            "content": "**Health validation** is the most underestimated concern. A connection sitting idle for minutes may have been killed by the database, a firewall timeout, or a network partition. Three strategies:\n\n1. **Test-on-borrow** \u2014 call `connection.isValid(timeoutSeconds)` before handing it out. Safe but adds latency to every borrow. HikariCP does this with a default 5-second timeout.\n2. **Test-while-idle** \u2014 a background `ScheduledExecutorService` sweeps idle connections every 30 seconds and evicts dead ones. Removes latency from the borrow path.\n3. **Max-lifetime eviction** \u2014 close connections older than N minutes regardless of health. HikariCP defaults to 30 minutes. This preempts firewall and database idle-timeout kills.\n\n**Leak detection:** the `PooledConnection` records `borrowedAt` timestamp. A background thread scans `active` connections and logs a warning (with stack trace) for any connection held longer than a threshold \u2014 typically 30 seconds. HikariCP calls this `leakDetectionThreshold`.\n\n**LIFO ordering** is deliberate. Returning a connection to the front of the deque means the next borrow gets the most-recently-used connection, keeping it warm in TCP buffers and reducing the chance of hitting an idle-timeout kill. Connections at the back of the deque naturally age out, allowing the pool to shrink during low-traffic periods.\n\n**Time complexity:** `borrow()` and `release()` are O(1) \u2014 deque and semaphore operations are constant-time. **Space:** O(maxSize) connections plus wrapper metadata."
+          },
+          {
+            "type": "step",
+            "title": "Production Sizing and HikariCP Internals",
+            "content": "Pool sizing follows a well-known formula from the PostgreSQL wiki: **connections = (CPU cores * 2) + effective_spindle_count**. For a 4-core server with SSD storage (1 effective spindle), that is 9 connections. Most teams set 10\u201320 and never revisit, but oversizing actually *hurts* \u2014 more connections mean more lock contention inside the database, more context switching, and higher memory per backend process.\n\nHikariCP's `ConcurrentBag` improves on a simple deque by giving each thread **thread-local affinity**: a thread first checks its own recently-returned connection before scanning the shared pool. This eliminates CAS contention on the deque head under high concurrency and is the main reason HikariCP benchmarks faster than Tomcat JDBC and C3P0.\n\nMonitoring matters: expose `active`, `idle`, `waiting`, and `totalConnections` as Micrometer gauges. Alert when `waiting > 0` for more than a few seconds \u2014 that is a leading indicator of pool exhaustion before users see timeouts. In Spring Boot, HikariCP metrics are auto-registered with Actuator."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Blocking acquisition with timeout** \u2014 `pool.acquire(5, TimeUnit.SECONDS)` returns a connection or throws on timeout.\n- **`LinkedBlockingQueue` as the idle pool** \u2014 thread-safe, blocks on empty pool, bounded capacity enforces the max connection limit.\n- **Validation on borrow, not on return** \u2014 test `connection.isValid(1)` when checking out, not when returning.\n- **Min-idle warm-up thread** \u2014 a background thread maintains `minIdle` connections always open.\n- **Max-lifetime enforcement** \u2014 long-lived connections hit database server timeouts (PostgreSQL default 10 minutes of idle)."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A database connection pool avoids the 30\u2013100ms cost of creating a JDBC connection on every request \u2014 TCP handshake, TLS negotiation, and database authentication combined. The pool maintains a bounded set of pre-opened connections that threads borrow, use, and return.\n\n**The core data structure:**\n- `LinkedBlockingQueue<Connection>` as the idle connection pool: thread-safe, blocks when empty (acquisition wait), bounded capacity enforces the max connection limit\n- `pool.poll(timeoutMs, MILLISECONDS)` implements acquisition with timeout \u2014 returns a connection or null after the timeout; the caller throws a \"pool exhausted\" exception and the upstream request fails fast rather than waiting indefinitely\n\n**Connection lifecycle management:**\n- Validate on borrow, not on return: call `connection.isValid(1)` when checking out; a connection can become stale while sitting in the pool between uses due to database server timeouts or network interruptions\n- Max lifetime enforcement: PostgreSQL's default `idle_in_transaction_session_timeout` closes idle connections; replace pool connections older than max-lifetime before the database drops them from the other side, which causes mysterious connection errors at the application layer\n- Min-idle warm-up: a background thread creates connections proactively to maintain `minIdle` always ready; prevents cold-start latency spikes when traffic resumes after a quiet period\n\n**The release contract:**\n- Callers must always return the connection in a try-finally block; a leaked connection (never returned) permanently reduces the pool's available capacity\n- Wrap borrowed connections in a proxy that intercepts `close()` and returns to the pool instead of actually closing the underlying JDBC connection\n\nI recommend HikariCP for all production use \u2014 it implements all of these behaviors (validation, max lifetime, min idle, leak detection) with the lowest overhead of any Java connection pool; implement from scratch only as an interview exercise."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does HikariCP's ConcurrentBag achieve faster borrows than a simple BlockingQueue?",
+        "What happens when your connection pool maxSize is set too high?",
+        "How would you implement connection pool sharding for multi-tenant databases?"
+      ],
+      "seo": {
+        "metaTitle": "Connection Pool Manager Java \u2014 LLD Interview Guide",
+        "metaDescription": "Design a JDBC connection pool in Java with Semaphore bounding, LIFO idle stack, health checks, leak detection, and HikariCP internals comparison."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A database connection pool avoids the 30\u2013100ms cost of creating a JDBC connection on every request \u2014 TCP handshake, TLS negotiation, and database authentication combined.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Opening a database connection involves TCP handshake, TLS negotiation, and authentication \u2014 easily 30\u2013100 ms per connection. Under load, creating connections on demand exhausts database limits and adds latency to every query. A connection pool pre-creates a set of connections and lends them to callers, reclaiming them after use. The design challenge is threefold: bounding (never exceed the database's max_connections), health (don't hand out dead connections), and leak detection (find code paths that borrow but never return). HikariCP \u2014 the de facto standard in Spring Boot \u2014 solves all three."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Health validation is the most underestimated concern.",
+              "A connection sitting idle for minutes may have been killed by the database, a firewall timeout, or a network partition.",
+              "Three strategies: 1.",
+              "Test-on-borrow \u2014 call connection.isValid(timeoutSeconds) before handing it out.",
+              "Safe but adds latency to every borrow.",
+              "HikariCP does this with a default 5-second timeout."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Blocking acquisition with timeout \u2014 pool",
+              "acquire(5, TimeUnit",
+              "SECONDS) returns a connection or throws on timeout",
+              "LinkedBlockingQueue as the idle pool \u2014 thread-safe, blocks on empty pool, bounded capacity enforces the max connection limit",
+              "Validation on borrow, not on return \u2014 test connection"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Creating a new connection for every request \u2014 TCP handshake + TLS + auth takes 30-100ms per connection; pooling amortizes this to near zero"
+          }
+        ],
+        "cap": "The core data structure: LinkedBlockingQueue<Connection> as the idle connection pool: thread-safe, blocks when empty (acquisition wait), bounded capacity enforces the max connection limit pool.poll(ti",
+        "familiarity_anchors": [
+          "Maintain",
+          "Semaphore",
+          "ConcurrentLinkedDeque"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does HikariCP's ConcurrentBag achieve faster borrows than a simple BlockingQueue?",
+          "What happens when your connection pool maxSize is set too high?",
+          "How would you implement connection pool sharding for multi-tenant databases?"
+        ]
+      }
+    },
+    {
+      "id": "sdl-006",
+      "slug": "design-rate-limiter-component-java",
+      "question": "Design a code-level rate limiter component in Java. Support per-client limits with token bucket and sliding window algorithms.",
+      "title": "Design a Rate Limiter Component in Java (Code-Level)",
+      "direct_answer": "Implement a RateLimiter interface with two strategies: Token Bucket (smooth bursts) and Sliding Window Counter (strict per-window counts). Store per-client state in a ConcurrentHashMap keyed by client ID. Token bucket refills tokens at a fixed rate using elapsed-time math; sliding window divides time into sub-windows and sums recent counts.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Algorithm trade-offs between token bucket and sliding window, thread-safe state management, and per-client isolation",
+        "common_mistake": "Using a fixed-window counter \u2014 requests cluster at window boundaries and allow 2x the intended rate in a 1-second burst across the boundary",
+        "to_stand_out": "Explain why token bucket allows short bursts by design (burst capacity = bucket size), discuss Resilience4j and Guava RateLimiter internals, and address distributed rate limiting with Redis MULTI/EXEC or Lua scripts"
+      },
+      "company_tags": [
+        "Stripe",
+        "Cloudflare",
+        "Amazon API Gateway",
+        "Resilience4j"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Token Bucket vs Sliding Window \u2014 Two Complementary Approaches",
+            "content": "Rate limiting protects services from abuse and overload. At the code level, two algorithms dominate:\n\n**Token bucket** \u2014 a bucket holds up to N tokens, refilled at a fixed rate. Each request consumes one token; if the bucket is empty, the request is rejected. The bucket size controls burst tolerance: a bucket of 10 with a refill of 5/sec allows a burst of 10 followed by a steady 5/sec. This is what Guava's `RateLimiter` implements.\n\n**Sliding window counter** \u2014 divide time into sub-windows (e.g., 100ms slices of a 1-second window). Count requests in each sub-window and sum the last N sub-windows. This gives hard per-second limits without the boundary-burst problem of fixed windows.\n\nThe choice depends on the use case: APIs that want smooth throughput prefer token bucket; APIs that need strict \"max 100 per second, period\" prefer sliding window. A production system often layers both: a token bucket for per-second smoothing and a sliding window counter for per-minute hard caps."
+          },
+          {
+            "type": "code_example",
+            "title": "Token Bucket Implementation",
+            "language": "java",
+            "content": "public class TokenBucketRateLimiter {\n\n    private final int maxTokens;           // bucket capacity\n    private final double refillPerNano;    // tokens per nanosecond\n    private double availableTokens;\n    private long lastRefillNanos;\n    private final Object lock = new Object();\n\n    public TokenBucketRateLimiter(int maxTokens,\n                                  int refillPerSecond) {\n        this.maxTokens = maxTokens;\n        this.refillPerNano = refillPerSecond / 1_000_000_000.0;\n        this.availableTokens = maxTokens;  // start full\n        this.lastRefillNanos = System.nanoTime();\n    }\n\n    public boolean tryAcquire() {\n        return tryAcquire(1);\n    }\n\n    public boolean tryAcquire(int tokens) {\n        synchronized (lock) {\n            refill();\n            if (availableTokens >= tokens) {\n                availableTokens -= tokens;\n                return true;\n            }\n            return false; // rejected\n        }\n    }\n\n    private void refill() {\n        long now = System.nanoTime();\n        long elapsed = now - lastRefillNanos;\n        double newTokens = elapsed * refillPerNano;\n        // Cap at maxTokens \u2014 never exceed bucket size\n        availableTokens = Math.min(maxTokens,\n                                    availableTokens + newTokens);\n        lastRefillNanos = now;\n    }\n}"
+          },
+          {
+            "type": "step",
+            "title": "Sliding Window Counter \u2014 Eliminating Boundary Bursts",
+            "content": "A fixed-window counter resets at every boundary. A client can send 100 requests at 0:59 and 100 more at 1:00, achieving 200 in one second while the per-minute limit is 100. Sliding window fixes this by using overlapping sub-windows.\n\n```java\npublic class SlidingWindowRateLimiter {\n\n    private final int maxRequests;        // allowed per window\n    private final long windowMs;          // e.g., 60_000 for 1 minute\n    private final long subWindowMs;       // e.g., 1_000 for 1-second slices\n    private final int[] counters;         // circular buffer of sub-windows\n    private long currentSubWindow;        // index of current sub-window\n    private final Object lock = new Object();\n\n    public SlidingWindowRateLimiter(int maxRequests,\n                                    long windowMs,\n                                    long subWindowMs) {\n        this.maxRequests = maxRequests;\n        this.windowMs = windowMs;\n        this.subWindowMs = subWindowMs;\n        int numSubWindows = (int) (windowMs / subWindowMs);\n        this.counters = new int[numSubWindows];\n        this.currentSubWindow = System.currentTimeMillis() / subWindowMs;\n    }\n\n    public boolean tryAcquire() {\n        synchronized (lock) {\n            advanceWindow();\n            int total = 0;\n            for (int c : counters) total += c; // sum all sub-windows\n\n            if (total >= maxRequests) return false;\n\n            counters[currentIndex()]++;\n            return true;\n        }\n    }\n\n    private void advanceWindow() {\n        long now = System.currentTimeMillis() / subWindowMs;\n        long diff = now - currentSubWindow;\n        if (diff > 0) {\n            // Zero out stale sub-windows\n            for (long i = 0; i < Math.min(diff, counters.length); i++) {\n                counters[(int) ((currentSubWindow + i + 1)\n                    % counters.length)] = 0;\n            }\n            currentSubWindow = now;\n        }\n    }\n\n    private int currentIndex() {\n        return (int) (currentSubWindow % counters.length);\n    }\n}\n```\n\nThe circular buffer uses modulo indexing so memory is constant regardless of uptime. When the window advances, stale sub-windows are zeroed out. The sum of all sub-windows gives the request count over the last `windowMs` milliseconds \u2014 a true sliding window."
+          },
+          {
+            "type": "step",
+            "title": "Per-Client Isolation and Production Considerations",
+            "content": "In production, each client (identified by API key, IP, or user ID) needs its own rate limiter instance. A `ConcurrentHashMap<String, RateLimiter>` does the job:\n\n```java\nprivate final ConcurrentHashMap<String, TokenBucketRateLimiter>\n    limiters = new ConcurrentHashMap<>();\n\npublic boolean isAllowed(String clientId) {\n    return limiters.computeIfAbsent(clientId,\n        id -> new TokenBucketRateLimiter(100, 10))\n        .tryAcquire();\n}\n```\n\n**Memory concern:** with millions of clients, each limiter instance consumes heap. Use a background sweeper to evict limiter instances not accessed in the last N minutes, or cap the map size and evict LRU entries.\n\n**Distributed rate limiting:** the code-level limiter works for a single JVM. For multi-node deployments, move state to Redis: `INCR` with `EXPIRE` for fixed-window, Lua scripts for sliding window, or Redis `CL.THROTTLE` from the redis-cell module for token bucket.\n\n**Time complexity:** Token bucket `tryAcquire` is O(1). Sliding window `tryAcquire` is O(w) where w = number of sub-windows (typically 60 or fewer). **Space:** O(c) where c = number of active clients, each storing a small limiter instance."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Token bucket for burst-tolerant APIs, sliding window for strict per-second limits** \u2014 token bucket allows short bursts above the sustained rate.\n- **`AtomicLong` + `compareAndSet` for lock-free token management** \u2014 CAS loop retries on contention.\n- **`Semaphore` for concurrent connection limiting** \u2014 limits how many threads can execute a block simultaneously.\n- **`Bucket4j` over hand-rolled** \u2014 battle-tested token bucket implementation with Redis backend for distributed rate limiting.\n- **Rate limiter interface abstraction** \u2014 `boolean tryAcquire()` + `void acquireOrThrow()`."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A code-level rate limiter protects a service from being overwhelmed by limiting how often a caller can invoke an operation. At the code level, two algorithms dominate: token bucket for burst-tolerant rate limiting and sliding window for strict per-second enforcement.\n\n**Token bucket implementation:**\n- A bucket holds tokens up to a maximum capacity; the bucket refills at a fixed rate (the allowed calls per second); each operation attempt consumes one token; if the bucket is empty, the call is rejected or blocked\n- `AtomicLong` with `compareAndSet` implements the token state lock-free: read the current token count, compute the new count after consuming one, CAS-update; retry the loop on contention; this avoids synchronized blocks on the hot path\n\n**Sliding window implementation:**\n- Maintain a circular buffer or a timestamped deque of recent request times; count how many requests fall within the last N seconds; reject if the count equals the limit\n- More precise than token bucket for strict rate enforcement: token bucket allows a burst of capacity tokens immediately after a quiet period; sliding window enforces the limit uniformly across every N-second window\n\n**Composable interface:**\n- Define a `RateLimiter` interface with `boolean tryAcquire()` (non-blocking) and `void acquireOrThrow()` (throws on limit exceeded); implementations swap between algorithms without changing call sites\n- Per-user limits: store one `RateLimiter` instance per user ID in a `ConcurrentHashMap`; use `computeIfAbsent` to create on first access; `Caffeine`-backed cache with expiry removes idle users automatically\n\nI recommend token bucket for APIs where short bursts are acceptable user behavior, sliding window for strict enforcement of regulatory or SLA limits, and Bucket4j with Redis for any distributed rate limiting requirement spanning multiple application instances."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Guava RateLimiter implement warm-up periods?",
+        "How would you implement distributed rate limiting with Redis?",
+        "What is the leaky bucket algorithm and when is it preferred over token bucket?"
+      ],
+      "seo": {
+        "metaTitle": "Rate Limiter Component Java \u2014 LLD Interview Guide",
+        "metaDescription": "Design a rate limiter in Java with token bucket and sliding window algorithms. Per-client limits, thread safety, boundary-burst prevention, and Redis extension."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "A code-level rate limiter protects a service from being overwhelmed by limiting how often a caller can invoke an operation.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Rate limiting protects services from abuse and overload. At the code level, two algorithms dominate: Token bucket \u2014 a bucket holds up to N tokens, refilled at a fixed rate. Each request consumes one token; if the bucket is empty, the request is rejected. The bucket size controls burst tolerance: a bucket of 10 with a refill of 5/sec allows a burst of 10 followed by a steady 5/sec. This is what Guava's RateLimiter implements. Sliding window counter \u2014 divide time into sub-windows (e.g., 100ms slices of a 1-second window). Count requests in each sub-window and sum the last N sub-windows. This gives hard per-second limits without the boundary-burst problem of fixed windows. The choice depends on the use case."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Rate limiting protects services from abuse and overload. At the code level, two algorithms dominate: Token bucket \u2014 a bucket holds up to N tokens, refilled at a fixed rate. Each request consumes one token; if the bucket is empty, the request is rejected. The bucket size controls burst tolerance: a bucket of 10 with a refill of 5/sec allows a burst of 10 followed by a steady 5/sec. This is what Guava's RateLimiter implements. Sliding window counter \u2014 divide time into sub-windows (e.g., 100ms slices of a 1-second window). Count requests in each sub-window and sum the last N sub-windows. This gives hard per-second limits without the boundary-burst problem."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "A fixed-window counter resets at every boundary",
+              "A client can send 100 requests at 0:59 and 100 more at 1:00, achieving 200 in one second while the per-minute limit is 100",
+              "Sliding window fixes this by using overlapping sub-windows",
+              "``java public class SlidingWindowRateLimiter { private final int maxRequests; // allowed per window private final long windowMs; // e",
+              ", 60_000 for 1 minute private final long subWindowMs; // e"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Rate limiting protects services from abuse and overload. At the code level, two algorithms dominate: Token bucket \u2014 a bucket holds up to N tokens, refilled at a fixed rate. Each request consumes one token; if the bucket is empty, the request is rejected. The bucket size controls burst tolerance: a bucket of 10 with a refill of 5/sec allows a burst of 10 followed by a steady 5/sec. This is what Guava's RateLimiter implements. Sliding window counter \u2014 divide time into sub-windows (e.g., 100ms slices of a 1-second window). Count requests in each sub-window and sum the last N sub-windows. This gives hard per-second limits without the boundary-burst problem of fixed windows. The choice depends on the use case."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Rate limiting protects services from abuse and overload. At the code level, two algorithms dominate: Token bucket \u2014 a bucket holds up to N tokens, refilled at a fixed rate. Each request consumes one token; if the bucket is empty, the request is rejected. The bucket size controls burst tolerance: a bucket of 10 with a refill of 5/sec allows a burst of 10 followed by a steady 5/sec. This is what Guava's RateLimiter implements. Sliding window counter \u2014 divide time into sub-windows (e.g., 100ms slices of a 1-second window). Count requests in each sub-window and sum the last N sub-windows. This gives hard per-second limits without the boundary-burst problem of fixed windows. The choice depends on the use case."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Using a fixed-window counter \u2014 requests cluster at window boundaries and allow 2x the intended rate in a 1-second burst across the boundary"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Token bucket for burst-tolerant APIs, sliding window for strict per-second limits \u2014 token bucket allows short bursts above the sustained rate. AtomicLong + compareAndSet for lock-free token management \u2014 CAS loop retries on contention. Semaphore for concurrent connection limiting \u2014 limits how many threads can execute a block simultaneously. Bucket4j over hand-rolled \u2014 battle-tested token bucket implementation with Redis backend for distributed rate limiting. Rate limiter interface abstraction \u2014 boolean tryAcquire() + void acquireOrThrow()."
+          }
+        ],
+        "cap": "Token bucket implementation: A bucket holds tokens up to a maximum capacity; the bucket refills at a fixed rate (the allowed calls per second); each operation attempt consumes one token; if the bucket",
+        "familiarity_anchors": [
+          "Implement",
+          "RateLimiter",
+          "Token"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Guava RateLimiter implement warm-up periods?",
+          "How would you implement distributed rate limiting with Redis?",
+          "What is the leaky bucket algorithm and when is it preferred over token bucket?"
+        ]
+      }
+    }
+  ]
+}

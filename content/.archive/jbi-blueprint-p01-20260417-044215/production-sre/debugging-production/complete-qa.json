@@ -1,0 +1,115 @@
+{
+  "topic": "Debugging Production",
+  "topicSlug": "debugging-production",
+  "questions": [
+    {
+      "id": "perf-006",
+      "slug": "cpu-spikes-java-applications-debugging",
+      "question": "What causes CPU spikes in Java applications and how do you debug them?",
+      "title": "Diagnosing CPU Spikes in Java Applications",
+      "difficulty": "intermediate",
+      "layout_type": "problem-detective",
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "company_tags": [
+        "Datadog",
+        "New Relic",
+        "PagerDuty",
+        "Elastic"
+      ],
+      "interviewer_intent": {
+        "testing": "Your ability to distinguish between expected CPU spikes (GC, JIT compilation) and pathological ones (hot loops, lock contention), and to use the right tools to diagnose each.",
+        "common_mistake": "Restarting the application instead of capturing a thread dump or flamegraph while the spike is happening, losing all diagnostic information.",
+        "to_stand_out": "Mention capturing thread dumps during the spike, correlating with GC logs, and using async-profiler wall-clock mode to catch I/O-induced CPU spikes from busy-wait patterns."
+      },
+      "direct_answer": "Capture a flamegraph and thread dump during the spike; common causes are GC pressure, hot loops, lock contention, or JIT compilation bursts \u2014 each has a distinct signature.",
+      "answer": {
+        "sections": [
+          {
+            "type": "problem_statement",
+            "title": "The Spike That Disappears When You Restart \u2014 Taking the Evidence With It",
+            "content": "A Java microservice periodically spikes to 100% CPU for 5-10 seconds, then recovers. Users experience timeouts during the spike, the on-call engineer restarts the pod, and the problem disappears \u2014 along with all diagnostic evidence. The team opens a ticket, marks it as intermittent, and moves on. Three days later, it happens again.\n\nThe worst response to a CPU spike is restarting the process. Thread stacks, heap state, JIT compilation state, and GC logs all live in process memory. Once the process dies, the only evidence left is external metrics that show the spike happened but not why.\n\nThe correct response is to capture data while the spike is live: a **thread dump** shows what each thread is doing at that moment, a **CPU flamegraph** shows which methods consume the most time, and **GC logs** differentiate between application CPU usage and garbage collection overhead. Together, these three artifacts usually identify the root cause in minutes rather than the weeks of guesswork that follow a blind restart."
+          },
+          {
+            "type": "before_code",
+            "title": "The Busy-Wait and the Regex Bomb: Two Classic CPU Thieves",
+            "content": "Two of the most common pathological CPU patterns in Java services are busy-wait loops and catastrophic regex backtracking. Both pin a CPU core at 100% while appearing as simple, correct-looking code.\n\n```java\n// Busy-wait: spins a core at 100% waiting for a result\npublic Result waitForResult(String jobId) {\n    while (true) {\n        Result r = cache.get(jobId);\n        if (r != null) return r;\n        // No Thread.sleep() \u2014 this loop runs millions of iterations per second\n    }\n}\n```\n\nThe busy-wait looks functional \u2014 it does eventually return a result. But without a sleep or backoff, the loop executes cache lookups millions of times per second, consuming an entire core while contributing nothing useful between checks.\n\n```java\n// ReDoS: exponential backtracking on crafted input\nString pattern = \"(a+)+\";\nPattern.compile(pattern).matcher(userInput).matches();\n// If userInput = \"aaaaaaaaaaaaaaaaaaaaX\", this takes minutes\n```\n\nCatastrophic backtracking occurs when a regex has nested quantifiers and the input causes the engine to explore exponentially many match paths. A 20-character string can pin the regex engine for minutes."
+          },
+          {
+            "type": "diagnosis",
+            "title": "Capturing the Smoking Gun While the Spike Is Live",
+            "content": "The moment you see a CPU spike on monitoring, start capturing data \u2014 do not restart. Run these commands in sequence.\n\n```bash\n# Find which threads are consuming CPU (note thread IDs in hex)\ntop -H -p <PID>\n\n# Capture thread dump \u2014 shows what each thread is doing right now\njstack <PID> > threaddump.txt\n\n# Capture CPU flamegraph for 10 seconds\n./profiler.sh -d 10 -e cpu -f spike.html <PID>\n\n# Check if GC is the culprit \u2014 watch Full GC frequency\njstat -gcutil <PID> 1000\n```\n\nMatch the hot thread IDs from `top -H` (converted to hexadecimal) against the thread names in the jstack dump. If the hot thread is stuck in a tight loop, you will see it in RUNNABLE state executing the same method repeatedly.\n\nThe flamegraph provides a broader view \u2014 it shows all threads' CPU consumption, not just the hottest one. Each root cause has a distinct signature: **busy-wait** shows a single narrow deep stack with one method consuming all the width. **GC thrashing** shows wide `G1CollectedHeap` or `ParallelGC` frames. **ReDoS** shows deep `java.util.regex.Pattern$GroupHead` frames. **JIT compilation** bursts show `C2 CompilerThread` frames prominently during the first minutes after deployment.\n\nFor spikes that appear only under specific traffic patterns, use async-profiler in **wall-clock mode** (`-e wall`). Standard CPU sampling misses threads that are blocked on I/O or parked on locks \u2014 wall-clock mode samples all threads regardless of state, revealing I/O-induced CPU spikes that CPU-only profiling misses."
+          },
+          {
+            "type": "after_code",
+            "title": "Exponential Backoff and Safe Regex: Fixing the Two Most Common Causes",
+            "content": "For busy-wait, the fix is either exponential backoff or event-driven notification. Backoff dramatically reduces CPU consumption while maintaining reasonable responsiveness.\n\n```java\npublic Result waitForResult(String jobId) throws InterruptedException {\n    long backoff = 10; // start at 10ms\n    while (true) {\n        Result r = cache.get(jobId);\n        if (r != null) return r;\n        Thread.sleep(Math.min(backoff, 1000)); // cap at 1 second\n        backoff *= 2;\n    }\n}\n```\n\nThe exponential backoff reduces CPU usage from 100% to near zero while adding at most 1 second of delay at the cap. For tighter latency requirements, use a `CompletableFuture` or `CountDownLatch` so the waiting thread parks until notified, consuming zero CPU.\n\nFor ReDoS, three defenses layer together: validate input length before applying the regex, use **possessive quantifiers** (`a++` instead of `a+`) that prevent backtracking, and set a timeout on the match operation.\n\n```java\nif (userInput.length() > 1000) throw new IllegalArgumentException(\"Too long\");\nString safePattern = \"a++\"; // possessive \u2014 no backtracking possible\n```\n\nFor GC-caused spikes, the fix depends on the root cause. If allocation rate is too high, reduce object churn at the top allocation sites identified by async-profiler in allocation mode. If the heap is too small, increase `-Xmx`. If you are using the wrong collector for the workload, switch to **ZGC** for sub-millisecond pauses or **G1** with tuned `-XX:MaxGCPauseMillis` for balanced throughput."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Capture flamegraph before restarting** \u2014 restarting clears the running stack; async-profiler captures CPU samples in 30 seconds without stopping the JVM; widest boxes at the top = hottest methods\n- **`jstat -gcutil PID 1000` for GC-caused CPU spikes** \u2014 shows Young GC frequency and Old Gen usage in real time; Old Gen approaching 100% precedes a full GC pause; `GCT` column shows cumulative GC time\n- **Hot locks show as thread pileups on the same frame** \u2014 many threads in the flamegraph on the same `lock()` or `synchronized` call; confirm with `jstack PID` showing threads in BLOCKED state on the same monitor\n- **Regex `Pattern.compile()` in hot paths is CPU-intensive** \u2014 pre-compile patterns as `static final Pattern PATTERN = Pattern.compile(...)` at class initialization; constructor-scope or request-scope compilation adds measurable CPU overhead\n- **JIT compilation spike at startup is expected** \u2014 `CompilerThread` frames in the flamegraph during the first minutes of traffic; subsides after the JVM warms up; if it persists, the application is loading new classes continuously (dynamic proxy creation)"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "When CPU spikes in a Java application, the most important thing is to capture data before restarting \u2014 a restart clears the evidence and you're left guessing.\n\n**Capture a flamegraph during the spike**\n- `./profiler.sh -d 30 -f spike.html PID` captures a 30-second CPU flamegraph while the spike is happening \u2014 the widest boxes at the top of the flamegraph are the methods consuming the most CPU during the spike\n- async-profiler doesn't require the application to be stopped or restarted; it's safe to run in production briefly\n\n**Common causes visible in flamegraphs**\n- GC pressure: the flamegraph shows the GC threads consuming a large fraction of CPU \u2014 confirm with `jstat -gcutil PID 1000` which shows GC pauses and heap usage in real time; if Old Gen usage is climbing toward 100%, a full GC is imminent\n- Hot locks: many threads piling up on a `synchronized` block or `ReentrantLock`; the flamegraph shows all threads in the same lock-acquire call path; a `jstack PID` at the same time shows threads in BLOCKED state\n- Compilation: the JVM's JIT compiler compiles hot methods; a cold-start CPU spike often shows `Interpreter` and `CompilerThread` frames; this is expected and subsides as the JVM warms up\n- Regex compilation: `Pattern.compile()` in a hot path is CPU-intensive; compile patterns at class initialization and store as static final fields\n\n**GC-related CPU spikes**\n- Young GC pauses are frequent but short (< 50ms); high young GC frequency means the application is allocating objects faster than the young gen can be collected; increase Eden size or reduce allocations\n- Old Gen full GC is the severe case \u2014 `jstat -gcutil PID` shows `O` column approaching 100% before the spike; the full GC pause causes a CPU spike as all application threads stop; look for memory leaks or over-caching"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you distinguish a GC-induced CPU spike from an application CPU spike?",
+        "What is ReDoS and how do you prevent it in Java?",
+        "How do you capture a thread dump in a Kubernetes pod?"
+      ],
+      "seo": {
+        "metaTitle": "Diagnosing CPU Spikes in Java Applications | Performance Debugging Guide",
+        "metaDescription": "Learn how to identify and fix CPU spikes in Java apps using thread dumps, flamegraphs, and GC log analysis. Common causes: busy-wait, GC thrashing, ReDoS."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "When CPU spikes in a Java application, the most important thing is to capture data before restarting \u2014 a restart clears the evidence and you're left guessing.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Capture a flamegraph and thread dump during the spike; common causes are GC pressure, hot loops, lock contention, or JIT compilation bursts \u2014 each has a distinct signature."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Capture a flamegraph and thread dump during the spike; common causes are GC pressure, hot loops, lock contention, or JIT compilation bursts \u2014 each has a distinct signature."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Capture flamegraph before restarting \u2014 restarting clears the running stack; async-profiler captures CPU samples in 30 seconds without stopping the JVM; widest boxes at the top = hottest methods jstat -gcutil PID 1000 for GC-caused CPU spikes \u2014 shows Young GC frequency and Old Gen usage in real time; Old Gen approaching 100% precedes a full GC pause; GCT column shows cumulative GC time Hot locks show as thread pileups on the same frame \u2014 many threads in the flamegraph on the same lock() or synchronized call; confirm with jstack PID showing threads in BLOCKED state on the same monitor Regex Pattern",
+              "compile() in hot paths is CPU-intensive \u2014 pre-compile patterns as static final Pattern PATTERN = Pattern",
+              ") at class initialization; constructor-scope or request-scope compilation adds measurable CPU overhead JIT compilation spike at startup is expected \u2014 CompilerThread frames in the flamegraph during the first minutes of traffic; subsides after the JVM warms up; if it persists, the application is loading new classes continuously (dynamic proxy creation)"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Restarting the application instead of capturing a thread dump or flamegraph while the spike is happening, losing all diagnostic information."
+          }
+        ],
+        "cap": "Capture a flamegraph during the spike ./profiler.sh -d 30 -f spike.html PID captures a 30-second CPU flamegraph while the spike is happening \u2014 the widest boxes at the top of the flamegraph are the met",
+        "familiarity_anchors": [
+          "Capture"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you distinguish a GC-induced CPU spike from an application CPU spike?",
+          "What is ReDoS and how do you prevent it in Java?",
+          "How do you capture a thread dump in a Kubernetes pod?"
+        ]
+      }
+    }
+  ]
+}

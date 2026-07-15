@@ -1,0 +1,448 @@
+{
+  "topic": "Scenario Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "aj-005",
+      "slug": "java-reflection-performance",
+      "question": "How does Java reflection work, and what are the performance costs you must account for?",
+      "title": "Java Reflection and Performance Cost",
+      "direct_answer": "Reflection lets you inspect and invoke classes, methods, and fields at runtime via the java.lang.reflect API. The JVM validates access permissions on every reflective call (unless you call setAccessible(true)), and early JVM implementations used JNI stubs \u2014 making reflection 10-100x slower than direct calls. Since Java 9, the module system adds module accessibility checks. Java 17 seals reflective access to JDK internals.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you understand that reflection is not 'just slow' but specifically why, and what mitigations exist.",
+        "common_mistake": "Saying 'never use reflection' \u2014 frameworks like Spring, Jackson, and Hibernate depend on it; the key is caching Method objects.",
+        "to_stand_out": "Discuss MethodHandles.lookup() as a faster alternative, and java.lang.invoke.LambdaMetafactory for generating fast reflective-style accessors."
+      },
+      "company_tags": [
+        "Pivotal",
+        "Red Hat",
+        "JetBrains",
+        "Atlassian"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-13",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Reflection's Real Cost Is Not Speed \u2014 It Is Bypassing the Compiler's Safety Net",
+            "content": "Frameworks like Spring, Hibernate, and Jackson depend on reflection for wiring beans, mapping entities, and serializing objects \u2014 so the advice \"avoid reflection\" misses the point. The real question is understanding where the cost comes from and how to mitigate it in performance-sensitive paths.\n\n**Reflection's overhead** has three components. First, every `Method.invoke()` call performs access checking against the caller's permissions and module boundaries unless `setAccessible(true)` has been called. Second, arguments passed to `invoke()` must be boxed into an `Object[]` array, and the return value must be unboxed \u2014 this defeats JIT optimizations like escape analysis and scalar replacement. Third, the JVM cannot inline reflective calls the way it inlines direct method dispatch, because the target method is resolved at runtime rather than compile time.\n\nBefore Java 9, the JVM would \"inflate\" a reflective call after 15 invocations by generating a bytecode accessor class via `sun.reflect.GeneratedMethodAccessor`. This improved repeated calls but still could not match direct dispatch. **MethodHandle** (introduced in Java 7) integrates with the `invokedynamic` instruction and is JIT-friendly \u2014 the JVM treats cached MethodHandles similarly to virtual method calls. **LambdaMetafactory** takes this further by generating a functional interface implementation at runtime, making subsequent invocations indistinguishable from direct calls in JMH benchmarks."
+          },
+          {
+            "type": "phase",
+            "title": "From Method.invoke to LambdaMetafactory \u2014 Three Levels of Reflective Performance",
+            "content": "The performance gap between reflection approaches is significant enough to matter in hot loops processing thousands of objects per second. Caching the `Method` object is the baseline optimization \u2014 repeated calls to `getDeclaredMethod()` walk class metadata tables and allocate new Method objects each time.\n\n```java\n// BAD: looks up Method on every call\nfor (Object obj : objects) {\n    Method m = obj.getClass().getDeclaredMethod(\"getName\");\n    m.setAccessible(true);\n    String name = (String) m.invoke(obj);\n}\n\n// GOOD: cache Method object, set accessible once\nMethod m = MyClass.class.getDeclaredMethod(\"getName\");\nm.setAccessible(true); // skip access checks on subsequent calls\nfor (Object obj : objects) {\n    String name = (String) m.invoke(obj); // still boxes args\n}\n```\n\nCaching `Method` eliminates lookup cost but `invoke()` still boxes primitives and prevents inlining. **MethodHandle** solves the inlining problem by integrating with the JVM's `invokedynamic` infrastructure, allowing the JIT compiler to treat the call as a virtual dispatch once the handle is bound.\n\n```java\n// MethodHandle: JIT-friendly, inlineable after warmup\nMethodHandles.Lookup lookup = MethodHandles.lookup();\nMethodHandle mh = lookup.findVirtual(MyClass.class, \"getName\",\n        MethodType.methodType(String.class));\nfor (Object obj : objects) {\n    String name = (String) mh.invoke(obj); // JIT can inline this\n}\n```\n\nFor the highest throughput, **LambdaMetafactory** generates a real functional interface at runtime. The one-time setup cost is higher, but every subsequent call executes at native speed because the JVM compiles the generated class like any other concrete implementation. Jackson 3.x and modern Spring use this technique internally for bean property access, which is why their reflection-heavy operations are faster than naive `Method.invoke` loops."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Reflection cost: access checking, Object[] boxing, no JIT inlining** \u2014 three separate sources of overhead on every invoke.\n- **Optimization 1: cache Method + `setAccessible(true)`** \u2014 eliminates metadata traversal per call; Spring does this at startup.\n- **Optimization 2: `MethodHandle`** \u2014 integrates with `invokedynamic`; JIT can inline after warmup; approaches direct dispatch speed.\n- **Optimization 3: `LambdaMetafactory`** \u2014 generates real functional interface at runtime; one-time setup; every call = direct dispatch speed.\n- **Choose by profiling** \u2014 cached Method for most cases; MethodHandle when in flame graph; LambdaMetafactory for framework code."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Reflection lets you inspect and invoke methods dynamically, but the naive approach is slow \u2014 the key is understanding where the cost comes from and how to eliminate it.\n\n**Cost sources:**\n- Access checking on every `invoke()` call\n- Argument boxing into `Object[]` arrays\n- JIT cannot inline the target method \u2014 the call stays interpreted in hot paths\n\n**Optimization 1 \u2014 cache and setAccessible():**\n- Cache `Method` objects; call `setAccessible(true)` once during initialization \u2014 eliminates metadata traversal per call\n- Spring caches at startup to avoid paying the lookup cost per request\n\n**Optimization 2 \u2014 MethodHandle:**\n- Integrates with `invokedynamic` \u2014 JIT treats a cached `MethodHandle` like a virtual call and can inline it after warmup\n- Performance approaches direct dispatch speed in benchmarks\n\n**Optimization 3 \u2014 LambdaMetafactory:**\n- Generates a real functional interface implementation at runtime \u2014 after one-time setup, every call is indistinguishable from a direct method call\n- Jackson and modern Spring use this for bean property access at high throughput\n\nI recommend caching `Method` objects as the default; switch to `MethodHandle` when profiling shows reflective calls in your flame graph; reach for `LambdaMetafactory` only for framework-level code processing thousands of objects per second."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Spring use reflection, and how does it optimize it?",
+        "What is the difference between MethodHandle and Method?",
+        "How does GraalVM native image handle reflection?"
+      ],
+      "seo": {
+        "meta_title": "Java Reflection Performance Cost and MethodHandle \u2014 Interview",
+        "meta_description": "Understand Java reflection internals, performance costs, and MethodHandle/LambdaMetafactory alternatives for senior Java interviews.",
+        "keywords": [
+          "java reflection performance",
+          "java methodhandle",
+          "java reflection internals",
+          "java invoke dynamic interview"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Reflection lets you inspect and invoke methods dynamically, but the naive approach is slow \u2014 the key is understanding where the cost comes from and how to eliminate it.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Frameworks like Spring, Hibernate, and Jackson depend on reflection for wiring beans, mapping entities, and serializing objects \u2014 so the advice \"avoid reflection\" misses the point. The real question is understanding where the cost comes from and how to mitigate it in performance-sensitive paths. Reflection's overhead has three components. First, every Method.invoke() call performs access checking against the caller's permissions and module boundaries unless setAccessible(true) has been called. Second, arguments passed to invoke() must be boxed into an Object[] array, and the return value must be unboxed \u2014 this defeats."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The performance gap between reflection approaches is significant enough to matter in hot loops processing thousands of objects per second.",
+              "Caching the Method object is the baseline optimization \u2014 repeated calls to getDeclaredMethod() walk class metadata tables and allocate new Method objects each time.",
+              "``java // BAD: looks up Method on every call for (Object obj : objects) { Method m = obj.getClass().getDeclaredMethod(\"getName\"); m.setAccessible(true); String name = (String) m.invoke(obj); } // GOOD: cache Method object, set accessible once Method m = MyClass.class.getDeclaredMethod(\"getName\"); m.setAccessible(true); // skip access checks on subsequent calls for (Object obj : objects) { String name = (String) m.invoke(obj); // still boxes args } ` Caching Method eliminates lookup cost but invoke() still boxes primitives and prevents inlining.",
+              "MethodHandle solves the inlining problem by integrating with the JVM's invokedynamic infrastructure, allowing the JIT compiler to treat the call."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Reflection cost: access checking, Object[] boxing, no JIT inlining \u2014 three separate sources of overhead on every invoke",
+              "Optimization 1: cache Method + setAccessible(true) \u2014 eliminates metadata traversal per call; Spring does this at startup",
+              "Optimization 2: MethodHandle \u2014 integrates with invokedynamic; JIT can inline after warmup; approaches direct dispatch speed",
+              "Optimization 3: LambdaMetafactory \u2014 generates real functional interface at runtime; one-time setup; every call = direct dispatch speed",
+              "Choose by profiling \u2014 cached Method for most cases; MethodHandle when in flame graph; LambdaMetafactory for framework code"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Saying 'never use reflection' \u2014 frameworks like Spring, Jackson, and Hibernate depend on it; the key is caching Method objects."
+          }
+        ],
+        "cap": "Cost sources: Access checking on every invoke() call Argument boxing into Object[] arrays JIT cannot inline the target method \u2014 the call stays interpreted in hot paths Optimization 1 \u2014 cache and setAc",
+        "familiarity_anchors": [
+          "Reflection",
+          "Since"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Spring use reflection, and how does it optimize it?",
+          "What is the difference between MethodHandle and Method?",
+          "How does GraalVM native image handle reflection?"
+        ]
+      }
+    },
+    {
+      "id": "aj-006",
+      "slug": "java-nio-vs-traditional-io",
+      "question": "Compare Java NIO with traditional IO \u2014 when would you choose one over the other?",
+      "title": "NIO vs Traditional IO",
+      "direct_answer": "Traditional java.io is stream-oriented and blocking \u2014 each read/write blocks the calling thread until data is available. Java NIO (New I/O, java.nio) is buffer-oriented and supports non-blocking mode via Selectors, letting a single thread multiplex thousands of channels. NIO2 (Java 7) added the AsynchronousChannel API for true async completion callbacks. Choose traditional IO for simple, low-concurrency file processing; NIO for high-concurrency network servers.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Whether you know the core conceptual difference (stream/blocking vs buffer/non-blocking) and when each model fits.",
+        "common_mistake": "Thinking NIO is always faster \u2014 for a single file read, traditional IO is simpler and not slower. NIO shines under high connection concurrency.",
+        "to_stand_out": "Mention Netty as a NIO framework, zero-copy with FileChannel.transferTo(), and that virtual threads (Loom) make traditional blocking IO competitive again."
+      },
+      "company_tags": [
+        "Cloudflare",
+        "LinkedIn",
+        "Twitter/X",
+        "Grab"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-13",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Traditional IO Blocks One Thread Per Connection \u2014 NIO Multiplexes Thousands on One Thread",
+            "content": "The choice between `java.io` and `java.nio` is not about which is \"faster\" \u2014 a single file read performs identically with either API. The difference is the **threading model** under high concurrency. Traditional IO dedicates one thread per connection, and each `read()` call blocks that thread until data arrives. With 10,000 concurrent connections, you need 10,000 threads \u2014 each consuming ~1MB of stack memory.\n\n**NIO** inverts this model with three abstractions: **Channels** (bidirectional data conduits), **Buffers** (memory regions that hold data between channel operations), and **Selectors** (a single thread polling many channels for readiness). This is the **reactor pattern** \u2014 one thread calls `Selector.select()`, which returns only the channels that have data ready, avoiding both thread-per-connection overhead and busy-waiting.\n\n**NIO2** (Java 7) added `AsynchronousSocketChannel` with `CompletionHandler` callbacks, providing true asynchronous I/O without manual selector management. The landscape shifted again with **Virtual Threads** in Java 21 \u2014 blocking IO on a virtual thread parks the virtual thread without consuming an OS thread, making traditional `java.io` competitive for high-concurrency network servers again. This means NIO's selector-based model is primarily valuable when you need fine-grained back-pressure control or zero-copy transfers via `FileChannel.transferTo()`."
+          },
+          {
+            "type": "comparison_table",
+            "title": "IO vs NIO vs NIO2 \u2014 Threading Model, Buffer Mechanics, and When Each Wins",
+            "content": "The architectural difference between IO and NIO becomes clear when you trace how data moves from the network card to your application code. With traditional IO, the kernel copies data into a kernel buffer, then copies it again into the JVM's byte array \u2014 two copies per read. NIO's **DirectByteBuffer** allocates off-heap memory that the kernel can write into directly, eliminating one copy. `FileChannel.transferTo()` goes further with **zero-copy**: the kernel moves data from the page cache straight to the network socket without ever entering user space.\n\n| Aspect | java.io | java.nio | java.nio2 (Async) |\n|---|---|---|---|\n| Data model | Byte streams | Buffer + Channel | AsynchronousChannel |\n| Threading | 1 thread per connection | 1 Selector thread per N channels | Thread pool + callbacks |\n| Blocking | Always blocks | Non-blocking mode available | Never blocks caller |\n| Zero-copy | Not supported | `FileChannel.transferTo()` | Supported |\n| Back-pressure | Implicit (thread blocks) | Explicit (buffer management) | Callback-based |\n| Best for | Simple file I/O, low concurrency | High-concurrency servers, Netty | Async disk I/O |\n| With Virtual Threads | Competitive again | Still needed for zero-copy | Largely redundant |\n\nFrameworks like **Netty** wrap NIO's buffer and selector mechanics into a clean API that handles partial writes, selector wakeup races, and buffer lifecycle management. Most production services use Netty rather than raw NIO because hand-rolling a selector loop correctly \u2014 handling `OP_CONNECT` before `OP_READ`, rebuilding selected-key sets after channel exceptions, retrying partial writes with `OP_WRITE` registration \u2014 is error-prone and difficult to test. With virtual threads now available, the best practice is defaulting to traditional blocking IO for new services and reserving NIO for cases where zero-copy file transfer or explicit back-pressure control is a measured requirement."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Traditional IO blocks the thread; NIO uses Selectors** \u2014 one thread monitors thousands of channels via `epoll`/`kqueue`.\n- **NIO abstractions: Channels, Buffers, Selectors** \u2014 bidirectional flow, data staging, readiness polling.\n- **Zero-copy: `FileChannel.transferTo()`** \u2014 moves data from page cache to socket without entering user space.\n- **Raw NIO is hard to get right** \u2014 partial writes, selector wakeup races; use Netty instead for reliability.\n- **Java 21 virtual threads make blocking IO scale** \u2014 parks the virtual thread; carrier thread freed; `java.io` scales to high concurrency."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Java NIO (Non-Blocking I/O) was introduced to address the scalability limitation of traditional `java.io`, which requires one thread blocked per open connection. NIO uses Channels, Buffers, and Selectors to allow a single thread to monitor and serve thousands of connections simultaneously.\n\n**NIO abstractions:**\n- Channels: bidirectional data flow \u2014 `SocketChannel`, `FileChannel`\n- Buffers: hold the data being read or written \u2014 explicit position/limit management\n- Selectors: monitor multiple channels for readiness \u2014 maps to OS-level `epoll` (Linux) / `kqueue` (macOS)\n\n**Zero-copy capability:**\n- `FileChannel.transferTo()`: moves data from page cache to socket without entering user space\n- Eliminates the kernel-to-user-to-kernel copy that standard IO requires \u2014 significant throughput gain for file serving\n\n**Practical gotcha:**\n- Raw NIO is notoriously hard to get right \u2014 partial writes, selector wakeup races, cancelled-key cleanup are all traps\n- Use Netty instead \u2014 it wraps NIO into a reliable event loop abstraction that handles these edge cases\n\n**Java 21 virtual threads:**\n- Blocking IO on a virtual thread parks it without consuming an OS thread \u2014 traditional `java.io` scales to high concurrency again\n- For new services: blocking IO with virtual threads is simpler and sufficient; reserve NIO for zero-copy file serving\n\nI recommend blocking IO with virtual threads for new services; use NIO for zero-copy file serving or explicit back-pressure control."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Netty use NIO internally?",
+        "What is zero-copy and how does FileChannel.transferTo() achieve it?",
+        "How do virtual threads change the IO model in Java 21?"
+      ],
+      "seo": {
+        "meta_title": "Java NIO vs Traditional IO \u2014 Interview Guide",
+        "meta_description": "Compare Java IO, NIO, and NIO2: blocking vs non-blocking, Selector pattern, zero-copy, and virtual thread implications.",
+        "keywords": [
+          "java nio vs io",
+          "java selector non-blocking",
+          "java filechannel zero copy",
+          "java nio interview"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "Java NIO (Non-Blocking I/O) was introduced to address the scalability limitation of traditional java.io, which requires one thread blocked per open connection.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The choice between java.io and java.nio is not about which is \"faster\" \u2014 a single file read performs identically with either API. The difference is the threading model under high concurrency. Traditional IO dedicates one thread per connection, and each read() call blocks that thread until data arrives. With 10,000 concurrent connections, you need 10,000 threads \u2014 each consuming ~1MB of stack memory. NIO inverts this model with three abstractions."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "The architectural difference between IO and NIO becomes clear when you trace how data moves from the network card to your application code",
+              "With traditional IO, the kernel copies data into a kernel buffer, then copies it again into the JVM's byte array \u2014 two copies per read",
+              "NIO's DirectByteBuffer allocates off-heap memory that the kernel can write into directly, eliminating one copy",
+              "FileChannel",
+              "transferTo() goes further with zero-copy: the kernel moves data from the page cache straight to the network socket without ever entering user space"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "The choice between java.io and java.nio is not about which is \"faster\" \u2014 a single file read performs identically with either API. The difference is the threading model under high concurrency. Traditional IO dedicates one thread per connection, and each read() call blocks that thread until data arrives. With 10,000 concurrent connections, you need 10,000 threads \u2014 each consuming ~1MB of stack memory. NIO inverts this model with three abstractions: Channels (bidirectional data conduits), Buffers (memory regions that hold data between channel operations), and Selectors (a single thread polling many."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The choice between java.io and java.nio is not about which is \"faster\" \u2014 a single file read performs identically with either API. The difference is the threading model under high concurrency. Traditional IO dedicates one thread per connection, and each read() call blocks that thread until data arrives. With 10,000 concurrent connections, you need 10,000 threads \u2014 each consuming ~1MB."
+          }
+        ],
+        "cap": "NIO abstractions: Channels: bidirectional data flow \u2014 SocketChannel, FileChannel Buffers: hold the data being read or written \u2014 explicit position/limit management Selectors: monitor multiple channels",
+        "familiarity_anchors": [
+          "Traditional",
+          "Selectors",
+          "AsynchronousChannel"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Netty use NIO internally?",
+          "What is zero-copy and how does FileChannel.transferTo() achieve it?",
+          "How do virtual threads change the IO model in Java 21?"
+        ]
+      }
+    },
+    {
+      "id": "aj-009",
+      "slug": "java-module-system-jpms",
+      "question": "What problem does the Java Platform Module System (JPMS) solve and how do you define a module?",
+      "title": "Java Module System (JPMS)",
+      "direct_answer": "JPMS (introduced in Java 9) solves the classpath hell problem \u2014 any code could access any public class. Modules declare what they export (publicly accessible packages) and what they require (dependencies), enforcing strong encapsulation at the JVM level. A module is defined in module-info.java at the source root.",
+      "layout_type": "concept-explainer",
+      "interviewer_intent": {
+        "testing": "Whether you know the problem JPMS solves, how module-info.java works, and how it interacts with reflection.",
+        "common_mistake": "Thinking modules are the same as Maven/Gradle modules \u2014 JPMS is a JVM-level feature, independent of build tools.",
+        "to_stand_out": "Discuss automatic modules (unnamed module), --add-opens for libraries, and how GraalVM uses module boundaries for native image dead code elimination."
+      },
+      "company_tags": [
+        "Oracle",
+        "Red Hat",
+        "SAP",
+        "IBM"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-13",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Classpath Hell Let Any Code Touch Any Public Class \u2014 JPMS Closes That Door at the JVM Level",
+            "content": "Before Java 9, every JAR on the classpath dumped its classes into one flat namespace. A class in your application could call `sun.misc.Unsafe` or access internal packages of any library \u2014 nothing enforced boundaries beyond the `public` keyword. This created **split package** conflicts (the same package in two JARs), silent classpath ordering bugs, and brittle dependencies on JDK internals that broke across versions.\n\n**JPMS** addresses this by requiring each module to declare its boundaries in a `module-info.java` file at the source root. The `exports` directive lists packages visible to other modules. The `requires` directive lists compile-time and runtime dependencies. Packages not exported are **strongly encapsulated** \u2014 invisible even to code that has the JAR on the module path, and inaccessible via reflection unless the module uses `opens`.\n\nThe critical distinction that trips engineers is that **JPMS modules are not Maven modules**. Maven modules are a build-tool concept for organizing source trees. JPMS modules are a JVM-level enforcement mechanism \u2014 the runtime rejects access to non-exported packages with `IllegalAccessError`. This enforcement is what makes `--add-opens` necessary for libraries like Spring and Jackson that rely on deep reflection into classes they do not own. The tradeoff is real: JPMS buys you compile-time dependency verification and dead-code elimination for GraalVM native images, but it imposes migration cost on any library that accessed JDK internals."
+          },
+          {
+            "type": "phase",
+            "title": "Defining Modules, Migrating Incrementally, and Handling --add-opens in Production",
+            "content": "A module definition uses five directive types, each controlling a specific boundary. The `requires` directive declares dependencies, `requires transitive` re-exports them to consumers, `exports` makes packages visible, `opens` permits reflection into packages, and `provides`/`uses` enable the `ServiceLoader` mechanism.\n\n```java\n// src/com.example.payments/module-info.java\nmodule com.example.payments {\n    requires java.sql;                        // compile + runtime dep\n    requires transitive com.example.core;     // consumers also read core\n    exports com.example.payments.api;          // public API surface\n    exports com.example.payments.model\n        to com.example.ui;                     // qualified: only ui sees this\n    opens com.example.payments.internal\n        to com.fasterxml.jackson.databind;     // reflection for Jackson\n    provides com.example.payments.spi.PaymentProvider\n        with com.example.payments.impl.StripeProvider;\n}\n```\n\nThe **qualified exports** (`exports ... to`) and **qualified opens** (`opens ... to`) are the mechanism that most developers overlook. They restrict visibility to named consumer modules, limiting the blast radius of API changes and reflection access far beyond what `public` vs `package-private` can express.\n\nMigration is best done incrementally. Start by adding an **Automatic-Module-Name** entry to your JAR manifest \u2014 this stabilizes the module name without requiring a full `module-info.java`. Then use `jdeps --generate-module-info` to produce a starting point for directives and refine from there. The common trap is misconfigured test runners: Maven Surefire and Gradle's test task may place test classes on the classpath instead of the module path, causing `IllegalAccessError` in tests that pass as module-path compilation but fail at runtime. Document every `--add-opens` line explicitly so JDK upgrades remain auditable rather than silently breaking."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **JPMS solves classpath hell** \u2014 before Java 9, any class could access any public class in any JAR including JDK internals.\n- **`module-info.java` declares `exports` and `requires`** \u2014 unexported packages are invisible; enforced by JVM with `IllegalAccessError`.\n- **Even reflection is blocked without `opens`** \u2014 why Spring Boot launch scripts have `--add-opens` flags.\n- **JPMS vs Maven modules** \u2014 Maven organizes the build; JPMS enforces access at runtime.\n- **Migration: `Automatic-Module-Name` in manifest first** \u2014 stabilizes module name; add `module-info.java` once packages are clean."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "The Java Platform Module System (JPMS), introduced in Java 9, adds a formal module layer above JARs. Each module explicitly declares what packages it exports and what other modules it requires \u2014 and the JVM enforces these access rules at runtime, preventing the \"any class can access any class\" free-for-all of the classpath era.\n\n**What JPMS adds:**\n- Each module declares `exports` (what it exposes) and `requires` (what it depends on) in `module-info.java`\n- Packages not exported are invisible to other modules \u2014 enforced by the JVM at runtime with `IllegalAccessError`\n- Even reflection is blocked unless you add an `opens` directive\n\n**JPMS vs Maven modules:**\n- Maven modules: organize source code for the build tool \u2014 no runtime enforcement\n- JPMS modules: JVM-enforced access boundaries \u2014 runtime validates every access\n- Why Spring Boot launch scripts include `--add-opens` flags: Spring needs reflection access to packages JPMS doesn't export by default\n\n**Migration approach:**\n- Start with `Automatic-Module-Name` in your JAR manifest to stabilize the module name\n- Add `module-info.java` once internal packages are clean and stable\n\n**Practical payoffs:**\n- Large codebases: prevents accidental cross-module dependencies that create maintenance nightmares\n- GraalVM native images: module boundaries enable aggressive dead-code elimination at build time\n\nI recommend JPMS at scale \u2014 for smaller projects, the migration cost often exceeds the benefit unless you're targeting GraalVM native image."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is an automatic module and when does it occur?",
+        "How does ServiceLoader interact with JPMS?",
+        "Why does Spring Boot use --add-opens in its launch scripts?"
+      ],
+      "seo": {
+        "meta_title": "Java Module System JPMS Explained \u2014 Interview Guide",
+        "meta_description": "Master the Java Platform Module System: module-info.java, exports, requires, opens, and ServiceLoader for Java 9+ interviews.",
+        "keywords": [
+          "java module system",
+          "jpms java 9",
+          "module-info java",
+          "java modules interview"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "The Java Platform Module System (JPMS), introduced in Java 9, adds a formal module layer above JARs.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Before Java 9, every JAR on the classpath dumped its classes into one flat namespace. A class in your application could call sun.misc.Unsafe or access internal packages of any library \u2014 nothing enforced boundaries beyond the public keyword. This created split package conflicts (the same package in two JARs), silent classpath ordering bugs, and brittle dependencies on JDK internals that broke across versions. JPMS addresses this by requiring each module to declare its boundaries in a module-info.java file at the source root. The exports directive lists packages visible to other."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "A module definition uses five directive types, each controlling a specific boundary.",
+              "The requires directive declares dependencies, requires transitive re-exports them to consumers, exports makes packages visible, opens permits reflection into packages, and provides/uses enable the ServiceLoader mechanism.",
+              "``java // src/com.example.payments/module-info.java module com.example.payments { requires java.sql; // compile + runtime dep requires transitive com.example.core; // consumers also read core exports com.example.payments.api; // public API surface exports com.example.payments.model to com.example.ui; // qualified: only ui sees this opens com.example.payments.internal to com.fasterxml.jackson.databind; // reflection for Jackson provides com.example.payments.spi.PaymentProvider with com.example.payments.impl.StripeProvider; } ` The qualified exports (exports ...",
+              "to) and qualified opens (opens ...",
+              "to) are the mechanism that most developers overlook.",
+              "They restrict visibility to named consumer modules, limiting the blast radius of API changes and reflection access far beyond what public vs package-private can express."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "JPMS solves classpath hell \u2014 before Java 9, any class could access any public class in any JAR including JDK internals",
+              "module-info",
+              "java declares exports and requires \u2014 unexported packages are invisible; enforced by JVM with IllegalAccessError",
+              "Even reflection is blocked without opens \u2014 why Spring Boot launch scripts have --add-opens flags",
+              "JPMS vs Maven modules \u2014 Maven organizes the build; JPMS enforces access at runtime"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Thinking modules are the same as Maven/Gradle modules \u2014 JPMS is a JVM-level feature, independent of build tools."
+          }
+        ],
+        "cap": "What JPMS adds: Each module declares exports (what it exposes) and requires (what it depends on) in module-info.java Packages not exported are invisible to other modules \u2014 enforced by the JVM at runti",
+        "familiarity_anchors": [
+          "Modules"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is an automatic module and when does it occur?",
+          "How does ServiceLoader interact with JPMS?",
+          "Why does Spring Boot use --add-opens in its launch scripts?"
+        ]
+      }
+    },
+    {
+      "id": "aj-010",
+      "slug": "annotation-processing-runtime",
+      "question": "How does Java annotation processing work at compile time vs runtime, and what are the use cases?",
+      "title": "Annotation Processing at Compile Time and Runtime",
+      "direct_answer": "Java has two annotation processing modes: compile-time via the Annotation Processing API (javax.annotation.processing), where Processor subclasses generate source or validate code during javac; and runtime via reflection (element.getAnnotation()), which reads retained annotations from bytecode. Compile-time processing is used by Lombok, MapStruct, and Dagger; runtime processing by Spring, Jackson, and Hibernate.",
+      "layout_type": "internals-deep-dive",
+      "interviewer_intent": {
+        "testing": "Whether you understand the @Retention policy (SOURCE vs CLASS vs RUNTIME) and the difference between compile-time code generation and runtime introspection.",
+        "common_mistake": "Forgetting that @Retention(RetentionPolicy.SOURCE) annotations are discarded after javac \u2014 you cannot read them at runtime.",
+        "to_stand_out": "Discuss how Lombok hooks into javac via internal APIs to mutate the AST directly (not the public Processor API), and why this makes Lombok fragile across JDK versions."
+      },
+      "company_tags": [
+        "Pivotal",
+        "Google",
+        "JetBrains",
+        "Atlassian"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2026-04-13",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "@Retention Decides When Your Annotation Exists \u2014 SOURCE, CLASS, and RUNTIME Serve Different Purposes",
+            "content": "The distinction between compile-time and runtime annotation processing determines what tools can see your annotation and what guarantees you get. A `@Retention(SOURCE)` annotation like `@Override` exists only during compilation \u2014 the compiler validates it and then discards it. A `@Retention(RUNTIME)` annotation like Spring's `@Component` survives into the running JVM where frameworks read it via reflection. This lifecycle difference is not just a metadata detail \u2014 it fundamentally shapes how frameworks are designed.\n\n**Compile-time processors** run inside `javac` as plug-ins. They implement `javax.annotation.processing.AbstractProcessor`, receive the AST of annotated elements, and can generate new source files that get compiled in the same round. MapStruct generates mapper implementations, Dagger generates dependency injection code, and AutoValue generates `equals`/`hashCode`/`toString` \u2014 all without runtime reflection overhead. The tradeoff is that compile-time processors cannot modify existing source files through the public API.\n\n**Runtime processing** uses `java.lang.reflect` to read annotations from loaded classes. Spring scans for `@Component`, Hibernate reads `@Entity`, and Jackson reads `@JsonProperty` \u2014 all at runtime. The cost is reflective overhead: access checking, argument boxing, and the inability for the JIT to inline reflective dispatch. Spring mitigates this by caching all annotation metadata in `BeanDefinition` objects during startup, so the per-request path never touches reflection.\n\n**Lombok** is a special case \u2014 it uses internal `javac` APIs to modify the AST directly rather than generating new files, which is why it breaks across JDK versions and is not a standard annotation processor."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Compile-Time vs Runtime: When Each Approach Wins",
+            "content": "The table clarifies that compile-time and runtime processing serve fundamentally different purposes \u2014 one generates code, the other inspects it.\n\n| Feature | Compile-Time (javac annotation processors) | Runtime (reflection-based) |\n|---|---|---|\n| When it runs | During compilation (javac rounds) | At application startup or on demand |\n| Mechanism | AbstractProcessor with process() method | Class.getAnnotations(), Field.getAnnotation() |\n| Can generate code | Yes \u2014 new source files via Filer API | No \u2014 can only read and interpret |\n| Can modify existing classes | No \u2014 source-level only, no bytecode manipulation | Yes \u2014 via proxies, bytecodes (Byte Buddy, cglib) |\n| Runtime overhead | Zero \u2014 all work done at compile time | Reflection cost on every access (mitigated by caching) |\n| Examples | Lombok, MapStruct, Dagger, AutoValue | Spring @Autowired, JPA @Entity, Jackson @JsonProperty |\n| Debugging difficulty | Hard \u2014 errors surface during compilation with cryptic messages | Easier \u2014 standard debugging with breakpoints |\n\nThe **runtime overhead** row is the practical differentiator. Compile-time processors like Lombok and MapStruct generate plain Java code that runs without any reflection \u2014 zero runtime cost. Runtime processors like Spring must scan classpath, read annotations via reflection, and create proxies at startup \u2014 measurable boot time cost that scales with the number of annotated beans."
+          },
+          {
+            "type": "phase",
+            "title": "Javac Rounds, Compile-Time Codegen, and Runtime Reflection Caching",
+            "content": "Compile-time annotation processing follows a round-based model. In each round, `javac` presents newly discovered annotated elements to processors. If a processor generates new source files containing annotations, those files trigger another round. Processing continues until no new files are generated \u2014 a fixed-point iteration.\n\n```java\n@SupportedAnnotationTypes(\"com.example.Validate\")\n@SupportedSourceVersion(SourceVersion.RELEASE_17)\npublic class ValidateProcessor extends AbstractProcessor {\n    @Override\n    public boolean process(Set<? extends TypeElement> annotations,\n                           RoundEnvironment roundEnv) {\n        for (Element el : roundEnv.getElementsAnnotatedWith(\n                Validate.class)) {\n            if (el.getKind() != ElementKind.FIELD) {\n                processingEnv.getMessager().printMessage(\n                    Diagnostic.Kind.ERROR,\n                    \"@Validate is only valid on fields\", el\n                );\n            }\n        }\n        return true; // claim the annotation\n    }\n}\n```\n\nThe processor receives each annotated element through the `RoundEnvironment` and can emit errors that fail the build, generate new source files via `processingEnv.getFiler()`, or produce resource files. Returning `true` from `process()` claims the annotation \u2014 no other processor will see it.\n\nRuntime annotation reading follows a different path entirely. When Spring starts, it scans packages for classes annotated with `@Component` and its stereotypes. Each reflective call to `Class.getAnnotations()` returns proxy objects implementing the annotation interface. The overhead is measurable at startup \u2014 a large Spring application with 2,000 beans might spend 500ms just on annotation scanning. Spring caches everything into `BeanDefinition` objects so the running application never re-reads annotations.\n\nModern Spring versions also support **ahead-of-time (AOT) processing** that moves annotation scanning to build time, generating the equivalent metadata as source code \u2014 effectively converting runtime processing into compile-time processing for faster startup."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Compile-time APT** \u2014 implements `AbstractProcessor`; generates new source files in rounds; cannot modify existing source.\n- **Runtime processing** \u2014 reads annotations via `java.lang.reflect`; Spring caches at startup; hot path never re-reads.\n- **`@Retention` policy** \u2014 SOURCE (hints only), CLASS (bytecode tools), RUNTIME (frameworks need reflection access).\n- **Lombok hooks into private javac APIs** \u2014 looks like APT but isn't; breaks on JDK upgrades; standard processors don't.\n- **Use JSR-269 for code generation; RUNTIME annotations for framework integration**."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Annotation processing has two distinct modes \u2014 compile-time processing that generates code during the build, and runtime processing that reads annotations from loaded classes.\n\n**Compile-time processing (APT):**\n- Implement `AbstractProcessor` \u2014 javac feeds annotated elements in rounds; your processor generates new source files\n- Can generate new files; cannot modify existing source code (standard JSR-269 constraint)\n- Used by: MapStruct (mapper implementations), Dagger (injection factories)\n\n**Runtime processing:**\n- Uses `java.lang.reflect` to read annotations from loaded classes\n- Used by: Spring (`@Component`/`@Autowired`), Hibernate (`@Entity`), Jackson (`@JsonProperty`)\n- Spring caches all annotations at startup in `BeanDefinition` objects \u2014 hot path never re-reads annotations\n\n**@Retention policy:**\n- `SOURCE`: compile-time hints only (e.g. `@Override`) \u2014 discarded after compilation\n- `RUNTIME`: readable via reflection \u2014 frameworks need this to discover annotated classes at runtime\n- `CLASS`: stays in bytecode for bytecode analyzers; not loaded by the JVM's reflection API\n\n**Lombok gotcha:**\n- Hooks into private javac APIs to modify the AST directly \u2014 looks like APT but isn't standard\n- Breaks on JDK upgrades; standard processors like MapStruct don't\n\nI recommend JSR-269 processors for code generation and `RUNTIME` annotations for framework integration."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Lombok differ from a standard Annotation Processor?",
+        "What is the difference between APT and reflection-based frameworks like Spring?",
+        "How would you write a custom compile-time validator using Annotation Processing?"
+      ],
+      "seo": {
+        "meta_title": "Java Annotation Processing Runtime vs Compile Time \u2014 Interview",
+        "meta_description": "Understand Java annotation retention policies, compile-time processors, and runtime reflection for framework design interviews.",
+        "keywords": [
+          "java annotation processing",
+          "java retention policy",
+          "java compile time annotation",
+          "java runtime annotation interview"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "Annotation processing has two distinct modes \u2014 compile-time processing that generates code during the build, and runtime processing that reads annotations from loaded classes.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The distinction between compile-time and runtime annotation processing determines what tools can see your annotation and what guarantees you get. A @Retention(SOURCE) annotation like @Override exists only during compilation \u2014 the compiler validates it and then discards it. A @Retention(RUNTIME) annotation like Spring's @Component survives into the running JVM where frameworks read it via reflection. This lifecycle difference is not just a metadata detail \u2014 it fundamentally shapes how frameworks."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "The table clarifies that compile-time and runtime processing serve fundamentally different purposes \u2014 one generates code, the other inspects it",
+              "| Feature | Compile-Time (javac annotation processors) | Runtime (reflection-based) | |---|---|---| | When it runs | During compilation (javac rounds) | At application startup or on demand | | Mechanism | AbstractProcessor with process() method | Class",
+              "getAnnotations(), Field",
+              "getAnnotation() | | Can generate code | Yes \u2014 new source files via Filer API | No \u2014 can only read and interpret | | Can modify existing classes | No \u2014 source-level only, no bytecode manipulation | Yes \u2014 via proxies, bytecodes (Byte Buddy, cglib) | | Runtime overhead | Zero \u2014 all work done at compile time | Reflection cost on every access (mitigated by caching) | | Examples | Lombok, MapStruct, Dagger, AutoValue | Spring @Autowired, JPA @Entity, Jackson @JsonProperty | | Debugging difficulty | Hard \u2014 errors surface during compilation with cryptic messages | Easier \u2014 standard debugging with breakpoints | The runtime overhead row is the practical differentiator",
+              "Compile-time processors like Lombok and MapStruct generate plain Java code that runs without any reflection \u2014 zero runtime cost"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "The distinction between compile-time and runtime annotation processing determines what tools can see your annotation and what guarantees you get. A @Retention(SOURCE) annotation like @Override exists only during compilation \u2014 the compiler validates it and then discards it. A @Retention(RUNTIME) annotation like Spring's @Component survives into the running JVM where frameworks read it via reflection. This lifecycle difference is not just a metadata detail \u2014 it fundamentally shapes how frameworks are designed. Compile-time processors run inside javac as plug-ins. They implement javax.annotation.processing.AbstractProcessor, receive the AST of annotated elements, and can."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The distinction between compile-time and runtime annotation processing determines what tools can see your annotation and what guarantees you get. A @Retention(SOURCE) annotation like @Override exists only during compilation \u2014 the compiler validates it and then discards it. A @Retention(RUNTIME) annotation like Spring's @Component survives into the running JVM where frameworks read it via reflection. This lifecycle difference is not."
+          }
+        ],
+        "cap": "@Override) \u2014 discarded after compilation RUNTIME: readable via reflection \u2014 frameworks need this to discover annotated classes at runtime CLASS: stays in bytecode for bytecode analyzers; not loaded by",
+        "familiarity_anchors": [
+          "Annotation",
+          "Processing",
+          "Processor"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Lombok differ from a standard Annotation Processor?",
+          "What is the difference between APT and reflection-based frameworks like Spring?",
+          "How would you write a custom compile-time validator using Annotation Processing?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,223 @@
+{
+  "topic": "Integration Testing",
+  "topicSlug": "integration-testing",
+  "questions": [
+    {
+      "id": "test-011",
+      "slug": "testing-kafka-embedded-kafka",
+      "question": "How do you test Kafka producers and consumers in a Spring Boot application using @EmbeddedKafka?",
+      "title": "Testing Kafka with @EmbeddedKafka",
+      "direct_answer": "@EmbeddedKafka starts an in-memory Kafka broker inside the test JVM, so you can test real Kafka producer and consumer logic without an external broker. Use @SpringBootTest + @EmbeddedKafka, override spring.kafka.bootstrap-servers with ${spring.embedded.kafka.brokers}, send messages with KafkaTemplate, and use a CountDownLatch or Awaitility in the consumer to wait for the message to be processed before asserting.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Whether you can test event-driven microservice logic end-to-end without relying on an external Kafka cluster",
+        "common_mistake": "Using Thread.sleep() to wait for the consumer to process the message \u2014 use CountDownLatch or Awaitility for deterministic synchronisation",
+        "to_stand_out": "Mention Testcontainers Kafka as an alternative that runs a real Kafka broker in Docker, which can catch issues with real Kafka that the embedded broker might mask"
+      },
+      "company_tags": [
+        "Confluent",
+        "LinkedIn",
+        "Uber"
+      ],
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Kafka Tests Need a Real Broker \u2014 @EmbeddedKafka Gives You One Without Docker",
+            "content": "Testing Kafka consumers and producers requires a broker. Mocking `KafkaTemplate` tests serialization but misses the actual consume-produce lifecycle \u2014 partition assignment, offset management, consumer group coordination. `@EmbeddedKafka` starts an in-memory Kafka broker as part of the Spring test context. No Docker, no external infrastructure.\n\nThe embedded broker handles topic creation, partition assignment, and offset tracking exactly like a real broker. Messages sent by `KafkaTemplate` are stored in the embedded broker's log, and `@KafkaListener` instances consume them through the normal consumer group protocol.\n\nThe biggest testing mistake is `Thread.sleep()` for synchronization. Kafka consumption is asynchronous \u2014 the listener processes messages in a background thread. `Awaitility` or `CountDownLatch` provides proper synchronization that adapts to actual processing speed. A 5-second sleep that \"works\" locally fails on a loaded CI server where the consumer takes 6 seconds to start.\n\nFor teams running many Kafka tests, the embedded broker's startup cost matters. Like Testcontainers, use a shared embedded broker across test classes. Define the `@EmbeddedKafka` configuration in a base class or custom annotation, and Spring's context caching reuses the same broker instance. Different topic configurations invalidate the cache, so standardize topics across test classes where possible."
+          },
+          {
+            "type": "step",
+            "title": "The Full Pattern \u2014 Produce, Consume, Assert With Awaitility",
+            "content": "```java\n@SpringBootTest\n@EmbeddedKafka(partitions = 1, topics = {\"order-events\"})\nclass OrderConsumerTest {\n    @Autowired KafkaTemplate<String, OrderEvent> template;\n    @Autowired OrderRepository repository;\n    \n    @Test\n    void shouldProcessOrderEvent() {\n        template.send(\"order-events\", \"ORD-1\", new OrderEvent(\"ORD-1\", BigDecimal.TEN));\n        \n        await().atMost(Duration.ofSeconds(10))\n               .untilAsserted(() -> {\n                   assertThat(repository.findByOrderId(\"ORD-1\")).isNotNull();\n               });\n    }\n    \n    @Test\n    void shouldRouteToDeadLetterOnInvalidEvent() {\n        template.send(\"order-events\", \"BAD\", new OrderEvent(null, null));\n        \n        ConsumerRecord<String, OrderEvent> dlt =\n            KafkaTestUtils.getSingleRecord(dltConsumer, \"order-events.DLT\",\n                Duration.ofSeconds(10));\n        assertThat(dlt.key()).isEqualTo(\"BAD\");\n    }\n}\n```\n\n`partitions = 1` ensures deterministic ordering \u2014 multiple partitions introduce non-deterministic assignment that makes assertions about order unreliable. `KafkaTestUtils.getSingleRecord()` waits for one record on the specified topic, providing clean DLT verification.\n\nFor producer tests, use a test consumer to verify the message was sent with the correct key, value, headers, and partition. `KafkaTestUtils.getRecords()` returns all records from a topic, useful for batch verification."
+          },
+          {
+            "type": "step",
+            "title": "Common Pitfalls \u2014 Consumer Group Conflicts and Topic Reuse",
+            "content": "**Use unique consumer group IDs per test class.** If two test classes share a consumer group ID and run in the same JVM, they compete for partitions. Use `groupId = \"test-\" + UUID.randomUUID()` or class-specific group IDs.\n\n**Clean up between tests.** The embedded broker persists messages between test methods. If test A sends a message and test B reads from the same topic, test B might see test A's message. Use unique topics per test or clear the consumer's position with `seekToEnd()`.\n\n**Verify error handling, not just happy path.** The highest-value Kafka tests verify that malformed messages reach the DLT, that retries exhaust correctly, and that the consumer continues processing after a failure. These tests catch configuration regressions \u2014 someone changes the error handler and the test detects that DLT routing silently broke.\n\nFor teams using Testcontainers instead of `@EmbeddedKafka`, the trade-off is startup time vs fidelity. The embedded broker is faster (in-memory) but doesn't support all Kafka features (transactions require specific configuration). Testcontainers' Kafka module runs a real Confluent/Apache Kafka image but adds container startup time.\n\nAnother common issue: **serialization configuration in tests must match production.** If your production `KafkaTemplate` uses `JsonSerializer` with specific type mappings, the test template must use the same configuration. A test that sends raw strings but the consumer expects JSON-serialized objects fails with deserialization errors that don't reflect real behavior."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@EmbeddedKafka` starts an in-memory Kafka broker \u2014 no Docker needed. The test produces a message, the `@KafkaListener` consumes it asynchronously, and you verify the side effect with Awaitility: `await().atMost(10, SECONDS).untilAsserted(() -> ...)`.\n\nSet `partitions = 1` for deterministic tests \u2014 multiple partitions introduce non-deterministic assignment. Use unique consumer group IDs per test class to avoid partition competition.\n\nThe highest-value tests verify error handling: send malformed data, verify it reaches the DLT with `KafkaTestUtils.getSingleRecord()`. These tests catch configuration regressions when someone changes the error handler and DLT routing silently breaks.\n\nNever use `Thread.sleep()` \u2014 it's slow and flaky. Awaitility adapts to actual processing speed, making tests fast locally and tolerant of CI slowness.\n\nUse unique consumer group IDs per test class to prevent partition competition, and set `partitions = 1` for deterministic ordering in assertions."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@EmbeddedKafka` starts an in-memory broker** \u2014 no Docker; set `partitions = 1` for deterministic ordering; the broker handles topic creation and consumer group coordination.\n- **`Thread.sleep()` is wrong for Kafka tests** \u2014 use `Awaitility` or `CountDownLatch`; `await().atMost(10, SECONDS).untilAsserted()` polls until the assertion passes.\n- **Use unique consumer group IDs per test class** \u2014 shared group IDs cause partition competition between test classes running in the same JVM; use class-specific IDs or UUID-based groups.\n- **Test DLT routing with `KafkaTestUtils.getSingleRecord()`** \u2014 send malformed data, wait for it to appear on `<topic>.DLT`; these tests catch error handler configuration regressions.\n- **Embedded broker vs Testcontainers Kafka** \u2014 embedded is faster (in-memory) but limited; Testcontainers runs a real Kafka image with full feature support but adds container startup time."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you test Kafka Schema Registry integration in tests?",
+        "How do you test a dead-letter topic (DLT) handler?",
+        "What is the difference between @EmbeddedKafka and Redpanda for testing?"
+      ],
+      "seo": {
+        "metaTitle": "Testing Kafka @EmbeddedKafka Spring Boot | Java Interview",
+        "metaDescription": "Learn how to test Kafka producers and consumers in Spring Boot using @EmbeddedKafka and Testcontainers with Awaitility for async assertions."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P08",
+        "hook": "@EmbeddedKafka starts an in-memory Kafka broker \u2014 no Docker needed.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Testing Kafka consumers and producers requires a broker. Mocking KafkaTemplate tests serialization but misses the actual consume-produce lifecycle \u2014 partition assignment, offset management, consumer group coordination. @EmbeddedKafka starts an in-memory Kafka broker as part of the Spring test context. No Docker, no external infrastructure. The embedded broker handles topic creation, partition assignment, and offset tracking exactly like a real broker. Messages sent by KafkaTemplate are stored in the embedded broker's log, and @KafkaListener instances consume them through the normal consumer group protocol. The biggest testing mistake is Thread.sleep() for synchronization."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "``java @SpringBootTest @EmbeddedKafka(partitions = 1, topics = {\"order-events\"}) class OrderConsumerTest { @Autowired KafkaTemplate<String, OrderEvent> template; @Autowired OrderRepository repository; @Test void shouldProcessOrderEvent() { template.send(\"order-events\", \"ORD-1\", new OrderEvent(\"ORD-1\", BigDecimal.TEN)); await().atMost(Duration.ofSeconds(10)) .untilAsserted(() -> { assertThat(repository.findByOrderId(\"ORD-1\")).isNotNull(); }); } @Test void shouldRouteToDeadLetterOnInvalidEvent() { template.send(\"order-events\", \"BAD\", new OrderEvent(null, null)); ConsumerRecord<String, OrderEvent> dlt = KafkaTestUtils.getSingleRecord(dltConsumer, \"order-events.DLT\", Duration.ofSeconds(10)); assertThat(dlt.key()).isEqualTo(\"BAD\"); } } ` partitions = 1 ensures deterministic ordering \u2014 multiple partitions introduce non-deterministic assignment that makes assertions about order unreliable.",
+              "KafkaTestUtils.getSingleRecord() waits for one record on the specified topic, providing clean DLT verification.",
+              "For producer tests, use a test consumer to verify the message was sent with the correct key, value, headers, and partition.",
+              "KafkaTestUtils.getRecords()` returns all records from a topic, useful for batch verification.",
+              "Use unique consumer group IDs per test class.",
+              "If two test classes share a consumer group ID and run in the same JVM."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "@EmbeddedKafka starts an in-memory broker \u2014 no Docker; set partitions = 1 for deterministic ordering; the broker handles topic creation and consumer group coordination",
+              "sleep() is wrong for Kafka tests \u2014 use Awaitility or CountDownLatch; await()",
+              "atMost(10, SECONDS)",
+              "untilAsserted() polls until the assertion passes",
+              "Use unique consumer group IDs per test class \u2014 shared group IDs cause partition competition between test classes running in the same JVM; use class-specific IDs or UUID-based groups"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Using Thread.sleep() to wait for the consumer to process the message \u2014 use CountDownLatch or Awaitility for deterministic synchronisation"
+          }
+        ],
+        "cap": "Use unique consumer group IDs per test class to prevent partition competition, and set partitions = 1 for deterministic ordering in assertions.",
+        "familiarity_anchors": [
+          "EmbeddedKafka",
+          "Kafka",
+          "SpringBootTest"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you test Kafka Schema Registry integration in tests?",
+          "How do you test a dead-letter topic (DLT) handler?",
+          "What is the difference between @EmbeddedKafka and Redpanda for testing?"
+        ]
+      }
+    },
+    {
+      "id": "test-integration",
+      "slug": "integration-testing-spring-boot",
+      "question": "Integration Testing in Spring Boot \u2014 @SpringBootTest, @DataJpaTest, @WebMvcTest",
+      "title": "Integration Testing in Spring Boot \u2014 @SpringBootTest, @DataJpaTest, @WebMvcTest",
+      "direct_answer": "Spring Boot integration tests verify that components work together with real infrastructure. @SpringBootTest loads the full context; @WebMvcTest, @DataJpaTest load targeted slices for faster, focused tests.",
+      "layout_type": "default",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands the integration testing strategy in Spring Boot and can explain when each test slice is appropriate.",
+        "common_mistake": "Using @SpringBootTest for every integration test instead of targeted slices, leading to slow test suites.",
+        "to_stand_out": "Explain context caching, the relationship between @MockBean and cache invalidation, and how to structure integration tests for maximum cache reuse."
+      },
+      "company_tags": [],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "@SpringBootTest Loads Everything \u2014 That's Why It's Slow and Why Slices Exist",
+            "content": "`@SpringBootTest` starts the full Spring application context \u2014 every bean, every auto-configuration, every component scan. This gives maximum fidelity but at a cost: context startup takes 5-30 seconds depending on the application. For a project with 200 tests all using `@SpringBootTest`, the test suite runs for 30+ minutes.\n\n**Test slices** load only the parts of the context relevant to what you're testing. `@WebMvcTest(UserController.class)` loads the web layer \u2014 controller, filters, converters \u2014 but not services, repositories, or database connections. `@DataJpaTest` loads JPA repositories and an embedded H2 database but not controllers or services.\n\nThe performance difference is dramatic. A `@WebMvcTest` starts in under 2 seconds. The same test with `@SpringBootTest` takes 10-15 seconds because it loads the entire application including database connections, message brokers, and scheduled tasks that the test doesn't need.\n\nSpring caches application contexts across tests with the same configuration \u2014 but slices with different `@MockBean` annotations create different cache keys, triggering new context creation. Minimizing distinct `@MockBean` combinations across test classes keeps context caching effective."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Test Slice Selection \u2014 What Each Annotation Loads",
+            "content": "| Annotation | What it loads | What it excludes | Typical use |\n|---|---|---|---|\n| `@SpringBootTest` | Everything | Nothing | Full integration tests, app startup verification |\n| `@WebMvcTest` | Controllers, filters, `@ControllerAdvice` | Services, repositories, DB | Controller request/response testing |\n| `@DataJpaTest` | JPA repos, `EntityManager`, H2/Testcontainers | Controllers, services | Repository query verification |\n| `@WebFluxTest` | WebFlux controllers | Everything else | Reactive controller testing |\n| `@JsonTest` | Jackson `ObjectMapper` | Everything else | JSON serialization/deserialization |\n| `@RestClientTest` | `RestTemplate` / `WebClient` with mock server | Everything else | External API client testing |\n\nThe pattern: **use the narrowest slice that covers what you're testing.** If you're testing a controller's request mapping and validation, `@WebMvcTest` is faster and more focused than `@SpringBootTest`. If you're testing a JPA query, `@DataJpaTest` loads only what the repository needs."
+          },
+          {
+            "type": "step",
+            "title": "When @SpringBootTest Is Actually the Right Choice",
+            "content": "`@SpringBootTest` is appropriate for tests that verify **cross-cutting behavior** \u2014 how the full application hangs together.\n\n```java\n@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)\nclass ApplicationSmokeTest {\n    @Autowired TestRestTemplate restTemplate;\n    \n    @Test\n    void healthEndpointReturnsUp() {\n        ResponseEntity<String> response = restTemplate.getForEntity(\"/actuator/health\", String.class);\n        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);\n    }\n}\n```\n\n`RANDOM_PORT` starts the actual HTTP server \u2014 not MockMvc \u2014 on a random port. This tests the full HTTP stack including filters, exception handlers, and content negotiation. Use this for smoke tests, security integration tests, and scenarios where MockMvc's simulated request pipeline doesn't catch the issue.\n\n`MOCK` (default) doesn't start a real server but provides a mock servlet environment. Combined with `@AutoConfigureMockMvc`, this gives you `MockMvc` in a full context \u2014 useful when you need all beans loaded but don't need a real HTTP server.\n\nReserve `@SpringBootTest` for the 10-20% of tests that genuinely need the full context. The other 80% should use slices."
+          },
+          {
+            "type": "step",
+            "title": "Test Profile and Property Overrides \u2014 Isolating Test Configuration",
+            "content": "Test slices often need different configuration than production. `@TestPropertySource(properties = \"spring.jpa.show-sql=true\")` overrides individual properties. `@ActiveProfiles(\"test\")` activates a test-specific `application-test.yml` with test database URLs, disabled scheduling, and mock external service endpoints.\n\nThe hierarchy matters: `@TestPropertySource` overrides profile properties, which override `application.yml`. This lets you keep most configuration in the default file and override only what's test-specific.\n\nOne pattern that prevents test configuration drift: create a `src/test/resources/application-test.yml` that disables everything tests don't need \u2014 scheduled tasks (`spring.task.scheduling.enabled=false`), actuator endpoints, and Kafka auto-configuration. Tests start faster because Spring skips auto-configuration for components that aren't part of the test.\n\nFor `@DataJpaTest`, properties like `spring.jpa.hibernate.ddl-auto=create-drop` ensure a clean schema per test run. Combined with `@Transactional` rollback, this gives complete test isolation without manual cleanup scripts."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "`@SpringBootTest` loads the full application context \u2014 every bean, every auto-configuration. It gives maximum fidelity but takes 10-30 seconds to start. Test slices like `@WebMvcTest` and `@DataJpaTest` load only the relevant portion, starting in under 2 seconds.\n\n`@WebMvcTest(UserController.class)` loads just the controller layer \u2014 no services, no repositories, no database. You mock dependencies with `@MockBean`. `@DataJpaTest` loads JPA repositories with an embedded database \u2014 no controllers.\n\nThe rule: **use the narrowest slice that covers what you're testing.** Reserve `@SpringBootTest` for smoke tests and cross-cutting integration tests \u2014 maybe 10-20% of your suite. The rest should use slices.\n\nOne thing that trips people up: Spring caches contexts, but each unique `@MockBean` combination creates a new cache key. Minimizing distinct mock combinations across test classes keeps caching effective and the suite fast."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`@SpringBootTest` takes 10-30 seconds; `@WebMvcTest` takes under 2 seconds** \u2014 the full context loads every bean including database, messaging, and scheduled tasks that your controller test doesn't need.\n- **Each unique `@MockBean` combination creates a new context cache key** \u2014 10 test classes with different mock sets means 10 context startups; standardize mock combinations across tests to maximize caching.\n- **`@DataJpaTest` auto-configures an embedded H2 database** \u2014 add `@AutoConfigureTestDatabase(replace = NONE)` to use Testcontainers instead of H2 for realistic SQL testing.\n- **`webEnvironment = RANDOM_PORT` starts a real HTTP server** \u2014 tests the full HTTP stack including filters and content negotiation; use `TestRestTemplate` instead of `MockMvc` for these tests.\n- **80% of tests should use slices; 20% should use `@SpringBootTest`** \u2014 if you're testing a controller, use `@WebMvcTest`; if you're testing a query, use `@DataJpaTest`; reserve full context for smoke and cross-cutting tests."
+          }
+        ]
+      },
+      "followup_questions": [],
+      "seo": {
+        "metaTitle": "Integration Testing in Spring Boot \u2014 @SpringBootTest, @DataJpaTest, @WebMvcTest",
+        "metaDescription": ""
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P08",
+        "hook": "@SpringBootTest loads the full application context \u2014 every bean, every auto-configuration.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "@SpringBootTest starts the full Spring application context \u2014 every bean, every auto-configuration, every component scan. This gives maximum fidelity but at a cost: context startup takes 5-30 seconds depending on the application. For a project with 200 tests all using @SpringBootTest, the test suite runs for 30+ minutes. Test slices load only the parts of the context relevant to what you're testing. @WebMvcTest(UserController.class) loads the web layer \u2014 controller, filters, converters \u2014 but not services, repositories, or database connections. @DataJpaTest."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands the integration testing strategy in Spring Boot and can explain when each test slice is appropriate."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "@SpringBootTest takes 10-30 seconds; @WebMvcTest takes under 2 seconds \u2014 the full context loads every bean including database, messaging, and scheduled tasks that your controller test doesn't need",
+              "Each unique @MockBean combination creates a new context cache key \u2014 10 test classes with different mock sets means 10 context startups; standardize mock combinations across tests to maximize caching",
+              "@DataJpaTest auto-configures an embedded H2 database \u2014 add @AutoConfigureTestDatabase(replace = NONE) to use Testcontainers instead of H2 for realistic SQL testing",
+              "webEnvironment = RANDOM_PORT starts a real HTTP server \u2014 tests the full HTTP stack including filters and content negotiation; use TestRestTemplate instead of MockMvc for these tests",
+              "80% of tests should use slices; 20% should use @SpringBootTest \u2014 if you're testing a controller, use @WebMvcTest; if you're testing a query, use @DataJpaTest; reserve full context for smoke and cross-cutting tests"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "@SpringBootTest starts the full Spring application context \u2014 every bean, every auto-configuration, every component scan. This gives maximum fidelity but at a cost: context startup takes 5-30 seconds depending on the application. For a project with 200 tests all using @SpringBootTest, the test suite runs for 30+ minutes. Test slices load only the parts of the context relevant to what you're testing. @WebMvcTest(UserController.class) loads the web layer \u2014 controller, filters, converters \u2014 but not services, repositories, or database connections. @DataJpaTest loads JPA repositories and an embedded H2 database but not controllers or services. The performance difference is dramatic. A @WebMvcTest starts in under 2 seconds. The same test with @SpringBootTest takes 10-15 seconds because it loads the entire application including."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Using @SpringBootTest for every integration test instead of targeted slices, leading to slow test suites"
+            ]
+          }
+        ],
+        "cap": "Minimizing distinct mock combinations across test classes keeps caching effective and the suite fast.",
+        "familiarity_anchors": [
+          "Spring",
+          "SpringBootTest",
+          "WebMvcTest"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": []
+      }
+    }
+  ]
+}

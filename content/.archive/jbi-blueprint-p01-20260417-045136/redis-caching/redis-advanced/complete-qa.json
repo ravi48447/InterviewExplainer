@@ -1,0 +1,230 @@
+{
+  "topic": "Redis Advanced",
+  "topicSlug": "redis-advanced",
+  "questions": [
+    {
+      "id": "redis-007",
+      "slug": "rate-limiting-redis",
+      "question": "How do you implement rate limiting in a Spring Boot application using Redis?",
+      "title": "Rate Limiting with Redis: INCR+EXPIRE and Sliding Window",
+      "direct_answer": "The simplest Redis rate limiter uses INCR to count requests per time window and EXPIRE to reset the counter, but this fixed-window approach allows bursts at window boundaries. A sliding window log stores request timestamps in a Sorted Set and counts entries in the last N seconds, providing smooth limiting. For production, Lua scripts make these operations atomic, preventing race conditions between INCR and EXPIRE or ZADD and ZREMRANGEBYSCORE.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Ability to implement a production-grade distributed rate limiter and awareness of the atomicity requirement and fixed-window boundary burst problem.",
+        "common_mistake": "Not making INCR+EXPIRE atomic \u2014 a process crash between the two commands leaves counters without expiry, effectively blocking the key forever.",
+        "to_stand_out": "Discuss the token bucket or leaky bucket algorithms as alternatives, and mention that Spring Cloud Gateway has built-in Redis rate limiting using the token bucket algorithm."
+      },
+      "company_tags": [
+        "Stripe",
+        "Cloudflare",
+        "Twilio",
+        "SendGrid",
+        "Kong"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "hard",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "How it works under the hood",
+            "content": "Rate limiting protects backend resources from overload by bounding the number of requests a client can make within a time window. Redis is the natural backing store because its atomic operations, sub-millisecond latency, and shared state across application instances make it ideal for enforcing limits in a distributed deployment.\n\nThe fixed-window algorithm divides time into discrete buckets. Each bucket is a Redis key whose name encodes the window (e.g., `ratelimit:user42:1705300000`). `INCR` atomically bumps the counter and `EXPIRE` sets the cleanup timer. The critical subtlety is that these two commands must be atomic \u2014 if the process crashes between `INCR` (which creates the key implicitly) and `EXPIRE`, the key persists forever and the user is permanently blocked. Wrapping both in a Lua script solves this.\n\nThe boundary-burst problem is inherent to fixed windows: a user can exhaust the limit at second 59 of window 1 and again at second 0 of window 2, effectively doubling their rate in a two-second span. The sliding window log fixes this by storing each request's timestamp in a Sorted Set. Before admitting a new request, `ZREMRANGEBYSCORE` drops entries older than the window, the new timestamp is added with `ZADD`, and `ZCARD` counts the remaining entries. Memory scales linearly with the allowed request count per window, so this approach is best suited for moderate limits.\n\nFor API gateway-level enforcement, Spring Cloud Gateway ships with a Redis-backed token bucket rate limiter. The token bucket continuously refills at a configurable rate (`replenishRate`) up to a maximum burst size (`burstCapacity`). It handles bursty traffic more gracefully than fixed windows because accumulated tokens absorb short spikes without rejecting requests."
+          },
+          {
+            "type": "step",
+            "title": "Step 1 \u2014 Fixed Window with INCR + EXPIRE (Simple)",
+            "content": "The simplest rate limiter uses `INCR` with `EXPIRE`, wrapped in a Lua script for atomicity:\n\n```lua\n-- rate_limit_fixed.lua\n-- KEYS[1] = rate limit key, ARGV[1] = max requests, ARGV[2] = window in seconds\nlocal current = redis.call('INCR', KEYS[1])\nif current == 1 then\n    redis.call('EXPIRE', KEYS[1], ARGV[2])\nend\nif current > tonumber(ARGV[1]) then\n    return 0  -- rejected\nend\nreturn 1      -- allowed\n```\n\n**Why Lua?** Without it, a crash between `INCR` (which creates the key implicitly) and `EXPIRE` leaves a counter without a TTL \u2014 permanently blocking that client. Lua executes atomically on the Redis server.\n\n**Boundary burst problem:** A user can exhaust the limit at second 59 of window 1, then again at second 0 of window 2, effectively doubling their rate in a 2-second span. The sliding window approach (Step 3) fixes this."
+          },
+          {
+            "type": "step",
+            "title": "Step 2 \u2014 Spring Boot Fixed Window Implementation",
+            "content": "Spring Boot service wrapping the fixed-window Lua script:\n\n```java\n@Service\npublic class RateLimiter {\n\n    private final StringRedisTemplate redis;\n    private final RedisScript<Long> script;\n\n    public RateLimiter(StringRedisTemplate redis) {\n        this.redis = redis;\n        this.script = RedisScript.of(\n            new ClassPathResource(\"scripts/rate_limit_fixed.lua\"), Long.class);\n    }\n\n    public boolean isAllowed(String clientId, int maxRequests, int windowSeconds) {\n        String key = \"ratelimit:\" + clientId + \":\"\n            + Instant.now().getEpochSecond() / windowSeconds;\n        Long result = redis.execute(script,\n            List.of(key),\n            String.valueOf(maxRequests),\n            String.valueOf(windowSeconds));\n        return result != null && result == 1;\n    }\n}\n```\n\nUsage in a Spring MVC interceptor:\n\n```java\n@Component\npublic class RateLimitInterceptor implements HandlerInterceptor {\n\n    @Override\n    public boolean preHandle(HttpServletRequest req, HttpServletResponse res,\n                             Object handler) {\n        String clientId = req.getRemoteAddr();\n        if (!rateLimiter.isAllowed(clientId, 100, 60)) {\n            res.setStatus(429);\n            res.setHeader(\"Retry-After\", \"60\");\n            return false;\n        }\n        return true;\n    }\n}\n```"
+          },
+          {
+            "type": "step",
+            "title": "Step 3 \u2014 Sliding Window with Sorted Set",
+            "content": "The sliding window stores each request timestamp as a ZSet score, giving smooth rate enforcement:\n\n```lua\n-- rate_limit_sliding.lua\n-- KEYS[1] = key, ARGV[1] = now (ms), ARGV[2] = window (ms), ARGV[3] = max\nlocal window_start = tonumber(ARGV[1]) - tonumber(ARGV[2])\nredis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', window_start)\nlocal count = redis.call('ZCARD', KEYS[1])\nif count >= tonumber(ARGV[3]) then\n    return 0  -- rejected\nend\nredis.call('ZADD', KEYS[1], ARGV[1], ARGV[1] .. ':' .. math.random(100000))\nredis.call('EXPIRE', KEYS[1], math.ceil(tonumber(ARGV[2]) / 1000) + 1)\nreturn 1      -- allowed\n```\n\nJava integration:\n\n```java\npublic boolean isAllowedSlidingWindow(String clientId, int maxRequests,\n                                       Duration window) {\n    String key = \"ratelimit:sw:\" + clientId;\n    long nowMs = Instant.now().toEpochMilli();\n    Long result = redis.execute(slidingScript,\n        List.of(key),\n        String.valueOf(nowMs),\n        String.valueOf(window.toMillis()),\n        String.valueOf(maxRequests));\n    return result != null && result == 1;\n}\n```\n\n**Trade-off:** Memory scales with the allowed request count (one ZSet entry per request in the window). For limits like 10,000 req/min, consider the fixed-window approach or token bucket instead."
+          },
+          {
+            "type": "step",
+            "title": "Step 4 \u2014 Spring Cloud Gateway Built-in Rate Limiter",
+            "content": "Spring Cloud Gateway ships with a Redis-backed token bucket rate limiter:\n\n```yaml\n# application.yml\nspring:\n  cloud:\n    gateway:\n      routes:\n        - id: api-route\n          uri: http://localhost:8081\n          predicates:\n            - Path=/api/**\n          filters:\n            - name: RequestRateLimiter\n              args:\n                redis-rate-limiter.replenishRate: 10   # 10 tokens/second steady\n                redis-rate-limiter.burstCapacity: 20   # Allow burst of 20\n                redis-rate-limiter.requestedTokens: 1  # 1 token per request\n                key-resolver: \"#{@userKeyResolver}\"\n```\n\n```java\n@Bean\npublic KeyResolver userKeyResolver() {\n    // Rate limit by authenticated user, fallback to IP\n    return exchange -> Mono.justOrEmpty(\n        exchange.getRequest().getHeaders().getFirst(\"X-User-Id\"))\n        .switchIfEmpty(Mono.just(\n            exchange.getRequest().getRemoteAddress().getAddress().getHostAddress()));\n}\n```\n\n**How it works:** The gateway uses a Lua script internally that implements the token bucket algorithm. Tokens refill at `replenishRate` per second up to `burstCapacity`. Each request consumes `requestedTokens`. This handles bursty traffic more gracefully than fixed windows \u2014 short spikes are absorbed by the bucket's capacity without rejecting requests."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **`INCR` with `EXPIRE` is atomic fixed-window rate limiting** \u2014 safe under concurrent requests; set the key with `INCR`, then `EXPIRE` on first increment only; `SET key 1 EX 60 NX` sets atomically on creation\n- **Fixed window allows boundary bursts** \u2014 clients can send the full limit at the end of one window and the full limit at the start of the next; the effective rate in that span is 2x the stated limit\n- **Sliding window with Sorted Set eliminates boundary bursts** \u2014 score = timestamp; remove old entries with `ZREMRANGEBYSCORE`; count remaining with `ZCARD`; true N-requests-per-window semantics\n- **Lua script makes multi-command rate limiting atomic** \u2014 `EVAL` executes a Lua script atomically in Redis; the read-check-increment sequence runs as one unit without race conditions between commands\n- **Bucket4j with Redis for Spring Boot** \u2014 implements token bucket algorithm with Redis persistence; integrates with Spring Cloud Gateway for API-level rate limiting without custom Lua scripts"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to explain this in an interview",
+            "content": "Rate limiting with Redis is a classic use case because Redis's atomic operations make counter increments safe under concurrent requests from multiple application instances \u2014 something in-memory counters can't handle in a distributed deployment.\n\n**Fixed window with INCR**\n- The simple approach: `INCR ip:192.168.1.1:2024-01:16:30` increments a counter for this IP in this minute; `EXPIRE` sets the TTL to 60 seconds so the counter resets automatically\n- `INCR` is atomic \u2014 no two concurrent requests can read and write the counter simultaneously without both their increments being recorded\n- The limitation: fixed windows allow bursting at the window boundary \u2014 a client can send 100 requests at 11:59 and 100 requests at 12:00, totaling 200 in a 2-second window even though the limit is 100 per minute\n\n**Sliding window with Sorted Set**\n- `ZADD requests ip:192.168.1.1 timestamp requestId` adds the request timestamp as the score; `ZREMRANGEBYSCORE` removes entries older than the window; `ZCARD` counts remaining entries\n- This gives a true sliding window \u2014 the count reflects requests in the last N seconds from now, not from the start of the current minute period; no boundary burst is possible\n- Slightly more expensive than INCR: three commands vs one, wrapped in a Lua script for atomicity\n\n**Token bucket with Lua script**\n- The most accurate rate limiting model \u2014 each client has a bucket of tokens that refills at a fixed rate; each request consumes one token; if the bucket is empty, the request is rejected\n- Implement in a Lua script (`EVAL`) to make the read-compute-write atomic in Redis; or use the Bucket4j library which integrates with Redis for Spring Boot applications\n\nBucket4j with a Redis backend is the recommended production approach for Spring Boot \u2014 it provides token bucket semantics, configures via Spring Cloud Gateway, and handles the Lua atomicity automatically."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is the difference between the token bucket and leaky bucket rate limiting algorithms?",
+        "How would you implement per-IP rate limiting across multiple application instances?",
+        "What are the memory implications of the sliding window ZSet approach at high request volumes?"
+      ],
+      "seo": {
+        "metaTitle": "Redis Rate Limiting in Spring Boot: INCR, Sliding Window, Lua | Interview Guide",
+        "metaDescription": "Implement Redis rate limiting in Java/Spring Boot using fixed window INCR+EXPIRE and sliding window Sorted Set approaches with Lua scripts for atomicity."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Rate limiting with Redis is a classic use case because Redis's atomic operations make counter increments safe under concurrent requests from multiple application instances \u2014 something in-memory counters can't handle in a distributed deployment.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Rate limiting protects backend resources from overload by bounding the number of requests a client can make within a time window. Redis is the natural backing store because its atomic operations, sub-millisecond latency, and shared state across application instances make it ideal for enforcing limits in a distributed deployment. The fixed-window algorithm divides time into discrete buckets. Each bucket is a Redis key whose name encodes the window (e.g., ratelimit:user42:1705300000). INCR atomically bumps the counter and EXPIRE sets the cleanup timer. The critical subtlety is that these two commands must."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The simplest rate limiter uses INCR with EXPIRE, wrapped in a Lua script for atomicity: ``lua -- rate_limit_fixed.lua -- KEYS[1] = rate limit key, ARGV[1] = max requests, ARGV[2] = window in seconds local current = redis.call('INCR', KEYS[1]) if current == 1 then redis.call('EXPIRE', KEYS[1], ARGV[2]) end if current > tonumber(ARGV[1]) then return 0 -- rejected end return 1 -- allowed ` Why Lua?",
+              "Without it, a crash between INCR (which creates the key implicitly) and EXPIRE` leaves a counter without a TTL \u2014 permanently blocking that client.",
+              "Lua executes atomically on the Redis server.",
+              "Boundary burst problem: A user can exhaust the limit at second 59 of window 1, then again at second 0 of window 2, effectively doubling their rate in a 2-second span.",
+              "The sliding window approach (Step 3) fixes this.",
+              "Spring Boot service wrapping the fixed-window."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "INCR with EXPIRE is atomic fixed-window rate limiting \u2014 safe under concurrent requests; set the key with INCR, then EXPIRE on first increment only; SET key 1 EX 60 NX sets atomically on creation Fixed window allows boundary bursts \u2014 clients can send the full limit at the end of one window and the full limit at the start of the next; the effective rate in that span is 2x the stated limit Sliding window with Sorted Set eliminates boundary bursts \u2014 score = timestamp; remove old entries with ZREMRANGEBYSCORE; count remaining with ZCARD; true N-requests-per-window semantics Lua script makes multi-command rate limiting atomic \u2014 EVAL executes a Lua script atomically in Redis; the read-check-increment sequence runs as one unit without race conditions between commands Bucket4j with Redis for Spring Boot \u2014 implements token bucket algorithm with Redis persistence; integrates with Spring Cloud Gateway for API-level rate limiting without custom Lua scripts"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Not making INCR+EXPIRE atomic \u2014 a process crash between the two commands leaves counters without expiry, effectively blocking the key forever."
+          }
+        ],
+        "cap": "Fixed window with INCR The simple approach: INCR ip:192.168.1.1:2024-01:16:30 increments a counter for this IP in this minute; EXPIRE sets the TTL to 60 seconds so the counter resets automatically INC",
+        "familiarity_anchors": [
+          "Redis",
+          "EXPIRE",
+          "Sorted"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is the difference between the token bucket and leaky bucket rate limiting algorithms?",
+          "How would you implement per-IP rate limiting across multiple application instances?",
+          "What are the memory implications of the sliding window ZSet approach at high request volumes?"
+        ]
+      }
+    },
+    {
+      "id": "redis-010",
+      "slug": "redis-cluster-vs-sentinel",
+      "question": "What is the difference between Redis Cluster and Redis Sentinel, and when do you use each?",
+      "title": "Redis Cluster vs Redis Sentinel: High Availability and Horizontal Scaling",
+      "direct_answer": "Redis Sentinel provides high availability for a single Redis dataset through automatic failover: it monitors a primary and replicas, promoting a replica if the primary fails. Redis Cluster provides both high availability and horizontal scaling by sharding the keyspace across multiple primary nodes (each with its own replicas), supporting datasets larger than a single node's memory and distributing read/write load. Use Sentinel when one node has enough capacity; use Cluster when you need to scale beyond a single node.",
+      "layout_type": "comparison-arena",
+      "interviewer_intent": {
+        "testing": "Understanding of the architectural difference between HA-only vs HA-plus-sharding, and awareness of Cluster's limitations like multi-key operation restrictions.",
+        "common_mistake": "Thinking Sentinel provides sharding or that Cluster replaces Sentinel \u2014 Cluster has its own built-in failover, so you do not need Sentinel with Cluster.",
+        "to_stand_out": "Mention that Redis Cluster uses consistent hashing with 16,384 hash slots, discuss the limitations of multi-key operations (keys must be in the same slot unless using hash tags), and mention that Spring Data Redis supports both via LettuceConnectionFactory."
+      },
+      "company_tags": [
+        "Twitter",
+        "GitHub",
+        "Alibaba",
+        "Shopify",
+        "Booking.com"
+      ],
+      "reading_time_minutes": 4,
+      "last_updated": "2025-01-15",
+      "difficulty": "medium",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "High availability vs horizontal scaling in Redis",
+            "content": "Redis Sentinel and Redis Cluster solve overlapping but distinct problems, and conflating them is a common interview mistake. Understanding when each is appropriate requires grasping the architectural difference between high availability (keeping a single dataset available during node failures) and horizontal scaling (distributing a dataset across multiple nodes to exceed single-node capacity).\n\nSentinel is a set of monitoring processes that run alongside your Redis deployment. It continuously health-checks the primary, and when a quorum of Sentinel instances agrees the primary is unreachable, it promotes one of the replicas to primary and reconfigures the remaining replicas to follow the new primary. The application connects via Sentinel-aware clients (like Lettuce in Spring) that query Sentinel for the current primary address and reconnect automatically after failover. The dataset itself remains bounded by a single primary's memory \u2014 Sentinel provides no sharding.\n\nRedis Cluster shards the 16,384-slot keyspace across multiple primary nodes, each with its own set of replicas. When a primary fails, its replicas participate in an election and the winner takes over the failed primary's hash slots \u2014 no external Sentinel process is needed. The total dataset capacity equals the sum of all primaries' memory, and write throughput scales with the number of shards. However, multi-key commands (`MGET`, `MSET`, `SUNION`) only work when all involved keys hash to the same slot, because a single command cannot span nodes. Redis addresses this with hash tags: wrapping a substring in curly braces (`{user:42}:profile`) forces Redis to hash only the tagged portion, co-locating related keys on the same shard.\n\nIn Spring Data Redis, the switch between modes is a configuration change: `RedisSentinelConfiguration` vs `RedisClusterConfiguration` on the `LettuceConnectionFactory`. Application code using `RedisTemplate` or `@Cacheable` remains unchanged, though Cluster deployments must be aware of the hash-slot constraint when designing key schemas."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Sentinel vs Cluster Trade-offs",
+            "content": "| Aspect | Redis Sentinel | Redis Cluster |\n|---|---|---|\n| **Purpose** | High availability (automatic failover) | HA + horizontal scaling (sharding) |\n| **Data distribution** | Single primary holds entire dataset | Sharded across N primaries via 16,384 hash slots |\n| **Max dataset size** | Limited to one node's RAM | Sum of all primary nodes' RAM |\n| **Write throughput** | Single primary bottleneck | Scales with number of primaries |\n| **Failover mechanism** | External Sentinel processes monitor + promote | Built-in: replicas elect a new primary per shard |\n| **Multi-key operations** | Full support (single node) | Only if all keys hash to the same slot (use hash tags) |\n| **Lua scripts** | Full access to all keys | Keys must be in the same slot |\n| **Transactions (MULTI)** | Full support | Same-slot keys only |\n| **Client complexity** | Sentinel-aware client queries master address | Cluster-aware client handles MOVED/ASK redirections |\n| **Minimum nodes** | 1 primary + 1 replica + 3 Sentinels | 3 primaries + 3 replicas (6 nodes minimum) |\n| **Spring config** | `spring.data.redis.sentinel.*` | `spring.data.redis.cluster.*` |\n| **Operational complexity** | Low \u2014 familiar primary-replica model | Medium \u2014 resharding, slot migration, redirect handling |\n| **Best for** | Datasets < 50 GB, single-primary workloads | Large datasets, write-heavy workloads needing horizontal scale |"
+          },
+          {
+            "type": "code_example",
+            "title": "Spring Boot Configuration for Both",
+            "content": "Spring Boot configuration for Sentinel and Cluster:\n\n**Sentinel configuration (`application.yml`):**\n```yaml\nspring:\n  data:\n    redis:\n      sentinel:\n        master: mymaster\n        nodes:\n          - sentinel-1:26379\n          - sentinel-2:26379\n          - sentinel-3:26379\n      password: ${REDIS_PASSWORD}\n      lettuce:\n        pool:\n          max-active: 16\n```\n\n**Cluster configuration (`application.yml`):**\n```yaml\nspring:\n  data:\n    redis:\n      cluster:\n        nodes:\n          - redis-1:6379\n          - redis-2:6379\n          - redis-3:6379\n          - redis-4:6379\n          - redis-5:6379\n          - redis-6:6379\n        max-redirects: 3   # Max MOVED/ASK redirections per command\n      password: ${REDIS_PASSWORD}\n      lettuce:\n        pool:\n          max-active: 16\n```\n\nBoth modes use the same `LettuceConnectionFactory` \u2014 your `RedisTemplate` and `@Cacheable` code does not change. The Lettuce driver handles Sentinel master discovery and Cluster slot routing transparently.\n\n```java\n// Hash tags force related keys to the same Cluster slot\nString profileKey = \"{user:42}:profile\";\nString settingsKey = \"{user:42}:settings\";\n// Both keys hash on \"user:42\" \u2192 guaranteed same slot \u2192 MGET works\nredisTemplate.opsForValue().multiGet(List.of(profileKey, settingsKey));\n```"
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Sentinel: HA for a single dataset** \u2014 automatic failover without partitioning; all data on one primary + replicas; requires three Sentinel processes for quorum; dataset limited to one node's RAM\n- **Cluster: partitioned dataset + HA** \u2014 16,384 hash slots distributed across N primaries; each primary has replicas; dataset grows with node count; total capacity exceeds one node's RAM\n- **Cluster restricts multi-key commands** \u2014 `MGET`, `SUNIONSTORE` only work when all keys are in the same hash slot; use `{hashtag}` notation in key names to force co-location of related keys\n- **Sentinel is simpler for most applications** \u2014 if the dataset fits in one node's RAM, Sentinel provides failover without the operational complexity of hash slot management and cross-slot restrictions\n- **Spring Boot configuration** \u2014 `spring.redis.sentinel.*` for Sentinel mode; `spring.redis.cluster.nodes` for Cluster; Lettuce (the default Redis client) supports both transparently"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to explain this in an interview",
+            "content": "Redis Sentinel and Redis Cluster solve different problems. Sentinel provides high availability for a single dataset; Cluster provides both high availability and horizontal data partitioning across multiple nodes.\n\n**Redis Sentinel \u2014 HA for a single dataset**\n- Sentinel monitors a primary-replica set and performs automatic failover \u2014 if the primary becomes unreachable, Sentinel promotes the replica with the most current data and updates clients about the new primary address\n- Sentinel itself runs on separate processes (typically three) to avoid a single point of failure in the monitoring layer; a majority of Sentinels must agree before promoting a replica\n- All data lives on one primary (plus replicas) \u2014 Sentinel doesn't partition data, it just ensures the primary is always available; dataset size is limited by one node's RAM\n\n**Redis Cluster \u2014 data partitioned across N primaries**\n- Cluster splits the keyspace into 16,384 hash slots and distributes them across multiple primary nodes \u2014 which means the total dataset size can exceed one node's RAM because different keys live on different nodes\n- Each primary has its own replica(s) for failover within its slot range \u2014 losing a primary promotes its replica automatically without external Sentinel processes\n- Cluster introduces key restrictions: multi-key commands (`MGET`, `SUNIONSTORE`) only work when all keys map to the same hash slot; use `{hashtag}` in key names to force co-location of related keys\n\n**Which to choose**\n- Use Sentinel when your dataset fits on one Redis instance but you need failover \u2014 the operational simplicity is significant and most Spring Boot applications don't need to partition their Redis data\n- Use Cluster when your dataset is too large for one node's RAM, or write throughput exceeds what one primary can handle\n- In Spring Boot: configure `spring.redis.sentinel.master` and `spring.redis.sentinel.nodes` for Sentinel; `spring.redis.cluster.nodes` for Cluster"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Redis Cluster handle the case when a primary fails and has no available replicas?",
+        "What are hash tags in Redis Cluster and when do you need them?",
+        "Can you use Redis Cluster with Spring's @Cacheable annotation without any code changes?"
+      ],
+      "seo": {
+        "metaTitle": "Redis Cluster vs Sentinel: HA and Sharding Explained | Java Interview Guide",
+        "metaDescription": "Compare Redis Cluster and Redis Sentinel for high availability and horizontal scaling, with Spring Boot configuration examples and hash slot explanation."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "Redis Sentinel and Redis Cluster solve different problems.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "Redis Sentinel and Redis Cluster solve overlapping but distinct problems, and conflating them is a common interview mistake. Understanding when each is appropriate requires grasping the architectural difference between high availability (keeping a single dataset available during node failures) and horizontal scaling (distributing a dataset across multiple nodes to exceed single-node capacity). Sentinel is a set of monitoring processes that run alongside your Redis deployment. It continuously health-checks the primary."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "| Aspect | Redis Sentinel | Redis Cluster | |---|---|---| | Purpose | High availability (automatic failover) | HA + horizontal scaling (sharding) | | Data distribution | Single primary holds entire dataset | Sharded across N primaries via 16,384 hash slots | | Max dataset size | Limited to one node's RAM | Sum of all primary nodes' RAM | | Write throughput | Single primary bottleneck | Scales with number of primaries | | Failover mechanism | External Sentinel processes monitor + promote | Built-in: replicas elect a new primary per shard | | Multi-key operations | Full support (single node) | Only if all keys hash to the same slot (use hash tags) | | Lua scripts | Full access to all keys | Keys must be in the same slot | | Transactions (MULTI) | Full support | Same-slot keys only | | Client complexity | Sentinel-aware client queries master address | Cluster-aware client handles MOVED/ASK redirections | | Minimum nodes | 1 primary + 1 replica + 3 Sentinels | 3 primaries + 3 replicas (6 nodes minimum) | | Spring config | spring",
+              "| | Operational complexity | Low \u2014 familiar primary-replica model | Medium \u2014 resharding, slot migration, redirect handling | | Best for | Datasets < 50 GB, single-primary workloads | Large datasets, write-heavy workloads needing horizontal scale |"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Redis Sentinel and Redis Cluster solve overlapping but distinct problems, and conflating them is a common interview mistake. Understanding when each is appropriate requires grasping the architectural difference between high availability (keeping a single dataset available during node failures) and horizontal scaling (distributing a dataset across multiple nodes to exceed single-node capacity). Sentinel is a set of monitoring processes that run alongside your Redis deployment. It continuously health-checks the primary, and when a quorum of Sentinel instances agrees the primary is unreachable, it promotes one of the replicas to primary."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "Spring Boot configuration for Sentinel and Cluster: Sentinel configuration (application.yml): ``yaml spring: data: redis: sentinel: master: mymaster nodes: sentinel-1:26379 sentinel-2:26379 sentinel-3:26379 password: ${REDIS_PASSWORD} lettuce: pool: max-active: 16 ` Cluster configuration (application.yml): `yaml spring: data: redis: cluster: nodes: redis-1:6379 redis-2:6379 redis-3:6379 redis-4:6379 redis-5:6379 redis-6:6379 max-redirects: 3 # Max MOVED/ASK redirections per command password: ${REDIS_PASSWORD} lettuce: pool: max-active: 16 ` Both modes."
+          }
+        ],
+        "cap": "Redis Sentinel \u2014 HA for a single dataset Sentinel monitors a primary-replica set and performs automatic failover \u2014 if the primary becomes unreachable, Sentinel promotes the replica with the most curre",
+        "familiarity_anchors": [
+          "Redis",
+          "Sentinel",
+          "Cluster"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Redis Cluster handle the case when a primary fails and has no available replicas?",
+          "What are hash tags in Redis Cluster and when do you need them?",
+          "Can you use Redis Cluster with Spring's @Cacheable annotation without any code changes?"
+        ]
+      }
+    }
+  ]
+}

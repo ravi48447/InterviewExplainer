@@ -1,0 +1,520 @@
+{
+  "topic": "Scenario Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "sd-008",
+      "slug": "design-leaderboard-system",
+      "question": "Design a real-time leaderboard for a gaming platform with 10 million users.",
+      "title": "Design a Real-Time Gaming Leaderboard",
+      "direct_answer": "Use Redis Sorted Sets (ZADD/ZRANK/ZRANGE) as the leaderboard data structure. ZADD updates a score atomically; ZRANK gives a player's rank in O(log N). For 10M users, Redis handles this in memory with sub-millisecond operations.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 6,
+      "last_updated": "2026-04-11",
+      "interviewer_intent": {
+        "testing": "Redis sorted set knowledge as a purpose-built leaderboard data structure",
+        "common_mistake": "Using a relational database with ORDER BY rank DESC \u2014 correct but can't handle thousands of concurrent score updates efficiently",
+        "to_stand_out": "Discuss partitioned leaderboards for scale (top global, per-region, per-friend-group) and the time-windowed leaderboard pattern"
+      },
+      "company_tags": [
+        "Riot Games",
+        "Blizzard",
+        "Steam",
+        "Google Play"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Why Relational Databases Can't Do Real-Time Rankings at Scale",
+            "content": "A leaderboard needs to answer one question fast: **what rank is this user?** With a relational database, that's `SELECT COUNT(*) FROM scores WHERE score > ?` \u2014 a full table scan or index scan across millions of rows. At 10 million users with thousands of score updates per second, this query becomes the bottleneck. Every score update potentially changes the rank of every other user.\n\nThe traditional SQL approach \u2014 `ORDER BY score DESC LIMIT 100` \u2014 works for displaying the top 100. But answering \"what is user X's rank among 10 million users?\" requires counting all users with higher scores, which is O(N). For a gaming platform processing 10,000 score updates per second, this is computationally prohibitive.\n\n**Redis Sorted Sets** solve this with a data structure purpose-built for ranked data. Internally a skip list + hash table, sorted sets provide **O(log N) rank lookups and score updates** \u2014 for 10 million members, that's ~23 operations per lookup instead of 10 million. The rank of any member is computed in under 1ms."
+          },
+          {
+            "type": "step",
+            "title": "Redis Sorted Sets: The Data Structure Behind Every Leaderboard",
+            "content": "A Redis sorted set (`ZSET`) stores members with associated scores, automatically maintaining sort order. The **key operations** that make leaderboards efficient are built into the data structure itself.\n\n`ZADD` adds or updates a score \u2014 **O(log N)** time complexity. `ZREVRANK` returns a member's rank (0-indexed, highest score first) \u2014 also O(log N). `ZREVRANGE` returns the top K members with scores \u2014 O(log N + K). `ZSCORE` returns a member's score \u2014 O(1). All operations that a leaderboard needs, all sub-millisecond for millions of members.\n\nThe implementation for a Spring Boot gaming platform uses these operations directly through the **Redis template**. The service wraps the sorted set commands into domain methods that map naturally to leaderboard requirements \u2014 updating scores, querying ranks, fetching top-N, and the critical \"around me\" view.\n\n```java\n@Service\npublic class LeaderboardService {\n    private final StringRedisTemplate redis;\n    private static final String KEY = \"leaderboard:global\";\n\n    public void updateScore(String userId, double score) {\n        redis.opsForZSet().add(KEY, userId, score);\n    }\n\n    public Long getRank(String userId) {\n        return redis.opsForZSet().reverseRank(KEY, userId);\n    }\n\n    public Set<ZSetOperations.TypedTuple<String>> getTopN(int n) {\n        return redis.opsForZSet()\n            .reverseRangeWithScores(KEY, 0, n - 1);\n    }\n}\n```\n\nThe `getAroundMe` feature is the non-obvious capability that interviewers look for \u2014 showing a player their rank with the 5 players above and below them. This is implemented as a single `ZREVRANGE` call with **computed offsets** from the user's current rank, making it O(log N) rather than requiring a separate query. The sorted set maintains order on every insert, so rank computation never requires a full re-sort."
+          },
+          {
+            "type": "step",
+            "title": "Scaling Beyond One Sorted Set: Partitioned and Time-Windowed Leaderboards",
+            "content": "A single Redis sorted set holds up to **~2^32 members** and works well for 10 million users. But production leaderboards need multiple dimensions: global, per-region, per-friend-group, daily, weekly, and all-time.\n\n**Time-windowed leaderboards** use separate keys per period: `leaderboard:daily:2026-04-13`, `leaderboard:weekly:2026-W16`. Score updates write to all applicable keys simultaneously. At the end of each period, archive the key and create a new one. Daily leaderboards auto-expire with Redis TTL \u2014 set `EXPIRE leaderboard:daily:2026-04-12 172800` (48 hours) to keep yesterday's results accessible briefly.\n\n**Per-group leaderboards** (friends, region, guild) use separate sorted sets per group. A user's score update fans out to their group keys. For friend-group leaderboards, the fan-out is bounded by the number of friends (~150 Dunbar's number). For regional leaderboards, partition by region ID.\n\nThe **memory math**: a sorted set with 10M members, each member ID ~20 bytes + 8 bytes score + skip list overhead \u2248 **~500 MB**. Ten dimensional leaderboards = ~5 GB. Well within a single Redis instance's capacity (modern instances support 64+ GB), but monitor memory with `INFO memory` and set `maxmemory-policy` to reject writes rather than evict leaderboard data.\n\nFor rankings beyond Redis capacity (billions of users), **partitioned leaderboards with merge** work: shard users across multiple sorted sets by hash, query each shard for top-K, merge results. This is the approach mobile games with hundreds of millions of players use."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Redis Sorted Set with ZADD/ZREVRANK** \u2014 O(log N) writes and O(log N) rank lookups.\n- **Write-through from game server to Redis** \u2014 game server updates score immediately on Redis; the database gets an async write via Kafka.\n- **Batch database sync every 60 seconds** \u2014 writing to PostgreSQL on every score event creates unnecessary write amplification.\n- **Sparse top-100 + user's neighborhood** \u2014 most users care about global top-100 and their rank \u00b110.\n- **Pagination via ZREVRANGE with offset/count** \u2014 O(log N + M) where M is page size; Redis handles millions of ranked entries efficiently."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A real-time leaderboard for 10 million players requires ranking updates to appear within seconds of score changes. Relational databases with `ORDER BY score DESC` can't handle this \u2014 at this scale, a ranking query requires a full table scan or index scan over millions of rows on every update.\n\n**The Redis Sorted Set as the core data structure:**\n- Redis Sorted Set (ZSET) is the right answer: ZADD updates or inserts a score in O(log N); ZREVRANK returns a player's rank in O(log N); ZREVRANGE returns the top-N players in O(log N + N)\n- Atomic operations prevent race conditions when two players earn the same score simultaneously; Redis single-threaded command processing ensures consistency without application-level locking\n- For 10 million players, the sorted set occupies roughly 800MB\u20131.2GB of Redis memory \u2014 within a single instance's capacity\n\n**The write path:**\n- The game server writes the score directly to Redis (write-through) on every score event; this keeps the leaderboard always fresh\n- The database gets an asynchronous write via Kafka every 60 seconds per player; batch updates reduce database write load by 60\u00d7 without affecting the real-time leaderboard that users see\n\n**What to show each user:**\n- The global top-100 list is common to all users \u2014 serve it from a cached Redis ZREVRANGE call refreshed every 5 seconds\n- Each user's own rank and neighborhood (\u00b110 positions): two Redis calls \u2014 ZREVRANK for rank, ZREVRANGE with offset for neighbors; combine in a single pipeline call for sub-millisecond response\n- Avoid returning more than 1,000 entries per request; pagination with ZREVRANGE(offset, count) is O(log N + M) where M is page size\n\nI recommend Redis Sorted Set as the primary real-time store, async database sync for durability, and the sparse top-100 plus user neighborhood pattern to minimize the data returned per API call."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement a friend leaderboard (rank among my friends)?",
+        "How do you handle time-windowed leaderboards (weekly, monthly)?",
+        "What happens if Redis goes down \u2014 how do you restore the leaderboard?"
+      ],
+      "seo": {
+        "metaTitle": "Design Real-Time Leaderboard Redis \u2014 Java System Design Interview",
+        "metaDescription": "Real-time leaderboard design with Redis Sorted Sets. ZADD, ZRANK, ZRANGE commands, time-windowed leaderboards, and nearby-player ranking."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "A real-time leaderboard for 10 million players requires ranking updates to appear within seconds of score changes.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "A leaderboard needs to answer one question fast: what rank is this user? With a relational database, that's SELECT COUNT(*) FROM scores WHERE score > ? \u2014 a full table scan or index scan across millions of rows. At 10 million users with thousands of score updates per second, this query becomes the bottleneck. Every score update potentially changes the rank of every other user. The traditional SQL approach \u2014 ORDER BY score DESC LIMIT 100 \u2014 works for displaying the top 100. But answering \"what is user X's rank among 10 million users?\" requires counting all users with higher scores, which is O(N). For a gaming platform processing 10,000 score updates per second, this is computationally prohibitive. Redis Sorted."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "A leaderboard needs to answer one question fast: what rank is this user? With a relational database, that's SELECT COUNT(*) FROM scores WHERE score > ? \u2014 a full table scan or index scan across millions of rows. At 10 million users with thousands of score updates per second, this query becomes the bottleneck. Every score update potentially changes the rank of every other user. The traditional SQL approach \u2014 ORDER BY score DESC LIMIT 100 \u2014 works for displaying the top 100. But answering \"what is user X's rank among 10 million users?\" requires counting all users with higher scores, which is O(N). For a gaming platform processing 10,000."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "A Redis sorted set (ZSET) stores members with associated scores, automatically maintaining sort order",
+              "The key operations that make leaderboards efficient are built into the data structure itself",
+              "ZADD adds or updates a score \u2014 O(log N) time complexity",
+              "ZREVRANK returns a member's rank (0-indexed, highest score first) \u2014 also O(log N)",
+              "ZREVRANGE returns the top K members with scores \u2014 O(log N + K)"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "A leaderboard needs to answer one question fast: what rank is this user? With a relational database, that's SELECT COUNT(*) FROM scores WHERE score > ? \u2014 a full table scan or index scan across millions of rows. At 10 million users with thousands of score updates per second, this query becomes the bottleneck. Every score update potentially changes the rank of every other user. The traditional SQL approach \u2014 ORDER BY score DESC LIMIT 100 \u2014 works for displaying the top 100. But answering \"what is user X's rank among 10 million users?\" requires counting all users with higher scores, which is O(N). For a gaming platform processing 10,000 score updates per second, this is computationally prohibitive. Redis Sorted."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "A leaderboard needs to answer one question fast: what rank is this user? With a relational database, that's SELECT COUNT(*) FROM scores WHERE score > ? \u2014 a full table scan or index scan across millions of rows. At 10 million users with thousands of score updates per second, this query becomes the bottleneck. Every score update potentially changes the rank of every other user. The traditional SQL approach \u2014 ORDER BY score DESC LIMIT 100 \u2014 works for displaying the top 100. But answering \"what is user X's rank among 10 million users?\" requires counting all users with higher scores, which is O(N). For a gaming platform processing 10,000 score updates per second, this is computationally prohibitive. Redis Sorted."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Using a relational database with ORDER BY rank DESC \u2014 correct but can't handle thousands of concurrent score updates efficiently"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Redis Sorted Set with ZADD/ZREVRANK \u2014 O(log N) writes and O(log N) rank lookups. Write-through from game server to Redis \u2014 game server updates score immediately on Redis; the database gets an async write via Kafka. Batch database sync every 60 seconds \u2014 writing to PostgreSQL on every score event creates unnecessary write amplification. Sparse top-100 + user's neighborhood \u2014 most users care about global top-100 and their rank \u00b110. Pagination via ZREVRANGE with offset/count \u2014 O(log N + M) where M is page size."
+          }
+        ],
+        "cap": "The Redis Sorted Set as the core data structure: Redis Sorted Set (ZSET) is the right answer: ZADD updates or inserts a score in O(log N); ZREVRANK returns a player's rank in O(log N); ZREVRANGE.",
+        "familiarity_anchors": [
+          "Redis",
+          "Sorted",
+          "ZRANK"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement a friend leaderboard (rank among my friends)?",
+          "How do you handle time-windowed leaderboards (weekly, monthly)?",
+          "What happens if Redis goes down \u2014 how do you restore the leaderboard?"
+        ]
+      }
+    },
+    {
+      "id": "sdh-003",
+      "slug": "design-file-storage-service",
+      "question": "Design a file storage and synchronization service like Google Drive or Dropbox.",
+      "title": "Design a File Storage Service (Google Drive/Dropbox)",
+      "direct_answer": "Split files into fixed-size chunks (4MB), deduplicate with content-hash (SHA-256), and store chunks in object storage (S3). A metadata service in PostgreSQL tracks file hierarchy, versions, and chunk manifests. Sync uses a change log with server-assigned sequence numbers \u2014 clients poll for changes since their last checkpoint.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Chunked file storage, deduplication, sync protocol design, conflict resolution, and metadata vs blob separation",
+        "common_mistake": "Storing entire files as single blobs \u2014 uploading a 2GB file for a 1-byte change wastes bandwidth and makes deduplication impossible",
+        "to_stand_out": "Explain content-defined chunking (Rabin fingerprinting) vs fixed-size chunking, how to handle edit conflicts with operational transforms or last-writer-wins, and resumable uploads with chunk-level progress"
+      },
+      "company_tags": [
+        "Google",
+        "Dropbox",
+        "Microsoft",
+        "Box"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Bandwidth Problem That Makes Chunking Non-Negotiable",
+            "content": "Consider a service with **500 million users**, 100 million daily active, each storing ~2GB on average \u2014 **1 exabyte (1,000 PB)** total. Daily uploads: 50 million files with an average size of 500KB \u2192 **25TB ingested daily**, roughly **580 uploads/sec** average with peaks at 5\u201310\u00d7 during business hours.\n\nThe most common design mistake is treating files as **monolithic blobs**. If a user edits a single paragraph in a 100MB document, the naive system re-uploads the entire 100MB. Multiply by millions of users making small edits throughout the day, and the bandwidth waste becomes staggering. Worse, deduplication becomes impossible \u2014 two users with the same file store it twice.\n\nThe foundational design principle is **separating metadata from file content**. Metadata (file names, paths, permissions, version history, chunk manifests) lives in PostgreSQL where ACID transactions ensure correctness for operations like rename, move, and share. File content is split into **chunks**, each content-hashed with SHA-256, and stored in S3. Identical chunks \u2014 across versions or across users \u2014 are stored exactly once. This separation lets each layer scale independently: PostgreSQL handles complex relational queries, S3 handles petabyte-scale blob storage with 11 nines of durability."
+          },
+          {
+            "type": "step",
+            "title": "Chunking and Deduplication: How One-Byte Edits Avoid Full Re-uploads",
+            "content": "The upload flow starts on the client. The client splits the file into **4MB chunks**, computes a **SHA-256 hash** of each chunk, and sends the hash list to the server. The server checks which hashes already exist in storage and responds with the subset the client needs to upload. Only **novel chunks** travel over the network.\n\nThis hash-first protocol achieves two types of deduplication simultaneously. **Same-user dedup**: when a user saves a new version of a document, most chunks are identical to the previous version \u2014 only changed chunks upload. **Cross-user dedup**: when two users upload the same file (common in corporate environments), the second upload discovers all chunks already exist and completes instantly.\n\n**Fixed-size chunking** (every 4MB boundary) is the simple starting point. Its weakness: inserting a byte at the beginning shifts every subsequent boundary, making all chunks appear new. **Content-defined chunking** (Rabin fingerprinting) picks boundaries based on content patterns, so insertions only affect chunks immediately around the edit. Dropbox uses content-defined chunking in production.\n\nThe upload service implements the dedup check and storage.\n\n```java\n@Service\npublic class ChunkUploadService {\n    private final S3Client s3;\n    private final ChunkRepository chunkRepo;\n\n    public List<String> findMissingChunks(List<String> clientHashes) {\n        Set<String> existing = chunkRepo.findExistingHashes(clientHashes);\n        return clientHashes.stream()\n            .filter(h -> !existing.contains(h))\n            .toList();\n    }\n\n    public void storeChunk(String sha256, byte[] data) {\n        if (chunkRepo.existsByHash(sha256)) return;  // dedup\n        s3.putObject(\"chunks-bucket\", sha256, data);\n        chunkRepo.save(new ChunkRecord(sha256, data.length));\n    }\n}\n```\n\nDropbox reported approximately **25% storage savings** from cross-user deduplication alone, with significant additional savings from version-level dedup within individual users' file histories."
+          },
+          {
+            "type": "step",
+            "title": "Metadata Service: ACID Where It Matters",
+            "content": "File metadata requires **transactional consistency** that object storage cannot provide. Renaming a folder must atomically update all children's paths. Moving a file between folders must atomically update the parent reference. Sharing permissions must be checked on every access. PostgreSQL handles all of these naturally.\n\nThe schema models files and folders as a tree with parent references.\n\n```sql\nCREATE TABLE files (\n    file_id        BIGINT PRIMARY KEY,\n    user_id        BIGINT NOT NULL,\n    parent_id      BIGINT REFERENCES files(file_id),\n    name           VARCHAR(255) NOT NULL,\n    is_folder      BOOLEAN DEFAULT FALSE,\n    latest_version INT DEFAULT 1,\n    size_bytes     BIGINT,\n    content_hash   VARCHAR(64),\n    created_at     TIMESTAMPTZ,\n    updated_at     TIMESTAMPTZ,\n    is_deleted     BOOLEAN DEFAULT FALSE,\n    UNIQUE (user_id, parent_id, name)\n);\n\nCREATE TABLE file_versions (\n    file_id      BIGINT REFERENCES files(file_id),\n    version      INT,\n    chunk_hashes JSONB,\n    size_bytes   BIGINT,\n    created_by   BIGINT,\n    created_at   TIMESTAMPTZ,\n    PRIMARY KEY (file_id, version)\n);\n```\n\nEvery save creates a new `file_versions` row with the updated chunk manifest. The `files` table always points to the latest version via `latest_version`. Old versions are retained for 30 days \u2014 users can restore previous versions within that window.\n\n**Garbage collection** uses reference counting. Each chunk tracks how many file versions reference it via a `ref_count` column. When a version expires or is deleted, referenced chunks get their counts decremented. A background GC job periodically deletes chunks with `ref_count = 0` from S3, reclaiming storage without risking data loss for active versions.\n\nSharding strategy: partition by `user_id` so a single user's entire file tree lives on one shard. Cross-user sharing uses a `shared_access` table mapping `(file_id, grantee_user_id, permission_level)` that can reside on any shard since sharing lookups are infrequent compared to tree traversals."
+          },
+          {
+            "type": "step",
+            "title": "Sync Protocol: Change Logs and Conflict Resolution",
+            "content": "The sync problem boils down to: \"what changed since I last checked?\" Dropbox solves this with a **change log** \u2014 a journal of every file mutation stamped with a globally monotonic sequence number.\n\nEach client remembers the sequence number of the last change it processed. On sync, it requests `GET /changes?cursor=1001` and receives all mutations since then. For real-time responsiveness, combine **long-polling** (or WebSocket push) for immediate notification with periodic full sync as a consistency safety net.\n\n```\nChange Log:\nseq=1001  user:42  MODIFY  /docs/report.pdf   v3\nseq=1002  user:42  CREATE  /photos/beach.jpg   v1\nseq=1003  user:42  DELETE  /tmp/draft.txt\nseq=1004  user:42  MOVE    /docs/old.pdf \u2192 /archive/old.pdf\n```\n\n**Conflict resolution** arises when two devices edit the same file while both are offline. The Dropbox model handles this pragmatically:\n\n1. Device A edits `report.pdf` (based on version 3) and syncs first \u2192 server accepts, creates version 4\n2. Device B also edited `report.pdf` (based on version 3) and syncs later \u2192 server detects base version 3 \u2260 current version 4\n3. Server saves B's version as a **conflict copy**: `report (B's conflicted copy).pdf`\n4. The user manually chooses which version to keep\n\nThis is deliberately simple. Google Docs uses **Operational Transform (OT)** for real-time collaborative editing within a single document, but for a file-level storage service where files include binary formats (images, videos, executables), automatic merging is impossible. Conflict copies are the correct general-purpose approach \u2014 predictable, auditable, and safe for any file type."
+          },
+          {
+            "type": "step",
+            "title": "Resumable Uploads, Security, and Performance Optimization",
+            "content": "Large files spanning gigabytes cannot rely on a single HTTP connection surviving from start to finish. **Resumable uploads** let clients recover from interruptions without restarting. The client uploads chunks independently, each identified by its SHA-256 hash. If a connection drops mid-upload, the client asks the server which chunks it already received and uploads only the remaining ones. Google's resumable upload protocol uses this same chunk-level tracking approach.\n\n**Security** layers protect data at every stage. Chunks are encrypted at rest in S3 using **AES-256 server-side encryption**. All transfers use TLS 1.3. For users requiring zero-knowledge storage, **client-side encryption** lets the user hold the key \u2014 the server stores only ciphertext. The trade-off: server-side search and preview generation become impossible with client-side encryption, since the server cannot read what it stores.\n\n**Performance optimizations** improve the daily experience for active users. The client maintains a **local cache** of recently accessed chunks, reassembling files locally and downloading only missing chunks. For frequently shared files (company templates, team documents), serve chunks from a **CDN** to reduce origin load and improve download speed. Text-based files benefit from gzip compression before upload; already-compressed formats (JPEG, ZIP, MP4) should skip compression.\n\n**Quota management** tracks each user's storage as `SUM(size_bytes)` across all active file versions. When two users share identical chunks, each user's quota still counts those chunks individually. The alternative \u2014 shared-chunk quota splitting \u2014 creates confusing billing when one user deletes their copy. Per-user counting is simpler and more predictable for customer support."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Chunked upload with resumable sessions** \u2014 split files into 4MB chunks; upload each with a session ID.\n- **Content-addressable storage with SHA-256 deduplication** \u2014 hash each chunk before upload; if the hash exists in the store, skip upload entirely.\n- **Delta sync sends only changed blocks** \u2014 compute block-level diffs on the client; send only modified 4MB blocks rather than the whole file.\n- **S3 for blob storage, metadata in PostgreSQL** \u2014 files as objects in S3; file metadata (path, size, version, owner) in a relational database.\n- **Conflict resolution: last-write-wins with version vectors** \u2014 track vector clocks per device; on conflict, keep both versions and present to user."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A file storage and sync service at Google Drive scale handles 500 million users storing roughly 2GB each on average \u2014 1 exabyte of total storage. The design must handle large file uploads reliably, sync changes across multiple devices efficiently, and serve files with low latency globally.\n\n**Upload architecture:**\n- Split files into 4MB chunks before upload; each chunk uploads independently with a resumable session ID; on network failure, resume from the last successful chunk without re-uploading what the server received\n- Content-addressable storage: compute SHA-256 of each chunk before upload; if the hash already exists in the store (another user uploaded the same file), skip the upload entirely; at Dropbox scale this eliminates 30\u201340% of upload bandwidth through cross-user deduplication\n- S3 (or GCS) for blob storage; the database stores only metadata \u2014 file path, owner, chunk hashes, version history, sharing permissions\n\n**Delta sync \u2014 efficient for large files:**\n- Instead of uploading the entire file on every change, compute block-level diffs on the client; send only the modified 4MB blocks\n- For a 2GB virtual machine image where 50MB changed, delta sync sends 50MB instead of 2GB \u2014 a 40\u00d7 reduction\n- The client maintains a local block hash map; the sync service sends the set of changed block hashes; the client uploads only those blocks\n\n**Conflict resolution:**\n- When two devices edit the same file simultaneously, a conflict occurs; most services implement last-write-wins as the default with conflict copies preserved\n- Version vectors track which device wrote which version; on conflict, both versions are kept and presented to the user for resolution\n- For collaborative documents (like Google Docs), Operational Transformation or CRDT-based algorithms enable real-time concurrent editing without conflicts\n\nI recommend S3 for blob storage, content-addressable chunk deduplication, delta sync for frequently modified large files, and last-write-wins with conflict copy preservation as the default conflict resolution strategy."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you handle sharing a folder with thousands of users and keeping permissions consistent?",
+        "How does content-defined chunking (Rabin fingerprinting) improve over fixed-size chunking?",
+        "How would you implement real-time collaborative editing on top of this file storage system?"
+      ],
+      "seo": {
+        "metaTitle": "Design File Storage Google Drive Dropbox \u2014 Java System Design Interview",
+        "metaDescription": "File storage system design with chunked uploads, SHA-256 deduplication, metadata service, change log sync protocol, and conflict resolution."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "A file storage and sync service at Google Drive scale handles 500 million users storing roughly 2GB each on average \u2014 1 exabyte of total storage.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Consider a service with 500 million users, 100 million daily active, each storing ~2GB on average \u2014 1 exabyte (1,000 PB) total. Daily uploads: 50 million files with an average size of 500KB \u2192 25TB ingested daily, roughly 580 uploads/sec average with peaks at 5\u201310\u00d7 during business hours. The most common design mistake is treating files as monolithic blobs. If a user edits a single paragraph in a 100MB document, the naive system re-uploads the entire 100MB. Multiply by millions of users making small edits throughout the day, and the bandwidth waste becomes staggering. Worse, deduplication becomes impossible \u2014 two users with the same file store it twice. The foundational design principle is separating metadata from file content. Metadata (file."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Consider a service with 500 million users, 100 million daily active, each storing ~2GB on average \u2014 1 exabyte (1,000 PB) total. Daily uploads: 50 million files with an average size of 500KB \u2192 25TB ingested daily, roughly 580 uploads/sec average with peaks at 5\u201310\u00d7 during business hours. The most common design mistake is treating files as monolithic blobs. If a user edits a single paragraph in a 100MB document, the naive system re-uploads the entire 100MB. Multiply by millions of users making small edits throughout the day, and the bandwidth waste becomes staggering. Worse, deduplication becomes impossible \u2014 two users with the same file store it twice. The foundational."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "The upload flow starts on the client",
+              "The client splits the file into 4MB chunks, computes a SHA-256 hash of each chunk, and sends the hash list to the server",
+              "The server checks which hashes already exist in storage and responds with the subset the client needs to upload",
+              "Only novel chunks travel over the network",
+              "This hash-first protocol achieves two types of deduplication simultaneously"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Consider a service with 500 million users, 100 million daily active, each storing ~2GB on average \u2014 1 exabyte (1,000 PB) total. Daily uploads: 50 million files with an average size of 500KB \u2192 25TB ingested daily, roughly 580 uploads/sec average with peaks at 5\u201310\u00d7 during business hours. The most common design mistake is treating files as monolithic blobs. If a user edits a single paragraph in a 100MB document, the naive system re-uploads the entire 100MB. Multiply by millions of users making small edits throughout the day, and the bandwidth waste becomes staggering. Worse, deduplication becomes impossible \u2014 two users with the same file store it twice. The foundational design principle is separating metadata from file content. Metadata (file."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Consider a service with 500 million users, 100 million daily active, each storing ~2GB on average \u2014 1 exabyte (1,000 PB) total. Daily uploads: 50 million files with an average size of 500KB \u2192 25TB ingested daily, roughly 580 uploads/sec average with peaks at 5\u201310\u00d7 during business hours. The most common design mistake is treating files as monolithic blobs. If a user edits a single paragraph in a 100MB document, the naive system re-uploads the entire 100MB. Multiply by millions of users making small edits throughout the day, and the bandwidth waste becomes staggering. Worse, deduplication becomes impossible \u2014 two users with the same file store it twice. The foundational design principle is separating metadata from file content. Metadata (file."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Storing entire files as single blobs \u2014 uploading a 2GB file for a 1-byte change wastes bandwidth and makes deduplication impossible"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Chunked upload with resumable sessions \u2014 split files into 4MB chunks; upload each with a session ID. Content-addressable storage with SHA-256 deduplication \u2014 hash each chunk before upload; if the hash exists in the store, skip upload entirely. Delta sync sends only changed blocks \u2014 compute block-level diffs on the client; send only modified 4MB blocks rather than the whole file. S3 for blob storage, metadata in PostgreSQL \u2014 files as objects in S3; file metadata (path, size, version, owner) in a relational database. Conflict."
+          }
+        ],
+        "cap": "Upload architecture: Split files into 4MB chunks before upload; each chunk uploads independently with a resumable session ID; on network failure, resume from the last successful chunk without re-uploa",
+        "familiarity_anchors": [
+          "Split",
+          "PostgreSQL"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you handle sharing a folder with thousands of users and keeping permissions consistent?",
+          "How does content-defined chunking (Rabin fingerprinting) improve over fixed-size chunking?",
+          "How would you implement real-time collaborative editing on top of this file storage system?"
+        ]
+      }
+    },
+    {
+      "id": "sdh-004",
+      "slug": "design-video-streaming-platform",
+      "question": "Design a video streaming platform like YouTube or Netflix.",
+      "title": "Design a Video Streaming Platform (YouTube/Netflix)",
+      "direct_answer": "Transcode uploaded videos into multiple resolutions and codec formats using a distributed processing pipeline (FFmpeg workers consuming from a queue). Store video segments in object storage and serve through a CDN with adaptive bitrate streaming (HLS/DASH). The video service handles metadata, search, and recommendations while the delivery layer handles content distribution at global scale.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Video processing pipeline design, CDN delivery at global scale, adaptive bitrate streaming, and separation of upload/processing/serving concerns",
+        "common_mistake": "Streaming the original uploaded file directly \u2014 without transcoding to multiple bitrates, users on slow connections get buffering, and mobile devices waste bandwidth on 4K they can't display",
+        "to_stand_out": "Explain HLS/DASH adaptive bitrate selection, DAG-based transcoding pipelines for parallel processing, and how CDN cache hierarchies reduce origin load"
+      },
+      "company_tags": [
+        "YouTube",
+        "Netflix",
+        "Amazon Prime Video",
+        "Disney+",
+        "Twitch"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Bandwidth Dominates Everything: Why You Can't Serve the Original File",
+            "content": "YouTube-scale: **500 hours of video uploaded every minute**, **1 billion hours watched per day**. The dominant cost is outbound bandwidth \u2014 at an average streaming bitrate of 5 Mbps, one billion watch-hours daily consumes approximately **5 exabytes of bandwidth per day**. CDN costs dwarf compute, storage, and every other operational expense.\n\nThe most common design mistake is **streaming the original uploaded file** directly. A user uploads a 4K video at 50 Mbps \u2014 streaming it to a viewer on a 3G mobile connection means constant buffering. Streaming it to a viewer with a 1080p screen wastes 75% of the bandwidth on resolution they can't display. The system must **transcode** every upload into a ladder of resolution-bitrate pairs (240p through 4K) and let the player select the appropriate quality dynamically.\n\nThe architecture separates into three independent subsystems with fundamentally different bottlenecks: the **upload and transcoding pipeline** (CPU-bound), the **metadata service** (IOPS-bound \u2014 titles, search, view counts, recommendations), and the **content delivery network** (bandwidth-bound \u2014 serving video segments globally). Each scales independently because adding CDN capacity doesn't solve a transcoding bottleneck."
+          },
+          {
+            "type": "step",
+            "title": "The Transcoding Pipeline: DAG-Based Parallel Processing",
+            "content": "Raw video upload follows a **resumable protocol** \u2014 videos can be gigabytes, and mobile connections are unreliable. The client uploads directly to S3 via a pre-signed URL, bypassing the API server. On upload completion, an S3 event notification kicks off the transcoding pipeline.\n\nTranscoding is not a single step \u2014 it is a **directed acyclic graph (DAG)** of independent tasks that run in parallel.\n\n```\nRaw Upload (S3)\n    \u2502\n    \u251c\u2500\u2192 Audio extraction \u2500\u2192 AAC encode \u2500\u2192 \u2510\n    \u251c\u2500\u2192 240p transcode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 \u2502\n    \u251c\u2500\u2192 480p transcode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 \u251c\u2500\u2192 HLS/DASH packaging\n    \u251c\u2500\u2192 720p transcode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 \u2502       \u2502\n    \u251c\u2500\u2192 1080p transcode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 \u2502       \u251c\u2500\u2192 Quality check\n    \u251c\u2500\u2192 4K transcode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 \u2518       \u2502\n    \u251c\u2500\u2192 Thumbnail generation                       \u251c\u2500\u2192 CDN distribution\n    \u2514\u2500\u2192 Content moderation (ML)                    \u2502\n                                                   \u2514\u2500\u2192 Mark as ready\n```\n\nAll five resolution transcodes run on separate machines simultaneously. A 10-minute video might take 20 minutes to transcode serially but only 5 minutes with parallel workers. Workers are **containerized FFmpeg instances** on Kubernetes, auto-scaling based on queue depth.\n\nEach resolution maps to a target bitrate for its intended device class.\n\n| Resolution | Bitrate | Target Device |\n|---|---|---|\n| 240p | 400 Kbps | 2G/3G mobile |\n| 480p | 1 Mbps | Standard mobile |\n| 720p | 2.5 Mbps | Tablet/laptop |\n| 1080p | 5 Mbps | Desktop |\n| 4K | 16 Mbps | Smart TV |\n\nEach resolution is encoded in at least two codecs: **H.264** for universal compatibility and **H.265 (HEVC) or VP9** for 30\u201350% bandwidth savings on supporting devices. A 10-minute video produces roughly 50 output files across all resolution-codec combinations."
+          },
+          {
+            "type": "step",
+            "title": "Adaptive Bitrate Streaming: Why Buffering Is a Solved Problem",
+            "content": "Videos are not served as monolithic files. Each transcoded variant is segmented into **6-second chunks**, and a manifest file lists all available quality levels. The player downloads the manifest, measures available bandwidth, and requests segments at the appropriate quality.\n\n**HLS (HTTP Live Streaming)** uses an `.m3u8` master playlist that advertises each quality level.\n\n```\n#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=426x240\n/video/abc123/240p/playlist.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480\n/video/abc123/480p/playlist.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720\n/video/abc123/720p/playlist.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080\n/video/abc123/1080p/playlist.m3u8\n```\n\nThe player starts by estimating bandwidth, picks the highest quality the connection supports, and begins downloading segments. If bandwidth drops mid-video \u2014 the user walks into an elevator \u2014 the player **switches to a lower bitrate on the next segment** without rebuffering. If bandwidth improves, it switches back up. This is **adaptive bitrate streaming (ABR)**, and it is why modern video players rarely buffer.\n\nThe critical architectural insight: segments are **ordinary HTTP files** cached by standard CDN infrastructure. HLS and DASH won the protocol war precisely because they piggyback on existing HTTP and CDN investment. Every segment request is a standard GET, cacheable at every layer of the CDN hierarchy. No proprietary streaming server is required \u2014 just a web server or CDN serving static files.\n\nEach quality level has its own segment playlist listing individual `.ts` (MPEG-TS) or fragmented MP4 chunks. The player walks through segments sequentially, requesting the next segment before the current one finishes playing to maintain a 2\u20133 segment playback buffer."
+          },
+          {
+            "type": "step",
+            "title": "CDN Cache Hierarchy: Keeping Origin Load Manageable",
+            "content": "Without a CDN, serving 1 billion hours of video per day from origin servers would require petabits of bandwidth from a few data center locations. The CDN distributes content to **200+ edge PoPs** worldwide, placing segments physically close to viewers.\n\nThe cache hierarchy has three tiers, each absorbing a layer of traffic.\n\n```\nViewer \u2192 Edge PoP (city-level, 200+ locations)\n              \u2502 cache miss\n              \u2192 Regional cache (continental, ~10 locations)\n                    \u2502 cache miss\n                    \u2192 Origin shield (single cache before S3)\n                         \u2502 cache miss\n                         \u2192 S3 origin (2\u20133 locations)\n```\n\n**Cache hit rates** for video are excellent. A popular video's segments are requested millions of times, but the content is immutable once transcoded. Typical CDN hit rate for popular content: **95%+**. Long-tail content (older videos with few views) has lower hit rates, but the **origin shield** prevents thundering herd: all regional caches miss to a single origin shield, which absorbs duplicate requests and forwards only one to S3.\n\n**Cost optimization levers** at the CDN layer drive significant savings. **Codec efficiency** is the largest lever \u2014 H.265/VP9 delivers equivalent perceptual quality at 30\u201350% less bitrate than H.264. At exabyte-scale daily delivery, this codec migration directly halves the CDN bill. **Per-title encoding** (Netflix's approach) analyzes each video's visual complexity and generates custom bitrate ladders \u2014 an animated movie needs far less bandwidth than an action film at equivalent perceived quality. **Predictive caching** preloads trending content to edge PoPs before peak hours, using recommendation engine signals to anticipate demand."
+          },
+          {
+            "type": "step",
+            "title": "View Counting at Scale and Content Moderation",
+            "content": "The metadata service manages titles, descriptions, channel information, and engagement counts. This layer is IOPS-bound rather than bandwidth-bound.\n\n**View counting** at YouTube scale reveals a classic distributed systems problem. A viral video receiving millions of views per minute cannot use `UPDATE videos SET view_count = view_count + 1` \u2014 that single row becomes permanently lock-contended. The solution is **event buffering**: publish view events to Kafka, aggregate counts with a stream processor (Flink) in 30-second tumbling windows, and batch-update the database.\n\n```java\n@Service\npublic class ViewCountService {\n    private final KafkaTemplate<String, ViewEvent> kafka;\n\n    public void recordView(String videoId, String userId) {\n        kafka.send(\"video-views\",\n            new ViewEvent(videoId, userId, Instant.now()));\n    }\n}\n```\n\nThe Flink consumer accumulates counts per video per 30-second window and writes a single batch update to PostgreSQL. This reduces write pressure from millions of individual increments to a few thousand batch operations per window. Display approximate counts (\"1.2M views\") refreshed periodically \u2014 users don't need per-second precision.\n\n**Search** indexes video metadata in Elasticsearch \u2014 title, description, tags, and auto-generated captions from speech-to-text transcription. Search relevance combines text matching with engagement signals like view count, like ratio, and recency.\n\n**Content moderation** runs as part of the transcoding DAG. ML models scan sampled frames for policy violations \u2014 nudity, violence, copyright-protected material. Flagged videos enter a human review queue and remain private until cleared. Audio/video fingerprinting (similar to YouTube's Content ID) matches uploads against a database of protected works to detect unauthorized use before publication."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Transcoding pipeline: FFmpeg in distributed workers** \u2014 raw video \u2192 multiple resolutions (360p/720p/1080p/4K) and formats (H.264/H.265/VP9/AV1).\n- **Adaptive bitrate streaming (HLS/DASH)** \u2014 segment video into 2\u201310 second chunks at each quality level.\n- **CDN for video delivery, not origin** \u2014 99% of video playback traffic hits CDN edge nodes; origin serves only uploads and the 1% of rare/cold content.\n- **Metadata in Cassandra, search in Elasticsearch** \u2014 video metadata (title, description, tags, creator) written to Cassandra for high write throughput.\n- **View count approximation with HyperLogLog** \u2014 exact view counting at YouTube scale requires distributed coordination.\n- **Content moderation pipeline** \u2014 computer vision models run on every uploaded video asynchronously; flagged content goes to human review queue."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "YouTube ingests 500 hours of video per minute and serves 1 billion hours of video per day. The design splits into two very different problems: the ingest and transcoding pipeline (write-heavy, batch processing) and the streaming delivery path (read-heavy, latency-critical).\n\n**Video ingest and transcoding pipeline:**\n- Raw uploaded video goes directly to object storage (S3); a transcoding job is published to a Kafka queue; distributed FFmpeg workers consume jobs and produce multiple resolution variants (360p, 720p, 1080p, 4K) and formats (H.264 for compatibility, H.265 for storage efficiency, AV1 for lowest bitrate)\n- 1 hour of 1080p H.264 video is roughly 8GB raw; H.265 transcoding reduces this to 4GB at equal quality \u2014 significant storage savings at YouTube scale\n- A 1-hour video requires 5\u201310 minutes of transcoding time distributed across a worker cluster; auto-scaling the worker fleet based on Kafka consumer lag handles upload traffic spikes\n\n**Adaptive bitrate streaming (ABR):**\n- Video is segmented into 2\u201310 second chunks at each quality level; the manifest file (HLS .m3u8 or DASH .mpd) lists all available quality levels and chunk URLs\n- The client player monitors current download bandwidth and selects the highest quality that can be downloaded faster than it's being played; seamless quality switches without buffering or interruption\n- Segment durations are 2 seconds for live streaming (low latency) and 6\u201310 seconds for VOD (better CDN cache efficiency)\n\n**CDN delivery at scale:**\n- 99% of video playback traffic hits CDN edge nodes; origin serves only uploads and rare/cold content; CDN serves popular content from the nearest geographic node, reducing latency from 150ms to 5ms\n- View count approximation: exact counting at YouTube scale requires distributed coordination across thousands of servers; HyperLogLog gives \u00b11% accuracy with 12KB memory per counter\n\nI recommend a Kafka-driven transcoding pipeline, HLS/DASH adaptive bitrate with 6-second segments for VOD, CDN delivery for all video content, and HyperLogLog for view count aggregation."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you design a live streaming feature with sub-5-second latency?",
+        "How does Netflix's per-title encoding optimize bandwidth usage?",
+        "How would you implement copyright detection (Content ID) for uploaded videos?"
+      ],
+      "seo": {
+        "metaTitle": "Design Video Streaming Platform YouTube Netflix \u2014 Java System Design Interview",
+        "metaDescription": "Video streaming platform design with transcoding pipeline, HLS adaptive bitrate, CDN cache hierarchy, view count aggregation, and content moderation."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "YouTube ingests 500 hours of video per minute and serves 1 billion hours of video per day.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "YouTube-scale: 500 hours of video uploaded every minute, 1 billion hours watched per day. The dominant cost is outbound bandwidth \u2014 at an average streaming bitrate of 5 Mbps, one billion watch-hours daily consumes approximately 5 exabytes of bandwidth per day. CDN costs dwarf compute, storage, and every other operational expense. The most common design mistake is streaming the original uploaded file directly. A user uploads a 4K video at 50 Mbps \u2014 streaming it to a viewer on a 3G mobile connection means constant buffering. Streaming it to a viewer with a 1080p screen wastes 75% of the bandwidth on resolution they can't display. The system must transcode every upload into a ladder of resolution-bitrate pairs (240p through 4K)."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "YouTube-scale: 500 hours of video uploaded every minute, 1 billion hours watched per day. The dominant cost is outbound bandwidth \u2014 at an average streaming bitrate of 5 Mbps, one billion watch-hours daily consumes approximately 5 exabytes of bandwidth per day. CDN costs dwarf compute, storage, and every other operational expense. The most common design mistake is streaming the original uploaded file directly. A user uploads a 4K video at 50 Mbps \u2014 streaming it to a viewer on a 3G mobile connection means constant buffering. Streaming it to a viewer with a 1080p screen wastes 75% of the bandwidth on resolution they can't display. The system must transcode every."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Raw video upload follows a resumable protocol \u2014 videos can be gigabytes, and mobile connections are unreliable",
+              "The client uploads directly to S3 via a pre-signed URL, bypassing the API server",
+              "On upload completion, an S3 event notification kicks off the transcoding pipeline",
+              "Transcoding is not a single step \u2014 it is a directed acyclic graph (DAG) of independent tasks that run in parallel",
+              "`` Raw Upload (S3) \u2502 \u251c\u2500\u2192 Audio extraction \u2500\u2192 AAC encode \u2500\u2192 \u2510 \u251c\u2500\u2192 240p transcode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 \u2502 \u251c\u2500\u2192 480p transcode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 \u251c\u2500\u2192 HLS/DASH packaging \u251c\u2500\u2192 720p transcode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 \u2502 \u2502 \u251c\u2500\u2192 1080p transcode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 \u2502 \u251c\u2500\u2192 Quality check \u251c\u2500\u2192 4K transcode \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2192 \u2518 \u2502 \u251c\u2500\u2192 Thumbnail generation \u251c\u2500\u2192 CDN distribution \u2514\u2500\u2192 Content moderation (ML) \u2502 \u2514\u2500\u2192 Mark as ready `` All five resolution transcodes run on separate machines simultaneously"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "YouTube-scale: 500 hours of video uploaded every minute, 1 billion hours watched per day. The dominant cost is outbound bandwidth \u2014 at an average streaming bitrate of 5 Mbps, one billion watch-hours daily consumes approximately 5 exabytes of bandwidth per day. CDN costs dwarf compute, storage, and every other operational expense. The most common design mistake is streaming the original uploaded file directly. A user uploads a 4K video at 50 Mbps \u2014 streaming it to a viewer on a 3G mobile connection means constant buffering. Streaming it to a viewer with a 1080p screen wastes 75% of the bandwidth on resolution they can't display. The system must transcode every upload into a ladder of resolution-bitrate pairs (240p through 4K)."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "YouTube-scale: 500 hours of video uploaded every minute, 1 billion hours watched per day. The dominant cost is outbound bandwidth \u2014 at an average streaming bitrate of 5 Mbps, one billion watch-hours daily consumes approximately 5 exabytes of bandwidth per day. CDN costs dwarf compute, storage, and every other operational expense. The most common design mistake is streaming the original uploaded file directly. A user uploads a 4K video at 50 Mbps \u2014 streaming it to a viewer on a 3G mobile connection means constant buffering. Streaming it to a viewer with a 1080p screen wastes 75% of the bandwidth on resolution they can't display. The system must transcode every upload into a ladder of resolution-bitrate pairs (240p through 4K)."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Streaming the original uploaded file directly \u2014 without transcoding to multiple bitrates, users on slow connections get buffering, and mobile devices waste bandwidth on 4K they can't display"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Transcoding pipeline: FFmpeg in distributed workers \u2014 raw video \u2192 multiple resolutions (360p/720p/1080p/4K) and formats (H.264/H.265/VP9/AV1). Adaptive bitrate streaming (HLS/DASH) \u2014 segment video into 2\u201310 second chunks at each quality level. CDN for video delivery, not origin \u2014 99% of video playback traffic hits CDN edge nodes; origin serves only uploads and the 1% of rare/cold content. Metadata in Cassandra, search in Elasticsearch \u2014 video metadata (title, description, tags, creator) written to Cassandra for high write throughput. View count approximation with HyperLogLog \u2014 exact view."
+          }
+        ],
+        "cap": "Video ingest and transcoding pipeline: Raw uploaded video goes directly to object storage (S3); a transcoding job is published to a Kafka queue; distributed FFmpeg workers consume jobs and produce mul",
+        "familiarity_anchors": [
+          "Transcode",
+          "FFmpeg",
+          "Store"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you design a live streaming feature with sub-5-second latency?",
+          "How does Netflix's per-title encoding optimize bandwidth usage?",
+          "How would you implement copyright detection (Content ID) for uploaded videos?"
+        ]
+      }
+    },
+    {
+      "id": "sdh-005",
+      "slug": "design-ride-sharing-service",
+      "question": "Design a ride-sharing service like Uber.",
+      "title": "Design a Ride-Sharing Service (Uber)",
+      "direct_answer": "Use a geospatial index (H3/S2 grid cells or Redis geospatial commands) to match riders with nearby drivers in real-time. A dispatch service finds the best driver based on proximity, ETA, and acceptance probability. Track driver locations with frequent GPS updates (every 3-4 seconds) stored in an in-memory grid. The ride lifecycle flows through states: requested \u2192 matched \u2192 en-route \u2192 in-progress \u2192 completed.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Geospatial indexing, real-time location tracking, matching algorithm design, and ride state machine management",
+        "common_mistake": "Using SQL distance queries (Haversine formula with ORDER BY) for nearest-driver search \u2014 this scans all drivers and doesn't scale past a few thousand",
+        "to_stand_out": "Explain H3/S2 geospatial cell-based indexing for O(1) neighborhood lookups, ETA-based matching over pure distance, and supply/demand-based dynamic pricing"
+      },
+      "company_tags": [
+        "Uber",
+        "Lyft",
+        "Grab",
+        "Ola",
+        "DiDi"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "1.5 Million Location Writes Per Second: Why SQL Distance Queries Fail",
+            "content": "Uber-scale numbers: **5 million active drivers** globally, **20 million rides per day**. Each active driver sends a GPS update every **3\u20134 seconds** \u2192 5M drivers \u00d7 0.3 updates/sec = **1.5 million location updates per second**. Ride requests: 20M/day \u00f7 86,400 \u2248 **230 requests/sec** average, with city-level peaks hitting 10\u00d7 during rush hours and major events.\n\nThe central technical challenge is **real-time geospatial matching**: when a rider requests a pickup, the system must find the best available driver within seconds. This requires a **spatial index** that absorbs 1.5M writes/sec and answers nearest-neighbor queries in under 100ms. The most common mistake is using SQL with the Haversine formula: `SELECT * FROM drivers ORDER BY haversine(rider_lat, rider_lng, driver_lat, driver_lng) LIMIT 10`. This computes distance for **every driver in the database** \u2014 O(N) per request. With 5M drivers, that is billions of distance calculations per second.\n\nBeyond matching, the system must manage a **ride state machine** \u2014 each ride transitions through states (requested \u2192 matched \u2192 arriving \u2192 in-progress \u2192 completed \u2192 payment) with coordination between rider, driver, and backend services. Any transition failure must be recoverable without charging the wrong amount or leaving a ride in a corrupted state."
+          },
+          {
+            "type": "step",
+            "title": "H3 Hexagonal Grid: O(1) Neighborhood Lookup Instead of O(N) Scan",
+            "content": "Uber's **H3 library** divides the Earth's surface into hexagonal cells at multiple resolutions. Resolution 7 produces cells of approximately **5 km\u00b2** \u2014 a typical city contains a few hundred cells. Every driver's GPS coordinates map to a single cell ID.\n\nWhen a driver sends a location update, the system computes the H3 cell, removes the driver from their previous cell's set, and adds them to the new cell's set \u2014 both **O(1) Redis commands**. When a rider requests a ride, the dispatch service computes the rider's cell and retrieves all drivers from that cell plus the **6 neighboring hexagons** (H3's `gridDisk(1)` function).\n\nThis reduces nearest-driver search from scanning 5 million global drivers to examining roughly **70\u2013350 candidates** in 7 cells \u2014 three orders of magnitude fewer distance calculations.\n\n```java\n@Service\npublic class LocationService {\n    private final H3Core h3;\n    private final StringRedisTemplate redis;\n\n    public void updateLocation(String driverId, double lat, double lng) {\n        String newCell = h3.latLngToCellAddress(lat, lng, 7);\n        String prevCell = redis.opsForValue()\n            .getAndSet(\"driver:cell:\" + driverId, newCell);\n        if (prevCell != null && !prevCell.equals(newCell)) {\n            redis.opsForSet().remove(\"cell:\" + prevCell, driverId);\n        }\n        redis.opsForSet().add(\"cell:\" + newCell, driverId);\n    }\n\n    public Set<String> findNearbyDrivers(double lat, double lng) {\n        String riderCell = h3.latLngToCellAddress(lat, lng, 7);\n        List<String> cells = h3.gridDisk(riderCell, 1);\n        return cells.stream()\n            .flatMap(c -> redis.opsForSet().members(\"cell:\" + c).stream())\n            .collect(Collectors.toSet());\n    }\n}\n```\n\nIf the initial 7-cell search returns no available drivers, the system expands to `gridDisk(2)` \u2014 19 cells covering a wider radius. Progressive expansion avoids unnecessary wide searches in dense areas while still finding drivers in sparse suburbs."
+          },
+          {
+            "type": "step",
+            "title": "Dispatch Logic: ETA Beats Raw Distance",
+            "content": "Finding the nearest driver by straight-line distance is misleading. A driver 2km away on a highway may arrive in 3 minutes, while a driver 500m away in gridlocked traffic takes 12 minutes. **ETA-based matching** produces dramatically better rider experience.\n\nAfter the location service returns nearby candidates, the dispatch service filters to available drivers and calculates **estimated time of arrival** for each using a routing engine (OSRM or Google Maps Directions API). The best candidate has the lowest ETA, not the shortest distance.\n\n```java\n@Service\npublic class DispatchService {\n    private final LocationService locationService;\n    private final RoutingEngine routing;\n\n    public Optional<DriverMatch> dispatch(RideRequest request) {\n        Set<String> nearby = locationService\n            .findNearbyDrivers(request.getPickupLat(), request.getPickupLng());\n\n        return nearby.stream()\n            .map(id -> driverService.getDriver(id))\n            .filter(Driver::isAvailable)\n            .map(d -> {\n                Duration eta = routing.estimateETA(\n                    d.getLat(), d.getLng(),\n                    request.getPickupLat(), request.getPickupLng());\n                return new DriverMatch(d, eta);\n            })\n            .min(Comparator.comparing(DriverMatch::getEta));\n    }\n}\n```\n\nThe dispatch flow **offers** the ride to the best candidate with a **15-second acceptance timeout**. If the driver declines or doesn't respond, the next candidate is offered. After 3 failed offers, the matching re-runs from scratch because driver positions may have changed during the offer cycle.\n\n**Double-dispatch prevention** is critical: two concurrent ride requests in the same area could both be offered to the same driver. The system places a **Redis lock** on the driver ID when an offer is extended \u2014 `SETNX driver:lock:{driverId}` with 15-second TTL. Other dispatch queries filter out locked drivers. If the offer expires without acceptance, the TTL auto-releases the lock and the driver becomes available again."
+          },
+          {
+            "type": "step",
+            "title": "Ride Lifecycle: Every Transition Is a Durable Event",
+            "content": "Each ride follows a strict state machine. Every transition persists as a **durable event** before triggering side effects \u2014 this ensures crash recovery without corrupting ride state or double-charging.\n\nThe ride lifecycle is fundamentally a **finite state machine** with well-defined transitions. The system must guarantee that every state change is atomic and durable \u2014 a ride cannot be simultaneously \"in progress\" and \"completed,\" and no transition should be lost if the server crashes mid-update.\n\nEach state transition is persisted as an event before the state changes, giving a complete audit trail for dispute resolution and analytics. This pattern also enables replaying the ride history to reconstruct state after failures.\n\n```\n[REQUESTED] \u2500\u2500match found\u2500\u2500\u2192 [DRIVER_ASSIGNED]\n    \u2502                              \u2502\n    \u2502 no drivers / timeout         \u2502 driver arrives at pickup\n    \u2193                              \u2193\n[CANCELLED]                 [DRIVER_ARRIVED]\n                                   \u2502\n                                   \u2502 rider boards, trip starts\n                                   \u2193\n                            [TRIP_IN_PROGRESS]\n                                   \u2502\n                                   \u2502 driver ends trip\n                                   \u2193\n                            [TRIP_COMPLETED]\n                                   \u2502\n                                   \u2502 fare calculated, payment charged\n                                   \u2193\n                            [PAYMENT_PROCESSED]\n```\n\n**Fare calculation** runs at trip completion: `base_fare + (rate_per_km \u00d7 distance) + (rate_per_min \u00d7 duration) \u00d7 surge_multiplier`. Distance and duration come from the **actual GPS trace** recorded during the trip \u2014 not the estimated route. The driver app records GPS points every 3 seconds throughout the ride, and the server computes traveled distance from this real path.\n\n```sql\nCREATE TABLE rides (\n    ride_id          BIGINT PRIMARY KEY,\n    rider_id         BIGINT NOT NULL,\n    driver_id        BIGINT,\n    status           VARCHAR(30) NOT NULL,\n    pickup_lat       DECIMAL(10,7),\n    pickup_lng       DECIMAL(10,7),\n    dropoff_lat      DECIMAL(10,7),\n    dropoff_lng      DECIMAL(10,7),\n    distance_km      DECIMAL(6,2),\n    duration_min     DECIMAL(6,2),\n    fare_amount      DECIMAL(10,2),\n    surge_multiplier DECIMAL(3,2) DEFAULT 1.00,\n    requested_at     TIMESTAMPTZ,\n    completed_at     TIMESTAMPTZ\n);\n```\n\n**Payment** is charged asynchronously after trip completion \u2014 the trip is never blocked waiting for payment confirmation. If the charge fails (card declined), the fare is flagged as pending and the rider's account is restricted until payment resolves. The rider exits the car, the trip ends, and payment settles afterward independently."
+          },
+          {
+            "type": "step",
+            "title": "Surge Pricing, Geographic Partitioning, and Safety",
+            "content": "**Surge pricing** is a supply-demand balancing mechanism computed per H3 cell. When the ratio of active ride requests to available drivers in a cell exceeds a threshold, the surge multiplier increases \u2014 incentivizing drivers to enter the zone and signaling riders that demand is high. The multiplier refreshes every **30 seconds** based on real-time counts. Per-cell granularity ensures that excess demand in one neighborhood doesn't trigger a citywide surge.\n\n**Geographic partitioning** limits blast radius. Each city or metro area operates as an **independent partition** with its own location store, dispatch service, and database shard. An outage in the NYC partition has zero impact on San Francisco. Cross-city rides (airport transfers spanning city boundaries) are handled by the origin region's partition.\n\n**Driver connectivity loss mid-trip** is handled by the driver app caching GPS points locally. When connectivity restores, cached points are uploaded and the GPS trace is completed. Fare calculation uses the full trace, ensuring accurate billing regardless of intermittent connectivity gaps.\n\n**Safety is a first-class architectural concern**, not a feature add-on. The system shares live trip details with emergency contacts, provides real-time GPS tracking visible to trusted contacts, stores driver background check results in a separate compliance service, and routes a panic button to local emergency services with the ride's live location. Interviewers notice when you mention safety as a design consideration rather than an afterthought."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Geospatial index with H3 hexagons** \u2014 partition the map into hexagonal cells at multiple resolutions.\n- **Driver location updates via Kafka, not direct database writes** \u2014 5 million drivers sending GPS updates every 3 seconds = 1.7M writes/sec.\n- **Redis for live driver positions, PostgreSQL for trips** \u2014 Redis stores current lat/lng per driverID with 10-second TTL.\n- **Surge pricing triggered by demand/supply ratio per hexagon** \u2014 compute active requests / available drivers per cell every 30 seconds.\n- **ETA calculation: Dijkstra on road graph with live traffic** \u2014 pre-compute routing graph."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Uber at scale has 5 million active drivers sending GPS updates every 3 seconds \u2014 that's 1.7 million location writes per second at peak. Every rider request requires matching the nearest available driver in under 2 seconds. The design challenge is combining real-time geospatial state management with fast matching under high write pressure.\n\n**Driver location management:**\n- 1.7 million writes/second cannot go directly to a database; Kafka absorbs the burst, consumer groups batch-update Redis; Redis stores the current lat/lng per driverID with a 10-second TTL (stale drivers fall off automatically)\n- Geospatial index with H3 hexagons: partition the map into hexagonal cells at multiple resolutions; find nearby drivers by querying the user's cell and its adjacent cells; lookup is O(1) regardless of total driver count\n- Redis Geo commands (GEOADD, GEORADIUS) provide built-in geospatial indexing; for the highest density cities, H3 hexagonal cells with cell-level indices are more efficient\n\n**Matching and dispatch:**\n- When a rider requests a trip, the matching service queries Redis for available drivers within a 3km radius; ranks them by ETA to the rider using Dijkstra on the road graph with live traffic weights\n- The top 3 drivers receive the offer simultaneously; the first to accept is dispatched; the others receive cancellation\n- ETA recalculates every 30 seconds during the trip using live traffic data; the driver app and rider app both display the updated estimate\n\n**Surge pricing:**\n- Compute the active request count / available driver count per hexagonal cell every 30 seconds; if the ratio exceeds a threshold, apply a surge multiplier\n- Surge is localized \u2014 one neighborhood can be at 2\u00d7 surge while an adjacent neighborhood is at 1\u00d7; the hexagonal grid provides the geographic granularity needed\n\nI recommend Kafka for location write buffering, Redis Geo for real-time driver positions with H3 hexagonal indexing for nearest-driver queries, and ETA computation on a pre-built road graph with live traffic weights."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you implement surge pricing and what signals would you use?",
+        "How do you handle the cold start problem when a new city has very few drivers?",
+        "How would you design the ETA prediction service using real-time traffic data?"
+      ],
+      "seo": {
+        "metaTitle": "Design Ride-Sharing Service Uber \u2014 Java System Design Interview",
+        "metaDescription": "Ride-sharing system design with H3 geospatial indexing, ETA-based driver matching, ride state machine, surge pricing, and geographic partitioning."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "Uber at scale has 5 million active drivers sending GPS updates every 3 seconds \u2014 that's 1.7 million location writes per second at peak.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "Uber-scale numbers: 5 million active drivers globally, 20 million rides per day. Each active driver sends a GPS update every 3\u20134 seconds \u2192 5M drivers \u00d7 0.3 updates/sec = 1.5 million location updates per second. Ride requests: 20M/day \u00f7 86,400 \u2248 230 requests/sec average, with city-level peaks hitting 10\u00d7 during rush hours and major events. The central technical challenge is real-time geospatial matching: when a rider requests a pickup, the system must find the best available driver within seconds. This requires a spatial index that absorbs 1.5M writes/sec and answers nearest-neighbor queries in under 100ms. The most common mistake is using SQL with the Haversine formula: SELECT * FROM drivers ORDER BY haversine(rider_lat, rider_lng, driver_lat, driver_lng) LIMIT 10. This computes."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "Uber-scale numbers: 5 million active drivers globally, 20 million rides per day. Each active driver sends a GPS update every 3\u20134 seconds \u2192 5M drivers \u00d7 0.3 updates/sec = 1.5 million location updates per second. Ride requests: 20M/day \u00f7 86,400 \u2248 230 requests/sec average, with city-level peaks hitting 10\u00d7 during rush hours and major events. The central technical challenge is real-time geospatial matching: when a rider requests a pickup, the system must find the best available driver within seconds. This requires a spatial index that absorbs 1.5M writes/sec and answers nearest-neighbor queries in under 100ms. The most common mistake is using SQL with the Haversine formula: SELECT * FROM drivers."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "Uber's H3 library divides the Earth's surface into hexagonal cells at multiple resolutions",
+              "Resolution 7 produces cells of approximately 5 km\u00b2 \u2014 a typical city contains a few hundred cells",
+              "Every driver's GPS coordinates map to a single cell ID",
+              "When a driver sends a location update, the system computes the H3 cell, removes the driver from their previous cell's set, and adds them to the new cell's set \u2014 both O(1) Redis commands",
+              "When a rider requests a ride, the dispatch service computes the rider's cell and retrieves all drivers from that cell plus the 6 neighboring hexagons (H3's gridDisk(1) function)"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "Uber-scale numbers: 5 million active drivers globally, 20 million rides per day. Each active driver sends a GPS update every 3\u20134 seconds \u2192 5M drivers \u00d7 0.3 updates/sec = 1.5 million location updates per second. Ride requests: 20M/day \u00f7 86,400 \u2248 230 requests/sec average, with city-level peaks hitting 10\u00d7 during rush hours and major events. The central technical challenge is real-time geospatial matching: when a rider requests a pickup, the system must find the best available driver within seconds. This requires a spatial index that absorbs 1.5M writes/sec and answers nearest-neighbor queries in under 100ms. The most common mistake is using SQL with the Haversine formula: SELECT * FROM drivers ORDER BY haversine(rider_lat, rider_lng, driver_lat, driver_lng) LIMIT 10. This computes."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "Uber-scale numbers: 5 million active drivers globally, 20 million rides per day. Each active driver sends a GPS update every 3\u20134 seconds \u2192 5M drivers \u00d7 0.3 updates/sec = 1.5 million location updates per second. Ride requests: 20M/day \u00f7 86,400 \u2248 230 requests/sec average, with city-level peaks hitting 10\u00d7 during rush hours and major events. The central technical challenge is real-time geospatial matching: when a rider requests a pickup, the system must find the best available driver within seconds. This requires a spatial index that absorbs 1.5M writes/sec and answers nearest-neighbor queries in under 100ms. The most common mistake is using SQL with the Haversine formula: SELECT * FROM drivers ORDER BY haversine(rider_lat, rider_lng, driver_lat, driver_lng) LIMIT 10. This computes."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Using SQL distance queries (Haversine formula with ORDER BY) for nearest-driver search \u2014 this scans all drivers and doesn't scale past a few thousand"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Geospatial index with H3 hexagons \u2014 partition the map into hexagonal cells at multiple resolutions. Driver location updates via Kafka, not direct database writes \u2014 5 million drivers sending GPS updates every 3 seconds = 1.7M writes/sec. Redis for live driver positions, PostgreSQL for trips \u2014 Redis stores current lat/lng per driverID with 10-second TTL. Surge pricing triggered by demand/supply ratio per hexagon \u2014 compute active requests / available drivers per cell every 30 seconds. ETA calculation: Dijkstra on road graph with live traffic \u2014."
+          }
+        ],
+        "cap": "Driver location management: 1.7 million writes/second cannot go directly to a database; Kafka absorbs the burst, consumer groups batch-update Redis; Redis stores the current lat/lng per driverID with",
+        "familiarity_anchors": [
+          "Redis",
+          "Track"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you implement surge pricing and what signals would you use?",
+          "How do you handle the cold start problem when a new city has very few drivers?",
+          "How would you design the ETA prediction service using real-time traffic data?"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "topic": "S3 Storage",
+  "topicSlug": "s3-storage",
+  "questions": [
+    {
+      "id": "aws-004",
+      "slug": "s3-integration-spring-boot",
+      "question": "How do you integrate Amazon S3 with Spring Boot for file upload, download, and presigned URLs?",
+      "title": "S3 Integration with Spring Boot",
+      "direct_answer": "Use the AWS SDK v2 S3Client (or Spring Cloud AWS's S3Template) to upload objects with PutObjectRequest, download with GetObjectRequest, and generate presigned URLs with S3Presigner. Always use IAM roles for authentication \u2014 never hardcode access keys.",
+      "layout_type": "recipe-builder",
+      "interviewer_intent": {
+        "testing": "Practical file handling in cloud environments and security awareness",
+        "common_mistake": "Hardcoding AWS credentials or storing files on the EC2/container filesystem instead of S3",
+        "to_stand_out": "Explain presigned URLs as a security pattern \u2014 let clients upload/download directly to S3 without routing bytes through your backend"
+      },
+      "company_tags": [
+        "dropbox",
+        "shopify",
+        "stripe",
+        "pinterest",
+        "slack"
+      ],
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "difficulty": "intermediate",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Architecture Mistake: Routing File Bytes Through Your Application Server",
+            "content": "The naive approach to file uploads is: client sends a multipart POST to your Spring Boot controller, the controller reads the file into memory, then uploads it to S3. For a 10 MB profile picture, this works. For a 500 MB video or 10,000 concurrent uploads, your application server becomes a **file proxy** \u2014 consuming heap memory, network bandwidth, and Tomcat threads for data that's just passing through.\n\nThe production pattern is **presigned URLs**: your Spring Boot server generates a time-limited URL that authorizes the client to upload or download directly to/from S3. The server handles only the URL generation (milliseconds), and the client handles the data transfer (seconds to minutes). Your application never touches the file bytes.\n\nThis distinction \u2014 proxying bytes vs. generating presigned URLs \u2014 is what interviewers are testing. Both approaches use the same S3 SDK, but the presigned URL pattern demonstrates an understanding of how production systems handle file operations at scale."
+          },
+          {
+            "type": "step",
+            "title": "Streaming Uploads and Downloads: When Your Server Must Handle Bytes",
+            "content": "Some scenarios require server-side file processing \u2014 virus scanning before storage, image resizing, or watermarking. In these cases, stream the file instead of buffering it entirely in memory.\n\nThe AWS SDK v2 `S3Client` supports both approaches. For uploads, `RequestBody.fromInputStream()` streams directly from the multipart request. For downloads, `ResponseInputStream` lets you process data in chunks without loading the full object into heap.\n\n```java\n@Service\npublic class FileStorageService {\n    private final S3Client s3;\n    private static final String BUCKET = \"my-app-uploads\";\n\n    public FileStorageService(S3Client s3) {\n        this.s3 = s3;\n    }\n\n    public String upload(String key, InputStream content,\n                         long contentLength, String contentType) {\n        s3.putObject(\n            PutObjectRequest.builder()\n                .bucket(BUCKET).key(key)\n                .contentType(contentType)\n                .contentLength(contentLength) // required for streaming\n                .build(),\n            RequestBody.fromInputStream(content, contentLength));\n        return \"s3://\" + BUCKET + \"/\" + key;\n    }\n\n    public void download(String key, OutputStream target) throws IOException {\n        try (var response = s3.getObject(\n                GetObjectRequest.builder().bucket(BUCKET).key(key).build())) {\n            response.transferTo(target); // streams without full heap load\n        }\n    }\n}\n```\n\nThe `contentLength` parameter on upload is required for streaming \u2014 without it, the SDK buffers the entire stream into memory to calculate the size, defeating the purpose of streaming. If you don't know the content length upfront, use the S3 multipart upload API which uploads in chunks."
+          },
+          {
+            "type": "step",
+            "title": "Presigned URLs: The Pattern That Scales File Operations Without Server Cost",
+            "content": "Presigned URLs are the highest-impact pattern for file-heavy applications. Your Spring Boot server generates a URL that's signed with your IAM credentials and valid for a limited time. The client uses this URL to communicate directly with S3 \u2014 your server is never in the data path.\n\nThe `S3Presigner` (SDK v2) generates both download (GET) and upload (PUT) URLs. The expiry time is a security decision: long enough for the transfer, short enough that a leaked URL doesn't provide indefinite access.\n\n```java\n@Service\npublic class PresignedUrlService {\n    private final S3Presigner presigner;\n    private static final String BUCKET = \"my-app-uploads\";\n\n    public PresignedUrlService(S3Presigner presigner) {\n        this.presigner = presigner;\n    }\n\n    public URL generateUploadUrl(String key, String contentType, int expiryMinutes) {\n        var request = PutObjectRequest.builder()\n            .bucket(BUCKET).key(key)\n            .contentType(contentType)\n            .build();\n        return presigner.presignPutObject(b -> b\n            .signatureDuration(Duration.ofMinutes(expiryMinutes))\n            .putObjectRequest(request))\n            .url();\n    }\n\n    public URL generateDownloadUrl(String key, int expiryMinutes) {\n        var request = GetObjectRequest.builder()\n            .bucket(BUCKET).key(key)\n            .build();\n        return presigner.presignGetObject(b -> b\n            .signatureDuration(Duration.ofMinutes(expiryMinutes))\n            .getObjectRequest(request))\n            .url();\n    }\n}\n```\n\nThe client uploads with a simple `PUT` request to the presigned URL \u2014 no AWS SDK needed on the client side. This works from any HTTP client, including browser `fetch()`. The `contentType` must match what was specified during URL generation, or S3 rejects the upload with a `SignatureDoesNotMatch` error.\n\nFor downloads, serve the presigned URL as a redirect (`302`) from your API endpoint. The client follows the redirect and downloads directly from S3's CDN-grade infrastructure \u2014 faster than proxying and zero load on your server."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Presigned URL for uploads/downloads skips the server** \u2014 client uploads directly to S3; server generates a time-limited signed URL; eliminates server bandwidth, memory, and connection usage for file transfer\n- **`S3Client.putObject` with streaming avoids loading files into memory** \u2014 use `RequestBody.fromInputStream()` with a content length; never buffer large files in a byte array before uploading\n- **`S3Template` from Spring Cloud AWS simplifies common operations** \u2014 wraps SDK client with Spring idioms; inherits IAM credential resolution from the task or instance role automatically\n- **Never make buckets public; use presigned or CloudFront signed URLs** \u2014 presigned URLs expire after a configured duration (15 min to 7 days); CloudFront signed URLs allow longer expiry with CDN distribution\n- **Enable versioning and SSE on user-upload buckets** \u2014 versioning recovers accidental overwrites; SSE-S3 (or SSE-KMS for key management compliance) encrypts all objects at rest"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "S3 integration in Spring Boot comes down to one architectural decision: does your server proxy the file bytes through itself, or does it generate a presigned URL and let the client upload or download directly?\n\n**Presigned URLs \u2014 the right default**\n- A presigned URL is a time-limited S3 URL that grants the holder permission to read or write a specific object \u2014 your server generates it with `S3Presigner.presignPutObject()` and returns it to the client, which then uploads directly to S3\n- This is the correct approach for uploads because the file never passes through your server \u2014 which means your server doesn't consume bandwidth, memory, or connection slots for large uploads; S3 handles the inbound data transfer directly\n\n**Direct upload via the server \u2014 when necessary**\n- If you need to validate, transform, or virus-scan the file before storing it, the server must receive the bytes \u2014 use `S3Client.putObject(PutObjectRequest, RequestBody.fromInputStream(stream, length))` with a streaming approach to avoid loading the entire file into memory\n- Set `Content-Type` and `ContentDisposition` on the PutObjectRequest so S3 serves the file with the correct headers when downloaded\n\n**Using Spring Cloud AWS**\n- `spring-cloud-aws-starter-s3` provides `S3Template` which wraps the SDK client with Spring idioms \u2014 `s3Template.upload(bucket, key, inputStream)` for uploads, `s3Template.download(bucket, key)` returns a `Resource`\n- Inject `S3Template` as a bean; Spring Cloud AWS handles credential resolution from the IAM task role automatically in ECS\n\n**Access control**\n- Never make buckets public; use presigned URLs for time-limited access; for long-term sharing, generate CloudFront signed URLs through a distribution in front of S3\n- Enable S3 bucket versioning for user-uploaded data so accidental overwrites can be recovered; enable server-side encryption (SSE-S3 or SSE-KMS) for compliance"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you handle multipart uploads for very large files in S3?",
+        "How do you enforce that only authenticated users can access objects in a private S3 bucket?",
+        "What is S3 Transfer Acceleration and when would you use it?"
+      ],
+      "seo": {
+        "meta_title": "S3 Integration with Spring Boot \u2014 Upload, Download, Presigned URLs",
+        "meta_description": "Complete guide to integrating Amazon S3 with Spring Boot using AWS SDK v2. Covers file upload, streaming download, presigned URLs, and IAM configuration.",
+        "keywords": [
+          "spring boot s3",
+          "aws s3 java",
+          "s3 presigned url spring boot",
+          "upload download s3 spring"
+        ]
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "S3 integration in Spring Boot comes down to one architectural decision: does your server proxy the file bytes through itself, or does it generate a presigned URL and let the client upload or download directly?",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The naive approach to file uploads is: client sends a multipart POST to your Spring Boot controller, the controller reads the file into memory, then uploads it to S3. For a 10 MB profile picture, this works. For a 500 MB video or 10,000 concurrent uploads, your application server becomes a file proxy \u2014 consuming heap memory, network bandwidth, and Tomcat threads for data that's just passing through. The production pattern is presigned URLs: your Spring Boot server generates a time-limited URL that authorizes the client to upload or download."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Some scenarios require server-side file processing \u2014 virus scanning before storage, image resizing, or watermarking.",
+              "In these cases, stream the file instead of buffering it entirely in memory.",
+              "The AWS SDK v2 S3Client supports both approaches.",
+              "For uploads, RequestBody.fromInputStream() streams directly from the multipart request.",
+              "For downloads, ResponseInputStream lets you process data in chunks without loading the full object into heap.",
+              "``java @Service public class FileStorageService { private final S3Client s3; private static final String BUCKET = \"my-app-uploads\"; public FileStorageService(S3Client s3) { this.s3 = s3; } public String upload(String key, InputStream content, long contentLength, String contentType) { s3.putObject( PutObjectRequest.builder() .bucket(BUCKET).key(key) .contentType(contentType) .contentLength(contentLength) // required for streaming .build(), RequestBody.fromInputStream(content, contentLength)); return \"s3://\" + BUCKET + \"/\" + key; } public void download(String key, OutputStream target) throws IOException { try (var response = s3.getObject( GetObjectRequest.builder().bucket(BUCKET).key(key).build())) { response.transferTo(target); // streams without full heap."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Presigned URL for uploads/downloads skips the server \u2014 client uploads directly to S3; server generates a time-limited signed URL; eliminates server bandwidth, memory, and connection usage for file transfer S3Client",
+              "putObject with streaming avoids loading files into memory \u2014 use RequestBody",
+              "fromInputStream() with a content length; never buffer large files in a byte array before uploading S3Template from Spring Cloud AWS simplifies common operations \u2014 wraps SDK client with Spring idioms; inherits IAM credential resolution from the task or instance role automatically Never make buckets public; use presigned or CloudFront signed URLs \u2014 presigned URLs expire after a configured duration (15 min to 7 days); CloudFront signed URLs allow longer expiry with CDN distribution Enable versioning and SSE on user-upload buckets \u2014 versioning recovers accidental overwrites; SSE-S3 (or SSE-KMS for key management compliance) encrypts all objects at rest"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Hardcoding AWS credentials or storing files on the EC2/container filesystem instead of S3"
+          }
+        ],
+        "cap": "Presigned URLs \u2014 the right default A presigned URL is a time-limited S3 URL that grants the holder permission to read or write a specific object \u2014 your server generates it with S3Presigner.presignPutO",
+        "familiarity_anchors": [
+          "Spring",
+          "Cloud",
+          "PutObjectRequest"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you handle multipart uploads for very large files in S3?",
+          "How do you enforce that only authenticated users can access objects in a private S3 bucket?",
+          "What is S3 Transfer Acceleration and when would you use it?"
+        ]
+      }
+    }
+  ]
+}

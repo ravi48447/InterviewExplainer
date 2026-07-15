@@ -1,0 +1,248 @@
+{
+  "topic": "Design Fundamentals",
+  "topicSlug": "design-fundamentals",
+  "questions": [
+    {
+      "id": "sdf-005",
+      "slug": "consistent-hashing",
+      "question": "How does consistent hashing work and why is it essential for distributed systems?",
+      "title": "Consistent Hashing: How Distributed Systems Distribute Data",
+      "direct_answer": "Consistent hashing maps both data keys and server nodes onto a circular hash space (0 to 2^32). Each key is assigned to the next server clockwise on the ring. When a node joins or leaves, only keys between the departed node and its predecessor are redistributed \u2014 roughly 1/N of total keys instead of all of them. Virtual nodes (100-200 per physical server) ensure even distribution.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Understanding of why naive modular hashing fails and how consistent hashing solves the redistribution problem",
+        "common_mistake": "Forgetting virtual nodes \u2014 without them, consistent hashing has severe distribution imbalance with small cluster sizes",
+        "to_stand_out": "Discuss bounded-load consistent hashing (Google 2017) and how systems like Cassandra and Kafka use it in practice"
+      },
+      "company_tags": [
+        "Amazon",
+        "Akamai",
+        "Discord",
+        "Cassandra"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem That Made Consistent Hashing Necessary",
+            "content": "Imagine you have 4 cache servers and you distribute keys using `hash(key) % 4`. Server 0 gets keys where hash mod 4 = 0, server 1 gets mod 4 = 1, and so on. This works perfectly \u2014 until you **add or remove a server**.\n\nWhen you go from 4 servers to 5, the modulus changes from `% 4` to `% 5`. A key that hashed to slot 2 under mod-4 might now hash to slot 3 under mod-5. In practice, **~80% of all keys remap to different servers**. For a cache cluster, that means 80% cache misses simultaneously \u2014 a **thundering herd** of requests hitting your database all at once. For a storage cluster, it means 80% of data needs physical migration between nodes.\n\nConsistent hashing solves this by ensuring that **adding or removing a node only remaps ~1/N of the keys** (where N is the number of nodes). Instead of mod arithmetic, it arranges nodes and keys on a ring, and each key is assigned to the nearest node clockwise. When a node leaves, only its keys move \u2014 to the next node on the ring. Everything else stays put."
+          },
+          {
+            "type": "phase",
+            "title": "The Ring: How Keys Find Their Node",
+            "content": "Consistent hashing maps both **nodes and keys** onto a circular hash space (typically 0 to 2^32 - 1). Each node is hashed by its identifier (IP address, hostname) to a position on the ring. Each key is hashed to a position on the same ring. A key belongs to the **first node encountered moving clockwise** from the key's position.\n\nWhen a new node joins the ring, it takes a position and absorbs only the keys between it and the previous node counter-clockwise. All other keys remain with their current nodes. When a node leaves, its keys move to the next node clockwise \u2014 the one that would have been second-closest. In both cases, only **1/N of the keys** are affected.\n\nThis is the fundamental improvement over mod-N hashing: the disruption from topology changes is proportional to `1/N`, not `(N-1)/N`. For a 100-node cluster, adding a node remaps ~1% of keys instead of ~99%.\n\nThe concept generalizes beyond caching. **Cassandra** uses consistent hashing to assign data partitions to nodes. **Kafka** uses it to assign partitions to brokers during rebalancing. **Amazon DynamoDB** uses a variant to distribute data across storage nodes. Any system that needs to redistribute work when nodes join or leave benefits from this approach."
+          },
+          {
+            "type": "phase",
+            "title": "Virtual Nodes: Fixing the Distribution Problem",
+            "content": "Basic consistent hashing has a severe flaw: with only a few physical nodes, the ring has poor distribution. If 4 nodes happen to hash close together on the ring, one node might own 60% of the key space while another owns 5%. This imbalance gets worse with fewer nodes and is sensitive to the specific hash values of node identifiers.\n\n**Virtual nodes** (vnodes) solve this by mapping each physical node to **100\u2013200 positions** on the ring instead of one. A 4-node cluster with 150 vnodes each places 600 points on the ring, giving much more uniform distribution. Statistical variance drops dramatically \u2014 the standard deviation of load per node drops from ~50% with 4 points to ~5% with 600 points.\n\nWhen a physical node leaves, its 150 virtual positions are scattered around the ring, so the keys redistribute across **many different nodes** instead of all flowing to one successor. This prevents the \"one node suddenly gets double the load\" problem.\n\nThe trade-off is metadata overhead \u2014 the ring mapping table grows from N entries to N \u00d7 vnodes entries. For 100 physical nodes \u00d7 150 vnodes = 15,000 entries, each entry is a hash value + node ID, roughly 24 bytes. Total: ~360 KB. Trivial for modern systems, but the table must be synchronized across all clients that perform hash lookups."
+          },
+          {
+            "type": "phase",
+            "title": "Bounded-Load Consistent Hashing: The 2017 Google Improvement",
+            "content": "Even with virtual nodes, consistent hashing doesn't guarantee **load balance** \u2014 it guarantees uniform key distribution, but keys aren't equal. Some keys are hot (accessed millions of times), some are cold. A node that happens to own a few hot keys can become a bottleneck.\n\n**Bounded-load consistent hashing** (Mirrokni et al., Google, 2017) adds a capacity constraint: no node can exceed **(1 + \u03b5) \u00d7 average_load**, where \u03b5 is typically 0.25. When a key's natural owner is at capacity, the algorithm moves clockwise to the next node with capacity. This guarantees that no node handles more than 25% above average, at the cost of slightly more remapping during topology changes.\n\nThis is what Google uses in its load balancers and what Vimeo's **HAProxy** deployment adopted to eliminate hot-node problems. The algorithm maintains consistent hashing's low-disruption property while adding the load-awareness that vanilla consistent hashing lacks.\n\nIn practice, bounded-load consistent hashing matters when you have **highly skewed access patterns** \u2014 a small number of keys receiving disproportionate traffic. For uniform workloads, standard consistent hashing with virtual nodes is sufficient."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Modulo hashing causes cascading redistribution** \u2014 `hash(key) % N` means adding one server remaps ~(N-1)/N of all keys.\n- **Virtual nodes solve uneven distribution** \u2014 without vnodes, random ring placement creates hot spots.\n- **Ring lookup is O(log N) with sorted structure** \u2014 a TreeMap of virtual node positions makes clockwise successor lookup efficient.\n- **Bounded load prevents hot nodes during transitions** \u2014 standard consistent hashing doesn't limit how much extra load a node absorbs during membership.\n- **Used by Cassandra, DynamoDB, and Chord** \u2014 the algorithm is foundational for any distributed system that needs elastic scaling without global."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Consistent hashing solves the cascading redistribution problem that standard modulo hashing creates when you add or remove cache servers. With `hash(key) % N`, adding one server remaps approximately (N-1)/N of all keys \u2014 nearly everything moves. Consistent hashing limits redistribution to approximately 1/N of keys per server added or removed.\n\n**How the ring works:**\n- Hash the server addresses onto a circular ring of 2^32 positions; hash each key to the same ring; the key's owning node is the first server encountered clockwise from the key's position\n- Adding a server inserts one new position on the ring; only the keys between the new node and its predecessor on the ring need to move \u2014 all other assignments are unchanged\n- Removing a server means its keys move to its clockwise successor \u2014 again, only the keys that were on that specific node migrate\n\n**Virtual nodes solve uneven distribution:**\n- With a small number of real servers, random ring placement creates hot spots \u2014 one server might receive 40% of keys while another handles 10%\n- Virtual nodes assign each physical server 100\u2013200 positions on the ring; the combined effect distributes load within 5% of ideal balance\n- Virtual nodes also allow weighted assignment: a server with 2\u00d7 the memory gets 2\u00d7 the virtual node count, attracting proportionally more keys\n\n**Practical implications:**\n- Lookup is O(log N) with a sorted TreeMap of ring positions; this is the data structure Redis Cluster and Cassandra use internally\n- The algorithm is why Cassandra can add a node and rebalance only 1/N of data, why Redis Cluster slots are redistributable without full restart, and why Chord peer-to-peer routing works\n\nI recommend consistent hashing as the default partitioning strategy for any distributed cache or database cluster that needs elastic scaling \u2014 it eliminates the catastrophic resharding event that modulo hashing causes."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does Cassandra use consistent hashing for its token ring?",
+        "What is rendezvous (HRW) hashing and how does it compare?",
+        "How do you handle replication with consistent hashing?"
+      ],
+      "seo": {
+        "metaTitle": "Consistent Hashing Explained with Virtual Nodes \u2014 System Design",
+        "metaDescription": "How consistent hashing distributes data in distributed systems. Virtual nodes, bounded-load extension, TreeMap implementation, and real-world usage in Cassandra and DynamoDB."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Consistent hashing solves the cascading redistribution problem that standard modulo hashing creates when you add or remove cache servers.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Imagine you have 4 cache servers and you distribute keys using hash(key) % 4. Server 0 gets keys where hash mod 4 = 0, server 1 gets mod 4 = 1, and so on. This works perfectly \u2014 until you add or remove a server. When you go from 4 servers to 5, the modulus changes from % 4 to % 5. A key that hashed to slot 2 under mod-4 might now hash to slot 3 under mod-5. In practice, ~80% of all keys remap to different servers. For."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Consistent hashing maps both nodes and keys onto a circular hash space (typically 0 to 2^32 - 1).",
+              "Each node is hashed by its identifier (IP address, hostname) to a position on the ring.",
+              "Each key is hashed to a position on the same ring.",
+              "A key belongs to the first node encountered moving clockwise from the key's position.",
+              "When a new node joins the ring, it takes a position and absorbs only the keys between it and the previous node counter-clockwise.",
+              "All other keys remain with their current nodes."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Modulo hashing causes cascading redistribution \u2014 hash(key) % N means adding one server remaps ~(N-1)/N of all keys",
+              "Virtual nodes solve uneven distribution \u2014 without vnodes, random ring placement creates hot spots",
+              "Ring lookup is O(log N) with sorted structure \u2014 a TreeMap of virtual node positions makes clockwise successor lookup efficient",
+              "Bounded load prevents hot nodes during transitions \u2014 standard consistent hashing doesn't limit how much extra load a node absorbs during membership",
+              "Used by Cassandra, DynamoDB, and Chord \u2014 the algorithm is foundational for any distributed system that needs elastic scaling without global"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Forgetting virtual nodes \u2014 without them, consistent hashing has severe distribution imbalance with small cluster sizes"
+          }
+        ],
+        "cap": "How the ring works: Hash the server addresses onto a circular ring of 2^32 positions; hash each key to the same ring; the key's owning node is the first server encountered clockwise from the key's.",
+        "familiarity_anchors": [
+          "Consistent",
+          "Virtual"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does Cassandra use consistent hashing for its token ring?",
+          "What is rendezvous (HRW) hashing and how does it compare?",
+          "How do you handle replication with consistent hashing?"
+        ]
+      }
+    },
+    {
+      "id": "sdf-007",
+      "slug": "api-gateway-pattern",
+      "question": "What is the API Gateway pattern and why is it essential for microservices architectures?",
+      "title": "API Gateway Pattern: Single Entry Point for Microservices",
+      "direct_answer": "An API Gateway is a single entry point that sits between external clients and internal microservices. It handles cross-cutting concerns \u2014 authentication, rate limiting, TLS termination, request routing, response aggregation \u2014 so individual services don't have to. Without it, clients must know about every service endpoint, and every service must independently implement auth, rate limiting, and CORS.",
+      "layout_type": "design-whiteboard",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 7,
+      "last_updated": "2026-04-12",
+      "interviewer_intent": {
+        "testing": "Understanding of the gateway's role in decoupling clients from services, and awareness of gateway becoming a single point of failure",
+        "common_mistake": "Putting business logic in the gateway \u2014 it should handle cross-cutting infrastructure concerns only, not domain logic",
+        "to_stand_out": "Discuss BFF (Backend for Frontend) pattern, gateway vs service mesh responsibilities, and strategies for avoiding gateway as bottleneck"
+      },
+      "company_tags": [
+        "Netflix",
+        "Amazon",
+        "Kong",
+        "Google"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Problem: Why Clients Can't Talk to Microservices Directly",
+            "content": "In a monolith, the client makes one HTTP call to one server. In microservices, a single page load might need data from 5 different services \u2014 users, orders, products, recommendations, notifications. Without a gateway, the client must know the address of every service, make multiple network calls, handle authentication with each one, and deal with different protocols and error formats.\n\nAn **API gateway** is a single entry point that sits between clients and backend services. It receives one request from the client, routes it to the appropriate service(s), aggregates responses if needed, and handles cross-cutting concerns: **authentication, rate limiting, request logging, SSL termination, and response caching**. The client talks to one URL, one protocol, one authentication scheme.\n\nThe non-obvious value isn't routing \u2014 it's **decoupling**. When the backend team splits the order service into order-management and order-fulfillment, the client doesn't change. When a service migrates from REST to gRPC internally, the gateway translates. The gateway absorbs backend evolution so clients don't have to."
+          },
+          {
+            "type": "component",
+            "title": "What Belongs in the Gateway vs What Doesn't",
+            "content": "The most common mistake with API gateways is **putting business logic in them**. The gateway should handle infrastructure concerns \u2014 things that apply to every request regardless of which service handles it. The moment you write an if-statement about order status or user tier in the gateway, you've created a coupling that defeats the purpose.\n\n**Belongs in the gateway:**\n- Authentication and token validation (verify JWT, reject expired tokens)\n- Rate limiting (per-client quotas, throttling)\n- Request/response logging and tracing (correlation IDs)\n- SSL termination (encrypt externally, plain HTTP internally)\n- Response caching for idempotent GET requests\n- Protocol translation (REST \u2194 gRPC, WebSocket \u2194 HTTP)\n- Request routing based on path, headers, or API version\n\n**Does NOT belong in the gateway:**\n- Business validation (\"is this order amount valid?\")\n- Data transformation beyond simple format conversion\n- Orchestration of multi-service workflows (use a dedicated orchestrator)\n- Database queries of any kind\n\nThe rule of thumb: if removing the gateway should only break cross-cutting infrastructure, not business features. If a business feature breaks without the gateway, that logic is in the wrong place."
+          },
+          {
+            "type": "step",
+            "title": "BFF Pattern: One Gateway Per Client Type",
+            "content": "A single API gateway serving mobile apps, web SPAs, and third-party integrations eventually becomes a bottleneck \u2014 not in performance, but in **team velocity**. The mobile team needs a different response shape than the web team. The third-party API needs versioning that internal clients don't. Changes for one client risk breaking another.\n\nThe **Backend for Frontend** (BFF) pattern solves this by deploying a separate gateway per client type. The mobile BFF aggregates responses into compact payloads optimized for bandwidth. The web BFF returns richer data structures. The partner API BFF handles versioning and rate limiting specific to external consumers.\n\nEach BFF is owned by the team that owns the client, which eliminates cross-team coordination for API changes. Netflix uses this approach extensively \u2014 their mobile, TV, and web clients each have dedicated BFF services that aggregate from shared backend microservices.\n\nThe trade-off is operational overhead \u2014 more gateways to deploy and monitor. For teams with fewer than 3 distinct client types, a single gateway with path-based routing is usually sufficient. The BFF pattern pays for itself when client teams are large enough that a shared gateway creates deployment contention."
+          },
+          {
+            "type": "step",
+            "title": "Gateway vs Service Mesh: Different Problems, Different Layers",
+            "content": "A common confusion in interviews is conflating the API gateway with a **service mesh** (Istio, Linkerd). They operate at different network boundaries and solve different problems.\n\nThe API gateway handles **north-south traffic** \u2014 external clients calling into the cluster. It's the public-facing entry point with authentication, rate limiting, and client-specific concerns. The service mesh handles **east-west traffic** \u2014 service-to-service calls within the cluster. It provides mutual TLS, retry policies, circuit breakers, and observability between internal services.\n\nIn a Kubernetes deployment, the typical setup is: **Ingress controller or API gateway** (Kong, AWS API Gateway, Spring Cloud Gateway) at the edge, **service mesh** (Istio, Linkerd) for internal traffic. The gateway doesn't see internal service calls; the mesh doesn't see external client requests.\n\nSpring Cloud Gateway is a strong choice for Java teams \u2014 it integrates natively with Spring Security for authentication, Resilience4j for circuit breaking, and supports reactive non-blocking I/O for high concurrency. For managed alternatives, AWS API Gateway handles throttling, caching, and authentication without any code, but limits customization."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Single-entry-point routing eliminates N-endpoint client contracts** \u2014 without a gateway, mobile apps must know every service address, handle.\n- **JWT validation at the gateway stops unauthenticated traffic upstream** \u2014 every service behind the gateway can trust the caller's identity without.\n- **Rate limiting at the gateway protects all backend services uniformly** \u2014 a single sliding window per API key prevents one abusive client from starving.\n- **SPOF mitigation requires \u22653 instances with readiness probes** \u2014 a single gateway instance makes every backend service unreachable on failure.\n- **Keep it thin** \u2014 auth, rate limiting, routing, and TLS termination belong here; response aggregation and business logic belong in BFF services."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "An API gateway solves the N-endpoint client problem in microservices. Without it, every mobile app must know every service address, handle auth tokens per service, and update when topology changes. The gateway is a single front door for routing, JWT validation, rate limiting, TLS termination, and observability.\n\n**Core gateway responsibilities:**\n- Request routing: map `/api/users/**` to user-service, `/api/orders/**` to order-service; logical service names resolve through service discovery so routes survive pod restarts\n- JWT authentication: validate bearer tokens in a global filter before any downstream service sees the request; downstream services can trust the caller identity without their own auth filter\n- Rate limiting: enforce per-API-key or per-IP sliding window limits centrally; one configuration change applies uniformly to all protected services\n\n**Spring Cloud Gateway implementation details:**\n- Built on Netty + Project Reactor \u2014 fully non-blocking; one thread handles thousands of concurrent connections; critical for the fan-out pattern where one gateway request spawns multiple backend calls\n- Routes defined with predicates and filters; `lb://service-name` integrates with Eureka/Consul for client-side load balancing without hardcoded IPs\n- Circuit breakers per route protect the gateway from being blocked by one slow backend service\n\n**The SPOF problem:**\n- The gateway is the single point of failure for every backend service; if it goes down, everything goes down\n- Run at minimum three instances behind a network load balancer with readiness probes; alert on gateway-internal latency (excluding downstream) exceeding 10ms\n\nI recommend keeping the gateway strictly thin \u2014 authentication, rate limiting, routing, and TLS termination only; any business orchestration or response aggregation belongs in BFF services behind the gateway, not in the gateway itself."
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does an API Gateway differ from a service mesh?",
+        "What is the Backend for Frontend (BFF) pattern?",
+        "How do you handle authentication and authorization at the gateway?"
+      ],
+      "seo": {
+        "metaTitle": "API Gateway Pattern for Microservices \u2014 System Design Interview",
+        "metaDescription": "API Gateway pattern explained: routing, auth, rate limiting, BFF pattern. Spring Cloud Gateway examples, anti-patterns, and gateway comparison for system design."
+      },
+      "speakable_v2": {
+        "archetype": "F",
+        "pillar": "P01",
+        "hook": "An API gateway solves the N-endpoint client problem in microservices.",
+        "beats": [
+          {
+            "kind": "requirements_fr_nfr",
+            "layout": "paragraph",
+            "text": "In a monolith, the client makes one HTTP call to one server. In microservices, a single page load might need data from 5 different services \u2014 users, orders, products, recommendations, notifications. Without a gateway, the client must know the address of every service, make multiple network calls, handle authentication with each one, and deal with different protocols and error formats. An API gateway is a single entry point that sits between clients and backend services. It receives one request from the client, routes it to the appropriate service(s), aggregates responses if needed, and handles cross-cutting concerns: authentication, rate limiting, request logging, SSL termination, and response caching. The client talks to one URL, one protocol, one authentication scheme. The non-obvious value."
+          },
+          {
+            "kind": "capacity",
+            "layout": "paragraph",
+            "text": "In a monolith, the client makes one HTTP call to one server. In microservices, a single page load might need data from 5 different services \u2014 users, orders, products, recommendations, notifications. Without a gateway, the client must know the address of every service, make multiple network calls, handle authentication with each one, and deal with different protocols and error formats. An API gateway is a single entry point that sits between clients and backend services. It receives one request from the client, routes it to the appropriate service(s), aggregates responses if needed, and handles cross-cutting concerns: authentication, rate limiting, request logging, SSL termination, and response caching. The client talks to."
+          },
+          {
+            "kind": "api",
+            "layout": "bullets",
+            "items": [
+              "A single API gateway serving mobile apps, web SPAs, and third-party integrations eventually becomes a bottleneck \u2014 not in performance, but in team velocity",
+              "The mobile team needs a different response shape than the web team",
+              "The third-party API needs versioning that internal clients don't",
+              "Changes for one client risk breaking another",
+              "The Backend for Frontend (BFF) pattern solves this by deploying a separate gateway per client type"
+            ]
+          },
+          {
+            "kind": "data_model",
+            "layout": "paragraph",
+            "text": "The most common mistake with API gateways is putting business logic in them. The gateway should handle infrastructure concerns \u2014 things that apply to every request regardless of which service handles it. The moment you write an if-statement about order status or user tier in the gateway, you've created a coupling that defeats the purpose. Belongs in the gateway: Authentication and token validation (verify JWT, reject expired tokens) Rate limiting (per-client quotas, throttling) Request/response logging and tracing (correlation IDs) SSL termination (encrypt externally, plain HTTP internally) Response caching for idempotent GET requests Protocol translation (REST \u2194 gRPC, WebSocket \u2194 HTTP) Request routing based on path, headers, or API version Does NOT belong in the gateway: Business validation (\"is this order."
+          },
+          {
+            "kind": "high_level",
+            "layout": "paragraph",
+            "text": "In a monolith, the client makes one HTTP call to one server. In microservices, a single page load might need data from 5 different services \u2014 users, orders, products, recommendations, notifications. Without a gateway, the client must know the address of every service, make multiple network calls, handle authentication with each one, and deal with different protocols and error formats. An API gateway is a single entry point that sits between clients and backend services. It receives one request from the client, routes it to the appropriate service(s), aggregates responses if needed, and handles cross-cutting concerns: authentication, rate limiting, request logging, SSL termination, and response caching. The client talks to one URL, one protocol, one authentication scheme. The non-obvious value."
+          },
+          {
+            "kind": "bottleneck_deep_dive",
+            "layout": "callout",
+            "text": "Putting business logic in the gateway \u2014 it should handle cross-cutting infrastructure concerns only, not domain logic"
+          },
+          {
+            "kind": "tradeoffs",
+            "layout": "paragraph",
+            "text": "Single-entry-point routing eliminates N-endpoint client contracts \u2014 without a gateway, mobile apps must know every service address, handle. JWT validation at the gateway stops unauthenticated traffic upstream \u2014 every service behind the gateway can trust the caller's identity without. Rate limiting at the gateway protects all backend services uniformly \u2014 a single sliding window per API key prevents one abusive client from starving. SPOF mitigation requires \u22653 instances with readiness probes \u2014 a single gateway instance makes every backend service unreachable on failure. Keep it."
+          }
+        ],
+        "cap": "Core gateway responsibilities: Request routing: map /api/users/ to user-service, /api/orders/ to order-service; logical service names resolve through service discovery so routes survive pod restarts J",
+        "familiarity_anchors": [
+          "Gateway",
+          "Without"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does an API Gateway differ from a service mesh?",
+          "What is the Backend for Frontend (BFF) pattern?",
+          "How do you handle authentication and authorization at the gateway?"
+        ]
+      }
+    }
+  ]
+}

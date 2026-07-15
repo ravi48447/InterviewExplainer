@@ -1,0 +1,238 @@
+{
+  "topic": "Oauth2",
+  "topicSlug": "oauth2",
+  "questions": [
+    {
+      "id": "sec-006",
+      "slug": "oauth2-authorization-code-flow",
+      "question": "Walk me through the OAuth2 authorization code flow \u2014 what are the steps and why is each one needed?",
+      "title": "OAuth2 Authorization Code Flow",
+      "direct_answer": "The OAuth2 authorization code flow separates user authentication from token issuance by using a short-lived authorization code as an intermediary. The browser never receives the access token directly \u2014 it is exchanged server-to-server after the code is received. This prevents tokens from being exposed in browser history, logs, or referrer headers.",
+      "layout_type": "lifecycle-timeline",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 5,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Whether the candidate understands why the authorization code flow is more secure than the implicit flow and can trace the full token lifecycle.",
+        "common_mistake": "Confusing the authorization code flow with the implicit flow, or not knowing the purpose of the state parameter (CSRF prevention).",
+        "to_stand_out": "Explain PKCE (Proof Key for Code Exchange) for public clients, the difference between access tokens and ID tokens in OIDC, and how Spring Security OAuth2 Client handles this flow automatically."
+      },
+      "company_tags": [
+        "enterprise",
+        "saas",
+        "fintech",
+        "startup"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Authorization Code Flow Exists Because Browsers Are Not Safe Places for Access Tokens",
+            "content": "Before the authorization code flow existed, OAuth implementations used the **implicit flow**: the authorization server returned the access token directly in the URL fragment (`#access_token=...`) after authentication. The problem: URL fragments appear in browser history, server access logs, referrer headers sent to third-party resources embedded in the page, and anywhere else URLs are recorded. A token in the URL is a token that has been logged in six places.\n\nThe authorization code flow solves this by using **an intermediate short-lived code** instead of the token. The code appears in the URL \u2014 it can be logged \u2014 but it's useless without the client secret and expires in 60 seconds. The actual access token is obtained via a back-channel server-to-server request that never touches the browser. Browsers never see the access token.\n\nThe flow also solves the **client verification problem**. When the authorization server issues a code, it records which redirect URI was used. The client must present the same redirect URI during token exchange. Combined with the client secret (for confidential clients), this proves that the entity exchanging the code is the same registered client that started the flow \u2014 not an attacker who intercepted the code.\n\n**Spring Security OAuth2 Client** handles the entire flow automatically. After configuring `spring.security.oauth2.client.registration.*` properties and calling `.oauth2Login()` in the security configuration, Spring manages the redirect, state parameter, code reception, token exchange, token storage, and refresh \u2014 without any custom code. Understanding the flow is essential for debugging it when it breaks."
+          },
+          {
+            "type": "phase",
+            "title": "Authorization Request and User Authentication \u2014 The Client Steps Out of the Way",
+            "content": "The flow begins when the client application redirects the user's browser to the authorization server's `/authorize` endpoint. The redirect URL includes: `response_type=code`, `client_id`, `redirect_uri` (must match what's registered), `scope` (what permissions are requested), and `state`.\n\n**The `state` parameter** is the CSRF protection mechanism for OAuth2 itself. The client generates a cryptographically random value, stores it in the session, and sends it with the authorization request. When the authorization server redirects back, it includes the same `state`. The client validates that the received value matches the stored one before processing the code. Without this check, an attacker can craft a redirect URL that triggers the flow and associates their account with the victim's \u2014 a flow-injection attack that's subtle and devastating.\n\nAfter redirecting the user, the client waits. The authorization server runs its own authentication flow \u2014 login form, SSO, MFA, biometrics \u2014 entirely independent of the client. **The client has zero involvement in how the user authenticates.** This is the key delegation principle: the client trusts the authorization server to verify identity, and the authorization server trusts the client to use the token only for what it's permitted.\n\nIf authentication succeeds and the user consents to the requested scopes, the authorization server redirects to the client's `redirect_uri` with `code=<short-lived-code>&state=<original-state>`. The code is typically valid for 60 seconds and can only be used once \u2014 a used or expired code is immediately rejected."
+          },
+          {
+            "type": "phase",
+            "title": "Back-Channel Token Exchange \u2014 Why Tokens Never Touch the Browser",
+            "content": "The authorization code visible in the browser URL and potentially logged in several places is not the access token. It's a limited-time, single-use voucher that the server exchanges for tokens in a back-channel request.\n\nThe client's backend (not the browser, not JavaScript) sends a POST to the authorization server's `/token` endpoint with: `grant_type=authorization_code`, the received `code`, `redirect_uri` (must match exactly), `client_id`, and `client_secret` (for confidential clients). The authorization server validates all fields \u2014 mismatched redirect URI or wrong client secret causes immediate rejection.\n\nOn success, the response includes: an `access_token` (short-lived, used for API calls), optionally a `refresh_token` (longer-lived, for obtaining new access tokens), and for OIDC flows, an `id_token` (a JWT containing user identity claims for the client). **Access tokens authorize API calls. ID tokens identify the user to the client.** They're different tokens for different purposes \u2014 a common confusion point.\n\nThe access token and refresh token are returned in the response body of a server-to-server HTTP call. They never appear in a URL, never appear in browser history, and never appear in referrer headers. The back-channel exchange is the security guarantee of this flow. An attacker who intercepts the authorization code from a URL still can't exchange it \u2014 they lack the client secret or PKCE verifier.\n\n**Spring Security OAuth2 Client** stores the obtained tokens in the `OAuth2AuthorizedClient`, accessible via `@RegisteredOAuth2AuthorizedClient` in controller methods. Spring also handles token refresh automatically when the access token expires, using the stored refresh token."
+          },
+          {
+            "type": "phase",
+            "title": "PKCE \u2014 Extending the Flow to Public Clients Without a Client Secret",
+            "content": "Confidential clients (web server applications) can keep a client secret secure. Public clients \u2014 single-page applications, mobile apps \u2014 cannot. A client secret embedded in a JavaScript bundle or mobile app binary is not secret; it's accessible to anyone who inspects the bundle.\n\n**PKCE (Proof Key for Code Exchange)** removes the need for a client secret by using a cryptographic challenge. The client generates a random 43\u2013128 character `code_verifier`. It computes `code_challenge = BASE64URL(SHA256(code_verifier))` and sends the challenge with the authorization request. During token exchange, it sends the original `code_verifier`. The authorization server hashes the verifier and compares it to the stored challenge \u2014 if they match, the exchange is legitimate.\n\nAn attacker who intercepts the authorization code cannot exchange it \u2014 they have the code and the challenge (from the authorization request), but not the `code_verifier` that only the legitimate client generated and never transmitted publicly. PKCE provides the same binding as a client secret without requiring a shared secret.\n\n**OAuth 2.1 (the current draft successor) requires PKCE for all clients**, not just public clients, because PKCE also prevents authorization code injection attacks even for confidential clients. Spring Security OAuth2 Client supports PKCE transparently for registered clients configured with `client-authentication-method=none`. The `code_verifier` generation, challenge computation, and verification are handled automatically.\n\n**OIDC adds the ID token** to the authorization code flow response. The ID token is a JWT signed by the authorization server containing the user's identity claims: `sub` (subject/user ID), `email`, `name`, and any other requested profile claims. The access token authorizes API calls; the ID token identifies the user. Both are issued in the same token exchange response."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Authorization code flow: the token never passes through the browser URL** \u2014 the browser receives an authorization code (short-lived, one-use); the backend exchanges it for tokens via a server-to-server call.\n- **PKCE (Proof Key for Code Exchange) is mandatory for public clients (SPAs, mobile)** \u2014 the client generates a `code_verifier`, sends the hash (`code_challenge`) with the authorization request; proves the exchanger is the same party that initiated the flow.\n- **`state` parameter prevents CSRF on the authorization endpoint** \u2014 the client generates a random `state`, sends it with the authorization request, and validates it in the callback; a missing or mismatched `state` indicates CSRF.\n- **`access_token` is short-lived; `refresh_token` is long-lived** \u2014 access tokens are bearer tokens (no server lookup); refresh tokens are opaque and revocable at the authorization server.\n- **Spring Boot OAuth2 Client auto-configures the flow** \u2014 `spring-boot-starter-oauth2-client` + `spring.security.oauth2.client.registration.*` properties handle redirect, code exchange, token storage, and token refresh automatically."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "OAuth2 authorization code flow is the standard for 'Login with Google/GitHub/Microsoft' and for delegated access between services. Understanding each step is a common interview question for senior backend roles.\n\n**The flow \u2014 step by step**\n1. User clicks 'Login with Google'; your app redirects to `https://accounts.google.com/o/oauth2/auth?client_id=...&redirect_uri=...&state=<random>&scope=openid email`\n2. User authenticates at Google and approves the scopes\n3. Google redirects back to your `redirect_uri` with `?code=<auth_code>&state=<same_random>`\n4. Your backend verifies `state` matches, then exchanges `code` for tokens via POST to Google's token endpoint \u2014 server-to-server, the code never touches the browser again\n5. Google returns `access_token` (short-lived) + `id_token` (JWT with user info) + `refresh_token`\n6. Your app stores tokens and uses `access_token` to call Google APIs on the user's behalf\n\n**Why authorization code instead of implicit flow**\n- Implicit flow returned the access token in the URL fragment \u2014 visible in browser history, referrer headers, and logs\n- Authorization code flow: the token is exchanged server-to-server; the browser only sees a one-time code\n\n**PKCE for SPAs**\n- SPAs cannot keep a client secret; PKCE proves the code exchanger is the same origin that initiated the flow\n- Required for any public client (no client secret) using authorization code flow"
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is PKCE and when is it required in the authorization code flow?",
+        "What is the difference between an OAuth2 access token and an OIDC ID token?",
+        "How does Spring Security's OAuth2 Client store and manage tokens between requests?"
+      ],
+      "seo": {
+        "title": "OAuth2 Authorization Code Flow Explained \u2014 Java Spring Boot Interview",
+        "description": "Step-by-step explanation of OAuth2 authorization code flow for Java developers. Covers state parameter, back-channel token exchange, PKCE, and Spring Security integration."
+      },
+      "speakable_v2": {
+        "archetype": "A",
+        "pillar": "P02",
+        "hook": "OAuth2 authorization code flow is the standard for 'Login with Google/GitHub/Microsoft' and for delegated access between services.",
+        "beats": [
+          {
+            "kind": "definition",
+            "layout": "paragraph",
+            "text": "Before the authorization code flow existed, OAuth implementations used the implicit flow: the authorization server returned the access token directly in the URL fragment (#access_token=...) after authentication. The problem: URL fragments appear in browser history, server access logs, referrer headers sent to third-party resources embedded in the page, and anywhere else URLs are recorded. A token in the URL is a token that has been logged in six places. The authorization code flow solves this by using an intermediate short-lived."
+          },
+          {
+            "kind": "why_exists",
+            "layout": "paragraph",
+            "text": "Whether the candidate understands why the authorization code flow is more secure than the implicit flow and can trace the full token lifecycle."
+          },
+          {
+            "kind": "parts_or_states",
+            "layout": "bullets",
+            "items": [
+              "Authorization code flow: the token never passes through the browser URL \u2014 the browser receives an authorization code (short-lived, one-use); the backend exchanges it for tokens via a server-to-server call",
+              "PKCE (Proof Key for Code Exchange) is mandatory for public clients (SPAs, mobile) \u2014 the client generates a code_verifier, sends the hash (code_challenge) with the authorization request; proves the exchanger is the same party that initiated the flow",
+              "state parameter prevents CSRF on the authorization endpoint \u2014 the client generates a random state, sends it with the authorization request, and validates it in the callback; a missing or mismatched state indicates CSRF",
+              "access_token is short-lived; refresh_token is long-lived \u2014 access tokens are bearer tokens (no server lookup); refresh tokens are opaque and revocable at the authorization server",
+              "Spring Boot OAuth2 Client auto-configures the flow \u2014 spring-boot-starter-oauth2-client + spring"
+            ]
+          },
+          {
+            "kind": "example",
+            "layout": "paragraph",
+            "text": "Before the authorization code flow existed, OAuth implementations used the implicit flow: the authorization server returned the access token directly in the URL fragment (#access_token=...) after authentication. The problem: URL fragments appear in browser history, server access logs, referrer headers sent to third-party resources embedded in the page, and anywhere else URLs are recorded. A token in the URL is a token that has been logged in six places. The authorization code flow solves this by using an intermediate short-lived code instead of the token. The code appears in the URL \u2014 it can be logged \u2014 but it's useless without the client secret and expires in 60 seconds. The actual access token is obtained via a back-channel server-to-server request."
+          },
+          {
+            "kind": "pitfalls",
+            "layout": "bullets",
+            "items": [
+              "Confusing the authorization code flow with the implicit flow, or not knowing the purpose of the state parameter (CSRF prevention)"
+            ]
+          }
+        ],
+        "cap": "Your app stores tokens and uses access_token to call Google APIs on the user's behalf Why authorization code instead of implicit flow Implicit flow returned the access token in the URL fragment \u2014 visi",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "What is PKCE and when is it required in the authorization code flow?",
+          "What is the difference between an OAuth2 access token and an OIDC ID token?",
+          "How does Spring Security's OAuth2 Client store and manage tokens between requests?"
+        ]
+      }
+    },
+    {
+      "id": "ss-006",
+      "slug": "oauth2-resource-server-spring-security",
+      "question": "How do you configure Spring Security as an OAuth2 Resource Server?",
+      "title": "OAuth2 Resource Server Configuration in Spring Security",
+      "direct_answer": "A Resource Server validates JWT Bearer tokens on incoming requests to protect API endpoints. Spring Security's built-in OAuth2 Resource Server support requires adding the spring-security-oauth2-resource-server dependency, providing the JWK Set URI (so Spring can fetch the authorization server's public keys), and calling .oauth2ResourceServer() in the SecurityFilterChain. Spring handles JWT validation, claim extraction, and GrantedAuthority mapping automatically.",
+      "layout_type": "recipe-builder",
+      "difficulty": "intermediate",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-04-13",
+      "interviewer_intent": {
+        "testing": "Whether the candidate can wire a real-world OAuth2 protected API \u2014 not just understand the concept.",
+        "common_mistake": "Manually parsing JWTs in a custom filter when Spring Security's built-in Resource Server does it automatically and more securely.",
+        "to_stand_out": "Discuss custom JWT claim to GrantedAuthority conversion, JWT decoder customization, opaque token introspection, and multi-tenancy (multiple issuers)."
+      },
+      "company_tags": [
+        "Okta",
+        "Auth0",
+        "Microsoft",
+        "Google"
+      ],
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "Stop Writing Custom JWT Filters \u2014 Spring Security's Resource Server Does It More Securely and With Less Code",
+            "content": "The most common mistake when implementing JWT-protected APIs is writing a custom `OncePerRequestFilter` that manually parses the `Authorization` header, validates the signature, and sets the `Authentication`. Developers copy this pattern from tutorials and end up with custom JWT parsing code that misses edge cases: algorithm confusion attacks, key rotation, audience validation, and clock skew handling.\n\n**Spring Security's OAuth2 Resource Server handles all of this with two lines of configuration.** Add `spring-boot-starter-oauth2-resource-server` and set `spring.security.oauth2.resourceserver.jwt.issuer-uri`. Spring Security downloads the JWK Set (the authorization server's public keys) from the OIDC discovery endpoint, caches them, validates every JWT's signature and expiry, checks the `iss` claim against the configured issuer, and creates a `JwtAuthenticationToken` \u2014 all automatically. No custom filter, no JWT library dependency, no signature validation code to maintain.\n\nThe one customization almost every application needs is **claim-to-authority mapping**. By default, Spring Security reads the `scope` claim and creates authorities prefixed with `SCOPE_`. Most applications use a `roles` claim with `ROLE_` prefixed authorities. This mismatch is silent: authentication succeeds, `JwtAuthenticationToken` is populated, but `hasRole(\"ADMIN\")` fails because Spring Security is looking for `ROLE_ADMIN` and finding only `SCOPE_ADMIN` or finding the claim under the wrong key. A `JwtAuthenticationConverter` bean fixes this \u2014 it's the most common first configuration step after getting the basic setup working."
+          },
+          {
+            "type": "step",
+            "title": "Minimal Resource Server Configuration \u2014 Two Lines That Enable Full JWT Validation",
+            "content": "The minimum working configuration requires only a dependency and a property.\n\nIn `application.yml`:\n```yaml\nspring:\n  security:\n    oauth2:\n      resourceserver:\n        jwt:\n          issuer-uri: https://auth-server.example.com\n```\n\nIn the security configuration:\n```java\n@Bean\npublic SecurityFilterChain filterChain(HttpSecurity http) throws Exception {\n    return http\n        .authorizeHttpRequests(auth -> auth\n            .requestMatchers(\"/public/**\").permitAll()\n            .anyRequest().authenticated())\n        .oauth2ResourceServer(oauth2 -> oauth2\n            .jwt(Customizer.withDefaults()))   // enables JWT Bearer token validation\n        .build();\n}\n```\n\nWith `issuer-uri`, Spring Security fetches `https://auth-server.example.com/.well-known/openid-configuration` at startup, discovers the JWK Set URI, downloads the public keys, and validates the `iss` claim in every token against the configured value. Tokens from other issuers are rejected. Use `jwk-set-uri` (the raw JWK Set URL) instead of `issuer-uri` if the authorization server doesn't have an OIDC discovery endpoint \u2014 but you lose the issuer claim validation.\n\nThe resulting `JwtAuthenticationToken` is available in controllers via `@AuthenticationPrincipal Jwt jwt` \u2014 the full JWT object with all claims. Access `jwt.getClaimAsString(\"sub\")` for the subject, `jwt.getClaimAsStringList(\"roles\")` for roles, and so on. Spring Security manages key rotation automatically \u2014 when the authorization server adds a new key to the JWK Set, Spring fetches and caches the updated set on the next validation that encounters an unknown `kid` claim."
+          },
+          {
+            "type": "step",
+            "title": "Custom Claim Mapping \u2014 Fixing the SCOPE_ vs ROLE_ Mismatch",
+            "content": "The default `JwtGrantedAuthoritiesConverter` reads the `scope` or `scp` claim and creates `SCOPE_read`, `SCOPE_write` style authorities. If your authorization server uses a `roles` claim with `[\"ADMIN\", \"USER\"]`, Spring Security doesn't find any recognized authority claim and creates an empty authority set \u2014 authentication succeeds but all role checks fail.\n\nFix this with a `JwtAuthenticationConverter` bean:\n\n```java\n@Bean\npublic JwtAuthenticationConverter jwtAuthenticationConverter() {\n    JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter =\n        new JwtGrantedAuthoritiesConverter();\n    grantedAuthoritiesConverter.setAuthoritiesClaimName(\"roles\"); // read from \"roles\" claim\n    grantedAuthoritiesConverter.setAuthorityPrefix(\"ROLE_\");       // prefix for hasRole()\n\n    JwtAuthenticationConverter jwtAuthConverter = new JwtAuthenticationConverter();\n    jwtAuthConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);\n    return jwtAuthConverter;\n}\n```\n\nSpring Security auto-detects this bean and uses it \u2014 no additional wiring needed. After this, `hasRole(\"ADMIN\")` works as expected because the converter creates `ROLE_ADMIN` from the `roles` claim value `ADMIN`.\n\nFor complex claim structures \u2014 authorities spread across multiple claims, nested objects, or runtime logic \u2014 implement `Converter<Jwt, Collection<GrantedAuthority>>` directly and inject it into `JwtGrantedAuthoritiesConverter`:\n\n```java\ngrantedAuthoritiesConverter.setJwtGrantedAuthoritiesConverter(jwt -> {\n    List<String> roles = jwt.getClaimAsStringList(\"roles\");\n    List<String> perms = jwt.getClaimAsStringList(\"permissions\");\n    // combine both lists into GrantedAuthority objects\n});\n```\n\nThe converter runs after signature validation \u2014 the JWT is already trusted. The resource server trusts claims issued by the authorization server entirely. This is why the authorization server's security is the root of trust: whatever roles it puts in the JWT, the resource server accepts."
+          },
+          {
+            "type": "step",
+            "title": "Opaque Tokens, Multi-Tenancy, and Advanced JWT Decoder Configuration",
+            "content": "For opaque tokens (random strings with no embedded claims), configure the introspection endpoint instead of the JWK Set URI:\n\n```yaml\nspring.security.oauth2.resourceserver.opaquetoken.introspection-uri=https://auth.example.com/introspect\nspring.security.oauth2.resourceserver.opaquetoken.client-id=resource-server\nspring.security.oauth2.resourceserver.opaquetoken.client-secret=secret\n```\n\nSpring Security calls the introspection endpoint on every request with the token, receiving `active: true/false` and the associated claims. The key trade-off: **opaque tokens support instant revocation** (the authorization server checks validity on each introspection) but add a **network round-trip per request**. Cache introspection responses for 30\u201360 seconds to reduce the performance impact while maintaining near-real-time revocation.\n\nFor **multi-tenant applications** serving tokens from multiple authorization servers (different Okta tenants, internal and external IdPs), configure `JwtIssuerAuthenticationManagerResolver`:\n\n```java\n@Bean\npublic JwtIssuerAuthenticationManagerResolver authenticationManagerResolver() {\n    // Spring fetches JWK Sets for each trusted issuer separately\n    return JwtIssuerAuthenticationManagerResolver\n        .fromTrustedIssuers(\"https://issuer1.example.com\", \"https://issuer2.example.com\");\n}\n```\n\nThis reads the `iss` claim from each incoming JWT without verifying the signature first, looks up the configured `JwtDecoder` for that issuer, and delegates validation. The list of trusted issuers is your allowlist \u2014 an `iss` claim not in that list results in immediate rejection. Never build this allowlist from user input or token claims \u2014 hardcode or load from configuration only."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Resource server validates the JWT \u2014 it does not issue it** \u2014 the authorization server issues tokens; the resource server (your API) only validates the signature and claims using the public key from the JWKS endpoint.\n- **`spring-boot-starter-oauth2-resource-server` + `issuer-uri` property is the minimal configuration** \u2014 Spring auto-fetches the JWKS from `{issuer-uri}/.well-known/openid-configuration` and validates every `Authorization: Bearer` request.\n- **Custom `JwtAuthenticationConverter` maps JWT claims to `GrantedAuthority`** \u2014 the default maps `scope` claims; override to map custom claims (`roles`, `permissions`) to Spring's `GrantedAuthority` list.\n- **`JwtDecoder` can be customized for additional claim validation** \u2014 validate `aud` (audience), `iss` (issuer), custom business claims; `NimbusJwtDecoder.withJwkSetUri()` + `.jwtProcessorCustomizer()` for extra validators.\n- **Opaque token introspection for non-JWT tokens** \u2014 `spring.security.oauth2.resourceserver.opaquetoken.introspection-uri` configures a resource server that calls the auth server on every request to validate the token."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A resource server is any API that accepts OAuth2 tokens to authorize requests. Spring Security's resource server support validates JWTs without writing any filter code.\n\n**Minimal setup**\n```yaml\nspring:\n  security:\n    oauth2:\n      resourceserver:\n        jwt:\n          issuer-uri: https://auth.example.com\n```\n- Spring fetches the JWKS URI from the issuer's `.well-known/openid-configuration`\n- Every request with `Authorization: Bearer <jwt>` is validated against the fetched public keys\n- Claims are mapped to a `JwtAuthenticationToken` in the `SecurityContext`\n\n**Mapping claims to authorities**\n- Default: Spring maps `scope` claims to `SCOPE_read`, `SCOPE_write` authorities\n- Custom: `@Bean JwtAuthenticationConverter` \u2014 extract a custom `roles` claim and map to `ROLE_ADMIN`, `ROLE_USER`\n- `@PreAuthorize(\"hasAuthority('SCOPE_read')\")` or `hasRole('ADMIN')` \u2014 depends on how you mapped\n\n**Additional claim validation**\n- Validate `aud` claim: `OAuth2TokenValidator<Jwt>` that checks `jwt.getAudience().contains(\"my-api\")`\n- Compose with `DelegatingOAuth2TokenValidator` to run multiple validators\n- Fails validation \u2192 `401 Unauthorized` with `WWW-Authenticate: Bearer error=\"invalid_token\"`"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How would you validate additional JWT claims like 'aud' (audience) or a custom claim?",
+        "How do you configure a Resource Server to accept tokens from multiple issuers (multi-tenancy)?",
+        "What is the difference between JWT-based and opaque token Resource Server configuration?"
+      ],
+      "seo": {
+        "metaTitle": "OAuth2 Resource Server Spring Security Configuration \u2014 Java Guide",
+        "metaDescription": "Step-by-step guide to configuring Spring Security as an OAuth2 Resource Server: JWK Set URI, SecurityFilterChain, custom claim-to-authority mapping, and testing with mock JWTs."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P02",
+        "hook": "A resource server is any API that accepts OAuth2 tokens to authorize requests.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The most common mistake when implementing JWT-protected APIs is writing a custom OncePerRequestFilter that manually parses the Authorization header, validates the signature, and sets the Authentication. Developers copy this pattern from tutorials and end up with custom JWT parsing code that misses edge cases: algorithm confusion attacks, key rotation, audience validation, and clock skew handling. Spring Security's OAuth2 Resource Server handles all of this with two lines of configuration. Add spring-boot-starter-oauth2-resource-server and set spring.security.oauth2.resourceserver.jwt.issuer-uri. Spring Security downloads the JWK Set (the authorization server's public keys) from the OIDC discovery endpoint."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "The minimum working configuration requires only a dependency and a property.",
+              "In application.yml: ``yaml spring: security: oauth2: resourceserver: jwt: issuer-uri: https://auth-server.example.com ` In the security configuration: `java @Bean public SecurityFilterChain filterChain(HttpSecurity http) throws Exception { return http .authorizeHttpRequests(auth -> auth .requestMatchers(\"/public/**\").permitAll() .anyRequest().authenticated()) .oauth2ResourceServer(oauth2 -> oauth2 .jwt(Customizer.withDefaults())) // enables JWT Bearer token validation .build(); } ` With issuer-uri, Spring Security fetches https://auth-server.example.com/.well-known/openid-configuration at startup, discovers the JWK Set URI, downloads the public keys, and validates the iss claim in every token against the configured value.",
+              "Tokens from other issuers are rejected.",
+              "Use jwk-set-uri (the raw JWK Set URL) instead of issuer-uri if the authorization server doesn't have an OIDC discovery endpoint \u2014 but you lose the issuer claim validation.",
+              "The resulting JwtAuthenticationToken is available in controllers via @AuthenticationPrincipal Jwt jwt \u2014 the full JWT object with all claims.",
+              "Access jwt.getClaimAsString(\"sub\") for."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Resource server validates the JWT \u2014 it does not issue it \u2014 the authorization server issues tokens; the resource server (your API) only validates the signature and claims using the public key from the JWKS endpoint",
+              "spring-boot-starter-oauth2-resource-server + issuer-uri property is the minimal configuration \u2014 Spring auto-fetches the JWKS from {issuer-uri}/",
+              "well-known/openid-configuration and validates every Authorization: Bearer request",
+              "Custom JwtAuthenticationConverter maps JWT claims to GrantedAuthority \u2014 the default maps scope claims; override to map custom claims (roles, permissions) to Spring's GrantedAuthority list",
+              "JwtDecoder can be customized for additional claim validation \u2014 validate aud (audience), iss (issuer), custom business claims; NimbusJwtDecoder"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Manually parsing JWTs in a custom filter when Spring Security's built-in Resource Server does it automatically and more securely."
+          }
+        ],
+        "cap": "Minimal setup `yaml spring: security: oauth2: resourceserver: jwt: issuer-uri: https://auth.example.com Spring fetches the JWKS URI from the issuer's .well-known/openid-configuration Every request wit",
+        "familiarity_anchors": [
+          "Resource",
+          "Server",
+          "Bearer"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How would you validate additional JWT claims like 'aud' (audience) or a custom claim?",
+          "How do you configure a Resource Server to accept tokens from multiple issuers (multi-tenancy)?",
+          "What is the difference between JWT-based and opaque token Resource Server configuration?"
+        ]
+      }
+    }
+  ]
+}

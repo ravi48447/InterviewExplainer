@@ -1,0 +1,334 @@
+{
+  "topic": "Scenario Based",
+  "topicSlug": "scenario-based",
+  "questions": [
+    {
+      "id": "perf-008",
+      "slug": "what-is-cache-stampede-how-to-prevent-it",
+      "question": "What is cache stampede and how do you prevent it?",
+      "title": "Cache Stampede: What It Is and How to Prevent It",
+      "difficulty": "intermediate",
+      "layout_type": "problem-detective",
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "company_tags": [
+        "Reddit",
+        "Twitter",
+        "Cloudflare",
+        "Pinterest"
+      ],
+      "interviewer_intent": {
+        "testing": "Whether you understand the thundering herd problem at the cache layer and know the probabilistic early expiry and mutex locking techniques to prevent it.",
+        "common_mistake": "Thinking that cache TTL alone is sufficient protection, or using a distributed lock without a timeout (risk of deadlock).",
+        "to_stand_out": "Explain probabilistic early expiry (XFetch algorithm), mention using Redis SETNX for distributed mutex with short TTL as fallback, and discuss background refresh patterns."
+      },
+      "direct_answer": "Cache stampede happens when many requests simultaneously miss an expired cache entry. Prevent it with mutex locking, probabilistic early expiry, or background refresh before expiration.",
+      "answer": {
+        "sections": [
+          {
+            "type": "problem_statement",
+            "title": "500 Threads Hit the Database at the Same Millisecond",
+            "content": "A high-traffic e-commerce site caches its product catalog in Redis with a 60-second TTL. During normal traffic, the cache serves thousands of requests per second at microsecond latency. But every 60 seconds \u2014 the moment the TTL expires \u2014 hundreds of concurrent requests simultaneously discover a cache miss and independently decide to query the database to rebuild the cache.\n\nThe database receives 500 identical queries in the same second. CPU spikes to 100%, connection pools exhaust, and the spike cascades into timeouts for unrelated endpoints sharing the same database. The cache eventually rebuilds \u2014 499 of the 500 responses are thrown away because only one can win the write \u2014 but the damage is done. Under extreme traffic, this 60-second cycle can cascade into a full outage.\n\nThis is a **cache stampede**, also called a thundering herd. The root cause is not the database query being slow or the cache TTL being wrong. The root cause is that every copy of the cached value expires at exactly the same moment, causing synchronized concurrent recomputation that overwhelms the origin."
+          },
+          {
+            "type": "before_code",
+            "title": "The Naive Cache-Aside That Works Until Traffic Arrives",
+            "content": "The standard cache-aside pattern looks correct \u2014 check the cache, miss, fetch from database, populate cache. Under low concurrency, it works perfectly. Under high concurrency, it becomes a weapon pointed at your database.\n\n```java\n@Service\npublic class CatalogService {\n    public List<Product> getCatalog() {\n        List<Product> cached = redis.get(\"catalog\");\n        if (cached != null) return cached;\n\n        // Under low traffic: 1 thread reaches here, queries DB, writes cache\n        // Under high traffic: 500 threads reach here simultaneously\n        // All 500 query the database \u2014 499 results are discarded\n        List<Product> products = db.findAllProducts();\n        redis.setex(\"catalog\", 60, products);\n        return products;\n    }\n}\n```\n\nThe problem is in the gap between the cache check returning null and the cache being repopulated. With a 60-second TTL, this gap opens simultaneously for every request that arrives during the miss window. The first request to complete writes the cache, but by then 499 other threads have already started their database queries. Each one pays the full cost of a catalog fetch \u2014 and the database pays the combined cost 500 times over."
+          },
+          {
+            "type": "diagnosis",
+            "title": "Why Shared TTL Creates a Synchronized Thundering Herd",
+            "content": "The stampede happens because all copies of the cached value share the same expiry timestamp. When that timestamp passes, every request is a miss, and the cache-aside pattern has no coordination mechanism to prevent concurrent recomputation.\n\nThree characteristics make a cache entry vulnerable to stampede: **popularity** (high request rate means more threads hit the miss window), **compute cost** (an expensive database query means each thread ties up a connection and CPU for a long time), and **sharp TTL** (a fixed expiry time means the transition from cached to uncached is instantaneous rather than gradual).\n\nThree prevention strategies exist, each with different trade-offs:\n\n**Distributed mutex** \u2014 only one thread fetches from the database; others wait or serve stale data. Simple to implement but adds latency for waiting threads and requires a lock with a TTL to prevent permanent deadlock if the lock holder crashes.\n\n**Background refresh** \u2014 a scheduled job refreshes the cache before it expires, so application threads never trigger a database call. Simplest operationally but requires knowing the refresh schedule and wastes compute if the data changes rarely.\n\n**Probabilistic early expiry (XFetch)** \u2014 each request randomly decides whether to refresh the cache before TTL, with probability increasing as expiry approaches. Spreads recomputation over time instead of concentrating it at the expiry moment. No locks, no scheduler, but requires more careful tuning."
+          },
+          {
+            "type": "after_code",
+            "title": "Three Defenses: Mutex Lock, Background Refresh, and Probabilistic Expiry",
+            "content": "The distributed mutex uses Redis `SETNX` (set-if-not-exists) to ensure only one thread rebuilds the cache. Other threads either wait briefly and retry, or serve stale data if a previous value is available under a separate key.\n\n```java\npublic List<Product> getCatalog() {\n    List<Product> cached = redis.get(\"catalog\");\n    if (cached != null) return cached;\n\n    // SETNX: only one thread acquires. PX 5000: lock auto-expires in 5s\n    boolean acquired = redis.set(\"catalog:lock\", \"1\",\n            SetParams.setParams().nx().px(5000));\n    if (acquired) {\n        try {\n            List<Product> products = db.findAllProducts();\n            redis.setex(\"catalog\", 60, products);\n            return products;\n        } finally {\n            redis.del(\"catalog:lock\");\n        }\n    }\n    // Did not get lock \u2014 wait briefly, then retry\n    Thread.sleep(100);\n    return getCatalog();\n}\n```\n\nThe lock TTL of 5 seconds is critical. Without it, a thread that crashes while holding the lock creates a permanent deadlock \u2014 no thread can ever rebuild the cache. The 5-second expiry ensures the lock self-heals. Set the TTL longer than the expected database query time but short enough that a crash does not leave the system locked for minutes.\n\nThe background refresh pattern eliminates the stampede entirely by ensuring the cache is always warm. A scheduled job runs on a shorter interval than the TTL.\n\n```java\n@Scheduled(fixedDelay = 50_000) // refresh every 50s, TTL is 60s\npublic void refreshCatalogCache() {\n    List<Product> products = db.findAllProducts();\n    redis.setex(\"catalog\", 60, products);\n}\n```\n\nBecause the job runs every 50 seconds with a 60-second TTL, the cache is refreshed 10 seconds before it would expire. Application threads never see a cache miss under normal conditions. This is the approach I prefer for data that changes infrequently \u2014 product catalogs, configuration, reference data.\n\nThe **XFetch algorithm** takes a probabilistic approach. Each cache read computes a random value, and if that value exceeds a threshold that increases as the TTL countdown approaches zero, the thread proactively refreshes the cache instead of waiting for expiry. The probability function spreads recomputation across multiple time windows, making it statistically unlikely that many threads refresh simultaneously. No locks needed, no scheduler needed \u2014 but the tuning parameters (delta for recomputation cost, beta for aggressiveness) require experimentation with your specific traffic patterns."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Stampede: popular cache entry expires; all concurrent requests hit the database simultaneously** \u2014 database receives full request rate for that entry; CPU saturates; persists until cache is repopulated\n- **Mutex lock gates database access to one caller** \u2014 first caller sets a Redis lock (`SET nx EX`); fills the cache; others wait then read populated value; prevents N concurrent database queries for the same key\n- **Probabilistic early expiry prevents synchronized expiry** \u2014 refresh probability increases as TTL decreases; cache is refreshed before expiry; no synchronized miss; implementation: if `random() < beta x delta x log(ttl_remaining)`, refresh now\n- **Background refresh is the cleanest solution for hot keys** \u2014 scheduled job refreshes before expiry; user requests never see a miss; database queried once per TTL period regardless of traffic\n- **TTL jitter prevents coordinated stampedes** \u2014 `TTL = base + random(0, base * 0.2)` distributes expiry across a window; prevents all keys set at startup from expiring simultaneously"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "A cache stampede happens when a popular cache entry expires and many concurrent requests all miss simultaneously, all query the database, and all try to write the same key back \u2014 which can take a database from healthy to overloaded in seconds.\n\n**Why it happens**\n- At steady state, the cache serves thousands of requests per second for a popular entry; when that entry's TTL expires, all those concurrent requests reach the database simultaneously \u2014 the database receives the full request rate for that entry directly\n- If the database query is expensive (joining multiple tables, scanning millions of rows), all concurrent threads run it simultaneously; the database CPU saturates, latency spikes, and the storm persists until the cache is repopulated\n\n**Prevention 1 \u2014 Mutex lock**\n- When the cache misses, acquire a distributed lock before querying the database: `redisTemplate.execute(new RedisCallback<> { ... SET nx EX 10 ... })`; only the thread that acquires the lock queries the database; all other threads wait briefly and then read from the now-populated cache\n- The downside: threads that miss the lock must wait; set the lock TTL longer than the database query duration; handle the case where the lock holder fails before populating the cache\n\n**Prevention 2 \u2014 Probabilistic early expiry**\n- Rather than expiring all at once, each request has a small probability of proactively refreshing the cache before expiry \u2014 as the TTL decreases, the probability of early refresh increases\n- By the time the cache actually expires, a lucky early request has already refreshed it; expiry never causes a synchronized miss because the value is always refreshed before TTL reaches zero\n\n**Prevention 3 \u2014 Background refresh**\n- A scheduled background job refreshes cache entries before they expire \u2014 user-facing requests always hit a warm cache because expiry happens in the background, not in the request path\n- This is the cleanest solution for high-traffic hot keys: the cache is perpetually warm, and the database is queried once per TTL period regardless of traffic volume\n\n**Prevention 4 \u2014 TTL jitter**\n- If many keys expire at the same time (set at startup with the same TTL), they all stampede together; add a random jitter: `TTL = baseTTL + random(0, baseTTL * 0.2)` distributes expiry across a window"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How does the XFetch algorithm work for probabilistic cache expiry?",
+        "What is the difference between cache stampede and cache avalanche?",
+        "How do you implement a background cache refresh in Spring Boot?"
+      ],
+      "seo": {
+        "metaTitle": "Cache Stampede: What It Is and How to Prevent It in Java | Interview Guide",
+        "metaDescription": "Understand cache stampede (thundering herd) and learn to prevent it using Redis distributed locks, background refresh, and probabilistic early expiry in Java."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "A cache stampede happens when a popular cache entry expires and many concurrent requests all miss simultaneously, all query the database, and all try to write the same key back \u2014 which can take a.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "Cache stampede happens when many requests simultaneously miss an expired cache entry. Prevent it with mutex locking, probabilistic early expiry, or background refresh before expiration."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Cache stampede happens when many requests simultaneously miss an expired cache entry.",
+              "Prevent it with mutex locking, probabilistic early expiry, or background refresh before expiration."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Stampede: popular cache entry expires; all concurrent requests hit the database simultaneously \u2014 database receives full request rate for that entry; CPU saturates; persists until cache is repopulated Mutex lock gates database access to one caller \u2014 first caller sets a Redis lock (SET nx EX); fills the cache; others wait then read populated value; prevents N concurrent database queries for the same key Probabilistic early expiry prevents synchronized expiry \u2014 refresh probability increases as TTL decreases; cache is refreshed before expiry; no synchronized miss; implementation: if random() < beta x delta x log(ttl_remaining), refresh now Background refresh is the cleanest solution for hot keys \u2014 scheduled job refreshes before expiry; user requests never see a miss; database queried once per TTL period regardless of traffic TTL jitter prevents coordinated stampedes \u2014 TTL = base + random(0, base * 0",
+              "2) distributes expiry across a window; prevents all keys set at startup from expiring simultaneously"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Thinking that cache TTL alone is sufficient protection, or using a distributed lock without a timeout (risk of deadlock)."
+          }
+        ],
+        "cap": "}); only the thread that acquires the lock queries the database; all other threads wait briefly and then read from the now-populated cache The downside: threads that miss the lock must wait; set the l",
+        "familiarity_anchors": [
+          "Cache",
+          "Prevent"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How does the XFetch algorithm work for probabilistic cache expiry?",
+          "What is the difference between cache stampede and cache avalanche?",
+          "How do you implement a background cache refresh in Spring Boot?"
+        ]
+      }
+    },
+    {
+      "id": "ops-001",
+      "slug": "blue-green-vs-canary-deployment-difference",
+      "question": "What is the difference between blue-green and canary deployment?",
+      "title": "Blue-Green vs Canary Deployment: Key Differences",
+      "difficulty": "intermediate",
+      "layout_type": "comparison-arena",
+      "reading_time_minutes": 5,
+      "last_updated": "2025-01-15",
+      "company_tags": [
+        "Netflix",
+        "Amazon",
+        "Spotify",
+        "Airbnb"
+      ],
+      "interviewer_intent": {
+        "testing": "Whether you understand the risk trade-offs between instant cutover (blue-green) and gradual rollout (canary), and when each strategy is appropriate.",
+        "common_mistake": "Confusing the two or thinking canary is always better \u2014 blue-green is preferable when instant rollback is more important than blast radius reduction.",
+        "to_stand_out": "Mention traffic splitting mechanisms (Kubernetes ingress weights, feature flags, Istio VirtualService), database migration compatibility requirements for each strategy, and how canary combines with observability-driven automation."
+      },
+      "direct_answer": "Blue-green deploys a full replacement environment and switches all traffic at once; canary gradually shifts a small percentage of traffic to the new version, enabling early error detection before full rollout.",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Core Trade-Off: Rollback Speed vs Blast Radius",
+            "content": "The choice between blue-green and canary comes down to one question: do you trust your pre-production testing enough to expose all users at once, or do you need real production traffic to validate the release?\n\nBlue-green keeps two identical environments and swaps 100% of traffic in one atomic switch. If the new version breaks, the load balancer points back to the old environment in seconds. The cost: every user hits the new code immediately, so a subtle bug in a code path your tests missed reaches everyone before you know it exists.\n\nCanary takes the opposite approach \u2014 route a tiny slice of traffic (often 1-5%) to the new version first, watch error rates and latency on that slice, then widen. The blast radius of a bad release stays small because most users never see the broken code. The cost is operational complexity: you need traffic splitting infrastructure, per-version metrics, and either a human watching dashboards or automated promotion gates.\n\nNeither strategy is universally better, and this is the mistake most candidates make \u2014 assuming canary is always superior. Blue-green shines when rollback speed matters more than blast radius \u2014 internal services, batch processors, or systems where a quick revert is the fastest path to recovery. Canary shines when the service is customer-facing at scale and you cannot afford to expose millions of users to an untested code path, even briefly.\n\nBoth share one hard requirement that teams overlook: **database schema compatibility**. During the transition window \u2014 seconds for blue-green, hours for canary \u2014 old and new application code runs simultaneously against the same database. Migrations that drop or rename columns break whichever version expects the old schema."
+          },
+          {
+            "type": "comparison_table",
+            "title": "Where the Two Strategies Actually Diverge",
+            "content": "The surface difference is traffic shifting, but the real divergence is in validation philosophy \u2014 blue-green trusts pre-switch testing, canary trusts production metrics. That philosophical gap drives every other difference in the table. Blue-green bets everything on your ability to catch problems before the switch. Canary hedges that bet by exposing a small slice of real users first and measuring what happens.\n\n| Dimension | Blue-Green | Canary |\n|---|---|---|\n| **Traffic shift** | 100% at once (LB/DNS switch) | Gradual (1% \u2192 10% \u2192 50% \u2192 100%) |\n| **Rollback mechanism** | Flip LB back \u2014 seconds | Reroute canary to 0% \u2014 seconds to minutes |\n| **Blast radius on failure** | All users see the bug | Only canary slice affected |\n| **Infrastructure cost** | 2\u00d7 full capacity during deploy | Small canary subset alongside stable |\n| **Validation method** | Pre-switch smoke tests only | Real-traffic metrics on live users |\n| **Traffic splitting needed** | No \u2014 just DNS or LB swap | Yes \u2014 ingress weights, Istio VirtualService, or feature flags |\n| **Observability dependency** | Low \u2014 binary pass/fail decision | High \u2014 per-version metrics drive promotion |\n| **DB migration constraint** | Backward-compatible for seconds | Backward-compatible for hours |\n\nThe infrastructure cost row deserves emphasis: blue-green requires double the full capacity during the transition window because both environments must be sized to handle 100% traffic independently. Canary only adds a small subset of instances running the new version alongside the existing fleet, making it significantly cheaper for services that already run at scale."
+          },
+          {
+            "type": "when_to_use",
+            "title": "Choosing the Right Strategy \u2014 And Why Mature Teams Use Both",
+            "content": "**Blue-green fits when** the service is stateless or session-free, rollback speed is the top priority, and you have the infrastructure budget for two full environments. Internal APIs, batch workers, and scheduled jobs are typical blue-green candidates. The blast radius of a brief all-users exposure is manageable because the \"users\" are other services with retry logic, not humans refreshing a broken page.\n\n**Canary fits when** the service is customer-facing, high-traffic, and the cost of a bug reaching all users \u2014 even for 30 seconds \u2014 is unacceptable. E-commerce checkout flows, payment processing, and search ranking changes are canary territory. The overhead of traffic splitting through Kubernetes ingress weights, Istio `VirtualService` percentage routes, or application-level feature flags pays for itself the first time a canary catches a regression that staging missed.\n\n**The most mature teams combine both.** A canary rollout handles the initial validation \u2014 1% traffic for five minutes, automated metrics check via Argo Rollouts or Flagger, then promotion. If the canary passes but a problem surfaces hours later at full scale, a blue-green-style instant rollback provides the escape hatch. Argo Rollouts implements exactly this hybrid: canary analysis steps with an automatic rollback to the stable ReplicaSet if SLO metrics breach during any step.\n\nOne detail that separates experienced answers from textbook ones: the **database migration strategy is identical for both**. Whether you swap 100% of traffic in one second or ramp over an hour, old and new code overlap on the same database. Every migration must use expand-contract \u2014 add new columns first, dual-write, then clean up old columns after the old version is fully gone. Teams that nail the deployment strategy but ignore migration compatibility still experience downtime during rollout."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Blue-green: 100% traffic switch at once; canary: gradual percentage increase** \u2014 blue-green requires double infrastructure but enables instant rollback; canary limits blast radius but requires traffic-splitting infrastructure\n- **Blue-green rollback is one load balancer rule change** \u2014 flip the target group weight from green to blue; zero code changes required; completes in seconds\n- **Canary requires metrics to define \"success\"** \u2014 before increasing traffic percentage, confirm error rate, P99 latency, and business metrics (conversion rate, checkout completion) are not degraded vs the stable version\n- **Running two versions simultaneously requires backward-compatible database changes** \u2014 canary has both versions hitting the database at once; new columns must be nullable, new API fields must be optional; schema changes must be additive during the rollout window\n- **Feature flags provide code-level canary without traffic splitting** \u2014 deploy to all instances; enable for 1% of users via LaunchDarkly or Unleash; rollback is a flag toggle, not a deployment"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Blue-green and canary are both zero-downtime deployment strategies, but they make different trade-offs between speed of rollout and risk surface.\n\n**Blue-green \u2014 full environment switch**\n- Blue-green maintains two complete environments \u2014 blue (current production) and green (new version) \u2014 and switches all traffic from blue to green at once via a load balancer or DNS change\n- Which means: no users experience a mixed version during the transition; rollback is instant (flip back to blue); but you need double the infrastructure cost and the switch is all-or-nothing \u2014 if the new version has a bug, 100% of users hit it before you can roll back\n- Blue-green is the right choice when your pre-production testing is thorough and you trust the new version, or when the change is a big-bang release that can't be phased (e.g., a breaking schema change)\n\n**Canary \u2014 incremental rollout**\n- A canary release sends a small percentage of traffic (1%, 5%) to the new version while the rest continues to use the old \u2014 which means real users test the new version at limited blast radius before full rollout\n- The routing is typically done by a load balancer weighted rule (ALB weighted target groups, Nginx upstream weight, Kubernetes service mesh traffic splitting); you monitor error rates and latency for the canary group before increasing the percentage\n- If the canary shows elevated errors or latency, you route 0% to it and rollback without most users ever seeing the issue\n\n**When to use each**\n- Blue-green: you have full pre-production validation, need an immediate cutover (e.g., breaking API changes), or can't run two versions simultaneously due to database schema constraints\n- Canary: you want to validate with real traffic before full rollout, the change is stateless, and you have metrics to detect regressions at low traffic percentages\n\n**Feature flags as a code-level alternative**\n- Both strategies operate at the infrastructure level; feature flags provide the same progressive exposure at the code level \u2014 deploy to all instances, enable for 1% of users via a flag, roll out gradually"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you automate canary promotion and rollback based on metrics?",
+        "How do you handle database migrations with blue-green deployments?",
+        "How do you implement canary deployments in Kubernetes?"
+      ],
+      "seo": {
+        "metaTitle": "Blue-Green vs Canary Deployment: Key Differences | Java DevOps Interview",
+        "metaDescription": "Understand the difference between blue-green and canary deployment strategies, when to use each, and how they handle database migrations and rollback."
+      },
+      "speakable_v2": {
+        "archetype": "B",
+        "pillar": "P01",
+        "hook": "Blue-green and canary are both zero-downtime deployment strategies, but they make different trade-offs between speed of rollout and risk surface.",
+        "beats": [
+          {
+            "kind": "what_each_is",
+            "layout": "paragraph",
+            "text": "The choice between blue-green and canary comes down to one question: do you trust your pre-production testing enough to expose all users at once, or do you need real production traffic to validate the release? Blue-green keeps two identical environments and swaps 100% of traffic in one atomic switch. If the new version breaks, the load balancer points back to the old environment in seconds. The cost: every user hits."
+          },
+          {
+            "kind": "differences",
+            "layout": "bullets",
+            "items": [
+              "The surface difference is traffic shifting, but the real divergence is in validation philosophy \u2014 blue-green trusts pre-switch testing, canary trusts production metrics",
+              "That philosophical gap drives every other difference in the table",
+              "Blue-green bets everything on your ability to catch problems before the switch",
+              "Canary hedges that bet by exposing a small slice of real users first and measuring what happens",
+              "| Dimension | Blue-Green | Canary | |---|---|---| | Traffic shift | 100% at once (LB/DNS switch) | Gradual (1% \u2192 10% \u2192 50% \u2192 100%) | | Rollback mechanism | Flip LB back \u2014 seconds | Reroute canary to 0% \u2014 seconds to minutes | | Blast radius on failure | All users see the bug | Only canary slice affected | | Infrastructure cost | 2\u00d7 full capacity during deploy | Small canary subset alongside stable | | Validation method | Pre-switch smoke tests only | Real-traffic metrics on live users | | Traffic splitting needed | No \u2014 just DNS or LB swap | Yes \u2014 ingress weights, Istio VirtualService, or feature flags | | Observability dependency | Low \u2014 binary pass/fail decision | High \u2014 per-version metrics drive promotion | | DB migration constraint | Backward-compatible for seconds | Backward-compatible for hours | The infrastructure cost row deserves emphasis: blue-green requires double the full capacity during the transition window because both environments must be sized to handle 100% traffic independently"
+            ]
+          },
+          {
+            "kind": "when_to_pick",
+            "layout": "paragraph",
+            "text": "Blue-green fits when the service is stateless or session-free, rollback speed is the top priority, and you have the infrastructure budget for two full environments. Internal APIs, batch workers, and scheduled jobs are typical blue-green candidates. The blast radius of a brief all-users exposure is manageable because the \"users\" are other services with retry logic, not humans refreshing a broken page. Canary fits when the service is customer-facing, high-traffic, and the cost of a bug reaching all users \u2014 even for 30 seconds \u2014 is unacceptable. E-commerce checkout flows, payment."
+          },
+          {
+            "kind": "tiny_example",
+            "layout": "paragraph",
+            "text": "The choice between blue-green and canary comes down to one question: do you trust your pre-production testing enough to expose all users at once, or do you need real production traffic to validate the release? Blue-green keeps two identical environments and swaps 100% of traffic in one atomic switch. If the new version breaks, the load balancer points back to."
+          }
+        ],
+        "cap": "Blue-green \u2014 full environment switch Blue-green maintains two complete environments \u2014 blue (current production) and green (new version) \u2014 and switches all traffic from blue to green at once via a load",
+        "familiarity_anchors": [],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you automate canary promotion and rollback based on metrics?",
+          "How do you handle database migrations with blue-green deployments?",
+          "How do you implement canary deployments in Kubernetes?"
+        ]
+      }
+    },
+    {
+      "id": "ops-007",
+      "slug": "database-schema-migrations-production-flyway-liquibase",
+      "question": "How do you manage database schema migrations in production (Flyway/Liquibase)?",
+      "title": "Managing Database Schema Migrations in Production with Flyway and Liquibase",
+      "difficulty": "intermediate",
+      "layout_type": "recipe-builder",
+      "reading_time_minutes": 6,
+      "last_updated": "2025-01-15",
+      "company_tags": [
+        "Atlassian",
+        "GitHub",
+        "Shopify",
+        "HubSpot"
+      ],
+      "interviewer_intent": {
+        "testing": "Whether you treat schema migrations as version-controlled, automated, repeatable artifacts rather than ad-hoc SQL scripts run manually.",
+        "common_mistake": "Running migrations as part of application startup in production without safeguards, or using destructive changes (DROP COLUMN) before deploying backward-compatible code.",
+        "to_stand_out": "Mention the expand-contract pattern, running Flyway/Liquibase in a separate pre-deployment job rather than application startup, and having a tested rollback strategy for each migration."
+      },
+      "direct_answer": "Use Flyway or Liquibase to version-control schema changes; run migrations as a pre-deployment step separate from app startup; use expand-contract for backward compatibility during rolling deployments.",
+      "answer": {
+        "sections": [
+          {
+            "type": "overview",
+            "title": "The Failure You Do Not See Until Both Versions Are Running",
+            "content": "The danger of database migrations in production is not the migration itself \u2014 it is the window of time when old and new application code run simultaneously against the schema that just changed. A migration that drops a column succeeds in seconds. But during a rolling deployment, old pods still running the previous version query that column and crash with \"column not found.\" The migration was technically correct. The deployment still failed.\n\nThis window exists in every deployment strategy \u2014 blue-green, canary, rolling update. The duration varies (seconds for blue-green, minutes to hours for canary), but the constraint is the same: every schema change must be compatible with both the current and the next version of the application code. Teams that manage migrations as version-controlled SQL scripts using Flyway or Liquibase but ignore this compatibility requirement have solved the automation problem while missing the safety problem.\n\nThe other common failure is running migrations as part of application startup. When multiple pods start simultaneously in a Kubernetes rolling update, they race to apply the same migration. Flyway uses a database-level lock to serialize this, but the lock acquisition can time out or fail under concurrent startup load. Separating the migration step from application startup eliminates the race entirely and gives the deployment pipeline a clear gate: migration succeeds, then pods roll out."
+          },
+          {
+            "type": "step",
+            "title": "Flyway in Spring Boot: Version-Controlled SQL with Checksum Enforcement",
+            "content": "Flyway follows a simple model: SQL files named with version prefixes (`V1__create_users.sql`, `V2__add_email_column.sql`) live alongside the application code. At startup, Flyway reads the `flyway_schema_history` table to determine which versions have been applied and runs only the new ones. Once a migration is applied, its checksum is recorded \u2014 modifying an already-applied file causes a checksum mismatch error, which prevents silent schema drift between environments.\n\nThe naming convention enforces ordering: `V1__`, `V2__`, `V3__`. The double underscore separates the version number from the description. Repeatable migrations (prefixed `R__`) run every time their checksum changes, which is useful for recreating views or stored procedures that need to reflect the latest schema.\n\n```sql\n-- V3__add_display_name_column.sql\n-- Expansion phase: add nullable column, backward-compatible\nALTER TABLE users ADD COLUMN display_name VARCHAR(255);\n```\n\nThe column is deliberately nullable and has no default value constraint. For tables with millions of rows, adding a NOT NULL column with a default in older PostgreSQL versions rewrites the entire table while holding an exclusive lock. Keeping the column nullable makes the DDL instant and safe. Backfilling existing rows runs as a separate batch job that processes rows in chunks, not inside the migration transaction."
+          },
+          {
+            "type": "step",
+            "title": "Separating Migration Execution from Application Startup",
+            "content": "In development and staging, letting Flyway run automatically on Spring Boot startup is convenient and fast. In production, it is a risk. Multiple pods starting simultaneously compete for the Flyway lock. If one pod's migration fails halfway, the next pod sees a partially-applied state and either retries (if idempotent) or fails with a checksum mismatch.\n\nThe safer approach runs the migration as a dedicated Kubernetes Job or CI/CD pipeline step before the rolling update begins. The Job uses the same Flyway configuration and the same migration files, but runs once in isolation.\n\n```yaml\napiVersion: batch/v1\nkind: Job\nmetadata:\n  name: db-migration-v42\nspec:\n  template:\n    spec:\n      containers:\n        - name: migrate\n          image: my-app:v42\n          command: [\"java\", \"-cp\", \"app.jar\",\n            \"org.flywaydb.core.Flyway\", \"migrate\"]\n          env:\n            - name: SPRING_DATASOURCE_URL\n              valueFrom:\n                secretKeyRef:\n                  name: db-credentials\n                  key: url\n      restartPolicy: Never\n  backoffLimit: 1\n```\n\nThe `backoffLimit: 1` means if the migration fails, it does not retry automatically. A failed migration needs human inspection, not an automated retry that might apply the same partial change again. The deployment pipeline checks the Job's exit code: migration succeeds, then the rolling update begins. If it fails, the deployment stops before any new pods start.\n\nSet `spring.flyway.enabled=false` in the production profile so application pods skip migration on startup. They connect to the already-migrated database and start serving traffic immediately."
+          },
+          {
+            "type": "step",
+            "title": "Large-Table Migrations: Lock Timeouts, Concurrent Indexes, and Batch Backfills",
+            "content": "On a table with 50 million rows, certain DDL operations can hold exclusive locks for minutes, blocking all reads and writes. PostgreSQL 11+ handles `ADD COLUMN ... DEFAULT` without a table rewrite, but other operations like adding indexes still require caution.\n\nSet a **lock timeout** at the top of every migration file. If the migration cannot acquire the necessary lock within 5 seconds, it fails fast rather than blocking production queries behind it indefinitely.\n\n```sql\n-- V5__add_email_index.sql\nSET lock_timeout = '5s';\nCREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email\n  ON users(email);\n```\n\n`CREATE INDEX CONCURRENTLY` builds the index without holding an exclusive lock. It takes longer \u2014 it scans the table twice \u2014 but allows reads and writes to continue during index creation. The tradeoff: if concurrent index creation fails partway, it leaves an invalid index that must be dropped manually before retrying. Flyway will not retry because the versioned migration is already marked as applied \u2014 you need to either use a repeatable migration for indexes or manually fix the state in the history table.\n\nTest migration performance against production-scale data before applying. A migration that runs in 50ms on a development database with 100 rows might take 15 minutes on 50 million rows. Use database snapshots (RDS snapshots, Cloud SQL clones) to create a test environment with realistic volume, run the migration, and measure both duration and lock impact."
+          },
+          {
+            "type": "key_points",
+            "title": "Key Points",
+            "content": "- **Flyway runs migrations at startup automatically** \u2014 Spring Boot auto-configures Flyway; `V1__init.sql` runs before the application accepts traffic; recorded in `flyway_schema_history` with checksum; never runs twice\n- **Expand-contract prevents rolling deployment failures** \u2014 add new columns as nullable (V2); deploy new app version; backfill and add NOT NULL constraint (V3 in the next release); never add NOT NULL without a default during a rolling deploy\n- **Run migrations as a pre-deploy Job for large tables** \u2014 long migrations (adding indexes on million-row tables) block startup and cause health check failures; separate Flyway migration Job runs and completes before the new application pods start\n- **Never modify an executed migration** \u2014 Flyway detects checksum changes and fails startup; create a new migration to undo or alter the previous one; treat executed migrations as immutable history\n- **`spring.flyway.clean-disabled=true` in production** \u2014 `flyway.clean()` drops the entire database; disabled by default in Flyway 9+; explicitly disable in production config to prevent accidental data loss from misconfiguration"
+          },
+          {
+            "type": "speakable_answer",
+            "title": "How to Answer This Verbally",
+            "content": "Flyway and Liquibase version-control database schema changes the same way Git versions code \u2014 each migration is a numbered, immutable script that runs once and is recorded in a migrations table.\n\n**How Flyway works**\n- Flyway scans `classpath:db/migration` for files named `V1__description.sql`, `V2__description.sql`; it runs each unexecuted migration in order and records the checksum in the `flyway_schema_history` table\n- On application startup (with Spring Boot auto-configuration), Flyway runs automatically before the application accepts traffic \u2014 which means the database is always at the schema version the application expects\n\n**The production migration risk**\n- The real danger is the window during a rolling deployment when old and new application versions are running simultaneously with the new schema \u2014 if V2 adds a NOT NULL column, the old version's INSERT statements fail because they don't include the new column\n- Solution: the expand-contract pattern: V2 adds the column as nullable (old version's INSERTs work, new version writes null or the value); V3 (next release) fills in nulls and adds the NOT NULL constraint\n\n**Running migrations separately from the application**\n- For large tables, a migration that adds an index or rewrites rows can take minutes \u2014 running it during application startup blocks Spring Boot's initialization for those minutes, causing health check failures and deployment rollbacks\n- Run migrations as a pre-deployment Kubernetes Job (Flyway's `flyway migrate` command) before deploying the new application version; the application starts with the schema already updated\n\n**Flyway vs Liquibase**\n- Flyway uses SQL or Java migration scripts \u2014 simple, explicit, and familiar to anyone who knows SQL; immutable after execution\n- Liquibase uses XML/YAML/JSON changelogs \u2014 more database-agnostic (can generate SQL for different dialects), supports rollback scripts, and provides more granular change tracking; more configuration than Flyway"
+          }
+        ]
+      },
+      "followup_questions": [
+        "How do you roll back a Flyway migration?",
+        "What is the difference between Flyway and Liquibase?",
+        "How do you handle long-running schema changes (like adding an index to a large table) without locking?"
+      ],
+      "seo": {
+        "metaTitle": "Database Schema Migrations in Production with Flyway | Java Interview",
+        "metaDescription": "Learn how to manage database migrations in production using Flyway and Liquibase: version control, expand-contract pattern, and zero-downtime deployment strategies."
+      },
+      "speakable_v2": {
+        "archetype": "C",
+        "pillar": "P01",
+        "hook": "Flyway and Liquibase version-control database schema changes the same way Git versions code \u2014 each migration is a numbered, immutable script that runs once and is recorded in a migrations table.",
+        "beats": [
+          {
+            "kind": "mental_model",
+            "layout": "paragraph",
+            "text": "The danger of database migrations in production is not the migration itself \u2014 it is the window of time when old and new application code run simultaneously against the schema that just changed. A migration that drops a column succeeds in seconds. But during a rolling deployment, old pods still running the previous version query that column and crash with \"column not found.\" The migration was technically correct. The deployment still failed. This window exists in every deployment strategy \u2014 blue-green, canary, rolling update. The duration varies (seconds for blue-green."
+          },
+          {
+            "kind": "mechanism",
+            "layout": "ordered_list",
+            "steps": [
+              "Flyway follows a simple model: SQL files named with version prefixes (V1__create_users.sql, V2__add_email_column.sql) live alongside the application code.",
+              "At startup, Flyway reads the flyway_schema_history table to determine which versions have been applied and runs only the new ones.",
+              "Once a migration is applied, its checksum is recorded \u2014 modifying an already-applied file causes a checksum mismatch error, which prevents silent schema drift between environments.",
+              "The naming convention enforces ordering: V1__, V2__, V3__.",
+              "The double underscore separates the version number from the description.",
+              "Repeatable migrations (prefixed R__) run every time their checksum changes, which is useful for recreating views or stored procedures that need to reflect the latest schema."
+            ]
+          },
+          {
+            "kind": "edge_cases",
+            "layout": "bullets",
+            "items": [
+              "Flyway runs migrations at startup automatically \u2014 Spring Boot auto-configures Flyway; V1__init",
+              "sql runs before the application accepts traffic; recorded in flyway_schema_history with checksum; never runs twice Expand-contract prevents rolling deployment failures \u2014 add new columns as nullable (V2); deploy new app version; backfill and add NOT NULL constraint (V3 in the next release); never add NOT NULL without a default during a rolling deploy Run migrations as a pre-deploy Job for large tables \u2014 long migrations (adding indexes on million-row tables) block startup and cause health check failures; separate Flyway migration Job runs and completes before the new application pods start Never modify an executed migration \u2014 Flyway detects checksum changes and fails startup; create a new migration to undo or alter the previous one; treat executed migrations as immutable history spring",
+              "clean-disabled=true in production \u2014 flyway",
+              "clean() drops the entire database; disabled by default in Flyway 9+; explicitly disable in production config to prevent accidental data loss from misconfiguration"
+            ]
+          },
+          {
+            "kind": "failure_mode",
+            "layout": "callout",
+            "text": "Running migrations as part of application startup in production without safeguards, or using destructive changes (DROP COLUMN) before deploying backward-compatible code."
+          }
+        ],
+        "cap": "How Flyway works Flyway scans classpath:db/migration for files named V1__description.sql, V2__description.sql; it runs each unexecuted migration in order and records the checksum in the flyway_schema_",
+        "familiarity_anchors": [
+          "Flyway",
+          "Liquibase"
+        ],
+        "tts_overrides": {},
+        "speakable_status": "pending_review",
+        "followup_handoff": [
+          "How do you roll back a Flyway migration?",
+          "What is the difference between Flyway and Liquibase?",
+          "How do you handle long-running schema changes (like adding an index to a large table) without locking?"
+        ]
+      }
+    }
+  ]
+}
