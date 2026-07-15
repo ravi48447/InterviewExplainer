@@ -55,6 +55,8 @@ Define the permanent hierarchy between:
 * page layouts,
 * route-specific presentation.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Define the permanent hierarchy between: design tokens, global styles, shared primitives, composite components, feature components, page layouts, route-specific presentation. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -68,6 +70,8 @@ Determine which styling belongs in:
 * component variants,
 * layout components,
 * route-specific components.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Determine which styling belongs in: global CSS, Tailwind configuration, component variants, layout components, route-specific components. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -89,6 +93,8 @@ FEATURE COMPONENTS
 PAGE COMPOSITION
 ```
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Organize components into: Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -96,6 +102,8 @@ PAGE COMPOSITION
 ## P01-T004 — Establish Canonical UI Import Boundaries
 
 Prevent pages from bypassing shared V2 primitives unnecessarily.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Prevent pages from bypassing shared V2 primitives unnecessarily. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P1
 
@@ -105,6 +113,8 @@ Prevent pages from bypassing shared V2 primitives unnecessarily.
 
 Create predictable naming for canonical V2 components.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Create predictable naming for canonical V2 components. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P2
 
 ---
@@ -113,6 +123,8 @@ Create predictable naming for canonical V2 components.
 
 Define how visual variants are implemented without creating duplicate components.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Define how visual variants are implemented without creating duplicate components. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P1
 
 ---
@@ -120,6 +132,8 @@ Define how visual variants are implemented without creating duplicate components
 ## P01-T007 — Establish Component Size Strategy
 
 Standardize compact, default and large sizing where meaningful.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Standardize compact, default and large sizing where meaningful. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P1
 
@@ -138,6 +152,8 @@ Standardize:
 * selected,
 * error.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Standardize: default, hover, active, focus, disabled, loading, selected, error. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -146,6 +162,8 @@ Standardize:
 
 Mark legacy UI components clearly during migration.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Mark legacy UI components clearly during migration. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P1
 
 ---
@@ -153,6 +171,8 @@ Mark legacy UI components clearly during migration.
 ## P01-T010 — Prevent New Legacy Styling During V2 Migration
 
 Add development conventions that prevent new arbitrary styling patterns.
+
+**Execution:** Execute this task against the current repository in the context of Workstream A — UI Architecture Foundation, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Add development conventions that prevent new arbitrary styling patterns. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
 
 **Priority:** P1
 
@@ -171,6 +191,8 @@ Separate:
 * utilities,
 * theme behavior.
 
+**Execution:** Trace current consumers and behavior, refactor the responsibility at its shared owner, and migrate usage incrementally so externally visible behavior is preserved unless this task explicitly changes it. Apply this specifically to: Separate: reset/base styles, tokens, typography, content styles, utilities, theme behavior. Remove duplicate legacy paths after migration and run targeted regression checks across the routes or features with the largest blast radius.
+
 **Priority:** P0
 
 ---
@@ -178,6 +200,8 @@ Separate:
 ## P01-T012 — Remove Conflicting Global Style Rules
 
 Eliminate global selectors that unexpectedly override component behavior.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Eliminate global selectors that unexpectedly override component behavior. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P0
 
@@ -187,6 +211,8 @@ Eliminate global selectors that unexpectedly override component behavior.
 
 Delete confirmed unused legacy rules after dependency verification.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Delete confirmed unused legacy rules after dependency verification. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P1
 
 ---
@@ -195,6 +221,8 @@ Delete confirmed unused legacy rules after dependency verification.
 
 Create one canonical token source.
 
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Create one canonical token source. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
+
 **Priority:** P0
 
 ---
@@ -202,6 +230,8 @@ Create one canonical token source.
 ## P01-T015 — Remove Uncontrolled Global Element Styling
 
 Prevent generic selectors from causing route-specific inconsistencies.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Prevent generic selectors from causing route-specific inconsistencies. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P1
 
@@ -217,6 +247,8 @@ Establish predictable:
 * media behavior,
 * form behavior.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Establish predictable: box sizing, margins, typography inheritance, media behavior, form behavior. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P1
 
 ---
@@ -224,6 +256,8 @@ Establish predictable:
 ## P01-T017 — Standardize Selection Styling
 
 Create theme-compatible text selection behavior.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Create theme-compatible text selection behavior. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P3
 
@@ -233,6 +267,8 @@ Create theme-compatible text selection behavior.
 
 Ensure predictable navigation and anchor behavior.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Ensure predictable navigation and anchor behavior. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P2
 
 ---
@@ -241,6 +277,8 @@ Ensure predictable navigation and anchor behavior.
 
 Use restrained styling only where appropriate.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Use restrained styling only where appropriate. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P3
 
 ---
@@ -248,6 +286,8 @@ Use restrained styling only where appropriate.
 ## P01-T020 — Establish Global Overflow Protection
 
 Prevent common horizontal page overflow without hiding legitimate component defects.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Prevent common horizontal page overflow without hiding legitimate component defects. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P1
 
@@ -258,6 +298,8 @@ Prevent common horizontal page overflow without hiding legitimate component defe
 ## P01-T021 — Remove Arbitrary Global Color Architecture
 
 Replace uncontrolled page-level color decisions with semantic roles.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Replace uncontrolled page-level color decisions with semantic roles. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P0
 
@@ -272,6 +314,8 @@ Define:
 * muted background,
 * reading background.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Define: application background, elevated background, muted background, reading background. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -279,6 +323,8 @@ Define:
 ## P01-T023 — Implement Surface Color Tokens
 
 Create canonical surfaces for intentional grouping.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create canonical surfaces for intentional grouping. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -294,6 +340,8 @@ Define:
 * disabled text,
 * inverse text.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Define: primary text, secondary text, muted text, disabled text, inverse text. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -301,6 +349,8 @@ Define:
 ## P01-T025 — Implement Border Color Hierarchy
 
 Define subtle and strong boundary roles.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Define subtle and strong boundary roles. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -310,6 +360,8 @@ Define subtle and strong boundary roles.
 
 Create one controlled primary interaction system.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create one controlled primary interaction system. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -317,6 +369,8 @@ Create one controlled primary interaction system.
 ## P01-T027 — Implement Semantic Success Colors
 
 Use success color only where semantic meaning exists.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Use success color only where semantic meaning exists. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -326,6 +380,8 @@ Use success color only where semantic meaning exists.
 
 Prevent warning colors from becoming decorative noise.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Prevent warning colors from becoming decorative noise. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -333,6 +389,8 @@ Prevent warning colors from becoming decorative noise.
 ## P01-T029 — Implement Semantic Error Colors
 
 Standardize destructive and validation states.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize destructive and validation states. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -342,6 +400,8 @@ Standardize destructive and validation states.
 
 Create restrained informational emphasis.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create restrained informational emphasis. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -349,6 +409,8 @@ Create restrained informational emphasis.
 ## P01-T031 — Implement Difficulty Color Semantics
 
 Standardize easy, medium and hard indicators without overpowering content.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize easy, medium and hard indicators without overpowering content. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -358,6 +420,8 @@ Standardize easy, medium and hard indicators without overpowering content.
 
 Reduce unnecessary multi-colour visual competition.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Reduce unnecessary multi-colour visual competition. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P0
 
 ---
@@ -365,6 +429,8 @@ Reduce unnecessary multi-colour visual competition.
 ## P01-T033 — Remove Hard-Coded Hex Values from Shared UI
 
 Migrate shared components to semantic tokens.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Migrate shared components to semantic tokens. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P0
 
@@ -374,6 +440,8 @@ Migrate shared components to semantic tokens.
 
 Prevent canonical V2 components from depending on arbitrary palette values.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Prevent canonical V2 components from depending on arbitrary palette values. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P0
 
 ---
@@ -381,6 +449,8 @@ Prevent canonical V2 components from depending on arbitrary palette values.
 ## P01-T035 — Validate Semantic Color Contrast
 
 Ensure tokens support readable text and controls.
+
+**Execution:** Inspect the actual repository implementation for this scope, record concrete files, routes, components, APIs, or data paths found, and classify each finding by the action it requires. Apply this specifically to: Ensure tokens support readable text and controls. Write the result into the phase’s existing audit, tracker, or task artifact and create follow-up issues for unresolved findings instead of leaving generic observations.
 
 **Priority:** P0
 
@@ -392,6 +462,8 @@ Ensure tokens support readable text and controls.
 
 Create a calm base suitable for long reading sessions.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create a calm base suitable for long reading sessions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -399,6 +471,8 @@ Create a calm base suitable for long reading sessions.
 ## P01-T037 — Rebuild Light Surface Hierarchy
 
 Ensure cards and sections do not all appear equally elevated.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Ensure cards and sections do not all appear equally elevated. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -408,6 +482,8 @@ Ensure cards and sections do not all appear equally elevated.
 
 Improve contrast without making every element visually heavy.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Improve contrast without making every element visually heavy. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -415,6 +491,8 @@ Improve contrast without making every element visually heavy.
 ## P01-T039 — Rebuild Light Border Treatment
 
 Reduce excessive visible boxes.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Reduce excessive visible boxes. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -424,6 +502,8 @@ Reduce excessive visible boxes.
 
 Standardize hover, active and selected states.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize hover, active and selected states. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -431,6 +511,8 @@ Standardize hover, active and selected states.
 ## P01-T041 — Rebuild Light Code Presentation Foundation
 
 Prepare comfortable code contrast.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Prepare comfortable code contrast. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -440,6 +522,8 @@ Prepare comfortable code contrast.
 
 Create restrained semantic emphasis.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create restrained semantic emphasis. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -448,6 +532,8 @@ Create restrained semantic emphasis.
 
 Use hierarchy rather than stacking identical white boxes.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Use hierarchy rather than stacking identical white boxes. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P1
 
 ---
@@ -455,6 +541,8 @@ Use hierarchy rather than stacking identical white boxes.
 ## P01-T044 — Validate Long-Form Light Reading Comfort
 
 Review sustained content reading rather than only component screenshots.
+
+**Execution:** Inspect the actual repository implementation for this scope, record concrete files, routes, components, APIs, or data paths found, and classify each finding by the action it requires. Apply this specifically to: Review sustained content reading rather than only component screenshots. Write the result into the phase’s existing audit, tracker, or task artifact and create follow-up issues for unresolved findings instead of leaving generic observations.
 
 **Priority:** P0
 
@@ -466,6 +554,8 @@ Review sustained content reading rather than only component screenshots.
 
 Create a comfortable dark foundation.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create a comfortable dark foundation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -473,6 +563,8 @@ Create a comfortable dark foundation.
 ## P01-T046 — Rebuild Dark Surface Hierarchy
 
 Avoid excessive layers of differently coloured dark cards.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Avoid excessive layers of differently coloured dark cards. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -482,6 +574,8 @@ Avoid excessive layers of differently coloured dark cards.
 
 Avoid both low contrast and excessively bright text.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Avoid both low contrast and excessively bright text. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -489,6 +583,8 @@ Avoid both low contrast and excessively bright text.
 ## P01-T048 — Rebuild Dark Border Treatment
 
 Use restrained boundaries.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Use restrained boundaries. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -498,6 +594,8 @@ Use restrained boundaries.
 
 Create clear but calm interaction feedback.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create clear but calm interaction feedback. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -505,6 +603,8 @@ Create clear but calm interaction feedback.
 ## P01-T050 — Rebuild Dark Code Presentation Foundation
 
 Ensure code remains readable without visual dominance.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Ensure code remains readable without visual dominance. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -514,6 +614,8 @@ Ensure code remains readable without visual dominance.
 
 Prevent bright semantic blocks from overwhelming pages.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Prevent bright semantic blocks from overwhelming pages. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -522,6 +624,8 @@ Prevent bright semantic blocks from overwhelming pages.
 
 Reduce unnecessary dark-surface nesting.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Reduce unnecessary dark-surface nesting. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P1
 
 ---
@@ -529,6 +633,8 @@ Reduce unnecessary dark-surface nesting.
 ## P01-T053 — Validate Long-Form Dark Reading Comfort
 
 Test sustained reading and code-heavy pages.
+
+**Execution:** Inspect the actual repository implementation for this scope, record concrete files, routes, components, APIs, or data paths found, and classify each finding by the action it requires. Apply this specifically to: Test sustained reading and code-heavy pages. Write the result into the phase’s existing audit, tracker, or task artifact and create follow-up issues for unresolved findings instead of leaving generic observations.
 
 **Priority:** P0
 
@@ -540,6 +646,8 @@ Test sustained reading and code-heavy pages.
 
 Define the primary UI and body font loading strategy.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Define the primary UI and body font loading strategy. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -547,6 +655,8 @@ Define the primary UI and body font loading strategy.
 ## P01-T055 — Establish Canonical Monospace Font Strategy
 
 Define code typography without excessive loading cost.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Define code typography without excessive loading cost. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P1
 
@@ -556,6 +666,8 @@ Define code typography without excessive loading cost.
 
 Standardize major page titles and marketing headings.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize major page titles and marketing headings. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -563,6 +675,8 @@ Standardize major page titles and marketing headings.
 ## P01-T057 — Implement Content Heading Scale
 
 Define H1 through H6 behavior for educational content.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Define H1 through H6 behavior for educational content. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -572,6 +686,8 @@ Define H1 through H6 behavior for educational content.
 
 Define canonical body sizes and line heights.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Define canonical body sizes and line heights. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -579,6 +695,8 @@ Define canonical body sizes and line heights.
 ## P01-T059 — Implement Small Text Scale
 
 Standardize secondary information.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize secondary information. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -588,6 +706,8 @@ Standardize secondary information.
 
 Prevent metadata from competing with primary content.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Prevent metadata from competing with primary content. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -595,6 +715,8 @@ Prevent metadata from competing with primary content.
 ## P01-T061 — Implement Label Typography
 
 Standardize form and UI labels.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize form and UI labels. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -604,6 +726,8 @@ Standardize form and UI labels.
 
 Standardize control text weight and sizing.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize control text weight and sizing. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -611,6 +735,8 @@ Standardize control text weight and sizing.
 ## P01-T063 — Implement Code Typography
 
 Define inline and block code sizing.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Define inline and block code sizing. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -620,6 +746,8 @@ Define inline and block code sizing.
 
 Limit uncontrolled weight variation.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Limit uncontrolled weight variation. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P1
 
 ---
@@ -627,6 +755,8 @@ Limit uncontrolled weight variation.
 ## P01-T065 — Standardize Letter Spacing
 
 Remove arbitrary tracking choices.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Remove arbitrary tracking choices. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P2
 
@@ -636,6 +766,8 @@ Remove arbitrary tracking choices.
 
 Improve multiline heading readability.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Improve multiline heading readability. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P1
 
 ---
@@ -643,6 +775,8 @@ Improve multiline heading readability.
 ## P01-T067 — Standardize Body Line Height
 
 Optimize long-form reading.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Optimize long-form reading. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P0
 
@@ -652,6 +786,8 @@ Optimize long-form reading.
 
 Create consistent reading rhythm.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Create consistent reading rhythm. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P0
 
 ---
@@ -660,6 +796,8 @@ Create consistent reading rhythm.
 
 Make content hierarchy visually understandable.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Make content hierarchy visually understandable. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P0
 
 ---
@@ -667,6 +805,8 @@ Make content hierarchy visually understandable.
 ## P01-T070 — Remove Route-Specific Typography Hacks
 
 Migrate shared typography behavior to canonical styles.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Migrate shared typography behavior to canonical styles. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P1
 
@@ -678,6 +818,8 @@ Migrate shared typography behavior to canonical styles.
 
 Establish maximum line length for long-form answers.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Establish maximum line length for long-form answers. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -685,6 +827,8 @@ Establish maximum line length for long-form answers.
 ## P01-T072 — Define Wide Content Width
 
 Support tables, diagrams and code without forcing all prose to become wide.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Support tables, diagrams and code without forcing all prose to become wide. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -694,6 +838,8 @@ Support tables, diagrams and code without forcing all prose to become wide.
 
 Create a canonical general-purpose page container.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Create a canonical general-purpose page container. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -701,6 +847,8 @@ Create a canonical general-purpose page container.
 ## P01-T074 — Define Wide Application Width
 
 Support dashboards and complex application layouts.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Support dashboards and complex application layouts. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P1
 
@@ -710,6 +858,8 @@ Support dashboards and complex application layouts.
 
 Prevent long-form text from stretching across large displays.
 
+**Execution:** Execute this task against the current repository in the context of Workstream G — Reading Experience Foundation, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Prevent long-form text from stretching across large displays. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
+
 **Priority:** P0
 
 ---
@@ -717,6 +867,8 @@ Prevent long-form text from stretching across large displays.
 ## P01-T076 — Implement Prose Rhythm Foundation
 
 Standardize spacing between content elements.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize spacing between content elements. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -726,6 +878,8 @@ Standardize spacing between content elements.
 
 Improve ordered, unordered and nested lists.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Improve ordered, unordered and nested lists. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -733,6 +887,8 @@ Improve ordered, unordered and nested lists.
 ## P01-T078 — Implement Blockquote Styling
 
 Create restrained quotation treatment.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create restrained quotation treatment. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P2
 
@@ -742,6 +898,8 @@ Create restrained quotation treatment.
 
 Make inline technical terms readable without excessive emphasis.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Make inline technical terms readable without excessive emphasis. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -749,6 +907,8 @@ Make inline technical terms readable without excessive emphasis.
 ## P01-T080 — Implement Link Styling for Reading Content
 
 Ensure links are identifiable without overwhelming paragraphs.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Ensure links are identifiable without overwhelming paragraphs. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -758,6 +918,8 @@ Ensure links are identifiable without overwhelming paragraphs.
 
 Prevent bold-heavy content from becoming visually noisy.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Prevent bold-heavy content from becoming visually noisy. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -765,6 +927,8 @@ Prevent bold-heavy content from becoming visually noisy.
 ## P01-T082 — Implement Horizontal Rule Treatment
 
 Use subtle content separation.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Use subtle content separation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P2
 
@@ -774,6 +938,8 @@ Use subtle content separation.
 
 Ensure heading links work correctly beneath sticky navigation.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Ensure heading links work correctly beneath sticky navigation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -782,6 +948,8 @@ Ensure heading links work correctly beneath sticky navigation.
 
 Prevent technical terms and URLs from breaking layouts.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Prevent technical terms and URLs from breaking layouts. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -789,6 +957,8 @@ Prevent technical terms and URLs from breaking layouts.
 ## P01-T085 — Implement Mixed Prose-and-Code Layout Rules
 
 Allow code to use more width than surrounding prose when appropriate.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Allow code to use more width than surrounding prose when appropriate. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -800,6 +970,8 @@ Allow code to use more width than surrounding prose when appropriate.
 
 Define the permitted spacing system.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Define the permitted spacing system. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -807,6 +979,8 @@ Define the permitted spacing system.
 ## P01-T087 — Establish Component Internal Padding Rules
 
 Standardize control and container padding.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize control and container padding. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -816,6 +990,8 @@ Standardize control and container padding.
 
 Create consistent separation between major page regions.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Create consistent separation between major page regions. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -823,6 +999,8 @@ Create consistent separation between major page regions.
 ## P01-T089 — Establish Content Element Spacing Rules
 
 Standardize paragraph, list, code and heading rhythm.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Standardize paragraph, list, code and heading rhythm. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -832,6 +1010,8 @@ Standardize paragraph, list, code and heading rhythm.
 
 Create consistent responsive horizontal gutters.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create consistent responsive horizontal gutters. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -839,6 +1019,8 @@ Create consistent responsive horizontal gutters.
 ## P01-T091 — Remove Arbitrary Margin Proliferation
 
 Replace repeated one-off spacing fixes.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Replace repeated one-off spacing fixes. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P1
 
@@ -848,6 +1030,8 @@ Replace repeated one-off spacing fixes.
 
 Migrate reusable patterns to shared primitives.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Migrate reusable patterns to shared primitives. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P1
 
 ---
@@ -855,6 +1039,8 @@ Migrate reusable patterns to shared primitives.
 ## P01-T093 — Reduce Excessive Vertical Compression
 
 Increase breathing room where content currently feels crowded.
+
+**Execution:** Measure or inspect the current problem first, change the root shared cause rather than applying isolated patches, and apply the improvement to the affected page or feature family. Apply this specifically to: Increase breathing room where content currently feels crowded. Compare the resulting behavior against the current baseline and record any remaining exceptions or regressions that need a later task.
 
 **Priority:** P0
 
@@ -864,6 +1050,8 @@ Increase breathing room where content currently feels crowded.
 
 Avoid oversized empty sections that harm information flow.
 
+**Execution:** Measure or inspect the current problem first, change the root shared cause rather than applying isolated patches, and apply the improvement to the affected page or feature family. Apply this specifically to: Avoid oversized empty sections that harm information flow. Compare the resulting behavior against the current baseline and record any remaining exceptions or regressions that need a later task.
+
 **Priority:** P2
 
 ---
@@ -871,6 +1059,8 @@ Avoid oversized empty sections that harm information flow.
 ## P01-T095 — Define Compact Density Mode for Data-Heavy UI
 
 Allow legitimately dense application surfaces without affecting reading pages.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Allow legitimately dense application surfaces without affecting reading pages. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P2
 
@@ -882,6 +1072,8 @@ Allow legitimately dense application surfaces without affecting reading pages.
 
 Establish rules for when content should actually be placed inside a card or panel.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Establish rules for when content should actually be placed inside a card or panel. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -889,6 +1081,8 @@ Establish rules for when content should actually be placed inside a card or pane
 ## P01-T097 — Define Flat Section Pattern
 
 Support grouping without boxes.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Support grouping without boxes. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -898,6 +1092,8 @@ Support grouping without boxes.
 
 Use boundaries only where structural separation is useful.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Use boundaries only where structural separation is useful. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P1
 
 ---
@@ -905,6 +1101,8 @@ Use boundaries only where structural separation is useful.
 ## P01-T099 — Define Elevated Surface Pattern
 
 Reserve elevation for appropriate interactive or floating UI.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Reserve elevation for appropriate interactive or floating UI. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P1
 
@@ -914,6 +1112,8 @@ Reserve elevation for appropriate interactive or floating UI.
 
 Prevent inconsistent boundary weights.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Prevent inconsistent boundary weights. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P2
 
 ---
@@ -921,6 +1121,8 @@ Prevent inconsistent boundary weights.
 ## P01-T101 — Establish Radius Scale
 
 Create a restrained radius system.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Create a restrained radius system. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P1
 
@@ -930,6 +1132,8 @@ Create a restrained radius system.
 
 Reduce the “everything is a pill/card” appearance.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Reduce the “everything is a pill/card” appearance. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P0
 
 ---
@@ -937,6 +1141,8 @@ Reduce the “everything is a pill/card” appearance.
 ## P01-T103 — Establish Shadow Scale
 
 Define minimal elevation levels.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Define minimal elevation levels. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P1
 
@@ -946,6 +1152,8 @@ Define minimal elevation levels.
 
 Reduce visual heaviness.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Reduce visual heaviness. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P1
 
 ---
@@ -953,6 +1161,8 @@ Reduce visual heaviness.
 ## P01-T105 — Remove Nested Surface Anti-Patterns
 
 Prevent card-inside-card-inside-card layouts.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Prevent card-inside-card-inside-card layouts. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P0
 
@@ -964,6 +1174,8 @@ Prevent card-inside-card-inside-card layouts.
 
 Create the default V2 horizontal page boundary.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create the default V2 horizontal page boundary. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -971,6 +1183,8 @@ Create the default V2 horizontal page boundary.
 ## P01-T107 — Build Canonical Reading Container
 
 Create the long-form content boundary.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create the long-form content boundary. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -980,6 +1194,8 @@ Create the long-form content boundary.
 
 Support complex layouts and wide content.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support complex layouts and wide content. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -987,6 +1203,8 @@ Support complex layouts and wide content.
 ## P01-T109 — Build Canonical Section Component
 
 Standardize vertical page grouping.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize vertical page grouping. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -996,6 +1214,8 @@ Standardize vertical page grouping.
 
 Standardize vertical spacing composition.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize vertical spacing composition. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1003,6 +1223,8 @@ Standardize vertical spacing composition.
 ## P01-T111 — Build Canonical Inline Layout Primitive
 
 Standardize horizontal control grouping.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize horizontal control grouping. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P2
 
@@ -1012,6 +1234,8 @@ Standardize horizontal control grouping.
 
 Standardize responsive card and feature grids.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize responsive card and feature grids. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1019,6 +1243,8 @@ Standardize responsive card and feature grids.
 ## P01-T113 — Build Canonical Split Layout
 
 Support main-content and secondary-content structures.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support main-content and secondary-content structures. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -1028,6 +1254,8 @@ Support main-content and secondary-content structures.
 
 Support content navigation without forcing every page into a sidebar.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support content navigation without forcing every page into a sidebar. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -1035,6 +1263,8 @@ Support content navigation without forcing every page into a sidebar.
 ## P01-T115 — Build Canonical Sticky Region Primitive
 
 Standardize sticky behavior and offsets.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize sticky behavior and offsets. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1044,6 +1274,8 @@ Standardize sticky behavior and offsets.
 
 Allow wide code, diagrams or tables inside constrained reading layouts.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Allow wide code, diagrams or tables inside constrained reading layouts. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1052,6 +1284,8 @@ Allow wide code, diagrams or tables inside constrained reading layouts.
 
 Avoid duplicate breakpoint logic.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Avoid duplicate breakpoint logic. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1059,6 +1293,8 @@ Avoid duplicate breakpoint logic.
 ## P01-T118 — Remove Duplicate Container Components
 
 Migrate overlapping container implementations.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Migrate overlapping container implementations. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P0
 
@@ -1070,6 +1306,8 @@ Migrate overlapping container implementations.
 
 Create the permanent V2 button primitive.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create the permanent V2 button primitive. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -1077,6 +1315,8 @@ Create the permanent V2 button primitive.
 ## P01-T120 — Implement Primary Button Variant
 
 Use only for primary page actions.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Use only for primary page actions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -1086,6 +1326,8 @@ Use only for primary page actions.
 
 Support lower-priority actions.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support lower-priority actions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1093,6 +1335,8 @@ Support lower-priority actions.
 ## P01-T122 — Implement Ghost Button Variant
 
 Support low-emphasis actions.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support low-emphasis actions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1102,6 +1346,8 @@ Support low-emphasis actions.
 
 Standardize destructive operations.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize destructive operations. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1109,6 +1355,8 @@ Standardize destructive operations.
 ## P01-T124 — Implement Icon Button Variant
 
 Standardize compact icon actions.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize compact icon actions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1118,6 +1366,8 @@ Standardize compact icon actions.
 
 Prevent duplicate submissions and unclear waiting states.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Prevent duplicate submissions and unclear waiting states. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1125,6 +1375,8 @@ Prevent duplicate submissions and unclear waiting states.
 ## P01-T126 — Implement Button Disabled State
 
 Ensure accessible disabled behavior.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Ensure accessible disabled behavior. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1134,6 +1386,8 @@ Ensure accessible disabled behavior.
 
 Remove arbitrary button dimensions.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Remove arbitrary button dimensions. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P1
 
 ---
@@ -1141,6 +1395,8 @@ Remove arbitrary button dimensions.
 ## P01-T128 — Standardize Icon Alignment in Buttons
 
 Fix inconsistent icon/text positioning.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Fix inconsistent icon/text positioning. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P2
 
@@ -1150,6 +1406,8 @@ Fix inconsistent icon/text positioning.
 
 Migrate shared consumers where safe.
 
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Migrate shared consumers where safe. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
+
 **Priority:** P0
 
 ---
@@ -1157,6 +1415,8 @@ Migrate shared consumers where safe.
 ## P01-T130 — Remove Legacy Button Implementations
 
 Delete confirmed obsolete versions after migration.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Delete confirmed obsolete versions after migration. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P1
 
@@ -1168,6 +1428,8 @@ Delete confirmed obsolete versions after migration.
 
 Create a restrained general-purpose card.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create a restrained general-purpose card. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -1175,6 +1437,8 @@ Create a restrained general-purpose card.
 ## P01-T132 — Implement Interactive Card Variant
 
 Provide clear but subtle interaction behavior.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Provide clear but subtle interaction behavior. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1184,6 +1448,8 @@ Provide clear but subtle interaction behavior.
 
 Avoid hover effects on noninteractive content.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Avoid hover effects on noninteractive content. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1191,6 +1457,8 @@ Avoid hover effects on noninteractive content.
 ## P01-T134 — Implement Minimal Card Variant
 
 Support grouping with minimal visual chrome.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support grouping with minimal visual chrome. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1200,6 +1468,8 @@ Support grouping with minimal visual chrome.
 
 Separate application panels from generic cards.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Separate application panels from generic cards. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1207,6 +1477,8 @@ Separate application panels from generic cards.
 ## P01-T136 — Implement Section Header Pattern
 
 Standardize title, description and optional actions.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize title, description and optional actions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1216,6 +1488,8 @@ Standardize title, description and optional actions.
 
 Eliminate misleading interaction cues.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Eliminate misleading interaction cues. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P0
 
 ---
@@ -1223,6 +1497,8 @@ Eliminate misleading interaction cues.
 ## P01-T138 — Remove Universal Scale-on-Hover Behavior
 
 Avoid unnecessary motion and layout instability.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Avoid unnecessary motion and layout instability. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P0
 
@@ -1232,6 +1508,8 @@ Avoid unnecessary motion and layout instability.
 
 Prefer typography and spacing for content hierarchy.
 
+**Execution:** Measure or inspect the current problem first, change the root shared cause rather than applying isolated patches, and apply the improvement to the affected page or feature family. Apply this specifically to: Prefer typography and spacing for content hierarchy. Compare the resulting behavior against the current baseline and record any remaining exceptions or regressions that need a later task.
+
 **Priority:** P0
 
 ---
@@ -1239,6 +1517,8 @@ Prefer typography and spacing for content hierarchy.
 ## P01-T140 — Consolidate Duplicate Card Components
 
 Migrate shared implementations.
+
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Migrate shared implementations. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
 
 **Priority:** P0
 
@@ -1250,6 +1530,8 @@ Migrate shared implementations.
 
 Create restrained semantic badges.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create restrained semantic badges. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1257,6 +1539,8 @@ Create restrained semantic badges.
 ## P01-T142 — Implement Difficulty Badge Variants
 
 Standardize difficulty presentation.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize difficulty presentation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1266,6 +1550,8 @@ Standardize difficulty presentation.
 
 Support actual status semantics.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support actual status semantics. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -1273,6 +1559,8 @@ Support actual status semantics.
 ## P01-T144 — Implement Neutral Metadata Badge
 
 Support low-emphasis metadata where a badge is genuinely needed.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support low-emphasis metadata where a badge is genuinely needed. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P2
 
@@ -1282,6 +1570,8 @@ Support low-emphasis metadata where a badge is genuinely needed.
 
 Separate content tags from status badges.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Separate content tags from status badges. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1289,6 +1579,8 @@ Separate content tags from status badges.
 ## P01-T146 — Reduce Excessive Badge Usage
 
 Replace decorative badges with plain metadata text where appropriate.
+
+**Execution:** Measure or inspect the current problem first, change the root shared cause rather than applying isolated patches, and apply the improvement to the affected page or feature family. Apply this specifically to: Replace decorative badges with plain metadata text where appropriate. Compare the resulting behavior against the current baseline and record any remaining exceptions or regressions that need a later task.
 
 **Priority:** P0
 
@@ -1298,6 +1590,8 @@ Replace decorative badges with plain metadata text where appropriate.
 
 Restrict arbitrary category colours.
 
+**Execution:** Execute this task against the current repository in the context of Workstream M — Badge, Tag & Metadata System, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Restrict arbitrary category colours. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
+
 **Priority:** P1
 
 ---
@@ -1305,6 +1599,8 @@ Restrict arbitrary category colours.
 ## P01-T148 — Consolidate Duplicate Badge Components
 
 Migrate shared consumers.
+
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Migrate shared consumers. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
 
 **Priority:** P1
 
@@ -1316,6 +1612,8 @@ Migrate shared consumers.
 
 Standardize text input behavior.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize text input behavior. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -1323,6 +1621,8 @@ Standardize text input behavior.
 ## P01-T150 — Rebuild Canonical Textarea Component
 
 Support longer input consistently.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support longer input consistently. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1332,6 +1632,8 @@ Support longer input consistently.
 
 Standardize selection controls.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize selection controls. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1339,6 +1641,8 @@ Standardize selection controls.
 ## P01-T152 — Rebuild Canonical Checkbox Component
 
 Ensure clear states and accessibility.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Ensure clear states and accessibility. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1348,6 +1652,8 @@ Ensure clear states and accessibility.
 
 Standardize exclusive selection.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize exclusive selection. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -1355,6 +1661,8 @@ Standardize exclusive selection.
 ## P01-T154 — Implement Form Label Component
 
 Create consistent accessible labels.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create consistent accessible labels. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1364,6 +1672,8 @@ Create consistent accessible labels.
 
 Support contextual help.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support contextual help. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -1371,6 +1681,8 @@ Support contextual help.
 ## P01-T156 — Implement Field Error Component
 
 Standardize validation messages.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize validation messages. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1380,6 +1692,8 @@ Standardize validation messages.
 
 Support search and contextual inputs.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support search and contextual inputs. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1387,6 +1701,8 @@ Support search and contextual inputs.
 ## P01-T158 — Standardize Input Heights
 
 Remove arbitrary control dimensions.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Remove arbitrary control dimensions. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P1
 
@@ -1396,6 +1712,8 @@ Remove arbitrary control dimensions.
 
 Create consistent keyboard visibility.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Create consistent keyboard visibility. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P0
 
 ---
@@ -1403,6 +1721,8 @@ Create consistent keyboard visibility.
 ## P01-T160 — Consolidate Duplicate Form Components
 
 Migrate reusable implementations.
+
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Migrate reusable implementations. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
 
 **Priority:** P1
 
@@ -1414,6 +1734,8 @@ Migrate reusable implementations.
 
 Create the shared visual search primitive.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create the shared visual search primitive. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -1421,6 +1743,8 @@ Create the shared visual search primitive.
 ## P01-T162 — Implement Search Icon Treatment
 
 Standardize icon placement.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize icon placement. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P2
 
@@ -1430,6 +1754,8 @@ Standardize icon placement.
 
 Support quick query reset.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support quick query reset. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1437,6 +1763,8 @@ Support quick query reset.
 ## P01-T164 — Implement Search Loading State
 
 Communicate active search behavior.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Communicate active search behavior. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1446,6 +1774,8 @@ Communicate active search behavior.
 
 Create clear placeholder behavior.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create clear placeholder behavior. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -1454,6 +1784,8 @@ Create clear placeholder behavior.
 
 Support desktop discoverability without clutter.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support desktop discoverability without clutter. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -1461,6 +1793,8 @@ Support desktop discoverability without clutter.
 ## P01-T167 — Ensure Search Input Mobile Usability
 
 Provide appropriate touch targets and sizing.
+
+**Execution:** Execute this task against the current repository in the context of Workstream O — Search Input Foundation, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Provide appropriate touch targets and sizing. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
 
 **Priority:** P0
 
@@ -1472,6 +1806,8 @@ Provide appropriate touch targets and sizing.
 
 Standardize navigation states.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize navigation states. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -1479,6 +1815,8 @@ Standardize navigation states.
 ## P01-T169 — Implement Active Navigation State
 
 Make current location clear without excessive colour.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Make current location clear without excessive colour. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -1488,6 +1826,8 @@ Make current location clear without excessive colour.
 
 Support content hierarchy.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support content hierarchy. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1495,6 +1835,8 @@ Support content hierarchy.
 ## P01-T171 — Implement Navigation Group
 
 Standardize grouped links.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize grouped links. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1504,6 +1846,8 @@ Standardize grouped links.
 
 Create accessible visual breadcrumb presentation.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create accessible visual breadcrumb presentation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -1511,6 +1855,8 @@ Create accessible visual breadcrumb presentation.
 ## P01-T173 — Build Canonical Pagination Component
 
 Standardize multi-page navigation where required.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize multi-page navigation where required. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1520,6 +1866,8 @@ Standardize multi-page navigation where required.
 
 Support sequential learning flows.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support sequential learning flows. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1527,6 +1875,8 @@ Support sequential learning flows.
 ## P01-T175 — Build Canonical Tab Navigation
 
 Support local content switching without misuse as global navigation.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support local content switching without misuse as global navigation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1536,6 +1886,8 @@ Support local content switching without misuse as global navigation.
 
 Support progressive disclosure.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support progressive disclosure. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1543,6 +1895,8 @@ Support progressive disclosure.
 ## P01-T177 — Build Canonical Tree Navigation Primitives
 
 Prepare for later content-tree consolidation.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Prepare for later content-tree consolidation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -1554,6 +1908,8 @@ Prepare for later content-tree consolidation.
 
 Standardize modal behavior.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize modal behavior. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1561,6 +1917,8 @@ Standardize modal behavior.
 ## P01-T179 — Rebuild Canonical Drawer
 
 Support mobile and contextual panels.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support mobile and contextual panels. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -1570,6 +1928,8 @@ Support mobile and contextual panels.
 
 Standardize contextual actions.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize contextual actions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1577,6 +1937,8 @@ Standardize contextual actions.
 ## P01-T181 — Rebuild Canonical Popover
 
 Support lightweight contextual content.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support lightweight contextual content. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P2
 
@@ -1586,6 +1948,8 @@ Support lightweight contextual content.
 
 Use tooltips only for genuinely unclear icon actions.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Use tooltips only for genuinely unclear icon actions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -1593,6 +1957,8 @@ Use tooltips only for genuinely unclear icon actions.
 ## P01-T183 — Standardize Overlay Backdrop
 
 Create consistent visual hierarchy.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Create consistent visual hierarchy. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P1
 
@@ -1602,6 +1968,8 @@ Create consistent visual hierarchy.
 
 Prevent stacking conflicts.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Prevent stacking conflicts. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P0
 
 ---
@@ -1610,6 +1978,8 @@ Prevent stacking conflicts.
 
 Ensure accessible keyboard behavior.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Ensure accessible keyboard behavior. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P0
 
 ---
@@ -1617,6 +1987,8 @@ Ensure accessible keyboard behavior.
 ## P01-T186 — Standardize Overlay Mobile Behavior
 
 Prevent unusable desktop-style modals on small screens.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Prevent unusable desktop-style modals on small screens. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P1
 
@@ -1628,6 +2000,8 @@ Prevent unusable desktop-style modals on small screens.
 
 Create reusable loading placeholders.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create reusable loading placeholders. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1635,6 +2009,8 @@ Create reusable loading placeholders.
 ## P01-T188 — Build Text Skeleton Pattern
 
 Support reading-content loading.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support reading-content loading. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1644,6 +2020,8 @@ Support reading-content loading.
 
 Support structured content loading.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support structured content loading. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -1651,6 +2029,8 @@ Support structured content loading.
 ## P01-T190 — Build List Skeleton Pattern
 
 Support search and question-list loading.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support search and question-list loading. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1660,6 +2040,8 @@ Support search and question-list loading.
 
 Reserve spinner use for appropriate compact actions.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Reserve spinner use for appropriate compact actions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -1667,6 +2049,8 @@ Reserve spinner use for appropriate compact actions.
 ## P01-T192 — Replace Plain Loading Text in Shared Experiences
 
 Use context-appropriate loading feedback.
+
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Use context-appropriate loading feedback. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
 
 **Priority:** P1
 
@@ -1676,6 +2060,8 @@ Use context-appropriate loading feedback.
 
 Create clear recovery-oriented empty states.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create clear recovery-oriented empty states. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1683,6 +2069,8 @@ Create clear recovery-oriented empty states.
 ## P01-T194 — Build Canonical Error State
 
 Create understandable error recovery.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create understandable error recovery. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -1692,6 +2080,8 @@ Create understandable error recovery.
 
 Support component-level failures.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support component-level failures. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1699,6 +2089,8 @@ Support component-level failures.
 ## P01-T196 — Build Success Feedback Pattern
 
 Provide restrained confirmation.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Provide restrained confirmation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P2
 
@@ -1708,6 +2100,8 @@ Provide restrained confirmation.
 
 Use transient feedback consistently.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Use transient feedback consistently. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P2
 
 ---
@@ -1715,6 +2109,8 @@ Use transient feedback consistently.
 ## P01-T198 — Prevent Toast Overuse
 
 Keep persistent information in the interface when appropriate.
+
+**Execution:** Execute this task against the current repository in the context of Workstream R — Loading, Empty, Error & Feedback States, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Keep persistent information in the interface when appropriate. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
 
 **Priority:** P2
 
@@ -1726,6 +2122,8 @@ Keep persistent information in the interface when appropriate.
 
 Create the root long-form content renderer styling contract.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create the root long-form content renderer styling contract. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -1733,6 +2131,8 @@ Create the root long-form content renderer styling contract.
 ## P01-T200 — Build Canonical Code Block Shell
 
 Prepare reusable code presentation.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Prepare reusable code presentation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -1742,6 +2142,8 @@ Prepare reusable code presentation.
 
 Support language labels and actions.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support language labels and actions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1749,6 +2151,8 @@ Support language labels and actions.
 ## P01-T202 — Build Canonical Copy-Code Action
 
 Provide consistent copy feedback.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Provide consistent copy feedback. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1758,6 +2162,8 @@ Provide consistent copy feedback.
 
 Standardize technical references.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize technical references. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -1765,6 +2171,8 @@ Standardize technical references.
 ## P01-T204 — Build Canonical Callout Component
 
 Create the base semantic callout.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create the base semantic callout. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -1774,6 +2182,8 @@ Create the base semantic callout.
 
 Support neutral supplementary information.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support neutral supplementary information. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1781,6 +2191,8 @@ Support neutral supplementary information.
 ## P01-T206 — Implement Tip Callout
 
 Support useful guidance without excessive colour.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support useful guidance without excessive colour. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1790,6 +2202,8 @@ Support useful guidance without excessive colour.
 
 Reserve warning emphasis for meaningful caution.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Reserve warning emphasis for meaningful caution. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1797,6 +2211,8 @@ Reserve warning emphasis for meaningful caution.
 ## P01-T208 — Implement Example Block
 
 Create consistent worked-example presentation.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Create consistent worked-example presentation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -1806,6 +2222,8 @@ Create consistent worked-example presentation.
 
 Support concise summary emphasis.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support concise summary emphasis. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -1813,6 +2231,8 @@ Support concise summary emphasis.
 ## P01-T210 — Build Canonical Table Wrapper
 
 Support responsive technical tables.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support responsive technical tables. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -1822,6 +2242,8 @@ Support responsive technical tables.
 
 Prevent mobile page overflow.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Prevent mobile page overflow. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -1829,6 +2251,8 @@ Prevent mobile page overflow.
 ## P01-T212 — Implement Table Header Styling
 
 Improve scanability.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Improve scanability. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1838,6 +2262,8 @@ Improve scanability.
 
 Avoid excessive striping and visual noise.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Avoid excessive striping and visual noise. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -1845,6 +2271,8 @@ Avoid excessive striping and visual noise.
 ## P01-T214 — Build Canonical Diagram Container
 
 Support diagrams without forcing card styling.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support diagrams without forcing card styling. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -1854,6 +2282,8 @@ Support diagrams without forcing card styling.
 
 Standardize images and visual content.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Standardize images and visual content. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -1861,6 +2291,8 @@ Standardize images and visual content.
 ## P01-T216 — Build Canonical Content Caption
 
 Support diagrams, tables and media.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Support diagrams, tables and media. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P2
 
@@ -1872,6 +2304,8 @@ Support diagrams, tables and media.
 
 Standardize responsive behavior.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Standardize responsive behavior. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -1879,6 +2313,8 @@ Standardize responsive behavior.
 ## P01-T218 — Establish Mobile-First Layout Rules
 
 Avoid desktop layouts patched down for phones.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Avoid desktop layouts patched down for phones. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -1888,6 +2324,8 @@ Avoid desktop layouts patched down for phones.
 
 Standardize horizontal spacing.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Standardize horizontal spacing. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -1895,6 +2333,8 @@ Standardize horizontal spacing.
 ## P01-T220 — Establish Responsive Typography Behavior
 
 Prevent oversized headings and cramped body text.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Prevent oversized headings and cramped body text. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -1904,6 +2344,8 @@ Prevent oversized headings and cramped body text.
 
 Create predictable grid collapse behavior.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Create predictable grid collapse behavior. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P1
 
 ---
@@ -1911,6 +2353,8 @@ Create predictable grid collapse behavior.
 ## P01-T222 — Establish Responsive Sidebar Rules
 
 Define when sidebars remain, collapse or move.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Define when sidebars remain, collapse or move. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -1920,6 +2364,8 @@ Define when sidebars remain, collapse or move.
 
 Prepare consistent global and content navigation behavior.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Prepare consistent global and content navigation behavior. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -1927,6 +2373,8 @@ Prepare consistent global and content navigation behavior.
 ## P01-T224 — Establish Responsive Table Rules
 
 Prevent unusable data presentation.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Prevent unusable data presentation. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -1936,6 +2384,8 @@ Prevent unusable data presentation.
 
 Prevent code from breaking the viewport.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Prevent code from breaking the viewport. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -1943,6 +2393,8 @@ Prevent code from breaking the viewport.
 ## P01-T226 — Establish Responsive Dialog and Drawer Rules
 
 Use appropriate interaction patterns by viewport.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Use appropriate interaction patterns by viewport. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P1
 
@@ -1952,6 +2404,8 @@ Use appropriate interaction patterns by viewport.
 
 Improve mobile usability.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Improve mobile usability. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -1959,6 +2413,8 @@ Improve mobile usability.
 ## P01-T228 — Remove Shared Fixed-Width Mobile Breakage
 
 Fix reusable components that assume desktop width.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Fix reusable components that assume desktop width. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P0
 
@@ -1970,6 +2426,8 @@ Fix reusable components that assume desktop width.
 
 Create consistent keyboard focus indicators.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Create consistent keyboard focus indicators. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -1977,6 +2435,8 @@ Create consistent keyboard focus indicators.
 ## P01-T230 — Remove Focus Outline Suppression
 
 Eliminate inaccessible focus removal.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Eliminate inaccessible focus removal. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P0
 
@@ -1986,6 +2446,8 @@ Eliminate inaccessible focus removal.
 
 Prevent visual heading styles from breaking document structure.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Prevent visual heading styles from breaking document structure. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -1993,6 +2455,8 @@ Prevent visual heading styles from breaking document structure.
 ## P01-T232 — Establish Accessible Icon Button Rules
 
 Require accessible names.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Require accessible names. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -2002,6 +2466,8 @@ Require accessible names.
 
 Standardize labels, descriptions and errors.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Standardize labels, descriptions and errors. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -2009,6 +2475,8 @@ Standardize labels, descriptions and errors.
 ## P01-T234 — Establish Navigation Accessibility Rules
 
 Support semantic and keyboard navigation.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Support semantic and keyboard navigation. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -2018,6 +2486,8 @@ Support semantic and keyboard navigation.
 
 Standardize focus trapping and restoration.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Standardize focus trapping and restoration. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P0
 
 ---
@@ -2025,6 +2495,8 @@ Standardize focus trapping and restoration.
 ## P01-T236 — Establish Reduced Motion Support
 
 Respect user preferences.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Respect user preferences. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P1
 
@@ -2034,6 +2506,8 @@ Respect user preferences.
 
 Support visually hidden accessible content.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Support visually hidden accessible content. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P1
 
 ---
@@ -2041,6 +2515,8 @@ Support visually hidden accessible content.
 ## P01-T238 — Establish Minimum Contrast Requirements
 
 Apply them to canonical tokens and components.
+
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Apply them to canonical tokens and components. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
 
 **Priority:** P0
 
@@ -2052,6 +2528,8 @@ Apply them to canonical tokens and components.
 
 Use motion to explain state changes rather than decorate everything.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Use motion to explain state changes rather than decorate everything. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P1
 
 ---
@@ -2059,6 +2537,8 @@ Use motion to explain state changes rather than decorate everything.
 ## P01-T240 — Standardize Transition Durations
 
 Remove inconsistent animation timing.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Remove inconsistent animation timing. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P2
 
@@ -2068,6 +2548,8 @@ Remove inconsistent animation timing.
 
 Create consistent interaction feel.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Create consistent interaction feel. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P2
 
 ---
@@ -2075,6 +2557,8 @@ Create consistent interaction feel.
 ## P01-T242 — Remove Universal Transition-All Usage Where Harmful
 
 Avoid unnecessary property animation.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Avoid unnecessary property animation. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P1
 
@@ -2084,6 +2568,8 @@ Avoid unnecessary property animation.
 
 Reduce visual instability.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Reduce visual instability. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P0
 
 ---
@@ -2091,6 +2577,8 @@ Reduce visual instability.
 ## P01-T244 — Standardize Hover Feedback
 
 Use restrained colour, border or background changes.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Use restrained colour, border or background changes. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P1
 
@@ -2100,6 +2588,8 @@ Use restrained colour, border or background changes.
 
 Improve control responsiveness.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Improve control responsiveness. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P2
 
 ---
@@ -2107,6 +2597,8 @@ Improve control responsiveness.
 ## P01-T246 — Implement Reduced-Motion Alternatives
 
 Ensure essential interaction remains understandable.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Ensure essential interaction remains understandable. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -2118,6 +2610,8 @@ Ensure essential interaction remains understandable.
 
 Use one primary icon system.
 
+**Execution:** Turn this requirement into one explicit V2 rule and encode it in the repository location that will enforce or guide it; do not leave the result as an abstract recommendation. Apply this specifically to: Use one primary icon system. Update the affected shared architecture or implementation entry points so later tasks have one unambiguous convention to follow, with existing exceptions recorded for migration.
+
 **Priority:** P1
 
 ---
@@ -2125,6 +2619,8 @@ Use one primary icon system.
 ## P01-T248 — Standardize Icon Sizes
 
 Create predictable sizing roles.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Create predictable sizing roles. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P2
 
@@ -2134,6 +2630,8 @@ Create predictable sizing roles.
 
 Avoid inconsistent visual weight.
 
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Avoid inconsistent visual weight. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
+
 **Priority:** P2
 
 ---
@@ -2141,6 +2639,8 @@ Avoid inconsistent visual weight.
 ## P01-T250 — Remove Decorative Icon Overuse
 
 Use icons only where they improve comprehension.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Use icons only where they improve comprehension. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P1
 
@@ -2150,6 +2650,8 @@ Use icons only where they improve comprehension.
 
 Reduce inconsistency and bundle duplication.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Reduce inconsistency and bundle duplication. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P1
 
 ---
@@ -2157,6 +2659,8 @@ Reduce inconsistency and bundle duplication.
 ## P01-T252 — Standardize Icon and Text Spacing
 
 Improve control alignment.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Improve control alignment. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P2
 
@@ -2168,6 +2672,8 @@ Improve control alignment.
 
 Ensure one canonical theme system.
 
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Ensure one canonical theme system. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
+
 **Priority:** P0
 
 ---
@@ -2175,6 +2681,8 @@ Ensure one canonical theme system.
 ## P01-T254 — Implement System Theme Support
 
 Respect operating-system preference.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Respect operating-system preference. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -2184,6 +2692,8 @@ Respect operating-system preference.
 
 Reduce incorrect-theme rendering during load.
 
+**Execution:** Execute this task against the current repository in the context of Workstream X — Theme Infrastructure, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Reduce incorrect-theme rendering during load. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
+
 **Priority:** P0
 
 ---
@@ -2191,6 +2701,8 @@ Reduce incorrect-theme rendering during load.
 ## P01-T256 — Standardize Theme Persistence
 
 Ensure predictable user preference behavior.
+
+**Execution:** Find the current variants of this behavior, define the canonical V2 rule in the correct shared token, primitive, component, layout, or service layer, and migrate inconsistent consumers to it. Apply this specifically to: Ensure predictable user preference behavior. Keep only documented exceptions that have a real product need, then verify representative routes or flows so the standard is actually applied rather than merely documented.
 
 **Priority:** P1
 
@@ -2200,6 +2712,8 @@ Ensure predictable user preference behavior.
 
 Migrate components to semantic tokens.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Migrate components to semantic tokens. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P0
 
 ---
@@ -2208,6 +2722,8 @@ Migrate components to semantic tokens.
 
 Use one canonical mechanism.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Use one canonical mechanism. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P1
 
 ---
@@ -2215,6 +2731,8 @@ Use one canonical mechanism.
 ## P01-T259 — Validate Native Control Theme Behavior
 
 Ensure browser-native elements align with the selected theme.
+
+**Execution:** Inspect the actual repository implementation for this scope, record concrete files, routes, components, APIs, or data paths found, and classify each finding by the action it requires. Apply this specifically to: Ensure browser-native elements align with the selected theme. Write the result into the phase’s existing audit, tracker, or task artifact and create follow-up issues for unresolved findings instead of leaving generic observations.
 
 **Priority:** P2
 
@@ -2226,6 +2744,8 @@ Ensure browser-native elements align with the selected theme.
 
 Map every major legacy shared component to its V2 replacement.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Map every major legacy shared component to its V2 replacement. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -2233,6 +2753,8 @@ Map every major legacy shared component to its V2 replacement.
 ## P01-T261 — Consolidate Duplicate Button Systems
 
 Choose and migrate toward one canonical implementation.
+
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Choose and migrate toward one canonical implementation. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
 
 **Priority:** P0
 
@@ -2242,6 +2764,8 @@ Choose and migrate toward one canonical implementation.
 
 Reduce parallel card architectures.
 
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Reduce parallel card architectures. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
+
 **Priority:** P0
 
 ---
@@ -2249,6 +2773,8 @@ Reduce parallel card architectures.
 ## P01-T263 — Consolidate Duplicate Badge Systems
 
 Remove unnecessary variants and implementations.
+
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Remove unnecessary variants and implementations. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
 
 **Priority:** P1
 
@@ -2258,6 +2784,8 @@ Remove unnecessary variants and implementations.
 
 Create one shared form foundation.
 
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Create one shared form foundation. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
+
 **Priority:** P1
 
 ---
@@ -2265,6 +2793,8 @@ Create one shared form foundation.
 ## P01-T265 — Consolidate Duplicate Dialog Systems
 
 Standardize overlay behavior.
+
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Standardize overlay behavior. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
 
 **Priority:** P1
 
@@ -2274,6 +2804,8 @@ Standardize overlay behavior.
 
 Prepare for mobile navigation migration.
 
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Prepare for mobile navigation migration. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
+
 **Priority:** P1
 
 ---
@@ -2281,6 +2813,8 @@ Prepare for mobile navigation migration.
 ## P01-T267 — Consolidate Duplicate Breadcrumb Systems
 
 Prepare for unified UX and SEO hierarchy.
+
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Prepare for unified UX and SEO hierarchy. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
 
 **Priority:** P0
 
@@ -2290,6 +2824,8 @@ Prepare for unified UX and SEO hierarchy.
 
 Create consistent feedback.
 
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Create consistent feedback. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
+
 **Priority:** P1
 
 ---
@@ -2297,6 +2833,8 @@ Create consistent feedback.
 ## P01-T269 — Consolidate Duplicate Empty-State Systems
 
 Remove route-specific reinvention.
+
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Remove route-specific reinvention. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
 
 **Priority:** P2
 
@@ -2306,6 +2844,8 @@ Remove route-specific reinvention.
 
 Standardize recovery patterns.
 
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Standardize recovery patterns. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
+
 **Priority:** P1
 
 ---
@@ -2313,6 +2853,8 @@ Standardize recovery patterns.
 ## P01-T271 — Consolidate Duplicate Code Block Shells
 
 Prepare for question-page migration.
+
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Prepare for question-page migration. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
 
 **Priority:** P0
 
@@ -2322,6 +2864,8 @@ Prepare for question-page migration.
 
 Create one educational component family.
 
+**Execution:** Inventory the competing implementations for this responsibility, select the canonical V2 owner using the phase architecture, and migrate active consumers to it instead of keeping parallel paths. Apply this specifically to: Create one educational component family. Remove or deprecate the superseded path only after consumer migration, leaving one documented source of truth and no ambiguous ownership.
+
 **Priority:** P1
 
 ---
@@ -2330,6 +2874,8 @@ Create one educational component family.
 
 Delete only after usage verification.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Delete only after usage verification. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P1
 
 ---
@@ -2337,6 +2883,8 @@ Delete only after usage verification.
 ## P01-T274 — Prevent Legacy Component Reintroduction
 
 Document replacement rules for active development.
+
+**Execution:** Execute this task against the current repository in the context of Workstream Y — Legacy UI Consolidation, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Document replacement rules for active development. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
 
 **Priority:** P1
 
@@ -2348,6 +2896,8 @@ Document replacement rules for active development.
 
 Migrate common shared components to semantic tokens.
 
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Migrate common shared components to semantic tokens. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
+
 **Priority:** P0
 
 ---
@@ -2355,6 +2905,8 @@ Migrate common shared components to semantic tokens.
 ## P01-T276 — Replace Shared Hard-Coded Text Colors
 
 Migrate common shared components to semantic hierarchy.
+
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Migrate common shared components to semantic hierarchy. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
 
 **Priority:** P0
 
@@ -2364,6 +2916,8 @@ Migrate common shared components to semantic hierarchy.
 
 Use canonical border tokens.
 
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Use canonical border tokens. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
+
 **Priority:** P0
 
 ---
@@ -2371,6 +2925,8 @@ Use canonical border tokens.
 ## P01-T278 — Replace Shared Arbitrary Border Radii
 
 Use the canonical radius scale.
+
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Use the canonical radius scale. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
 
 **Priority:** P1
 
@@ -2380,6 +2936,8 @@ Use the canonical radius scale.
 
 Use canonical elevation roles.
 
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Use canonical elevation roles. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
+
 **Priority:** P1
 
 ---
@@ -2387,6 +2945,8 @@ Use canonical elevation roles.
 ## P01-T280 — Replace Shared Arbitrary Width Constraints
 
 Use canonical containers.
+
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Use canonical containers. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
 
 **Priority:** P0
 
@@ -2396,6 +2956,8 @@ Use canonical containers.
 
 Use the canonical spacing system.
 
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Use the canonical spacing system. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
+
 **Priority:** P0
 
 ---
@@ -2403,6 +2965,8 @@ Use the canonical spacing system.
 ## P01-T282 — Replace Shared Arbitrary Typography
 
 Use canonical text roles.
+
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Use canonical text roles. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
 
 **Priority:** P0
 
@@ -2412,6 +2976,8 @@ Use canonical text roles.
 
 Use canonical interaction behavior.
 
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Use canonical interaction behavior. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
+
 **Priority:** P1
 
 ---
@@ -2419,6 +2985,8 @@ Use canonical interaction behavior.
 ## P01-T284 — Replace Shared Arbitrary Focus States
 
 Use the global focus system.
+
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Use the global focus system. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
 
 **Priority:** P0
 
@@ -2428,6 +2996,8 @@ Use the global focus system.
 
 Flatten reusable composition where possible.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Flatten reusable composition where possible. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P0
 
 ---
@@ -2435,6 +3005,8 @@ Flatten reusable composition where possible.
 ## P01-T286 — Remove Shared Decorative Gradient Overuse
 
 Reserve gradients for intentional brand or hero use.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Reserve gradients for intentional brand or hero use. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P1
 
@@ -2444,6 +3016,8 @@ Reserve gradients for intentional brand or hero use.
 
 Use whitespace and hierarchy where possible.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Use whitespace and hierarchy where possible. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P0
 
 ---
@@ -2451,6 +3025,8 @@ Use whitespace and hierarchy where possible.
 ## P01-T288 — Remove Shared Excessive Badge Usage
 
 Reduce visual fragmentation.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Reduce visual fragmentation. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P0
 
@@ -2460,6 +3036,8 @@ Reduce visual fragmentation.
 
 Improve visual calm.
 
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Improve visual calm. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
+
 **Priority:** P1
 
 ---
@@ -2467,6 +3045,8 @@ Improve visual calm.
 ## P01-T290 — Remove Shared Unnecessary Motion
 
 Reduce distraction.
+
+**Execution:** Locate every active instance covered by this task, trace its consumers first, then remove only the confirmed obsolete or conflicting implementation and update affected references. Apply this specifically to: Reduce distraction. Run the relevant build, route, visual, or feature checks so the cleanup leaves no broken imports, hidden fallback dependency, or replacement gap.
 
 **Priority:** P1
 
@@ -2478,6 +3058,8 @@ Reduce distraction.
 
 Render canonical primitives together for rapid comparison.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Render canonical primitives together for rapid comparison. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -2485,6 +3067,8 @@ Render canonical primitives together for rapid comparison.
 ## P01-T292 — Create Typography Review Surface
 
 Review headings, body text, lists and code.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Review headings, body text, lists and code. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -2494,6 +3078,8 @@ Review headings, body text, lists and code.
 
 Review semantic hierarchy in both themes.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Review semantic hierarchy in both themes. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -2501,6 +3087,8 @@ Review semantic hierarchy in both themes.
 ## P01-T294 — Create Form Component Review Surface
 
 Validate all states consistently.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Validate all states consistently. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P2
 
@@ -2510,6 +3098,8 @@ Validate all states consistently.
 
 Test prose, code, callouts, tables and diagrams.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Test prose, code, callouts, tables and diagrams. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -2517,6 +3107,8 @@ Test prose, code, callouts, tables and diagrams.
 ## P01-T296 — Create Density Stress-Test Surface
 
 Test highly populated content without reverting to visual clutter.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Test highly populated content without reverting to visual clutter. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P0
 
@@ -2526,6 +3118,8 @@ Test highly populated content without reverting to visual clutter.
 
 Test sustained reading in light and dark themes.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Test sustained reading in light and dark themes. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -2534,6 +3128,8 @@ Test sustained reading in light and dark themes.
 
 Test narrow viewport behavior.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Test narrow viewport behavior. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -2541,6 +3137,8 @@ Test narrow viewport behavior.
 ## P01-T299 — Create Wide Desktop Stress-Test Surface
 
 Ensure layouts do not become excessively stretched.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Ensure layouts do not become excessively stretched. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -2552,6 +3150,8 @@ Ensure layouts do not become excessively stretched.
 
 Prevent the V2 component foundation from introducing excessive JavaScript.
 
+**Execution:** Inspect the actual repository implementation for this scope, record concrete files, routes, components, APIs, or data paths found, and classify each finding by the action it requires. Apply this specifically to: Prevent the V2 component foundation from introducing excessive JavaScript. Write the result into the phase’s existing audit, tracker, or task artifact and create follow-up issues for unresolved findings instead of leaving generic observations.
+
 **Priority:** P1
 
 ---
@@ -2559,6 +3159,8 @@ Prevent the V2 component foundation from introducing excessive JavaScript.
 ## P01-T301 — Minimize Client-Only UI Primitives
 
 Keep static visual components server-compatible where possible.
+
+**Execution:** Execute this task against the current repository in the context of Workstream AB — Root UI Performance, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Keep static visual components server-compatible where possible. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
 
 **Priority:** P0
 
@@ -2568,6 +3170,8 @@ Keep static visual components server-compatible where possible.
 
 Prefer predictable build-time styling where appropriate.
 
+**Execution:** Execute this task against the current repository in the context of Workstream AB — Root UI Performance, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Prefer predictable build-time styling where appropriate. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
+
 **Priority:** P1
 
 ---
@@ -2575,6 +3179,8 @@ Prefer predictable build-time styling where appropriate.
 ## P01-T303 — Reduce Duplicate Icon Bundle Cost
 
 Consolidate icon usage.
+
+**Execution:** Measure or inspect the current problem first, change the root shared cause rather than applying isolated patches, and apply the improvement to the affected page or feature family. Apply this specifically to: Consolidate icon usage. Compare the resulting behavior against the current baseline and record any remaining exceptions or regressions that need a later task.
 
 **Priority:** P2
 
@@ -2584,6 +3190,8 @@ Consolidate icon usage.
 
 Avoid multiple libraries solving the same UI problem.
 
+**Execution:** Measure or inspect the current problem first, change the root shared cause rather than applying isolated patches, and apply the improvement to the affected page or feature family. Apply this specifically to: Avoid multiple libraries solving the same UI problem. Compare the resulting behavior against the current baseline and record any remaining exceptions or regressions that need a later task.
+
 **Priority:** P1
 
 ---
@@ -2592,6 +3200,8 @@ Avoid multiple libraries solving the same UI problem.
 
 Avoid unnecessary weights and files.
 
+**Execution:** Measure or inspect the current problem first, change the root shared cause rather than applying isolated patches, and apply the improvement to the affected page or feature family. Apply this specifically to: Avoid unnecessary weights and files. Compare the resulting behavior against the current baseline and record any remaining exceptions or regressions that need a later task.
+
 **Priority:** P0
 
 ---
@@ -2599,6 +3209,8 @@ Avoid unnecessary weights and files.
 ## P01-T306 — Prevent Layout Shift from UI Foundation
 
 Stabilize font and component sizing.
+
+**Execution:** Execute this task against the current repository in the context of Workstream AB — Root UI Performance, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Stabilize font and component sizing. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
 
 **Priority:** P0
 
@@ -2610,6 +3222,8 @@ Stabilize font and component sizing.
 
 Protect complex shared behavior without testing trivial CSS implementation.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Protect complex shared behavior without testing trivial CSS implementation. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P2
 
 ---
@@ -2617,6 +3231,8 @@ Protect complex shared behavior without testing trivial CSS implementation.
 ## P01-T308 — Add Interaction Coverage for Critical Primitives
 
 Protect dialogs, drawers, menus and form interactions.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Protect dialogs, drawers, menus and form interactions. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -2626,6 +3242,8 @@ Protect dialogs, drawers, menus and form interactions.
 
 Catch shared accessibility regressions early.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Catch shared accessibility regressions early. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P0
 
 ---
@@ -2633,6 +3251,8 @@ Catch shared accessibility regressions early.
 ## P01-T310 — Add Theme Regression Coverage for Critical Components
 
 Protect semantic token usage.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Protect semantic token usage. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P1
 
@@ -2642,6 +3262,8 @@ Protect semantic token usage.
 
 Protect shared navigation and overflow-sensitive components.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Protect shared navigation and overflow-sensitive components. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -2649,6 +3271,8 @@ Protect shared navigation and overflow-sensitive components.
 ## P01-T312 — Add Legacy Import Detection Where Practical
 
 Detect reintroduction of deprecated components.
+
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Detect reintroduction of deprecated components. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
 
 **Priority:** P2
 
@@ -2660,6 +3284,8 @@ Detect reintroduction of deprecated components.
 
 Verify the design foundation in a realistic page.
 
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Verify the design foundation in a realistic page. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
+
 **Priority:** P0
 
 ---
@@ -2667,6 +3293,8 @@ Verify the design foundation in a realistic page.
 ## P01-T314 — Migrate One Representative Dense Page to Root V2 System
 
 Test whether the new system genuinely solves density.
+
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Test whether the new system genuinely solves density. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
 
 **Priority:** P0
 
@@ -2676,6 +3304,8 @@ Test whether the new system genuinely solves density.
 
 Test typography and reading width.
 
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Test typography and reading width. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
+
 **Priority:** P0
 
 ---
@@ -2683,6 +3313,8 @@ Test typography and reading width.
 ## P01-T316 — Migrate One Representative Code-Heavy Surface
 
 Test technical content primitives.
+
+**Execution:** Identify every active consumer of the current implementation, move them to the V2 target in a controlled sequence, and preserve compatibility only where an active dependency still requires it. Apply this specifically to: Test technical content primitives. Verify the migrated paths before retiring the old implementation, then update the migration tracker with completed consumers and remaining exceptions.
 
 **Priority:** P0
 
@@ -2692,6 +3324,8 @@ Test technical content primitives.
 
 Verify that V2 reduces unnecessary visual competition.
 
+**Execution:** Execute this task against the current repository in the context of Workstream AD — Phase 01 Integration & Completion, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Verify that V2 reduces unnecessary visual competition. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
+
 **Priority:** P0
 
 ---
@@ -2699,6 +3333,8 @@ Verify that V2 reduces unnecessary visual competition.
 ## P01-T318 — Compare V1 and V2 Reading Comfort
 
 Verify improvements in typography, width and spacing.
+
+**Execution:** Execute this task against the current repository in the context of Workstream AD — Phase 01 Integration & Completion, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Verify improvements in typography, width and spacing. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
 
 **Priority:** P0
 
@@ -2708,6 +3344,8 @@ Verify improvements in typography, width and spacing.
 
 Fix the system rather than patching representative pages locally.
 
+**Execution:** Execute this task against the current repository in the context of Workstream AD — Phase 01 Integration & Completion, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Fix the system rather than patching representative pages locally. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
+
 **Priority:** P0
 
 ---
@@ -2715,6 +3353,8 @@ Fix the system rather than patching representative pages locally.
 ## P01-T320 — Freeze Canonical V2 Design Tokens
 
 Prevent uncontrolled token changes during mass migration.
+
+**Execution:** Execute this task against the current repository in the context of Workstream AD — Phase 01 Integration & Completion, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Prevent uncontrolled token changes during mass migration. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
 
 **Priority:** P0
 
@@ -2724,6 +3364,8 @@ Prevent uncontrolled token changes during mass migration.
 
 Stabilize shared component interfaces before broad adoption.
 
+**Execution:** Execute this task against the current repository in the context of Workstream AD — Phase 01 Integration & Completion, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Stabilize shared component interfaces before broad adoption. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
+
 **Priority:** P0
 
 ---
@@ -2731,6 +3373,8 @@ Stabilize shared component interfaces before broad adoption.
 ## P01-T322 — Publish Legacy-to-V2 Component Mapping
 
 Give later phases an explicit migration path.
+
+**Execution:** Inspect the actual repository implementation for this scope, record concrete files, routes, components, APIs, or data paths found, and classify each finding by the action it requires. Apply this specifically to: Give later phases an explicit migration path. Write the result into the phase’s existing audit, tracker, or task artifact and create follow-up issues for unresolved findings instead of leaving generic observations.
 
 **Priority:** P0
 
@@ -2740,6 +3384,8 @@ Give later phases an explicit migration path.
 
 Record the actual implemented UI architecture.
 
+**Execution:** Implement this in the shared layer that owns the responsibility, using the existing V2 architecture and the task requirements below rather than adding a route-specific workaround. Apply this specifically to: Record the actual implemented UI architecture. Migrate the immediately affected consumers, cover responsive/theme/state behavior where relevant, and verify the resulting implementation through the appropriate build and regression checks.
+
 **Priority:** P1
 
 ---
@@ -2748,6 +3394,8 @@ Record the actual implemented UI architecture.
 
 Record important UI architecture decisions.
 
+**Execution:** Execute this task against the current repository in the context of Workstream AD — Phase 01 Integration & Completion, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Record important UI architecture decisions. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
+
 **Priority:** P1
 
 ---
@@ -2755,6 +3403,8 @@ Record important UI architecture decisions.
 ## P01-T325 — Update V2 Issue Log
 
 Record unresolved UI issues that belong to later route-specific phases.
+
+**Execution:** Execute this task against the current repository in the context of Workstream AD — Phase 01 Integration & Completion, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Record unresolved UI issues that belong to later route-specific phases. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
 
 **Priority:** P1
 
@@ -2770,6 +3420,8 @@ Document:
 * remaining route-specific work,
 * known risks.
 
+**Execution:** Execute this task against the current repository in the context of Workstream AD — Phase 01 Integration & Completion, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Document: implemented root systems, migrated primitives, removed legacy systems, remaining route-specific work, known risks. Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
+
 **Priority:** P0
 
 ---
@@ -2777,6 +3429,8 @@ Document:
 ## P01-T327 — Approve Phase 01 Foundation for Mass Page Migration
 
 Confirm that later phases can build on the canonical V2 system rather than creating new visual architectures.
+
+**Execution:** Execute this task against the current repository in the context of Workstream AD — Phase 01 Integration & Completion, using the existing requirement below as the scope and changing the owning shared implementation rather than adding an isolated workaround. Apply this specifically to: Confirm that later phases can build on the canonical V2 system rather than creating new visual architectures. # Phase 01 Exit Criteria Phase 01 is complete when Interview Explainer has: one canonical semantic color architecture, one coherent light theme, one coherent dark theme, one typography system, one reading-width architecture, one spacing system, one surface hierarchy, one radius and shadow system, canonical la Verify the affected routes, components, APIs, or workflows and record any unresolved dependency or exception in the existing V2 execution logs.
 
 **Priority:** P0
 

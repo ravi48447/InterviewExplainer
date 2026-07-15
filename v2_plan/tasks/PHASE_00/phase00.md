@@ -34,6 +34,9 @@ It should produce enough verified truth to begin:
 Review the completed repository audit and consolidate its verified findings into the canonical V2 repository audit document.
 
 **Primary output:** `V2_REPOSITORY_AUDIT.md`
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_REPOSITORY_AUDIT.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 **Status:** Existing audit work available; consolidation/verification required.
 
@@ -42,6 +45,8 @@ Review the completed repository audit and consolidate its verified findings into
 ## TASK-0002 — Verify Current Repository Structure
 
 Compare the existing audit against the current V2 working branch and identify files, directories or systems that have changed since the original audit.
+
+**Execution:** Execute this task against the current working branch, record the exact affected systems and verified result, and update `V2_REPOSITORY_AUDIT.md`. Convert every unresolved finding into a concrete issue, decision input or later-phase action rather than leaving it as a general observation.
 
 **Priority:** P0
 
@@ -64,6 +69,8 @@ Document the current frontend architecture, including:
 * configuration
 * styles
 * content loaders
+
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in `V2_REPOSITORY_AUDIT.md`; do not infer the flow from naming alone.
 
 **Priority:** P0
 
@@ -88,6 +95,8 @@ Document the current Spring Boot architecture, including:
 * dashboard
 * database migrations
 
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in `V2_REPOSITORY_AUDIT.md`; do not infer the flow from naming alone.
+
 **Priority:** P0
 
 ---
@@ -103,6 +112,8 @@ Identify every important frontend-to-backend interaction and classify whether it
 * local content files,
 * generated registries,
 * direct database-dependent APIs.
+
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in `V2_REPOSITORY_AUDIT.md`; do not infer the flow from naming alone.
 
 **Priority:** P0
 
@@ -121,6 +132,8 @@ Document the end-to-end data flow for:
 * progress,
 * dashboard,
 * recommendations.
+
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in `V2_REPOSITORY_AUDIT.md`; do not infer the flow from naming alone.
 
 **Priority:** P0
 
@@ -141,6 +154,8 @@ Find overlapping implementations for:
 * progress,
 * recommendations.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_REPOSITORY_AUDIT.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -155,6 +170,8 @@ Classify systems as:
 * TRANSITIONAL
 * GENERATED
 * UNKNOWN
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_REPOSITORY_AUDIT.md`; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P1
 
@@ -173,6 +190,8 @@ Create a list of files whose modification could affect large portions of the pro
 * shared navigation,
 * shared answer renderers.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_REPOSITORY_AUDIT.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -180,6 +199,8 @@ Create a list of files whose modification could affect large portions of the pro
 ## TASK-0010 — Create Repository Change-Risk Map
 
 Classify major systems by migration risk and define where changes require additional regression protection.
+
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into `V2_REPOSITORY_AUDIT.md` and link unresolved blockers to the issue or decision log instead of leaving vague notes.
 
 **Priority:** P1
 
@@ -192,6 +213,9 @@ Classify major systems by migration risk and define where changes require additi
 Enumerate all static and dynamic App Router pages.
 
 **Primary output:** `V2_ROUTE_INVENTORY.md`
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_ROUTE_INVENTORY.md` so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -200,6 +224,8 @@ Enumerate all static and dynamic App Router pages.
 
 Document all frontend API and route-handler endpoints.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_ROUTE_INVENTORY.md` so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -207,6 +233,8 @@ Document all frontend API and route-handler endpoints.
 ## TASK-0013 — Inventory Every Backend API Endpoint
 
 Document current Spring Boot endpoints and their consumers.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
 
 **Priority:** P0
 
@@ -224,6 +252,8 @@ Classify routes as:
 * PREVIEW
 * LEGACY
 * UNKNOWN
+
+**Execution:** Apply the stated classification to every item produced by the preceding inventory, with a short evidence-based reason for each choice. Do not leave unclassified items silently; mark uncertain cases as `UNKNOWN`/`INVESTIGATE` and record them in `V2_ROUTE_INVENTORY.md`.
 
 **Priority:** P0
 
@@ -247,6 +277,8 @@ Document dynamic URL patterns for:
 * DSA,
 * other dynamic content.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_ROUTE_INVENTORY.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -261,6 +293,8 @@ Document every rewrite and explain:
 * whether the destination is internal,
 * whether the behavior is still required.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -268,6 +302,8 @@ Document every rewrite and explain:
 ## TASK-0017 — Inventory Redirects
 
 Document all permanent and temporary redirects.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
 
 **Priority:** P0
 
@@ -277,6 +313,8 @@ Document all permanent and temporary redirects.
 
 Find routes used only to render or resolve public URLs internally.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_ROUTE_INVENTORY.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -284,6 +322,8 @@ Find routes used only to render or resolve public URLs internally.
 ## TASK-0019 — Identify Public URL Aliases
 
 Find cases where multiple public URLs can resolve to the same content.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -300,6 +340,8 @@ Detect:
 * legacy aliases,
 * parameter-order variants.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -307,6 +349,8 @@ Detect:
 ## TASK-0021 — Establish Current Public URL Baseline
 
 Create the list of existing public URLs and route patterns that V2 must intentionally preserve, redirect or retire.
+
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into the relevant Phase 00 audit/inventory document and link unresolved blockers to the issue or decision log instead of leaving vague notes.
 
 **Priority:** P0
 
@@ -322,6 +366,8 @@ Find routes that currently produce:
 * redirect loops,
 * unexpected fallback behavior.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_ROUTE_INVENTORY.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -329,6 +375,8 @@ Find routes that currently produce:
 ## TASK-0023 — Identify Orphan Route Families
 
 Find public route families that are technically available but poorly linked from the rest of the application.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_ROUTE_INVENTORY.md`; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P1
 
@@ -344,6 +392,8 @@ Assign every route family one of:
 * REDIRECT
 * REMOVE
 * INVESTIGATE
+
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into `V2_ROUTE_INVENTORY.md` and link unresolved blockers to the issue or decision log instead of leaving vague notes.
 
 **Priority:** P0
 
@@ -362,6 +412,9 @@ Find:
 * fallback metadata.
 
 **Primary output:** `V2_SEO_AUDIT.md`
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_SEO_AUDIT.md` so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -369,6 +422,8 @@ Find:
 ## TASK-0026 — Inventory Canonical URL Implementations
 
 Find every place canonical URLs are generated or hard-coded.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_SEO_AUDIT.md` so later tasks can operate from one complete list.
 
 **Priority:** P0
 
@@ -378,6 +433,8 @@ Find every place canonical URLs are generated or hard-coded.
 
 Find public indexable route families without reliable canonical URLs.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_SEO_AUDIT.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -386,6 +443,8 @@ Find public indexable route families without reliable canonical URLs.
 
 Find pages where the canonical URL may differ from the actual intended public URL.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_SEO_AUDIT.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -393,6 +452,8 @@ Find pages where the canonical URL may differ from the actual intended public UR
 ## TASK-0029 — Inventory robots.txt Behavior
 
 Document current crawler rules and their effect.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_SEO_AUDIT.md` so later tasks can operate from one complete list.
 
 **Priority:** P0
 
@@ -408,6 +469,8 @@ Find:
 * `nofollow`,
 * conflicting directives.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_SEO_AUDIT.md` so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -421,6 +484,8 @@ Document:
 * generated sitemap routes,
 * static sitemap files,
 * content sources used to generate URLs.
+
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in `V2_SEO_AUDIT.md`; do not infer the flow from naming alone.
 
 **Priority:** P0
 
@@ -437,6 +502,8 @@ Determine which intended public pages are:
 * redirected,
 * invalid.
 
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in `V2_ROUTE_INVENTORY.md`; do not infer the flow from naming alone.
+
 **Priority:** P0
 
 ---
@@ -450,6 +517,8 @@ Find sitemap URLs that:
 * return 5xx,
 * resolve to noncanonical variants.
 
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in `V2_SEO_AUDIT.md`; do not infer the flow from naming alone.
+
 **Priority:** P0
 
 ---
@@ -457,6 +526,8 @@ Find sitemap URLs that:
 ## TASK-0034 — Inventory Structured Data
 
 Find all JSON-LD and schema implementations.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_SEO_AUDIT.md` so later tasks can operate from one complete list.
 
 **Priority:** P1
 
@@ -466,6 +537,8 @@ Find all JSON-LD and schema implementations.
 
 Find pages emitting overlapping, invalid or inconsistent schemas.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_SEO_AUDIT.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P1
 
 ---
@@ -473,6 +546,8 @@ Find pages emitting overlapping, invalid or inconsistent schemas.
 ## TASK-0036 — Inventory Breadcrumb SEO Implementation
 
 Determine whether breadcrumb UI and breadcrumb schema share a consistent hierarchy.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_SEO_AUDIT.md` so later tasks can operate from one complete list.
 
 **Priority:** P1
 
@@ -482,6 +557,8 @@ Determine whether breadcrumb UI and breadcrumb schema share a consistent hierarc
 
 Find public pages where important indexable content may depend unnecessarily on client-side rendering.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_SEO_AUDIT.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -489,6 +566,8 @@ Find public pages where important indexable content may depend unnecessarily on 
 ## TASK-0038 — Identify Thin or Empty Search-Visible Routes
 
 Find indexable routes that render insufficient useful content.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_ROUTE_INVENTORY.md`; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P1
 
@@ -505,6 +584,8 @@ Map duplicated implementations of:
 * sitemap URLs,
 * robots directives.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_SEO_AUDIT.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -519,6 +600,8 @@ For each public route family, record:
 * sitemap presence,
 * internal-link availability.
 
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into `V2_SEO_AUDIT.md` and link unresolved blockers to the issue or decision log instead of leaving vague notes.
+
 **Priority:** P0
 
 ---
@@ -530,6 +613,9 @@ For each public route family, record:
 Identify all sources of public content.
 
 **Primary output:** `V2_CONTENT_INVENTORY.md`
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_CONTENT_INVENTORY.md` so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -545,6 +631,8 @@ Classify each source as:
 * LEGACY
 * DUPLICATE
 * UNKNOWN
+
+**Execution:** Apply the stated classification to every item produced by the preceding inventory, with a short evidence-based reason for each choice. Do not leave unclassified items silently; mark uncertain cases as `UNKNOWN`/`INVESTIGATE` and record them in `V2_CONTENT_INVENTORY.md`.
 
 **Priority:** P0
 
@@ -566,6 +654,8 @@ Count:
 * roadmaps,
 * cheatsheets,
 * DSA entities.
+
+**Execution:** Execute this task against the current working branch, record the exact affected systems and verified result, and update `V2_CONTENT_INVENTORY.md`. Convert every unresolved finding into a concrete issue, decision input or later-phase action rather than leaving it as a general observation.
 
 **Priority:** P1
 
@@ -589,6 +679,8 @@ Question
 
 and all exceptions.
 
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in `V2_CONTENT_INVENTORY.md`; do not infer the flow from naming alone.
+
 **Priority:** P0
 
 ---
@@ -596,6 +688,8 @@ and all exceptions.
 ## TASK-0045 — Inventory Slug Generation
 
 Find every slug-generation implementation.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_CONTENT_INVENTORY.md` so later tasks can operate from one complete list.
 
 **Priority:** P0
 
@@ -605,6 +699,8 @@ Find every slug-generation implementation.
 
 Detect duplicate or ambiguous slugs.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_CONTENT_INVENTORY.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -612,6 +708,8 @@ Detect duplicate or ambiguous slugs.
 ## TASK-0047 — Identify Identifier Instability
 
 Find entities whose public identity depends on unstable array positions, mutable names or inconsistent IDs.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -621,6 +719,8 @@ Find entities whose public identity depends on unstable array positions, mutable
 
 Find content represented in multiple active sources.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_CONTENT_INVENTORY.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -628,6 +728,8 @@ Find content represented in multiple active sources.
 ## TASK-0049 — Identify Content Synchronization Logic
 
 Document any scripts, builds or runtime processes that copy or transform content.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_CONTENT_INVENTORY.md`; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P1
 
@@ -637,6 +739,8 @@ Document any scripts, builds or runtime processes that copy or transform content
 
 Map how each route family obtains its content.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_CONTENT_INVENTORY.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -645,6 +749,8 @@ Map how each route family obtains its content.
 
 Find missing-content and fallback behavior that can create broken pages or soft 404s.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to `V2_CONTENT_INVENTORY.md`; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -652,6 +758,8 @@ Find missing-content and fallback behavior that can create broken pages or soft 
 ## TASK-0052 — Create Content Source-of-Truth Decision Inputs
 
 Prepare the evidence required for later canonicalization without prematurely rewriting the content architecture.
+
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into `V2_CONTENT_INVENTORY.md` and link unresolved blockers to the issue or decision log instead of leaving vague notes.
 
 **Priority:** P0
 
@@ -670,6 +778,8 @@ Find:
 * component-level styles,
 * inline styles.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -677,6 +787,8 @@ Find:
 ## TASK-0054 — Inventory Shared UI Components
 
 Create a repository-wide list of reusable UI primitives and shared components.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
 
 **Priority:** P0
 
@@ -697,6 +809,8 @@ Find overlapping implementations of:
 * loaders,
 * code blocks.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -704,6 +818,8 @@ Find overlapping implementations of:
 ## TASK-0056 — Identify Hard-Coded Color Usage
 
 Find uncontrolled color values and arbitrary visual styling.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P1
 
@@ -713,6 +829,8 @@ Find uncontrolled color values and arbitrary visual styling.
 
 Find repeated arbitrary layout values that contribute to inconsistency.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P1
 
 ---
@@ -720,6 +838,8 @@ Find repeated arbitrary layout values that contribute to inconsistency.
 ## TASK-0058 — Identify Excessive Card and Box Usage
 
 Locate route families and components where unnecessary containers create visual density.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -729,6 +849,8 @@ Locate route families and components where unnecessary containers create visual 
 
 Map competing heading, body, metadata and code styles.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -736,6 +858,8 @@ Map competing heading, body, metadata and code styles.
 ## TASK-0060 — Identify Page Width and Reading Width Inconsistency
 
 Find pages using incompatible content widths and line lengths.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -745,6 +869,8 @@ Find pages using incompatible content widths and line lengths.
 
 Find components that do not correctly use semantic theme values.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P1
 
 ---
@@ -753,6 +879,8 @@ Find components that do not correctly use semantic theme values.
 
 Find shared components and page families with major mobile or tablet issues.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -760,6 +888,8 @@ Find shared components and page families with major mobile or tablet issues.
 ## TASK-0063 — Identify Legacy V1 UI Systems
 
 Classify components and styles that should be replaced during V2.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -775,6 +905,8 @@ For every major shared component and route family, classify:
 * CONSOLIDATE
 * REMOVE
 
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into the relevant Phase 00 audit/inventory document and link unresolved blockers to the issue or decision log instead of leaving vague notes.
+
 **Priority:** P0
 
 ---
@@ -785,6 +917,8 @@ For every major shared component and route family, classify:
 
 Map controller responsibilities and API boundaries.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -792,6 +926,8 @@ Map controller responsibilities and API boundaries.
 ## TASK-0066 — Inventory Backend Services
 
 Map business logic and major service dependencies.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
 
 **Priority:** P0
 
@@ -801,6 +937,8 @@ Map business logic and major service dependencies.
 
 Map persistence responsibilities.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
+
 **Priority:** P1
 
 ---
@@ -808,6 +946,8 @@ Map persistence responsibilities.
 ## TASK-0068 — Inventory Database Entities
 
 Document current persistence models and relationships.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
 
 **Priority:** P0
 
@@ -817,6 +957,8 @@ Document current persistence models and relationships.
 
 Identify the active request/response contracts consumed by the frontend.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -824,6 +966,8 @@ Identify the active request/response contracts consumed by the frontend.
 ## TASK-0070 — Identify Duplicate or Conflicting API Responsibilities
 
 Find cases where multiple APIs provide overlapping functionality.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -833,6 +977,8 @@ Find cases where multiple APIs provide overlapping functionality.
 
 Find UI-side complexity caused by unstable or insufficient backend contracts.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P1
 
 ---
@@ -840,6 +986,8 @@ Find UI-side complexity caused by unstable or insufficient backend contracts.
 ## TASK-0072 — Identify Backend Work That Is Actually Unnecessary
 
 Prevent V2 from rewriting stable backend systems merely for architectural symmetry.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P1
 
@@ -849,6 +997,8 @@ Prevent V2 from rewriting stable backend systems merely for architectural symmet
 
 Document Flyway, legacy SQL migrations and schema-generation behavior.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -856,6 +1006,8 @@ Document Flyway, legacy SQL migrations and schema-generation behavior.
 ## TASK-0074 — Identify Schema Ownership Conflicts
 
 Find cases where multiple systems can modify database structure.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -865,6 +1017,8 @@ Find cases where multiple systems can modify database structure.
 
 Document where cache state affects content, users, search or recommendations.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
+
 **Priority:** P1
 
 ---
@@ -872,6 +1026,8 @@ Document where cache state affects content, users, search or recommendations.
 ## TASK-0076 — Identify High-Risk Backend Dependencies
 
 Find services or APIs whose changes could affect multiple product areas.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -888,6 +1044,8 @@ For major backend systems, classify:
 * REMOVE
 * INVESTIGATE
 
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into the relevant Phase 00 audit/inventory document and link unresolved blockers to the issue or decision log instead of leaving vague notes.
+
 **Priority:** P0
 
 ---
@@ -898,6 +1056,8 @@ For major backend systems, classify:
 
 Document every supported authentication mechanism.
 
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in the relevant Phase 00 audit/inventory document; do not infer the flow from naming alone.
+
 **Priority:** P0
 
 ---
@@ -905,6 +1065,8 @@ Document every supported authentication mechanism.
 ## TASK-0079 — Map Session Lifecycle
 
 Document creation, validation, refresh, expiration and logout behavior.
+
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in the relevant Phase 00 audit/inventory document; do not infer the flow from naming alone.
 
 **Priority:** P0
 
@@ -914,6 +1076,8 @@ Document creation, validation, refresh, expiration and logout behavior.
 
 Identify where access control is enforced.
 
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in the relevant Phase 00 audit/inventory document; do not infer the flow from naming alone.
+
 **Priority:** P0
 
 ---
@@ -921,6 +1085,8 @@ Identify where access control is enforced.
 ## TASK-0081 — Map User Persistence
 
 Document the canonical database records associated with users.
+
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in the relevant Phase 00 audit/inventory document; do not infer the flow from naming alone.
 
 **Priority:** P0
 
@@ -930,6 +1096,8 @@ Document the canonical database records associated with users.
 
 Trace bookmark state from UI to persistence.
 
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in the relevant Phase 00 audit/inventory document; do not infer the flow from naming alone.
+
 **Priority:** P1
 
 ---
@@ -937,6 +1105,8 @@ Trace bookmark state from UI to persistence.
 ## TASK-0083 — Map Completion and Progress Data Flow
 
 Trace completion and progress behavior.
+
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in the relevant Phase 00 audit/inventory document; do not infer the flow from naming alone.
 
 **Priority:** P0
 
@@ -946,6 +1116,8 @@ Trace completion and progress behavior.
 
 Document every source feeding the dashboard.
 
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in the relevant Phase 00 audit/inventory document; do not infer the flow from naming alone.
+
 **Priority:** P1
 
 ---
@@ -953,6 +1125,8 @@ Document every source feeding the dashboard.
 ## TASK-0085 — Map Recommendation Data Flow
 
 Document recommendation inputs and execution.
+
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in the relevant Phase 00 audit/inventory document; do not infer the flow from naming alone.
 
 **Priority:** P1
 
@@ -962,6 +1136,8 @@ Document recommendation inputs and execution.
 
 Find competing frontend, backend or local-storage implementations.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -969,6 +1145,8 @@ Find competing frontend, backend or local-storage implementations.
 ## TASK-0087 — Identify User-State Integrity Risks
 
 Find unstable identifiers, ownership issues or synchronization problems.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -980,6 +1158,8 @@ Find unstable identifiers, ownership issues or synchronization problems.
 
 Find all frontend and backend search systems.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -987,6 +1167,8 @@ Find all frontend and backend search systems.
 ## TASK-0089 — Identify Search Data Sources
 
 Determine what data each search implementation searches.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -996,6 +1178,8 @@ Determine what data each search implementation searches.
 
 Trace query input through result rendering.
 
+**Execution:** Trace the real implementation end to end from its entry point through intermediate layers to the final data source or rendered result, using imports, configuration and runtime paths as evidence. Record the concrete path, ownership, duplicates and unresolved gaps in the relevant Phase 00 audit/inventory document; do not infer the flow from naming alone.
+
 **Priority:** P0
 
 ---
@@ -1003,6 +1187,8 @@ Trace query input through result rendering.
 ## TASK-0091 — Identify Search Ranking Logic
 
 Document exact, partial, fuzzy or custom ranking behavior.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P1
 
@@ -1012,6 +1198,8 @@ Document exact, partial, fuzzy or custom ranking behavior.
 
 Find approaches likely to fail as content volume grows.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P1
 
 ---
@@ -1020,6 +1208,8 @@ Find approaches likely to fail as content volume grows.
 
 Map related questions, recommendations and continuation logic.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_CONTENT_INVENTORY.md` so later tasks can operate from one complete list.
+
 **Priority:** P1
 
 ---
@@ -1027,6 +1217,8 @@ Map related questions, recommendations and continuation logic.
 ## TASK-0094 — Identify Discovery Duplication
 
 Find overlapping search, tree-navigation and recommendation systems.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -1038,6 +1230,8 @@ Find overlapping search, tree-navigation and recommendation systems.
 
 Record the canonical dependency-installation process and blockers.
 
+**Execution:** Run the repository’s actual documented command from a clean, reproducible state and record the exact command, result, and blocking errors. Preserve current failures as baseline findings so later work can distinguish pre-existing problems from regressions; write the result to the relevant Phase 00 audit/inventory document.
+
 **Priority:** P0
 
 ---
@@ -1045,6 +1239,8 @@ Record the canonical dependency-installation process and blockers.
 ## TASK-0096 — Verify Frontend Type Checking
 
 Record current type errors and distinguish existing failures from future regressions.
+
+**Execution:** Run the repository’s actual documented command from a clean, reproducible state and record the exact command, result, and blocking errors. Preserve current failures as baseline findings so later work can distinguish pre-existing problems from regressions; write the result to the relevant Phase 00 audit/inventory document.
 
 **Priority:** P0
 
@@ -1054,6 +1250,8 @@ Record current type errors and distinguish existing failures from future regress
 
 Record current lint behavior and major blockers.
 
+**Execution:** Run the repository’s actual documented command from a clean, reproducible state and record the exact command, result, and blocking errors. Preserve current failures as baseline findings so later work can distinguish pre-existing problems from regressions; write the result to the relevant Phase 00 audit/inventory document.
+
 **Priority:** P1
 
 ---
@@ -1062,6 +1260,8 @@ Record current lint behavior and major blockers.
 
 Confirm whether the current frontend builds successfully.
 
+**Execution:** Run the repository’s actual documented command from a clean, reproducible state and record the exact command, result, and blocking errors. Preserve current failures as baseline findings so later work can distinguish pre-existing problems from regressions; write the result to `V2_BASELINE_REPORT.md`.
+
 **Priority:** P0
 
 ---
@@ -1069,6 +1269,8 @@ Confirm whether the current frontend builds successfully.
 ## TASK-0099 — Verify Backend Build
 
 Confirm the current backend build and test state.
+
+**Execution:** Run the repository’s actual documented command from a clean, reproducible state and record the exact command, result, and blocking errors. Preserve current failures as baseline findings so later work can distinguish pre-existing problems from regressions; write the result to the relevant Phase 00 audit/inventory document.
 
 **Priority:** P0
 
@@ -1085,6 +1287,8 @@ Document required:
 * environment variables,
 * external services.
 
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to the relevant Phase 00 audit/inventory document so later tasks can operate from one complete list.
+
 **Priority:** P0
 
 ---
@@ -1092,6 +1296,8 @@ Document required:
 ## TASK-0101 — Audit Tracked Secrets and Credentials
 
 Identify credentials or secrets that must not remain in source control.
+
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
 
 **Priority:** P0
 
@@ -1101,6 +1307,8 @@ Identify credentials or secrets that must not remain in source control.
 
 Remove confirmed sensitive values from tracked files and replace them with environment-based configuration.
 
+**Execution:** For each verified secret found in tracked files, remove the value from source control, replace runtime usage with environment-based configuration, and verify the application still resolves the setting correctly. Record every affected file and credential in the security findings without copying the secret value into documentation.
+
 **Priority:** P0
 
 ---
@@ -1108,6 +1316,8 @@ Remove confirmed sensitive values from tracked files and replace them with envir
 ## TASK-0103 — Rotate Exposed Credentials Where Required
 
 Treat previously committed credentials as potentially compromised.
+
+**Execution:** Identify every credential confirmed or reasonably believed to have been committed, rotate or revoke it in the owning service, update the deployment environment with the replacement, and verify the old credential no longer works. Record rotation status without storing either old or new secret values in the repository.
 
 **Priority:** P0
 
@@ -1117,6 +1327,8 @@ Treat previously committed credentials as potentially compromised.
 
 Find production-risky fallback credentials, permissive settings or debug behavior.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -1124,6 +1336,8 @@ Find production-risky fallback credentials, permissive settings or debug behavio
 ## TASK-0105 — Inventory Production Deployment Architecture
 
 Document how the current application is served and connected in production.
+
+**Execution:** Search the full active repository for every implementation in scope, record its exact path or endpoint, current consumer/usage, and whether it is active, generated, legacy or unknown. Deduplicate equivalent entries and write the verified inventory to `V2_BASELINE_REPORT.md` so later tasks can operate from one complete list.
 
 **Priority:** P0
 
@@ -1134,6 +1348,9 @@ Document how the current application is served and connected in production.
 Record behavior for major route families before migration.
 
 **Primary output:** `V2_BASELINE_REPORT.md`
+
+**Execution:** Choose representative routes or journeys from the verified inventories, measure or record their current behavior before V2 changes, and store reproducible evidence rather than impressions. Add the resulting baseline to `V2_ROUTE_INVENTORY.md` so later phases can compare before/after behavior.
+
 **Priority:** P0
 
 ---
@@ -1141,6 +1358,8 @@ Record behavior for major route families before migration.
 ## TASK-0107 — Capture Current Performance Baseline
 
 Record representative loading and rendering characteristics where measurable.
+
+**Execution:** Choose representative routes or journeys from the verified inventories, measure or record their current behavior before V2 changes, and store reproducible evidence rather than impressions. Add the resulting baseline to `V2_BASELINE_REPORT.md` so later phases can compare before/after behavior.
 
 **Priority:** P1
 
@@ -1156,6 +1375,8 @@ Record available:
 * CTR,
 * average position,
 * sitemap status.
+
+**Execution:** Choose representative routes or journeys from the verified inventories, measure or record their current behavior before V2 changes, and store reproducible evidence rather than impressions. Add the resulting baseline to `V2_BASELINE_REPORT.md` so later phases can compare before/after behavior.
 
 **Priority:** P1
 
@@ -1173,6 +1394,8 @@ Document the current behavior of:
 * progress,
 * dashboard.
 
+**Execution:** Choose representative routes or journeys from the verified inventories, measure or record their current behavior before V2 changes, and store reproducible evidence rather than impressions. Add the resulting baseline to `V2_BASELINE_REPORT.md` so later phases can compare before/after behavior.
+
 **Priority:** P1
 
 ---
@@ -1183,6 +1406,8 @@ Document the current behavior of:
 
 Summarize only findings that materially affect V2 implementation.
 
+**Execution:** Scan the complete relevant repository scope, verify each finding against actual usage, and record the exact affected route, file, component, endpoint or data source plus its impact. Classify each finding with a concrete later action and add it to the relevant Phase 00 audit/inventory document; create an issue for anything that can block Phase 01 or Phase 02.
+
 **Priority:** P0
 
 ---
@@ -1190,6 +1415,8 @@ Summarize only findings that materially affect V2 implementation.
 ## TASK-0111 — Create P0 Blocker List
 
 Identify issues that must be resolved before Phase 01 or Phase 02 implementation.
+
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into the relevant Phase 00 audit/inventory document and link unresolved blockers to the issue or decision log instead of leaving vague notes.
 
 **Priority:** P0
 
@@ -1199,6 +1426,8 @@ Identify issues that must be resolved before Phase 01 or Phase 02 implementation
 
 Identify important but nonblocking migration risks.
 
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into the relevant Phase 00 audit/inventory document and link unresolved blockers to the issue or decision log instead of leaving vague notes.
+
 **Priority:** P1
 
 ---
@@ -1206,6 +1435,8 @@ Identify important but nonblocking migration risks.
 ## TASK-0113 — Populate V2 Decision Inputs
 
 Prepare unresolved architectural decisions for explicit resolution.
+
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into `V2_DECISION_LOG.md` and link unresolved blockers to the issue or decision log instead of leaving vague notes.
 
 **Priority:** P0
 
@@ -1215,6 +1446,8 @@ Prepare unresolved architectural decisions for explicit resolution.
 
 Record verified current-state defects and technical risks.
 
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into `V2_ISSUE_LOG.md` and link unresolved blockers to the issue or decision log instead of leaving vague notes.
+
 **Priority:** P1
 
 ---
@@ -1222,6 +1455,8 @@ Record verified current-state defects and technical risks.
 ## TASK-0115 — Finalize Route Inventory Document
 
 Complete `V2_ROUTE_INVENTORY.md`.
+
+**Execution:** Complete the target document using the verified findings produced by the preceding tasks, remove placeholders and unresolved duplicate entries, and make sure every material unknown is either resolved or linked to the issue/decision log. Treat `V2_ROUTE_INVENTORY.md` as the final Phase 00 source of truth for this area.
 
 **Priority:** P0
 
@@ -1231,6 +1466,8 @@ Complete `V2_ROUTE_INVENTORY.md`.
 
 Complete `V2_SEO_AUDIT.md`.
 
+**Execution:** Complete the target document using the verified findings produced by the preceding tasks, remove placeholders and unresolved duplicate entries, and make sure every material unknown is either resolved or linked to the issue/decision log. Treat `V2_SEO_AUDIT.md` as the final Phase 00 source of truth for this area.
+
 **Priority:** P0
 
 ---
@@ -1239,6 +1476,8 @@ Complete `V2_SEO_AUDIT.md`.
 
 Complete `V2_CONTENT_INVENTORY.md`.
 
+**Execution:** Complete the target document using the verified findings produced by the preceding tasks, remove placeholders and unresolved duplicate entries, and make sure every material unknown is either resolved or linked to the issue/decision log. Treat `V2_CONTENT_INVENTORY.md` as the final Phase 00 source of truth for this area.
+
 **Priority:** P0
 
 ---
@@ -1246,6 +1485,8 @@ Complete `V2_CONTENT_INVENTORY.md`.
 ## TASK-0118 — Finalize Baseline Report
 
 Complete `V2_BASELINE_REPORT.md`.
+
+**Execution:** Complete the target document using the verified findings produced by the preceding tasks, remove placeholders and unresolved duplicate entries, and make sure every material unknown is either resolved or linked to the issue/decision log. Treat the relevant Phase 00 audit/inventory document as the final Phase 00 source of truth for this area.
 
 **Priority:** P0
 
@@ -1267,6 +1508,9 @@ Translate verified repository truth into the actual migration strategy for:
 * user state.
 
 **Primary output:** `V2_TECHNICAL_IMPLEMENTATION_PLAN.md`
+
+**Execution:** Use only findings verified by the preceding Phase 00 tasks to build this artifact or classification; include the concrete system/route/file, current state, required next action, and owning later phase where applicable. Write the result into `V2_REPOSITORY_AUDIT.md` and link unresolved blockers to the issue or decision log instead of leaving vague notes.
+
 **Priority:** P0
 
 ---
@@ -1274,6 +1518,8 @@ Translate verified repository truth into the actual migration strategy for:
 ## TASK-0120 — Approve Phase 00 Exit
 
 Confirm that enough repository truth exists to begin implementation-heavy phases without unresolved P0 uncertainty.
+
+**Execution:** Review all Phase 00 outputs and the P0 blocker list; close the phase only when no unresolved P0 uncertainty can invalidate the planned Phase 01 or Phase 02 work. Record the exit decision and any accepted P1 risks before moving the task queue forward.
 
 **Priority:** P0
 
