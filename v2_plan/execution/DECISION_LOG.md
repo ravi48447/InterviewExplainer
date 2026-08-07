@@ -73,3 +73,47 @@ Records the significant design/engineering decisions made during Phase 01, with 
 **Decision:** As of T320–T321, the Phase 01 token substrate (color/radius/spacing/shadow/width/z/motion) and component APIs (Batch 13 + 14) are frozen.
 
 **Why:** Downstream phases (02+) and route migrations depend on a stable contract. Freezing prevents churn during migration. Changes now require a documented decision-log entry.
+
+---
+
+# Phase 02 Decision Log (P02-T548)
+
+Records the significant design/engineering decisions made during Phase 02, with rationale.
+
+## D6 — SEO is a centralized system, not page-specific patches
+
+**Decision:** All SEO logic (URLs, canonical, robots, sitemaps, structured data, breadcrumbs, internal links) lives in a single `lib/seo/` module tree (33 modules). No page may concatenate origin + path or emit a canonical tag directly.
+
+**Why:** Phase 01 and earlier left ~290 scattered `SITE_URL` references and ~22 scattered `generateMetadata` functions. Inconsistent canonicals, missing robots directives, and duplicate metadata were the result. A centralized system makes SEO correctness a property of the architecture, not the author.
+
+## D7 — RouteFamily union uses kebab-case discriminators
+
+**Decision:** The `RouteFamily` union type uses kebab-case string literals (`'dsa-hub'`, `'dsa-problem'`, `'static-info'`) and the `ROUTE_REGISTRY` object keys match exactly.
+
+**Why:** Kebab-case is the URL/path convention. Using it consistently across the union, the registry keys, the template maps, and the switch cases eliminates the camelCase/kebab-case mismatch that caused dozens of TypeScript errors during the build. One spelling, everywhere.
+
+**Trade-off:** Kebab-case identifiers are slightly unusual in TS object literals; quoted keys (`'dsa-hub':`) are required. Accepted for consistency.
+
+## D8 — `getRouteContract<T>()` is the canonical accessor
+
+**Decision:** Consumers access route contracts via `getRouteContract(family)`, not direct `ROUTE_REGISTRY[family]` indexing.
+
+**Why:** `ROUTE_REGISTRY` uses `as const satisfies Record<RouteFamily, RouteContract>`. The `satisfies` narrowing produces a union of specific literal object types, so optional fields like `dynamic` don't exist on every variant — direct indexing fails type-checking when the code reads `contract.dynamic`. The accessor returns `RouteContract<T>` where all optional fields are available.
+
+## D9 — 404 vs 500 are distinguished
+
+**Decision:** `NotFoundError` and `DataFetchError` are separate classes. Data-fetch failures return HTTP 500, not 404.
+
+**Why:** Returning 404 for a data-fetch failure tells search engines the page doesn't exist, causing deindexing of pages that are merely temporarily broken. 500 signals "try again later" and preserves indexability (T086, T087, T527).
+
+## D10 — Non-production environments are noindex globally
+
+**Decision:** `getSeoEnvironment()` returns production|preview|staging|development. Any non-production environment emits `noindex, nofollow` globally and never serves as a canonical origin.
+
+**Why:** Preview/staging/localhost URLs must never appear in search results or be declared canonical. Making this environment-aware (not page-aware) prevents leaks.
+
+## D11 — Pagination page 2+ is noindex with canonical to page 1
+
+**Decision:** Page 1 self-canonicalizes. Page 2+ emits `noindex, follow` with `rel prev/next` and a canonical tag pointing to page 1.
+
+**Why:** Indexing every pagination page creates duplicate-content clutter. Canonical-to-page-1 consolidates link equity; noindex prevents indexation of thin pagination variants (T132, T680–T699).
