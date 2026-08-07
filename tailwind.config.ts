@@ -186,6 +186,33 @@ const config: Config = {
         xl: 'var(--shadow-xl)',
         none: 'none',
       },
+      // Z-index scale (P01-T185)
+      zIndex: {
+        base: 'var(--z-base)',
+        content: 'var(--z-content)',
+        sticky: 'var(--z-sticky)',
+        fixed: 'var(--z-fixed)',
+        popover: 'var(--z-popover)',
+        dropdown: 'var(--z-dropdown)',
+        drawer: 'var(--z-drawer)',
+        modal: 'var(--z-modal)',
+        toast: 'var(--z-toast)',
+        tooltip: 'var(--z-tooltip)',
+      },
+      // Motion durations + easings (P01-T239..T243)
+      transitionDuration: {
+        instant: 'var(--motion-duration-instant)',
+        fast: 'var(--motion-duration-fast)',
+        base: 'var(--motion-duration-base)',
+        slow: 'var(--motion-duration-slow)',
+        slower: 'var(--motion-duration-slower)',
+      },
+      transitionTimingFunction: {
+        standard: 'var(--motion-ease-standard)',
+        emphasized: 'var(--motion-ease-emphasized)',
+        decelerated: 'var(--motion-ease-decelerated)',
+        accelerated: 'var(--motion-ease-accelerated)',
+      },
       keyframes: {
         'accordion-down': {
           from: { height: '0' },
