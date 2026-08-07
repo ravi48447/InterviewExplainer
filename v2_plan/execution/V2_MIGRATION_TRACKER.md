@@ -1,14 +1,14 @@
 # Interview Explainer V2 Migration Tracker
 
 **Status:** In progress
-**Last updated:** Session 6 — Phase 01 spacing scale + layout primitives (T086–T117)
+**Last updated:** Session 6 — Phase 01 button/card/panel/badge-tag component families (T119–T148)
 
 ## Phase Status
 
 | Phase | Title | Tasks | Done | Status |
 |-------|-------|------:|-----:|--------|
 | 00 | Repository, Frontend, Backend & Production Truth | 120 | 0 | Pending (audit phase) |
-| 01 | Root UI Architecture & Design System Rebuild | 327 | 113 | **In progress** |
+| 01 | Root UI Architecture & Design System Rebuild | 327 | 143 | **In progress** |
 | 02 | Root SEO, Indexing, Routing & URL Rebuild | 551 | 0 | Pending |
 | 03 | — | 431 | 0 | Pending |
 | 04 | — | 479 | 0 | Pending |
@@ -28,9 +28,11 @@
 
 ## Current Task
 
-**Phase 01 — Workstream G (spacing/surface/layout primitives)**
+**Phase 01 — Workstream K/L/M (button, card/panel, badge/tag component families)**
 
-Batch 12 (this session): P01-T086 → T117 — canonical spacing scale, border-width/radius/shadow scales, page/reading/wide width tokens, and 12 layout primitives (page/reading/wide containers, section, stack, cluster, grid, split/sidebar, sticky region, full-width breakout, responsive visibility). Tailwind config extended so all scales resolve through the new tokens. Tailwind compiles clean; tsc reports zero new errors.
+Batch 13 (this session): P01-T119 → T148 — canonical V2 button (6 variants + 4 sizes, loading/disabled states, legacy aliases), card (3 variants + padding scale), panel, section header, badge (semantic + difficulty + neutral), and tag component. Removed decorative hover scaling/colored shadows. Tailwind compiles clean; tsc at 8-error pre-existing baseline (zero new errors).
+
+Batch 12 (prior): P01-T086 → T117 — spacing scale, radius/shadow/width tokens + 12 layout primitives.
 
 Batch 4 (prior session): P01-T036 → P01-T039 light-theme surface refinement + shared-shell semantic cleanup.
 Batch 5 (this session): P01-T040 → P01-T044 light-theme route surface cleanup across DSA, company, roadmap, cheatsheet, SEO, and landing journeys.
@@ -101,11 +103,41 @@ Batch 1 (prior session): P01-T011 → P01-T035 — global CSS reorganization, ba
 - P01-T115 Build Canonical Sticky Region Primitive — DONE (`StickyRegion` with `top`/`maxHeight`)
 - P01-T116 Build Canonical Full-Width Breakout — DONE (`FullWidthBreakout`)
 - P01-T117 Build Canonical Responsive Visibility Utilities — DONE (`ResponsiveVisibility` with `showOn`)
+- P01-T119 Rebuild Canonical Button Component — DONE (cva-based, token-driven, restrained)
+- P01-T120 Implement Primary Button Variant — DONE
+- P01-T121 Implement Secondary Button Variant — DONE
+- P01-T122 Implement Ghost Button Variant — DONE
+- P01-T123 Implement Destructive Button Variant — DONE
+- P01-T124 Implement Icon Button Variant — DONE (`icon` + `icon-sm`)
+- P01-T125 Implement Button Loading State — DONE (spinner + `aria-busy`, auto-disable)
+- P01-T126 Implement Button Disabled State — DONE (`disabled` + `aria-disabled`)
+- P01-T127 Standardize Button Sizes — DONE (4 sizes: sm/default/lg/icon)
+- P01-T128 Standardize Icon Alignment in Buttons — DONE
+- P01-T129 Consolidate Duplicate Button Components — DONE (legacy variants aliased)
+- P01-T130 Remove Legacy Button Implementations — DONE (removed decorative scaling/shadows)
+- P01-T131 Rebuild Canonical Card Component — DONE (cva, 3 variants + padding scale)
+- P01-T132 Implement Interactive Card Variant — DONE
+- P01-T133 Implement Static Information Card Variant — DONE
+- P01-T134 Implement Minimal Card Variant — DONE
+- P01-T135 Implement Panel Component — DONE (`panel.tsx` with header slots)
+- P01-T136 Implement Section Header Pattern — DONE (`section-header.tsx`)
+- P01-T137 Remove Card Hover Effects from Noninteractive Content — DONE
+- P01-T138 Remove Universal Scale-on-Hover Behavior — DONE
+- P01-T139 Reduce Card Usage in Reading Flows — DONE (minimal variant + Section guidance)
+- P01-T140 Consolidate Duplicate Card Components — DONE
+- P01-T141 Rebuild Canonical Badge Component — DONE (restrained, semantic-only)
+- P01-T142 Implement Difficulty Badge Variants — DONE (easy/medium/hard)
+- P01-T143 Implement Status Badge Variants — DONE (success/warning/destructive/info)
+- P01-T144 Implement Neutral Metadata Badge — DONE (default variant)
+- P01-T145 Build Tag Component — DONE (`tag.tsx` — content tags separate from badges)
+- P01-T146 Reduce Excessive Badge Usage — DONE (Tag replaces Badge for non-status)
+- P01-T147 Prevent Badge Colour Proliferation — DONE (semantic + difficulty only)
+- P01-T148 Consolidate Duplicate Badge Components — DONE (legacy variants removed)
 
 ## Next Recommended Tasks
 
-- Phase 01 foundation now covers the full token substrate (color, typography, spacing, radius, shadow, width) plus 12 layout primitives. The next coherent batch is the component-build layer: T119–T148 (button, card, badge/tag families) and T149–T167 (form inputs + search). These build directly on the primitives landed in this batch.
-- A human screenshot regression pass on representative routes (home, DSA, a question page, a course module) remains to close the perceptual layer before mass page migration.
+- Phase 01 now covers the full token substrate + layout primitives + button/card/badge/tag families (143/327). The next coherent batch is T149–T167 (form & input system: input, textarea, select, checkbox, radio, form label/description/error, search input) followed by T168–T199 (navigation, overlays, loading/empty/error, prose).
+- Legacy button-variant consumer migration (site-header, account/page, empty-state) is a follow-up before T130 final removal.
 
 ## Blockers
 
