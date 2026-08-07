@@ -113,7 +113,7 @@ function MockInterviewsContent() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  ">
 
       {/* Hero Section */}
-      <div className="dark bg-[#0f1014] text-foreground border-b border-white/10 relative overflow-hidden">
+      <div className="dark bg-hero text-foreground border-b border-white/10 relative overflow-hidden">
         <div className="w-full min-w-0 px-6 lg:px-12 py-16 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -246,7 +246,7 @@ function MockInterviewsContent() {
           </Link>
 
           <Link href="/dashboard">
-            <div className="p-6 rounded-2xl bg-surface border border-default border border-default dark:border-default/20 hover:shadow-lg transition-all group">
+            <div className="p-6 rounded-2xl bg-surface border border-default dark:border-default/20 hover:shadow-lg transition-all group">
               <div className="flex items-start justify-between mb-4">
                 <Zap className="h-8 w-8 text-primary dark:text-primary" />
                 <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-1 transition-all" />

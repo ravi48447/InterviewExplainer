@@ -236,7 +236,7 @@ export function DetailedExplanation({
     <section
       className={`mb-8 rounded-xl overflow-hidden shadow-lg ${
         d
-          ? "border border-border/60 bg-[#202020] shadow-black/40"
+          ? "border border-border/60 bg-surface shadow-black/40"
           : "border border-border/80 bg-background shadow-slate-100/80"
       }`}
     >
@@ -267,7 +267,7 @@ export function DetailedExplanation({
             key={main.id ?? idx}
             className={`rounded-xl px-5 py-5 sm:px-6 sm:py-6 border ${
               d
-                ? "bg-[#282828] border-border/40"
+                ? "bg-muted border-border/40"
                 : "bg-background border-border/70"
             }`}
           >
@@ -476,8 +476,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#101a2a] border-default dark:border-default/60"
-            : "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-info/10 border-default dark:border-default/60"
+            : "bg-primary/10 border-primary/20"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -503,8 +503,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#0d1c14] border-default dark:border-default/50"
-            : "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-success/10 border-default dark:border-default/50"
+            : "bg-success/10 border-success/20"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -531,8 +531,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#1a1408] border-default dark:border-default/50"
-            : "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-warning/10 border-default dark:border-default/50"
+            : "bg-warning/10 border-warning/20"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -554,8 +554,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#10102a] border-default dark:border-default/50"
-            : "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-muted border-default dark:border-default/50"
+            : "bg-primary/10 border-primary/20"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -596,8 +596,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#10102a] border-default dark:border-default/50"
-            : "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-muted border-default dark:border-default/50"
+            : "bg-primary/10 border-primary/20"
         }`}
       >
         {title && (
@@ -625,7 +625,7 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#272727] border-slate-600 dark:border-slate-700/60"
+            ? "bg-muted border-slate-600 dark:border-slate-700/60"
             : "bg-surface border-border/70"
         }`}
       >
@@ -654,8 +654,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#1a1408] border-default dark:border-default/50"
-            : "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-warning/10 border-default dark:border-default/50"
+            : "bg-warning/10 border-warning/20"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -677,8 +677,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#1c0e0e] border-default dark:border-default/50"
-            : "bg-red-50 dark:bg-red-500/10 dark:bg-red-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-destructive/10 border-default dark:border-default/50"
+            : "bg-destructive/10 border-destructive/20"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -700,8 +700,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#1a1408] border-default dark:border-default/50"
-            : "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-warning/10 border-default dark:border-default/50"
+            : "bg-warning/10 border-warning/20"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -723,7 +723,7 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#272727] border-slate-600 dark:border-slate-700/60"
+            ? "bg-muted border-slate-600 dark:border-slate-700/60"
             : "bg-surface border-border/70"
         }`}
       >
@@ -749,7 +749,7 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#272727] border-slate-600 dark:border-slate-700/60"
+            ? "bg-muted border-slate-600 dark:border-slate-700/60"
             : "bg-surface border-border/70"
         }`}
       >
@@ -778,8 +778,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#0d1c14] border-default dark:border-default/50"
-            : "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-success/10 border-default dark:border-default/50"
+            : "bg-success/10 border-success/20"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -801,8 +801,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#150f24] border-default dark:border-default/50"
-            : "bg-blue-50 dark:bg-blue-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-muted border-default dark:border-default/50"
+            : "bg-primary/10 border-primary/20"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -851,13 +851,13 @@ function SectionRenderer({
       <div
         className={`rounded-lg border ${
           d
-            ? "bg-[#0e1a10] border-default dark:border-default/50"
-            : "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/70 border-default dark:border-default/20/80"
+            ? "bg-success/10 border-default dark:border-default/50"
+            : "bg-success/10 border-success/20"
         }`}
       >
         <div
           className={`flex items-center gap-2 px-4 py-2.5 border-b ${
-            d ? "border-default dark:border-default/40" : "border-default dark:border-default/20/60"
+            d ? "border-default dark:border-default/40" : "border-default dark:border-default/20"
           }`}
         >
           <MessageCircle className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
@@ -878,8 +878,8 @@ function SectionRenderer({
       <div
         className={`rounded-lg px-4 py-3 border ${
           d
-            ? "bg-[#10102a] border-default dark:border-default/50"
-            : "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 border-default dark:border-default/20/70"
+            ? "bg-muted border-default dark:border-default/50"
+            : "bg-primary/10 border-primary/20"
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">

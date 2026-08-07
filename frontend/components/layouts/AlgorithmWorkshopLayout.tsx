@@ -68,8 +68,8 @@ export function AlgorithmWorkshopLayout({
 
       {/* Examples */}
       {examples && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40 overflow-hidden">
-          <div className="px-5 py-3 bg-blue-100 dark:bg-blue-950/20/50 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-blue-100 dark:bg-blue-950/50 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-primary dark:text-primary uppercase tracking-wide">Examples</span>
           </div>
           <div className="px-5 py-4 font-mono text-sm">
@@ -156,7 +156,7 @@ export function AlgorithmWorkshopLayout({
 
       {/* Java Tip */}
       {javaTip && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 px-5 py-4">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/60 px-5 py-4">
           <div className="flex items-center gap-2 mb-2">
             <Lightbulb className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             <span className="text-[11px] font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wide">Java-Specific Tip</span>

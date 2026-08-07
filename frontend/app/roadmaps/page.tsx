@@ -183,7 +183,7 @@ const TIMELINE_PLANS = [
 
 export default function RoadmapsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-green-50/20 dark:via-green-950/40  font-sans text-foreground selection:bg-green-200  ">
+    <div className="min-h-screen bg-gradient-to-br from-background via-surface-subtle to-background font-sans text-foreground selection:bg-success/20">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -218,7 +218,7 @@ export default function RoadmapsPage() {
               plans from 2-week sprints to 12-week mastery programs.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-t border-border">
+          <div className="px-8 py-4 bg-gradient-to-r from-surface-subtle to-surface border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-950/20 flex items-center justify-center">
@@ -233,7 +233,7 @@ export default function RoadmapsPage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
+              <div className="h-10 w-px bg-border" />
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-950/20 flex items-center justify-center">
                   <Code2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
@@ -247,7 +247,7 @@ export default function RoadmapsPage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
+              <div className="h-10 w-px bg-border" />
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-teal-100 dark:bg-teal-950/20 flex items-center justify-center">
                   <Calendar className="h-5 w-5 text-teal-600 dark:text-teal-400" />
@@ -294,7 +294,7 @@ export default function RoadmapsPage() {
                 <p className="text-xs text-muted-foreground leading-relaxed mb-3">
                   {plan.desc}
                 </p>
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800/60">
+                <div className="pt-3 border-t border-border/60">
                   <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">
                     Ideal for
                   </p>

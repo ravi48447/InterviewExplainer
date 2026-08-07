@@ -133,7 +133,7 @@ const ALERT_THEME: Record<
 > = {
   warning: {
     border: "border-default dark:border-default/20",
-    bg: "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60",
+    bg: "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20",
     accentLine: "bg-amber-400 dark:bg-amber-800",
     iconCls: "text-amber-600 dark:text-amber-400",
     icon: AlertTriangle,
@@ -141,7 +141,7 @@ const ALERT_THEME: Record<
   },
   tip: {
     border: "border-default dark:border-default/20",
-    bg: "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60",
+    bg: "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20",
     accentLine: "bg-emerald-400 dark:bg-emerald-800",
     iconCls: "text-emerald-600 dark:text-emerald-400",
     icon: Lightbulb,
@@ -149,7 +149,7 @@ const ALERT_THEME: Record<
   },
   note: {
     border: "border-default dark:border-default/20",
-    bg: "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60",
+    bg: "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20",
     accentLine: "bg-blue-400 dark:bg-blue-800",
     iconCls: "text-primary dark:text-primary",
     icon: Info,
@@ -157,7 +157,7 @@ const ALERT_THEME: Record<
   },
   info: {
     border: "border-default dark:border-default/20",
-    bg: "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60",
+    bg: "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20",
     accentLine: "bg-blue-400 dark:bg-blue-800",
     iconCls: "text-primary dark:text-primary",
     icon: Info,
@@ -403,7 +403,7 @@ function CodeBlock({
         </button>
       </div>
 
-      <pre className="m-0 overflow-x-auto bg-[#0f172a] text-muted-foreground text-[13px] leading-[1.65] px-5 py-4">
+      <pre className="m-0 overflow-x-auto bg-code text-muted-foreground text-[13px] leading-[1.65] px-5 py-4">
         <code
           className={`hljs language-${language || "plaintext"} font-mono whitespace-pre`}
           dangerouslySetInnerHTML={{ __html: codeHtml }}
@@ -841,7 +841,7 @@ export default function PreviewArticle({ article }: Props) {
     "'Crimson Pro', 'Source Serif 4', Charter, 'Iowan Old Style', Palatino, Georgia, serif";
 
   return (
-    <div className="min-h-screen bg-[#fbfaf6] text-foreground">
+    <div className="min-h-screen bg-surface-subtle text-foreground">
       {/* Subtle paper texture via gradient — magazine feel */}
       <div
         className="pointer-events-none fixed inset-0 opacity-[0.22]"
@@ -866,7 +866,7 @@ export default function PreviewArticle({ article }: Props) {
         .speakable-prose p {
           font-size: 18px;
           line-height: 1.78;
-          color: #1f2937;
+          color: hsl(var(--text-primary));
           margin-top: 1.4em;
           margin-bottom: 0;
         }
@@ -880,7 +880,7 @@ export default function PreviewArticle({ article }: Props) {
           line-height: 0.88;
           font-weight: 700;
           padding: 0.35rem 0.7rem 0 0;
-          color: #0f766e;
+          color: hsl(var(--success));
           background: linear-gradient(135deg, #0f766e 0%, #047857 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
@@ -939,20 +939,20 @@ export default function PreviewArticle({ article }: Props) {
         }
         .speakable-prose p strong {
           font-weight: 600;
-          color: #0f172a;
+          color: hsl(var(--text-primary));
         }
         .speakable-prose em {
           font-style: italic;
-          color: #475569;
+          color: hsl(var(--text-muted));
         }
         .speakable-prose code {
           font-family: var(--font-geist-mono), ui-monospace, monospace;
           font-size: 0.88em;
-          color: #1e293b;
-          background: #f1f5f9;
+          color: hsl(var(--code-text));
+          background: hsl(var(--code-surface));
           padding: 1px 6px;
           border-radius: 4px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid hsl(var(--code-border));
         }
         .quick-prose .quick-li {
           font-family: ${PROSE_SERIF};
@@ -1043,7 +1043,7 @@ export default function PreviewArticle({ article }: Props) {
                   icon={Sparkles}
                   accent="amber"
                 />
-                <div className="quick-prose relative rounded-2xl border border-default dark:border-default/20/60 bg-gradient-to-br  via-white to-white dark:via-zinc-900 dark:to-zinc-900 px-6 py-6 sm:px-8 sm:py-7 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
+                <div className="quick-prose relative rounded-2xl border border-default dark:border-default/20 bg-gradient-to-br from-surface-elevated to-surface px-6 py-6 sm:px-8 sm:py-7 shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden">
                   <span className="absolute left-0 top-0 bottom-0 w-1 bg-surface border border-default" />
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={quickComponents as never}>
                     {zones.quick}
@@ -1194,7 +1194,7 @@ export function ZoneHeader({
     indigo: {
       text: "text-primary dark:text-primary",
       bg: "bg-blue-50 dark:bg-blue-500/10",
-      iconBg: "bg-blue-100 dark:bg-blue-950/20/80 text-primary dark:text-primary",
+      iconBg: "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary",
     },
   };
   const a = accentMap[accent];

@@ -52,7 +52,7 @@ export function GlobalSearch({ localData }: GlobalSearchProps) {
       {/* Mobile/Tablet Search Icon */}
       <button
         onClick={() => setIsOpen(true)}
-        className="flex md:hidden items-center justify-center w-9 h-9 rounded-lg border border-border bg-card text-[#737373] hover:text-foreground hover:bg-hover transition-colors shrink-0"
+        className="flex md:hidden items-center justify-center w-9 h-9 rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-hover transition-colors shrink-0"
         aria-label="Open Search Modal"
       >
         <Search className="h-4.5 w-4.5" />

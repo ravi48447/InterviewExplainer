@@ -28,12 +28,13 @@ function loadMermaid(): Promise<MermaidApi> {
         useMaxWidth: true,
       },
       themeVariables: {
-        primaryColor: "#eff6ff",
-        primaryTextColor: "#1e293b",
-        primaryBorderColor: "#3b82f6",
-        lineColor: "#64748b",
-        secondaryColor: "#f1f5f9",
-        tertiaryColor: "#f8fafc",
+        // Semantic tokens via CSS variables so diagrams follow the active theme.
+        primaryColor: "hsl(var(--surface))",
+        primaryTextColor: "hsl(var(--text-primary))",
+        primaryBorderColor: "hsl(var(--primary))",
+        lineColor: "hsl(var(--muted-foreground))",
+        secondaryColor: "hsl(var(--surface-subtle))",
+        tertiaryColor: "hsl(var(--muted))",
         fontSize: "14px",
       },
     });

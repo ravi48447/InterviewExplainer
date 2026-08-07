@@ -152,7 +152,7 @@ function ProblemRow({
     return (
       <Link
         href={href}
-        className={`${baseClass} border-border hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/30 transition-all`}
+        className={`${baseClass} border-border hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/30 transition-all`}
       >
         {RowInner}
       </Link>
@@ -258,7 +258,7 @@ export default function Basic100Page() {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] to-[#f4f5f7] dark:from-background dark:to-background font-sans text-foreground">
+    <div className="relative min-h-screen bg-gradient-to-b from-surface-subtle to-background dark:from-background dark:to-background font-sans text-foreground">
       <div
         aria-hidden
         className="pointer-events-none fixed inset-0 z-0"
@@ -275,7 +275,7 @@ export default function Basic100Page() {
       />
 
       {/* ─── HERO ─────────────────────────────────────────────────── */}
-      <header className="relative z-10 overflow-hidden bg-[#0f1014] text-white">
+      <header className="relative z-10 overflow-hidden bg-hero text-white">
         <div className="pointer-events-none absolute inset-0" style={BG_HERO_GRID} aria-hidden />
         <div
           className="pointer-events-none absolute inset-0"

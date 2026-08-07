@@ -52,7 +52,7 @@ export default async function LangHubPage({ params }: { params: Promise<{ lang: 
   if (!meta) notFound();
 
   return (
-    <div className="min-h-screen bg-surface border border-default dark:from-slate-950 dark:">
+    <div className="min-h-screen bg-surface border border-default">
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-xs text-muted-foreground mb-8">

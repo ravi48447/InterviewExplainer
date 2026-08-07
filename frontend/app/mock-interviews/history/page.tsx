@@ -266,25 +266,25 @@ function MockInterviewHistoryContent() {
                   <AreaChart data={progressData}>
                     <defs>
                       <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8} />
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis
                       dataKey="date"
                       tick={{ fontSize: 12, fontWeight: 600 }}
-                      stroke="#64748b"
+                      stroke="hsl(var(--muted-foreground))"
                     />
                     <YAxis
                       domain={[0, 100]}
                       tick={{ fontSize: 12, fontWeight: 600 }}
-                      stroke="#64748b"
+                      stroke="hsl(var(--muted-foreground))"
                     />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: '#fff',
-                        border: '2px solid #e2e8f0',
+                        backgroundColor: 'hsl(var(--popover))',
+                        border: '2px solid hsl(var(--border))',
                         borderRadius: '12px',
                         fontWeight: 600,
                       }}
@@ -292,7 +292,7 @@ function MockInterviewHistoryContent() {
                     <Area
                       type="monotone"
                       dataKey="score"
-                      stroke="#3b82f6"
+                      stroke="hsl(var(--primary))"
                       strokeWidth={3}
                       fillOpacity={1}
                       fill="url(#scoreGradient)"

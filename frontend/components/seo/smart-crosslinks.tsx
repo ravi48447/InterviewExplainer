@@ -64,7 +64,7 @@ export function SmartCrosslinks({
       className="mb-8 rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
     >
       {/* Header */}
-      <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/60 bg-surface to-white  ">
+      <div className="px-6 py-4 border-b border-border/60 bg-surface">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="h-4 w-4 text-primary dark:text-primary" />
           <h2
@@ -86,7 +86,7 @@ export function SmartCrosslinks({
           {/* Primary next-up card */}
           <Link
             href={`/${primary.seoSlug}`}
-            className="group block rounded-xl border-2 border-border bg-gradient-to-br from-white  dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 p-4 hover:border-default dark:border-default hover:shadow-md transition-all"
+            className="group block rounded-xl border-2 border-border bg-gradient-to-br from-surface-elevated to-surface p-4 hover:border-default hover:shadow-md transition-all"
           >
             <div className="flex items-start gap-4">
               <div className="shrink-0 w-12 h-12 rounded-xl bg-surface flex items-center justify-center">
@@ -126,7 +126,7 @@ export function SmartCrosslinks({
                 <Link
                   key={m.seoSlug}
                   href={`/${m.seoSlug}`}
-                  className="group block rounded-lg border border-border bg-background px-3.5 py-3 hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40 transition-colors"
+                  className="group block rounded-lg border border-border bg-background px-3.5 py-3 hover:border-default hover:bg-primary/10 transition-colors"
                 >
                   <div className="flex items-baseline justify-between gap-2 mb-1">
                     <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
@@ -149,7 +149,7 @@ export function SmartCrosslinks({
       )}
 
       {/* Pillar link + complete track — unified footer tree */}
-      <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/60 bg-surface/60 space-y-2.5">
+      <div className="px-5 py-4 border-t border-border/60 bg-surface/60 space-y-2.5">
         {pillar && (
           <Link
             href={`/${pillar.pillarSlug}`}
@@ -170,14 +170,14 @@ export function SmartCrosslinks({
 
         <Link
           href={completeTrack.href}
-          className="group flex items-center gap-3 px-3 py-2.5 rounded-lg dark:bg-surface hover:dark:bg-surface transition-colors"
+          className="group flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface hover:bg-hover transition-colors"
         >
           <Compass className="h-4 w-4 text-primary dark:text-primary shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-[11px] font-black uppercase tracking-widest text-primary dark:text-primary leading-none mb-0.5">
               Full roadmap
             </div>
-            <div className="text-[13px] font-bold text-white leading-snug truncate">
+            <div className="text-[13px] font-bold text-foreground leading-snug truncate">
               {completeTrack.title}
             </div>
           </div>

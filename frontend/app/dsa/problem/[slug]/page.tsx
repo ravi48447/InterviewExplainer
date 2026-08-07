@@ -331,7 +331,7 @@ export default async function DSAProblemPage({
         </div>
 
         {problem.understanding && (
-          <div className="rounded-md border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-500/10 px-4 py-3">
+          <div className="rounded-md border-l-4 border-l-primary bg-primary/10 px-4 py-3">
             <p className="text-xs font-black uppercase tracking-widest text-primary dark:text-primary mb-1 flex items-center gap-1.5">
               <Lightbulb className="h-3 w-3" />
               In plain English
@@ -356,7 +356,7 @@ export default async function DSAProblemPage({
                 key={i}
                 className="rounded-lg border border-border bg-surface/70 overflow-hidden"
               >
-                <div className="px-3 py-1 bg-slate-200/70 dark:bg-slate-800/60 border-b border-border">
+                <div className="px-3 py-1 bg-muted border-b border-border">
                   <span className="text-xs font-black uppercase tracking-widest text-foreground">
                     Example {i + 1}
                   </span>
@@ -419,7 +419,7 @@ export default async function DSAProblemPage({
             <span className="text-sm font-black text-foreground flex items-center gap-2">
               <HelpCircle className="h-3.5 w-3.5 text-primary dark:text-primary dark:text-primary" />
               Clarifying questions
-              <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-blue-600 dark:bg-blue-800 text-primary-foreground text-xs font-black">
+              <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-xs font-black">
                 {problem.clarifyingQuestions.length}
               </span>
             </span>
@@ -469,7 +469,7 @@ export default async function DSAProblemPage({
         {problem.directAnswer && (
           <section aria-label="Quick answer" className="mb-6">
             <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-              <div className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 dark:bg-blue-800 text-white">
+              <div className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground">
                 <Zap className="h-4 w-4 text-primary dark:text-primary" />
                 <span className="text-xs font-bold uppercase tracking-widest">
                   30-second answer
@@ -538,7 +538,7 @@ export default async function DSAProblemPage({
                   dark slate = brute, emerald = optimal. */}
               <div className="flex items-center gap-4 text-xs font-medium text-blue-800 dark:text-blue-300">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-3 w-3 rounded-sm bg-surface border border-default border border-slate-400 dark:border-slate-700/40" />
+                  <span className="h-3 w-3 rounded-sm bg-surface border border-slate-400 dark:border-slate-700/40" />
                   Brute force
                 </span>
                 <span className="text-blue-700 dark:text-blue-300">→</span>
@@ -580,7 +580,7 @@ export default async function DSAProblemPage({
                       <th className="px-3 py-2 text-right">Jump</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  <tbody className="divide-y divide-border/60">
                     {problem.approaches.map((a, i) => {
                       const isOptimal =
                         i === problem.approaches.length - 1;

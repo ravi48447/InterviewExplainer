@@ -241,7 +241,7 @@ export default function SignupPage() {
                             <SocialButtons />
                             <div className="relative my-6">
                               <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-                              <div className="relative flex justify-center text-[10px] font-medium tracking-widest uppercase"><span className="bg-[#0A0A0A] px-4 text-muted-foreground">Or continue with email</span></div>
+                              <div className="relative flex justify-center text-[10px] font-medium tracking-widest uppercase"><span className="bg-background px-4 text-muted-foreground">Or continue with email</span></div>
                             </div>
                           </>
                         )}
@@ -452,7 +452,7 @@ export default function SignupPage() {
                     )}
                     <Button 
                       type="submit" 
-                      className="group relative flex-1 h-12 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#7C3AED] hover:from-[#1d4ed8] hover:to-[#6d28d9] text-white font-semibold transition-all duration-200 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.23)] hover:-translate-y-0.5 overflow-hidden"
+                      className="group relative flex-1 h-12 rounded-xl bg-gradient-to-r from-primary to-primary hover:from-primary/90 hover:to-primary/90 text-primary-foreground font-semibold transition-all duration-200 shadow-[0_4px_14px_0_hsl(var(--primary)/0.39)] hover:shadow-[0_6px_20px_0_hsl(var(--primary)/0.23)] hover:-translate-y-0.5 overflow-hidden"
                       disabled={isSubmitting || (step === 1 && !step1Valid)}
                     >
                       <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-200 ease-out" />
@@ -541,7 +541,7 @@ export default function SignupPage() {
                   "https://i.pravatar.cc/100?img=14",
                   "https://i.pravatar.cc/100?img=15"
                 ].map((url, i) => (
-                  <img key={i} src={url} alt="User" className="w-8 h-8 rounded-full border-2 border-[#0A0A0A]" />
+                  <img key={i} src={url} alt="User" className="w-8 h-8 rounded-full border-2 border-background" />
                 ))}
               </div>
               <span className="text-[10px] text-muted-foreground font-medium">Happy Developers</span>

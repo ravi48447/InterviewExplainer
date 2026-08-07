@@ -45,16 +45,16 @@ function toDisplayName(slug: string): string {
 }
 
 function difficultyColor(d: string): string {
-  return d === "easy" ? "#10b981" : d === "medium" ? "#f59e0b" : "#ef4444";
+  return d === "easy" ? "hsl(var(--difficulty-easy))" : d === "medium" ? "hsl(var(--difficulty-medium))" : "hsl(var(--difficulty-hard))";
 }
 function difficultyLabel(d: string): string {
   return d === "easy" ? "Easy" : d === "medium" ? "Medium" : "Hard";
 }
 
 const LEVEL_META: Record<string, { label: string; color: string; colorClass: string; range: string }> = {
-  beginner: { label: "Beginner", color: "#10b981", colorClass: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20", range: "0–2 yrs" },
-  intermediate: { label: "Intermediate", color: "#f59e0b", colorClass: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-default dark:border-default/20", range: "2–5 yrs" },
-  advanced: { label: "Advanced", color: "#ef4444", colorClass: "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-default dark:border-default/20", range: "5+ yrs" },
+  beginner: { label: "Beginner", color: "hsl(var(--difficulty-easy))", colorClass: "bg-success/10 dark:bg-success/20 text-success dark:text-success border-default dark:border-default/20", range: "0–2 yrs" },
+  intermediate: { label: "Intermediate", color: "hsl(var(--difficulty-medium))", colorClass: "bg-warning/10 dark:bg-warning/20 text-warning dark:text-warning border-default dark:border-default/20", range: "2–5 yrs" },
+  advanced: { label: "Advanced", color: "hsl(var(--difficulty-hard))", colorClass: "bg-destructive/10 dark:bg-destructive/20 text-destructive dark:text-destructive border-default dark:border-default/20", range: "5+ yrs" },
 };
 
 type PageParams = { lang: string; track: string; level: string; stack: string };
@@ -129,7 +129,7 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
           <main className="flex-1 min-w-0">
             {/* Hero */}
             <header className="mb-6 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-              <div className="relative px-6 py-5 bg-surface border border-default dark:">
+              <div className="relative px-6 py-5 bg-surface border border-default">
                 <div className="flex flex-wrap gap-2 mb-3">
                   <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary border border-default dark:border-default/20 shadow-sm">
                     {toDisplayName(lang)}
@@ -190,10 +190,10 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
                     <Link
                       key={`${idx}-${q.slug}`}
                       href={`${basePath}/${q.slug}`}
-                      className="group/link flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:pr-5 rounded-[12px] border border-border bg-background shadow-sm hover:border-[#2e64e5]/30 hover:shadow-md transition-all duration-200"
+                      className="group/link flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:pr-5 rounded-[12px] border border-border bg-background shadow-sm hover:border-primary/30 hover:shadow-md transition-all duration-200"
                     >
                       <div className="flex items-start sm:items-center gap-3 mb-2 sm:mb-0 max-w-full overflow-hidden">
-                        <div className="shrink-0 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground group-hover/link:border-[#2e64e5] group-hover/link:text-[#2e64e5] shadow-sm transition-all sm:ml-2">
+                        <div className="shrink-0 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground group-hover/link:border-primary group-hover/link:text-primary shadow-sm transition-all sm:ml-2">
                           {idx + 1}
                         </div>
                         <h4 className="text-[14px] font-medium text-foreground group-hover/link:text-foreground transition-colors leading-snug">
@@ -210,7 +210,7 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
                           <Clock className="w-3 h-3 text-muted-foreground" />
                           {q.estimatedReadTime ?? 5}m
                         </span>
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover/link:text-[#2e64e5] group-hover/link:translate-x-0.5 transition-all" />
+                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover/link:text-primary group-hover/link:translate-x-0.5 transition-all" />
                       </div>
                     </Link>
                   ))}
@@ -221,8 +221,8 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
 
           {/* ─── RIGHT SIDEBAR ─── */}
           <aside className="hidden xl:flex w-[300px] shrink-0 flex-col gap-4 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
-            <div className="rounded-xl border border-default dark:border-default/20 bg-surface border border-default shadow-sm overflow-hidden">
-              <div className="px-4 py-3 bg-surface border border-default border-b border-default dark:border-default/20">
+            <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-surface border border-default border-b dark:border-default/20">
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-primary dark:text-primary" />
                   <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">At a Glance</h3>

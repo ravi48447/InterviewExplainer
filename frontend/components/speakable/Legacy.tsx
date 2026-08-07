@@ -85,15 +85,15 @@ function LegacyQuestionCard({
       <div
         className={`rounded-xl overflow-hidden shadow-lg ${
           d
-            ? "border border-default dark:border-default/50 bg-[#0d1c15] shadow-black/40"
-            : "border border-default dark:border-default/20/70 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 shadow-sm"
+            ? "border border-default dark:border-default/50 bg-success/10 shadow-black/40"
+            : "border border-default dark:border-default/70 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/60 shadow-sm"
         }`}
       >
         <div
           className={`flex items-center gap-2 px-5 py-2.5 border-b ${
             d
               ? "border-default dark:border-default/50 bg-emerald-900 dark:bg-emerald-800/30"
-              : "border-default dark:border-default/20/60 bg-emerald-100 dark:bg-emerald-950/20/40"
+              : "border-default dark:border-default/60 bg-emerald-100 dark:bg-emerald-950/40"
           }`}
         >
           <Star
@@ -127,7 +127,7 @@ function LegacyQuestionCard({
               className={`text-[17px] leading-[1.6] font-medium mb-5 pb-5 border-b border-dashed ${
                 d
                   ? "text-white border-default dark:border-default/60"
-                  : "text-foreground border-default dark:border-default/20/60"
+                  : "text-foreground border-default dark:border-default/60"
               }`}
             >
               <MarkdownContent content={lede} inline />
@@ -143,7 +143,7 @@ function LegacyQuestionCard({
           {questionId !== undefined && (
             <div
               className={`mt-5 pt-4 border-t ${
-                d ? "border-default dark:border-default/50" : "border-default dark:border-default/20/50"
+                d ? "border-default dark:border-default/50" : "border-default dark:border-default/50"
               }`}
             >
               <MarkCompleteButton questionId={Number(questionId)} />

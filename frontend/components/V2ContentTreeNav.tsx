@@ -83,7 +83,7 @@ export default function V2ContentTreeNav({
   return (
     <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 bg-surface border border-default dark:from-slate-900/40 dark:to-slate-900/20 border-b border-border">
+      <div className="px-4 py-3 bg-surface border border-default border-b border-border">
         <Link
           href={basePath}
           className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-primary dark:text-primary transition-colors"
@@ -114,7 +114,7 @@ export default function V2ContentTreeNav({
                     className={cn(
                       "w-full flex items-center gap-2 px-2 py-2 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-colors",
                       moduleHasActive
-                        ? "text-primary dark:text-primary bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60"
+                        ? "text-primary bg-primary/10"
                         : "text-muted-foreground hover:text-foreground hover:bg-surface"
                     )}
                   >
@@ -155,7 +155,7 @@ export default function V2ContentTreeNav({
       const isExpanded = expandedStacks.has(stack.slug);
 
       return (
-        <div key={stack.slug} className={cn("rounded-lg transition-colors mb-0.5", isActive && "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/50")}>
+        <div key={stack.slug} className={cn("rounded-lg transition-colors mb-0.5", isActive && "bg-primary/10")}>
           <button
             onClick={() => toggleStack(stack.slug)}
             className={cn(
@@ -169,7 +169,7 @@ export default function V2ContentTreeNav({
             <span className="flex-1 text-left truncate text-[11px]">{stack.name}</span>
             <span className={cn(
               "text-[10px] shrink-0 px-1.5 py-0.5 rounded font-bold",
-              isActive ? "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary" : "text-muted-foreground"
+              isActive ? "bg-primary/10 text-primary" : "text-muted-foreground"
             )}>
               {stack.questionCount}
             </span>
@@ -190,7 +190,7 @@ export default function V2ContentTreeNav({
                     className={cn(
                       "flex items-start gap-2 pl-2 pr-2 py-1.5 text-[11px] rounded-lg transition-all",
                       isActiveQ
-                        ? "bg-surface border border-default text-white font-medium shadow-sm"
+                        ? "bg-primary text-primary-foreground border border-primary font-medium shadow-sm"
                         : "text-muted-foreground hover:text-foreground hover:bg-surface"
                     )}
                   >

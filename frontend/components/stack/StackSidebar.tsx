@@ -57,9 +57,9 @@ export function StackSidebar({
         </div>
         <div className="p-3 space-y-2.5">
           {[
-            { label: "Easy", count: easyCt, gradient: "from-green-50 dark:from-green-950/40 ", color: "#22c55e" },
-            { label: "Medium", count: medCt, gradient: "from-orange-50 dark:from-orange-950/40 ", color: "#f59e0b" },
-            { label: "Hard", count: hardCt, gradient: " to-rose-600", color: "#ef4444" },
+            { label: "Easy", count: easyCt, gradient: "from-green-50 dark:from-green-950/40 ", color: "hsl(var(--difficulty-easy))" },
+            { label: "Medium", count: medCt, gradient: "from-orange-50 dark:from-orange-950/40 ", color: "hsl(var(--difficulty-medium))" },
+            { label: "Hard", count: hardCt, gradient: " to-rose-600", color: "hsl(var(--difficulty-hard))" },
           ].map(({ label, count, gradient, color }) => (
             <div key={label} className="space-y-1">
               <div className="flex justify-between text-xs">

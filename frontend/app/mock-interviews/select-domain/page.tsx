@@ -378,7 +378,7 @@ function SelectDomainContent() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-surface border border-default rounded-2xl border-2 border-default dark:border-default/20 shadow-lg p-8"
+          className="bg-surface border-2 border-default dark:border-default/20 rounded-2xl shadow-lg p-8"
         >
           <div className="flex items-start justify-between gap-6">
             <div className="flex-1">

@@ -86,8 +86,8 @@ export function InternalsDeepDiveLayout({
 
       {/* Performance Implication */}
       {perfImplication && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-amber-100 dark:bg-amber-950/20/50 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/60 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-amber-100 dark:bg-amber-950/50 border-b border-default dark:border-default/20">
             <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             <span className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wide">Performance Implication</span>
           </div>
@@ -106,8 +106,8 @@ export function InternalsDeepDiveLayout({
 
       {/* Speakable Answer */}
       {speakable && (
-        <div className="rounded-xl border-2 border-default dark:border-default/30 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-default dark:border-default/20 dark:border-default/60">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-surface overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

@@ -75,8 +75,8 @@ export function FlowDiagramLayout({
 
       {/* Key Rules */}
       {flowRules && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-950/20/40 overflow-hidden">
-          <div className="px-5 py-3 bg-blue-100 dark:bg-blue-950/20/50 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-blue-100 dark:bg-blue-950/50 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-primary dark:text-primary uppercase tracking-wide">Key Rules to Remember</span>
           </div>
           <div className="px-5 py-4">
@@ -87,8 +87,8 @@ export function FlowDiagramLayout({
 
       {/* Failure Scenario */}
       {failureScenario && (
-        <div className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-orange-50 dark:bg-orange-500/10 dark:bg-orange-950/20/40 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-orange-100 dark:bg-orange-950/20/50 border-b border-orange-200 dark:border-orange-500/20">
+        <div className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-orange-50 dark:bg-orange-500/10 dark:bg-orange-950/40 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-orange-100 dark:bg-orange-950/50 border-b border-orange-200 dark:border-orange-500/20">
             <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
             <span className="text-xs font-bold text-orange-800 dark:text-orange-400 uppercase tracking-wide">What Happens on Failure</span>
           </div>
@@ -112,8 +112,8 @@ export function FlowDiagramLayout({
 
       {/* Interview Trap */}
       {interviewTrap && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-red-50 dark:bg-red-500/10 dark:bg-red-950/20/40 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-red-100 dark:bg-red-950/20/50 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-red-50 dark:bg-red-500/10 dark:bg-red-950/40 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-red-100 dark:bg-red-950/50 border-b border-default dark:border-default/20">
             <Lightbulb className="h-4 w-4 text-red-600 dark:text-red-400" />
             <span className="text-xs font-bold text-red-800 dark:text-red-400 uppercase tracking-wide">Common Interview Trap</span>
           </div>
@@ -125,8 +125,8 @@ export function FlowDiagramLayout({
 
       {/* Speakable */}
       {speakable && (
-        <div className="rounded-xl border-2 border-default dark:border-default/30 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-default dark:border-default/20 dark:border-default/60">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-surface overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

@@ -4,6 +4,11 @@
  */
 
 export const TYPOGRAPHY = {
+  fontFamily: {
+    body: "font-body",
+    display: "font-display",
+    mono: "font-mono",
+  },
   fontSize: {
     xs: "text-xs", // 12px - Caption / Badge
     sm: "text-sm", // 14px - Body / Input
@@ -21,6 +26,17 @@ export const TYPOGRAPHY = {
     semibold: "font-semibold",
     bold: "font-bold",
     black: "font-black",
+  },
+  lineHeight: {
+    body: "leading-relaxed",
+    prose: "leading-[1.75]",
+    tight: "leading-tight",
+    display: "leading-[1.05]",
+  },
+  letterSpacing: {
+    display: "tracking-[-0.04em]",
+    heading: "tracking-[-0.025em]",
+    label: "tracking-[0.08em]",
   },
 } as const;
 

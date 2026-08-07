@@ -388,7 +388,7 @@ export default async function PillarHubPage({
                   aria-hidden
                 />
                 <div className="relative pl-4 sm:pl-5">
-                <div className="px-4 sm:px-6 pt-7 pb-6 sm:pt-8 sm:pb-7 bg-gradient-to-br from-slate-50/90 via-white  dark:from-slate-900/40 dark:via-background dark:">
+                <div className="px-4 sm:px-6 pt-7 pb-6 sm:pt-8 sm:pb-7 bg-gradient-to-br from-surface-subtle via-surface to-background">
                   <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary dark:text-primary mb-2">
                     {hubEyebrow}
                   </div>
@@ -501,7 +501,7 @@ export default async function PillarHubPage({
                       <Link
                         key={s.question.slug}
                         href={`/${s.seoSlug}/${s.question.slug}`}
-                        className="group flex flex-col gap-2 rounded-lg border border-border bg-surface/40 p-4 hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40 hover:shadow-sm transition-all"
+                        className="group flex flex-col gap-2 rounded-lg border border-border bg-surface/40 p-4 hover:border-default hover:bg-primary/10 hover:shadow-sm transition-all"
                       >
                         <div className="flex items-center gap-2">
                           <span className="w-6 h-6 rounded-md bg-blue-600 dark:bg-blue-800 text-white font-black text-[11px] flex items-center justify-center">
@@ -652,7 +652,7 @@ export default async function PillarHubPage({
                       <Link
                         key={rp.pillarSlug}
                         href={`/${rp.pillarSlug}`}
-                        className="group block rounded-lg border border-border bg-surface/40 px-4 py-3 hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40 hover:shadow-sm transition-all"
+                        className="group block rounded-lg border border-border bg-surface/40 px-4 py-3 hover:border-default hover:bg-primary/10 hover:shadow-sm transition-all"
                       >
                         <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">
                           Prep category
@@ -722,7 +722,7 @@ export default async function PillarHubPage({
                   <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                     <Link
                       href={trackCta.href}
-                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md dark:bg-surface text-foreground font-bold text-xs hover:dark:bg-surface transition-colors"
+                      className="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-md bg-surface text-foreground font-bold text-xs hover:bg-hover transition-colors"
                     >
                       {trackCta.ctaLabel}
                       <ArrowRight className="h-3.5 w-3.5" />

@@ -193,7 +193,7 @@ function ModulePillarSections({ groups }: { groups: ModulePillarGroup[] }) {
               <li key={entry.seoSlug}>
                 <Link
                   href={`/${entry.seoSlug}`}
-                  className="group flex items-center gap-4 px-5 py-3 hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 transition-colors"
+                  className="group flex items-center gap-4 px-5 py-3 hover:bg-primary/10 transition-colors"
                 >
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm font-bold text-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors leading-snug">
@@ -308,7 +308,7 @@ export default function PrepIndexPage() {
           </nav>
 
           <header className="mb-6 rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
-            <div className="px-7 py-7 bg-surface border border-default dark:">
+            <div className="px-7 py-7 bg-surface border border-default">
               <div className="text-[11px] font-bold uppercase tracking-widest text-primary dark:text-primary mb-2">
                 Interview prep hub
               </div>
@@ -378,7 +378,7 @@ export default function PrepIndexPage() {
 
           <section
             id="track-architecture"
-            className="mb-10 scroll-mt-24 rounded-2xl border border-default dark:border-default/20/80 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/20 p-5 sm:p-6"
+            className="mb-10 scroll-mt-24 rounded-2xl border border-success/20 bg-success/10 p-5 sm:p-6"
           >
             <div className="mb-4">
               <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-400 mb-1">
@@ -412,7 +412,7 @@ export default function PrepIndexPage() {
             <PillarHubCards stats={javaPlatformPillars} />
           </section>
 
-          <section id="track-frontend" className="mb-10 scroll-mt-24 rounded-2xl border border-blue-200 dark:border-blue-500/20/80 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/20 p-5 sm:p-6">
+          <section id="track-frontend" className="mb-10 scroll-mt-24 rounded-2xl border border-primary/20 bg-primary/10 p-5 sm:p-6">
             <h2 className="text-xl font-black text-foreground">
               Frontend &amp; fullstack modules (JavaScript, TypeScript, React…)
             </h2>

@@ -184,13 +184,13 @@ function ProblemRow({
     return (
       <Link
         href={href}
-        className={`${baseClass} border-border hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/30 transition-all`}
+        className={`${baseClass} border-border hover:border-primary/40 hover:shadow-sm hover:bg-primary/10 transition-all`}
       >
         {RowInner}
       </Link>
     );
   }
-  return <div className={`${baseClass} border-slate-100 dark:border-slate-800/60 bg-surface/60`}>{RowInner}</div>;
+  return <div className={`${baseClass} border-border/60 bg-surface/60`}>{RowInner}</div>;
 }
 
 /** Section header used in the sheet body. */
@@ -328,7 +328,7 @@ export default async function DSASheetPage(
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] to-[#f4f5f7] dark:from-background dark:to-background font-sans text-foreground">
+    <div className="relative min-h-screen bg-gradient-to-b from-surface-subtle to-background dark:from-background dark:to-background font-sans text-foreground">
       {/* Page-wide ambient light — soft coloured glows drifting across the page. */}
       <div
         aria-hidden
@@ -346,7 +346,7 @@ export default async function DSASheetPage(
       />
 
       {/* ─── HERO (dark, consistent with the hub) ─────────────────── */}
-      <header className="relative z-10 overflow-hidden bg-[#0f1014] text-white">
+      <header className="relative z-10 overflow-hidden bg-hero text-white">
         <div className="pointer-events-none absolute inset-0" style={BG_HERO_GRID} aria-hidden />
         <div
           className="pointer-events-none absolute inset-0"
@@ -359,7 +359,7 @@ export default async function DSASheetPage(
           aria-hidden
         />
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#f4f5f7]/0 to-transparent"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background/0 to-transparent"
           aria-hidden
         />
 
@@ -399,7 +399,7 @@ export default async function DSASheetPage(
                 {firstAuthoredSlug && (
                   <Link
                     href={`/dsa/problem/${firstAuthoredSlug}`}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 dark:bg-blue-800 hover:bg-blue-500 dark:bg-blue-800 text-foreground font-bold rounded-xl transition-colors text-sm shadow-lg shadow-blue-900/40"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors text-sm shadow-lg shadow-primary/20"
                   >
                     <Play className="h-4 w-4" /> Start first problem
                   </Link>
@@ -474,7 +474,7 @@ export default async function DSASheetPage(
 
         {/* Difficulty split — slim full-width strip */}
         {diffTotal > 0 && (
-          <section className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] px-5 sm:px-6 py-4">
+          <section className="rounded-2xl border border-border bg-gradient-to-b from-surface-elevated to-surface shadow-sm px-5 sm:px-6 py-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 sm:p-6">
               <div className="flex shrink-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
                 <Gauge className="h-4 w-4 text-primary dark:text-primary" />
@@ -504,8 +504,8 @@ export default async function DSASheetPage(
 
         {/* About this plan — balanced two-column prose fills the width comfortably */}
         {sheet.description && (
-          <section className="rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(124,58,237,0.22)] overflow-hidden">
-            <div className="px-6 sm:px-8 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800/60 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900/40 dark:to-background">
+          <section className="rounded-2xl border border-border bg-gradient-to-b from-surface-elevated to-surface shadow-sm overflow-hidden">
+            <div className="px-6 sm:px-8 pt-5 pb-3 border-b border-border/60 bg-gradient-to-br from-surface-subtle to-surface">
               <p className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5" />
                 About this plan
@@ -557,7 +557,7 @@ export default async function DSASheetPage(
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:p-6 items-start">
             {sheet.whyThisSheet && sheet.whyThisSheet.length > 0 && (
               <section className="rounded-2xl border border-default dark:border-default/20 bg-gradient-to-b from-white  ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 shadow-[0_2px_20px_-10px_rgba(16,185,129,0.22)] overflow-hidden">
-                <div className="px-6 pt-5 pb-3 bg-surface border border-default border-b border-default dark:border-default/20 dark:border-default/40">
+                <div className="px-6 pt-5 pb-3 bg-surface border border-default border-b dark:border-default/40">
                   <SectionHeading
                     icon={Award}
                     kicker="Why this sheet"
@@ -705,14 +705,14 @@ export default async function DSASheetPage(
             ))}
             <Link
               href="/dsa"
-              className="group rounded-2xl bg-[#0f1014] hover:bg-[#15161c] transition-all overflow-hidden flex flex-col relative"
+              className="group rounded-2xl bg-hero hover:bg-hero-elevated transition-all overflow-hidden flex flex-col relative"
             >
               <div
                 className="pointer-events-none absolute inset-0"
                 style={{ background: "radial-gradient(ellipse 70% 80% at 110% -10%, rgba(139,92,246,0.25) 0%, transparent 60%)" }}
                 aria-hidden
               />
-              <div className="h-1.5 bg-gradient-to-r from-blue-50 dark:from-blue-950/40  dark:" />
+              <div className="h-1.5 bg-gradient-to-r from-blue-50 dark:from-blue-950/40" />
               <div className="relative p-5 flex flex-col flex-1 text-white">
                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300 mb-2">
                   <Sparkles className="h-3.5 w-3.5" /> Full hub

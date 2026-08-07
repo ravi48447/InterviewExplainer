@@ -264,7 +264,7 @@ function CompanyCard({
           <span className="font-medium">{company.rounds}</span>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+        <div className="flex flex-wrap gap-1.5 pt-3 border-t border-border/60">
           {company.topPatterns.map((p) => (
             <span
               key={p}
@@ -289,7 +289,7 @@ const totalCompanies =
 
 export default function CompaniesPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 via-orange-50/20 dark:via-orange-950/40  font-sans text-foreground selection:bg-orange-200  ">
+    <div className="min-h-screen bg-gradient-to-br from-background via-surface-subtle to-background font-sans text-foreground selection:bg-primary/20">
       <div className="w-full min-w-0 px-6 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 text-xs text-muted-foreground mb-8">
@@ -323,7 +323,7 @@ export default function CompaniesPage() {
               exactly what to prepare.
             </p>
           </div>
-          <div className="px-8 py-4 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-t border-border">
+          <div className="px-8 py-4 bg-gradient-to-r from-surface-subtle to-surface border-t border-border">
             <div className="flex items-center gap-6 flex-wrap">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-950/20 flex items-center justify-center">
@@ -338,7 +338,7 @@ export default function CompaniesPage() {
                   </div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
+              <div className="h-10 w-px bg-border" />
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-950/20 flex items-center justify-center">
                   <Layers className="h-5 w-5 text-amber-600 dark:text-amber-400" />
@@ -350,7 +350,7 @@ export default function CompaniesPage() {
                   <div className="text-lg font-bold text-foreground">4</div>
                 </div>
               </div>
-              <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
+              <div className="h-10 w-px bg-border" />
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-lg bg-yellow-100 dark:bg-yellow-950/20 flex items-center justify-center">
                   <Target className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />

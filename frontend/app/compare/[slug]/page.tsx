@@ -84,7 +84,7 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
   } : null;
 
   return (
-    <div className="min-h-screen bg-surface border border-default dark:from-slate-950 dark:">
+    <div className="min-h-screen bg-surface border border-default">
       {jsonLd && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />}
 
       <div className="w-full min-w-0 px-4 sm:px-6 lg:px-8 py-12">

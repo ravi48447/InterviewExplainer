@@ -274,7 +274,7 @@ export default function PillarTreeNav({
                   className={cn(
                     "flex items-center rounded-lg border-l-2 transition-all",
                     isActiveModule
-                      ? "border-default dark:border-default bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60"
+                      ? "border-primary bg-primary/10"
                       : "border-transparent hover:border-border hover:bg-surface",
                   )}
                 >
@@ -348,8 +348,8 @@ export default function PillarTreeNav({
                                   className={cn(
                                     "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs leading-snug transition-all",
                                     isActiveQ
-                                      ? "bg-blue-600 text-white font-bold shadow-sm"
-                                      : "text-muted-foreground hover:bg-blue-50 dark:bg-blue-500/10 hover:text-primary dark:text-primary",
+                                      ? "bg-primary text-primary-foreground font-bold shadow-sm"
+                                      : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
                                   )}
                                 >
                                   <span
@@ -383,7 +383,7 @@ export default function PillarTreeNav({
                             className={cn(
                               "w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs transition-colors",
                               hasActiveQ
-                                ? "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary font-bold"
+                                ? "bg-primary/10 text-primary font-bold"
                                 : "text-muted-foreground hover:bg-surface font-semibold",
                             )}
                           >
@@ -419,8 +419,8 @@ export default function PillarTreeNav({
                                     className={cn(
                                       "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs leading-snug transition-all",
                                       isActiveQ
-                                        ? "bg-blue-600 text-white font-bold shadow-sm"
-                                        : "text-muted-foreground hover:bg-blue-50 dark:bg-blue-500/10 hover:text-primary dark:text-primary",
+                                        ? "bg-primary text-primary-foreground font-bold shadow-sm"
+                                        : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
                                     )}
                                   >
                                     <span
@@ -511,7 +511,7 @@ export default function PillarTreeNav({
       {/* Mobile FAB */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed bottom-6 left-4 z-40 w-12 h-12 rounded-full bg-blue-600 dark:bg-blue-800 text-white shadow-xl flex items-center justify-center hover:bg-blue-700 dark:bg-blue-800 active:scale-95 transition-all"
+        className="lg:hidden fixed bottom-6 left-4 z-40 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
         aria-label="Open navigation"
       >
         <Menu className="h-5 w-5" />

@@ -9,7 +9,7 @@ import dynamic from "next/dynamic";
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center h-[360px] bg-[#1e1e1e]">
+    <div className="flex items-center justify-center h-[360px] bg-code">
       <Loader2 className="h-5 w-5 text-slate-500 dark:text-slate-400 animate-spin" />
     </div>
   ),
@@ -138,7 +138,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
   return (
     <div className="rounded-xl overflow-hidden shadow-xl ring-1 ring-slate-950/5 border border-border">
       {/* Header bar */}
-      <div className="flex items-center justify-between bg-[#21252b] border-b border-[#181a1f] px-4 py-2">
+      <div className="flex items-center justify-between bg-code-surface border-b border-code-border px-4 py-2">
         <div className="flex items-center gap-2">
           <Terminal className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-300" />
           <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
@@ -167,7 +167,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
       </div>
 
       {/* Monaco Editor */}
-      <div className="bg-[#1e1e1e]">
+      <div className="bg-code">
         <MonacoEditor
           height="360px"
           language={MONACO_LANG[activeLang] ?? "plaintext"}
@@ -196,7 +196,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
 
       {/* Custom stdin (collapsible) */}
       {showStdin && (
-        <div className="bg-[#21252b] border-t border-[#181a1f] px-4 py-3">
+        <div className="bg-code-surface border-t border-code-border px-4 py-3">
           <label className="block text-[10.5px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5">
             stdin (custom input)
           </label>
@@ -204,7 +204,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
             value={stdin}
             onChange={(e) => setStdin(e.target.value)}
             rows={3}
-            className="w-full bg-[#1e1e1e] text-slate-200 dark:text-slate-300 font-mono text-[13px] rounded border border-slate-600 dark:border-slate-700 px-3 py-2 resize-y focus:outline-none focus:border-slate-400 dark:border-slate-700 placeholder:text-secondary"
+            className="w-full bg-code text-slate-200 dark:text-slate-300 font-mono text-[13px] rounded border border-slate-600 dark:border-slate-700 px-3 py-2 resize-y focus:outline-none focus:border-slate-400 dark:border-slate-700 placeholder:text-secondary"
             placeholder="Enter input for your program here..."
             spellCheck={false}
           />
@@ -212,7 +212,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
       )}
 
       {/* Run button + output */}
-      <div className="bg-[#21252b] border-t border-[#181a1f]">
+      <div className="bg-code-surface border-t border-code-border">
         <div className="px-4 py-2.5 flex items-center justify-between gap-3">
           <button
             onClick={handleRun}
@@ -253,7 +253,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
 
         {/* Output panel */}
         {(result || running) && (
-          <div className="border-t border-[#181a1f] px-4 py-3">
+          <div className="border-t border-code-border px-4 py-3">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1.5">
               Output
             </p>

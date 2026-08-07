@@ -16,19 +16,22 @@ interface ActivityHeatmapCardProps {
 export function ActivityHeatmapCard({ heatmapData, showSample }: ActivityHeatmapCardProps) {
   const { theme } = useTheme();
 
+  // Heat scale uses semantic tokens via CSS variables: from --muted (empty)
+  // through --muted-foreground to --foreground (most active). This keeps the
+  // heatmap theme-aware without hard-coded hex values (P01-T033).
   const heatColor = (count: number, isDark: boolean): string => {
     if (isDark) {
-      if (count === 0) return '#111111';
-      if (count <= 2) return '#262626';
-      if (count <= 4) return '#525252';
-      if (count <= 6) return '#a3a3a3';
-      return '#ffffff';
+      if (count === 0) return 'hsl(var(--muted))';
+      if (count <= 2) return 'hsl(var(--surface-elevated))';
+      if (count <= 4) return 'hsl(var(--muted-foreground) / 0.5)';
+      if (count <= 6) return 'hsl(var(--muted-foreground))';
+      return 'hsl(var(--foreground))';
     } else {
-      if (count === 0) return '#f5f5f5';
-      if (count <= 2) return '#e5e5e5';
-      if (count <= 4) return '#a3a3a3';
-      if (count <= 6) return '#525252';
-      return '#000000';
+      if (count === 0) return 'hsl(var(--muted))';
+      if (count <= 2) return 'hsl(var(--surface-subtle))';
+      if (count <= 4) return 'hsl(var(--muted-foreground) / 0.5)';
+      if (count <= 6) return 'hsl(var(--muted-foreground))';
+      return 'hsl(var(--foreground))';
     }
   };
 

@@ -167,7 +167,7 @@ export default function CodeLanguageTabs({
   // tab changes. Combined with the useEffect above this gives hljs a clean
   // node every time and keeps the SSR/client trees in sync.
   const renderedCode = (
-    <pre className="m-0 overflow-x-auto bg-[#1f2330]">
+    <pre className="m-0 overflow-x-auto bg-code">
       <code
         key={active}
         ref={codeRef}
@@ -187,7 +187,7 @@ export default function CodeLanguageTabs({
   // for a per-block tab strip duplicating the same Java | Python choice.
   if (useDSA) {
     return (
-      <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-[#1f2330]">
+      <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-code">
         <div className="flex items-center justify-between gap-3 px-4 py-1.5 dark:bg-surface border-b border-border">
           <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             {displayName(active)}
@@ -207,7 +207,7 @@ export default function CodeLanguageTabs({
   if (languages.length === 1) {
     const lang = languages[0];
     return (
-      <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-[#1f2330]">
+      <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-code">
         <div className="flex items-center justify-between gap-3 px-4 py-2 dark:bg-surface text-xs border-b border-border">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-muted-foreground font-bold uppercase tracking-wider text-[11px] shrink-0">
@@ -227,7 +227,7 @@ export default function CodeLanguageTabs({
   }
 
   return (
-    <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-[#1f2330]">
+    <div className="rounded-lg border border-border/70 overflow-hidden my-3 bg-code">
       <div className="flex items-stretch dark:bg-surface border-b border-border">
         <div className="flex items-center gap-0 flex-1 overflow-x-auto">
           {languages.map((lang) => (
@@ -238,7 +238,7 @@ export default function CodeLanguageTabs({
                 "px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider transition-colors whitespace-nowrap border-b-2",
                 active === lang
                   ? "text-white border-default dark:border-default bg-slate-700/80"
-                  : "text-muted-foreground border-transparent hover:text-muted-foreground hover:dark:bg-surface/50",
+                  : "text-muted-foreground border-transparent hover:text-foreground hover:bg-surface/50",
               )}
               aria-pressed={active === lang}
               aria-label={`Show ${displayName(lang)} code`}

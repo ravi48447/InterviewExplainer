@@ -194,7 +194,7 @@ export default function ModuleQuestionsAccordion({
           <div
             key={REVISION_GROUP_SLUG}
             id={REVISION_GROUP_SLUG}
-            className="rounded-xl border border-default dark:border-default/20/90 bg-background overflow-hidden shadow-sm ring-1 ring-ring/[0.04]"
+            className="rounded-xl border border-default dark:border-default/90 bg-background overflow-hidden shadow-sm ring-1 ring-ring/[0.04]"
           >
             <button
               type="button"

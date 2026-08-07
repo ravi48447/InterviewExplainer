@@ -78,7 +78,7 @@ export default function StackHierarchyNav({
       <div className="rounded-xl border border-border bg-background/90 shadow-sm overflow-hidden">
         <Link
           href={`/${domainSlug}`}
-          className="flex items-center gap-2 px-4 py-3 text-xs font-bold text-muted-foreground hover:text-primary dark:text-primary hover:bg-blue-50 dark:bg-blue-500/10 transition-colors"
+          className="flex items-center gap-2 px-4 py-3 text-xs font-bold text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to All Stacks
@@ -111,7 +111,7 @@ export default function StackHierarchyNav({
                   className={cn(
                     "w-full flex items-center justify-between px-3 py-2 text-[11px] font-black uppercase tracking-widest transition-colors",
                     hasActiveStack
-                      ? "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary"
+                      ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-surface hover:text-foreground"
                   )}
                 >
@@ -129,7 +129,7 @@ export default function StackHierarchyNav({
                         className={cn(
                           "flex items-center gap-2 pl-5 pr-3 py-2 text-xs transition-colors border-l-2",
                           isActive
-                            ? "border-default dark:border-default bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/70 text-primary dark:text-primary font-bold"
+                            ? "border-primary bg-primary/10 text-primary font-bold"
                             : "border-transparent text-muted-foreground hover:bg-surface hover:text-foreground font-medium"
                         )}
                       >
@@ -153,7 +153,7 @@ export default function StackHierarchyNav({
                                   className={cn(
                                     "w-full flex items-center gap-2 pl-3 pr-2 py-1.5 text-[11px] transition-colors",
                                     isActiveSc
-                                      ? "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary font-bold"
+                            ? "bg-primary/10 text-primary font-bold"
                                       : "text-muted-foreground hover:bg-surface font-semibold"
                                   )}
                                 >
@@ -161,7 +161,7 @@ export default function StackHierarchyNav({
                                     ? <FolderOpen className="h-3 w-3 shrink-0 text-primary dark:text-primary" />
                                     : <Folder className="h-3 w-3 shrink-0 text-primary dark:text-primary" />}
                                   <span className="flex-1 text-left truncate">{sc.name}</span>
-                                  <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary shrink-0">
+                                  <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">
                                     {sc.questionCount}
                                   </span>
                                   {isExpSc
@@ -181,8 +181,8 @@ export default function StackHierarchyNav({
                                           className={cn(
                                             "flex items-start gap-2 pl-3 pr-2 py-1.5 text-[11px] transition-colors",
                                             isActiveQ
-                                              ? "bg-blue-600 text-white font-bold"
-                                              : "text-muted-foreground hover:bg-blue-50 dark:bg-blue-500/10 hover:text-primary dark:text-primary"
+                                              ? "bg-primary text-primary-foreground font-bold"
+                                              : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
                                           )}
                                         >
                                           <span className={cn("shrink-0 mt-0.5", isActiveQ ? "text-primary dark:text-primary" : "text-muted-foreground")}>

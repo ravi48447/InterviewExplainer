@@ -191,7 +191,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0f1014] text-slate-300">
+      <div className="min-h-screen bg-hero text-slate-300">
         <div className="w-full min-w-0 space-y-6 px-5 py-12">
           <Skeleton className="h-5 w-48 bg-zinc-800/80" />
           <Skeleton className="h-36 w-full rounded-3xl bg-zinc-800/60" />
@@ -217,13 +217,13 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
     <div className="relative min-h-screen overflow-x-clip text-slate-300 selection:bg-background/20">
       {/* ── FIXED PAGE BACKGROUND ── */}
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden>
-        <div className="absolute inset-0 bg-[#f4f5f7] " />
+        <div className="absolute inset-0 bg-surface-subtle " />
       </div>
 
       {/* ════════════════════════════════════════════════
           HERO — dark with grid
       ════════════════════════════════════════════════ */}
-      <header className="dark relative overflow-hidden bg-[#0f1014] border-b border-white/[0.08] text-foreground">
+      <header className="dark relative overflow-hidden bg-hero border-b border-white/[0.08] text-foreground">
         {/* fine square grid */}
         <div className="pointer-events-none absolute inset-0" style={BG_DARK_HERO_GRID} aria-hidden />
         {/* soft radial centre-glow so grid fades to dark at edges */}
@@ -233,7 +233,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
           aria-hidden
         />
         {/* bottom edge fade into outcomes */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#0f1014] to-transparent" aria-hidden />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-hero to-transparent" aria-hidden />
 
         <div className="relative w-full min-w-0 px-4 pb-14 pt-6 sm:px-8 sm:pb-16 sm:pt-8 lg:px-12">
 
@@ -282,7 +282,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
                   <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/[0.1] bg-white/[0.06] p-2.5 ring-1 ring-inset ring-white/[0.06]">
                     <TechIcon name={langIcon} className="h-10 w-10" />
                   </div>
-                  <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-[#0f1014] bg-emerald-400" />
+                  <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-hero bg-emerald-400" />
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -415,7 +415,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
       {/* ════════════════════════════════════════════════
           ROAD SECTION
       ════════════════════════════════════════════════ */}
-      <div className="dark relative overflow-hidden bg-[#1e2130] text-foreground">
+      <div className="dark relative overflow-hidden bg-hero-deep text-foreground">
         {/* atlas map texture */}
         <div className="pointer-events-none absolute inset-0 opacity-[0.28]" style={{
           backgroundImage: "url('/road-atlas-bg.svg')",
@@ -513,7 +513,7 @@ export function CourseLmsExperience({ domainSlug }: { domainSlug: string }) {
         </div>
 
         {/* bottom fade out */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#1e2130] to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-hero-deep to-transparent" />
       </div>
 
       {firstStackHref ? (

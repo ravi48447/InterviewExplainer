@@ -87,7 +87,7 @@ export function SiteFooter() {
                 >
                   <span>{link.label}</span>
                   {link.href === "/mock-interviews" && (
-                    <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-blue-500 dark:bg-blue-800/10 text-white dark:text-primary border border-default dark:border-default/20 whitespace-nowrap">Soon</span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 whitespace-nowrap">Soon</span>
                   )}
                 </Link>
               ))}

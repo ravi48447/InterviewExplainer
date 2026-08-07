@@ -123,7 +123,7 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface border border-default dark:from-slate-950 dark:">
+    <div className="min-h-screen bg-surface border border-default">
       <main className="w-full min-w-0 px-6 pt-12 pb-32">
         {/* Header */}
         <div className="text-center mb-10">

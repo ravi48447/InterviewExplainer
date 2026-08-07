@@ -58,7 +58,7 @@ function ThemeShell({
   children: ReactNode;
 }) {
   const wrapperWidth = mobile ? "max-w-[360px]" : "max-w-[720px]";
-  const surfaceBg = theme === "dark" ? "#101113" : "#ffffff";
+  const surfaceBg = theme === "dark" ? "hsl(var(--surface))" : "hsl(var(--surface))";
   return (
     <section
       className="speakable-prose mx-auto px-6 py-8 rounded-lg shadow-sm"

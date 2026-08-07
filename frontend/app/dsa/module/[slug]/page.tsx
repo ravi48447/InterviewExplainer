@@ -360,7 +360,7 @@ export default async function DSAModulePage(
     // (MarkdownContent, revision panel) render the light palette rather than
     // the provider's "dark" default on these white panes.
     <ContentThemeProvider>
-    <div className="min-h-screen bg-gradient-to-b from-[#eef0f4] to-[#f4f5f7] dark:from-background dark:to-background font-sans text-foreground">
+    <div className="min-h-screen bg-gradient-to-b from-surface-subtle to-background dark:from-background dark:to-background font-sans text-foreground">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -397,7 +397,7 @@ export default async function DSAModulePage(
           </nav>
 
           {/* ─── HERO ─────────────────────────────────────────────────────── */}
-          <header id="overview" className="mb-8 rounded-xl overflow-hidden scroll-mt-24 relative bg-[#0f1014] text-white border border-white/[0.06] shadow-lg">
+          <header id="overview" className="mb-8 rounded-xl overflow-hidden scroll-mt-24 relative bg-hero text-white border border-white/[0.06] shadow-lg">
             {/* Grid texture */}
             <div
               className="pointer-events-none absolute inset-0"
@@ -473,7 +473,7 @@ export default async function DSAModulePage(
                 {firstAuthored && (
                   <Link
                     href={`/dsa/problem/${firstAuthored.slug}`}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 dark:bg-blue-800 hover:bg-blue-500 dark:bg-blue-800 text-foreground font-bold rounded-xl transition-colors text-sm shadow-lg shadow-blue-900/30"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors text-sm shadow-lg shadow-primary/20"
                   >
                     Start practice
                     <ArrowRight className="h-4 w-4" />
@@ -545,7 +545,7 @@ export default async function DSAModulePage(
                     ))}
                   </ul>
                 </div>
-                <div className="rounded-xl border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 dark:bg-rose-950/20/50 p-5">
+                <div className="rounded-xl border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 dark:bg-rose-950/50 p-5">
                   <div className="flex items-center gap-2 mb-3">
                     <AlertTriangle className="h-4 w-4 text-rose-700 dark:text-rose-400" />
                     <h3 className="text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">
@@ -620,7 +620,7 @@ export default async function DSAModulePage(
             <section id="interview-voice" className="mb-10 scroll-mt-24">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {learn.interviewTalking && (
-                  <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/50 p-6">
+                  <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/50 p-6">
                     <div className="flex items-center gap-2 mb-3">
                       <Zap className="h-4 w-4 text-amber-700 dark:text-amber-400" />
                       <h3 className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
@@ -633,7 +633,7 @@ export default async function DSAModulePage(
                   </div>
                 )}
                 {learn.commonMistakes && learn.commonMistakes.length > 0 && (
-                  <div className="rounded-xl border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 dark:bg-rose-950/20/50 p-6">
+                  <div className="rounded-xl border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 dark:bg-rose-950/50 p-6">
                     <div className="flex items-center gap-2 mb-3">
                       <AlertTriangle className="h-4 w-4 text-rose-700 dark:text-rose-400" />
                       <h3 className="text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400">
@@ -657,7 +657,7 @@ export default async function DSAModulePage(
           {/* ─── COMPLEXITY NOTES ──────────────────────────────────────────── */}
           {learn?.complexityNotes && (
             <section id="complexity" className="mb-10 scroll-mt-24">
-              <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/50 p-5 flex items-start gap-3">
+              <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/50 p-5 flex items-start gap-3">
                 <Clock className="h-4 w-4 text-primary dark:text-primary shrink-0 mt-0.5" />
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-wider text-primary dark:text-primary mb-1">

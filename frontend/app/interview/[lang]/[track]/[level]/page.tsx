@@ -25,9 +25,9 @@ function toDisplayName(slug: string): string {
 }
 
 const LEVEL_META: Record<Level, { label: string; color: string; colorClass: string; range: string }> = {
-  beginner: { label: "Beginner", color: "#10b981", colorClass: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20", range: "0–2 years" },
-  intermediate: { label: "Intermediate", color: "#f59e0b", colorClass: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-default dark:border-default/20", range: "2–5 years" },
-  advanced: { label: "Advanced", color: "#ef4444", colorClass: "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-default dark:border-default/20", range: "5+ years" },
+  beginner: { label: "Beginner", color: "hsl(var(--difficulty-easy))", colorClass: "bg-success/10 dark:bg-success/20 text-success dark:text-success border-default dark:border-default/20", range: "0–2 years" },
+  intermediate: { label: "Intermediate", color: "hsl(var(--difficulty-medium))", colorClass: "bg-warning/10 dark:bg-warning/20 text-warning dark:text-warning border-default dark:border-default/20", range: "2–5 years" },
+  advanced: { label: "Advanced", color: "hsl(var(--difficulty-hard))", colorClass: "bg-destructive/10 dark:bg-destructive/20 text-destructive dark:text-destructive border-default dark:border-default/20", range: "5+ years" },
 };
 
 type PageParams = { lang: string; track: string; level: string };
@@ -113,7 +113,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
   ];
 
   function difficultyColor(d: string): string {
-    return d === "easy" ? "#10b981" : d === "medium" ? "#f59e0b" : "#ef4444";
+    return d === "easy" ? "hsl(var(--difficulty-easy))" : d === "medium" ? "hsl(var(--difficulty-medium))" : "hsl(var(--difficulty-hard))";
   }
   function difficultyLabel(d: string): string {
     return d === "easy" ? "Easy" : d === "medium" ? "Medium" : "Hard";
@@ -129,7 +129,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
           <aside className="hidden lg:flex w-[280px] shrink-0 flex-col gap-4 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
             <div className="rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-sm overflow-hidden">
               <div className="px-4 py-3 bg-surface border border-default dark:from-slate-900/40 dark:to-slate-900/20 border-b border-border">
-                <Link href="/interview" className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-[#2e64e5] transition-colors">
+                <Link href="/interview" className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-primary transition-colors">
                   <ArrowLeft className="h-3 w-3" />
                   All Languages
                 </Link>
@@ -179,7 +179,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
             )}
 
             {/* Progress Tracker */}
-            <div className="rounded-xl border border-default dark:border-default/20 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 shadow-sm p-4">
+            <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Award className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Your Progress</h3>
@@ -210,7 +210,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
           <main className="flex-1 min-w-0">
             {/* Hero Header */}
             <header className="mb-6 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-              <div className="relative px-6 py-5 bg-surface border border-default dark:">
+              <div className="relative px-6 py-5 bg-surface border border-default">
                 <div className="flex flex-wrap gap-2 mb-3">
                   <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary border border-default dark:border-default/20 shadow-sm">
                     {toDisplayName(lang)}
@@ -267,7 +267,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
             {/* Stacks with preview questions */}
             <div className="space-y-3 pb-10">
               {stackData.map((stack, sIdx) => (
-                <div key={stack.slug} className="border rounded-[12px] border-border shadow-sm bg-[#f8f9fa] overflow-hidden hover:border-border hover:shadow-md transition-all">
+                <div key={stack.slug} className="border rounded-[12px] border-border shadow-sm bg-surface-subtle overflow-hidden hover:border-border hover:shadow-md transition-all">
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center">
                     <div className="flex-1 flex gap-3 items-start sm:items-center p-4 sm:px-5">
                       <div className="shrink-0 w-8 h-8 rounded-full bg-background border border-border text-muted-foreground flex items-center justify-center">
@@ -285,7 +285,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
                       </div>
                       <Link
                         href={`${basePath}/${stack.slug}`}
-                        className="flex items-center justify-center h-8 px-3 rounded-md bg-background border border-border text-[#2e64e5] text-[11px] font-bold uppercase tracking-wider hover:border-[#2e64e5] hover:bg-[#2e64e5]/5 transition-colors shadow-sm"
+                        className="flex items-center justify-center h-8 px-3 rounded-md bg-background border border-border text-primary text-[11px] font-bold uppercase tracking-wider hover:border-primary hover:bg-primary/5 transition-colors shadow-sm"
                       >
                         Start <ChevronRight className="h-3.5 w-3.5 ml-1" />
                       </Link>
@@ -300,10 +300,10 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
                           <Link
                             key={`${idx}-${q.slug}`}
                             href={`${basePath}/${stack.slug}/${q.slug}`}
-                            className="group/link flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:pr-4 rounded-[8px] hover:bg-[#f8f9fa] transition-all duration-200"
+                            className="group/link flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:pr-4 rounded-[8px] hover:bg-surface-subtle transition-all duration-200"
                           >
                             <div className="flex items-start sm:items-center gap-3 mb-2 sm:mb-0 max-w-full overflow-hidden">
-                              <div className="shrink-0 w-5 h-5 rounded-full bg-background border border-border flex items-center justify-center text-[9px] font-bold text-muted-foreground group-hover/link:border-[#2e64e5] group-hover/link:text-[#2e64e5] shadow-sm transition-all sm:ml-2">
+                              <div className="shrink-0 w-5 h-5 rounded-full bg-background border border-border flex items-center justify-center text-[9px] font-bold text-muted-foreground group-hover/link:border-primary group-hover/link:text-primary shadow-sm transition-all sm:ml-2">
                                 {idx + 1}
                               </div>
                               <h4 className="text-[13.5px] font-medium text-foreground group-hover/link:text-foreground transition-colors leading-tight truncate">
@@ -326,7 +326,7 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
                       </div>
                       {stack.questionCount > 5 && (
                         <div className="mt-3 text-center border-t border-slate-100 dark:border-slate-800/60 pt-3">
-                          <Link href={`${basePath}/${stack.slug}`} className="text-[#2e64e5] hover:text-primary dark:text-primary text-[12px] font-bold tracking-wide flex items-center justify-center gap-1">
+                          <Link href={`${basePath}/${stack.slug}`} className="text-primary hover:text-primary/80 dark:text-primary text-[12px] font-bold tracking-wide flex items-center justify-center gap-1">
                             See all {stack.questionCount} questions <ChevronRight className="h-3.5 w-3.5" />
                           </Link>
                         </div>
@@ -340,8 +340,8 @@ export default async function V2LevelPage({ params }: { params: Promise<PagePara
 
           {/* ─── RIGHT SIDEBAR ─── */}
           <aside className="hidden xl:flex w-[300px] shrink-0 flex-col gap-4 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
-            <div className="rounded-xl border border-default dark:border-default/20 bg-surface border border-default shadow-sm overflow-hidden">
-              <div className="px-4 py-3 bg-surface border border-default border-b border-default dark:border-default/20">
+            <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-surface border border-default border-b dark:border-default/20">
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-primary dark:text-primary" />
                   <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">At a Glance</h3>

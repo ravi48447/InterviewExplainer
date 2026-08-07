@@ -410,7 +410,7 @@ export default function SpeakableReviewPage() {
                     type="button"
                     disabled={busy}
                     onClick={() => submitDecision("send_back")}
-                    className="px-4 py-2 rounded-md bg-slate-700 text-foreground font-semibold text-[13px] hover:dark:bg-surface disabled:opacity-50"
+                    className="px-4 py-2 rounded-md bg-muted text-foreground font-semibold text-[13px] hover:bg-hover disabled:opacity-50"
                   >
                     Send back to agent
                   </button>

@@ -126,7 +126,7 @@ const SHEETS = [
     count: 150,
     note: "Blind 75 + 75 follow-ups — comprehensive coverage",
     weeks: "10–14 wks",
-    color: "from-blue-50 dark:from-blue-950/40  dark:",
+    color: "from-blue-50 dark:from-blue-950/40",
     iconBg: "bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20",
     iconColor: "text-blue-500 dark:text-blue-400",
   },
@@ -146,7 +146,7 @@ const SHEETS = [
     count: 150,
     note: "LeetCode's official Top Interview 150 study plan",
     weeks: "8–12 wks",
-    color: "from-orange-50 dark:from-orange-950/40  dark:",
+    color: "from-orange-50 dark:from-orange-950/40",
     iconBg: "bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20",
     iconColor: "text-orange-500 dark:text-orange-400",
   },
@@ -156,7 +156,7 @@ const SHEETS = [
     count: 150,
     note: "Interview Prep Kit + top OA problems",
     weeks: "8–10 wks",
-    color: "from-green-50 dark:from-green-950/40  dark:",
+    color: "from-green-50 dark:from-green-950/40",
     iconBg: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-500/20",
     iconColor: "text-green-600 dark:text-green-400",
   },
@@ -166,7 +166,7 @@ const SHEETS = [
     count: 150,
     note: "Campus & competitive classics — MST, segment trees, DP",
     weeks: "10–14 wks",
-    color: "from-sky-50 dark:from-sky-950/40  dark:",
+    color: "from-sky-50 dark:from-sky-950/40",
     iconBg: "bg-sky-50 dark:bg-sky-500/10 border-sky-200 dark:border-sky-500/20",
     iconColor: "text-sky-500 dark:text-sky-400",
   },
@@ -176,7 +176,7 @@ const SHEETS = [
     count: 50,
     note: "Curated best-of — 100% authored, zero gaps",
     weeks: "3–4 wks",
-    color: "from-blue-50 dark:from-blue-950/40  dark:",
+    color: "from-blue-50 dark:from-blue-950/40",
     iconBg: "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-500/20",
     iconColor: "text-blue-500 dark:text-blue-400",
   },
@@ -226,7 +226,7 @@ const PHASE_META: Record<Phase, {
     lineBg: "bg-blue-200",
     cardAccent: "bg-blue-500", cardNumBg: "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/40", cardNumText: "text-blue-700 dark:text-primary",
     hoverBorder: "hover:border-default dark:hover:border-default/50",
-    headerBg: "bg-surface border border-default dark:", cardBorder: "border-default dark:border-default/20 dark:border-default/40",
+    headerBg: "bg-surface border border-default", cardBorder: "border-default dark:border-default/20",
   },
   core: {
     label: "Core Patterns",
@@ -242,7 +242,7 @@ const PHASE_META: Record<Phase, {
     label: "Advanced",
     description: "Trees, Graphs, DP, Backtracking — hard-medium tier that separates candidates",
     icon: Flame,
-    nodeBg: "bg-orange-50 dark:bg-orange-950/200", nodeText: "text-white",
+    nodeBg: "bg-orange-50 dark:bg-orange-950/20", nodeText: "text-foreground",
     lineBg: "bg-orange-200",
     cardAccent: "bg-orange-500", cardNumBg: "bg-orange-50 dark:bg-orange-500/10 dark:bg-orange-950/40", cardNumText: "text-orange-700 dark:text-orange-400",
     hoverBorder: "hover:border-orange-300 dark:hover:border-orange-700/50",
@@ -256,7 +256,7 @@ const PHASE_META: Record<Phase, {
     lineBg: "bg-slate-300",
     cardAccent: "bg-slate-500", cardNumBg: "bg-surface dark:bg-slate-900/40", cardNumText: "text-muted-foreground dark:text-white",
     hoverBorder: "hover:border-border dark:hover:border-slate-700/50",
-    headerBg: "bg-surface border border-default dark:from-slate-900/40 dark:to-slate-900/20/40 dark:from-slate-900/40 dark:to-slate-900/10", cardBorder: "border-border dark:border-slate-800/40",
+    headerBg: "bg-surface border border-default dark:from-slate-900/40 dark:to-slate-900/20 dark:from-slate-900/40 dark:to-slate-900/10", cardBorder: "border-border dark:border-slate-800/40",
   },
 };
 
@@ -382,13 +382,13 @@ export default function DSAIndexPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-[#eef0f4] to-[#f4f5f7] dark:from-background dark:to-background">
+    <div className="relative min-h-screen bg-gradient-to-b from-surface-subtle to-background dark:from-background dark:to-background">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       {/* ══════════════════════════════════════════════
           HERO — study-plan forward
       ══════════════════════════════════════════════ */}
-      <header className="relative overflow-hidden bg-[#0f1014] text-white">
+      <header className="relative overflow-hidden bg-hero text-white">
         <div className="pointer-events-none absolute inset-0" style={BG_HERO_GRID} aria-hidden />
         <div
           className="pointer-events-none absolute inset-0"
@@ -411,9 +411,9 @@ export default function DSAIndexPage() {
 
             {/* ── LEFT: headline + CTAs ── */}
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-500 dark:border-blue-500/50 dark:border-blue-700/25 bg-blue-500 dark:bg-blue-800/10 px-3.5 py-1.5">
-                <Sparkles className="h-3 w-3 text-blue-600 dark:text-blue-300" />
-                <span className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300">DSA Interview Prep</span>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3.5 py-1.5">
+                <Sparkles className="h-3 w-3 text-primary" />
+                <span className="text-xs font-bold uppercase tracking-widest text-primary">DSA Interview Prep</span>
               </div>
 
               <h1 className="text-3xl sm:text-[2.75rem] font-black tracking-tight text-white leading-[1.05] mb-4">
@@ -434,7 +434,7 @@ export default function DSAIndexPage() {
               <div className="flex flex-wrap gap-2.5 mb-6">
                 <a
                   href="#plans"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 dark:bg-blue-800 hover:bg-blue-500 dark:bg-blue-800 text-white font-bold rounded-xl transition-colors text-sm shadow-lg shadow-blue-900/40"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl transition-colors text-sm shadow-lg shadow-primary/20"
                 >
                   <Trophy className="h-4 w-4" /> Choose a study plan
                 </a>
@@ -571,7 +571,7 @@ export default function DSAIndexPage() {
               <a
                 key={p.href}
                 href={p.href}
-                className={`group relative flex flex-col rounded-2xl border border-border bg-gradient-to-b from-white to-slate-50/60 dark:to-slate-950/40 ring-1 ring-white/70 dark:from-zinc-900/60 dark:to-zinc-950/60 dark:ring-white/10 dark:border-white/10 ${p.glow} p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg ${p.ring}`}
+                className={`group relative flex flex-col rounded-2xl border border-border bg-gradient-to-b from-surface-elevated to-surface ${p.glow} p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg ${p.ring}`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className={`w-11 h-11 rounded-xl border flex items-center justify-center ${p.chip}`}>
@@ -599,7 +599,7 @@ export default function DSAIndexPage() {
         <section aria-label="Basic 100 for freshers">
           <Link
             href="/dsa/basic-100"
-            className="group relative block overflow-hidden rounded-2xl bg-[#0f1014] text-foreground shadow-lg transition-all hover:-translate-y-0.5"
+            className="group relative block overflow-hidden rounded-2xl bg-hero text-foreground shadow-lg transition-all hover:-translate-y-0.5"
           >
             <div
               aria-hidden
@@ -668,11 +668,11 @@ export default function DSAIndexPage() {
                 <Link
                   key={s.slug}
                   href={`/dsa/sheet/${s.slug}`}
-                  className="group rounded-2xl border border-border bg-background hover:border-blue-300 dark:border-blue-500/30 hover:shadow-lg hover:shadow-blue-100/60 hover:-translate-y-0.5 transition-all flex flex-col overflow-hidden"
+                  className="group rounded-2xl border border-border bg-background hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-0.5 transition-all flex flex-col overflow-hidden"
                 >
                   <div className={`h-1.5 bg-gradient-to-r ${s.color}`} />
                   {inner}
-                  <div className="px-5 pb-4 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:text-blue-400">
+                  <div className="px-5 pb-4 pt-3 border-t border-border/60 flex items-center gap-1.5 text-xs font-semibold text-primary group-hover:text-primary">
                     Open this plan <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </Link>
@@ -704,7 +704,7 @@ export default function DSAIndexPage() {
               { n: "3", title: "Work the phases in order", body: "Foundations → Core (≈60% of interviews) → Advanced → Specialised." },
             ].map((step) => (
               <div key={step.n} className="flex items-start gap-3 rounded-xl border border-border bg-background p-4">
-                <span className="shrink-0 w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 flex items-center justify-center text-sm font-black">
+                <span className="shrink-0 w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-sm font-black">
                   {step.n}
                 </span>
                 <div>
@@ -759,14 +759,14 @@ export default function DSAIndexPage() {
                         <Link
                           key={m.moduleSlug}
                           href={`/dsa/module/${m.moduleSlug}`}
-                          className={`group flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-800/60 bg-surface/60 dark:bg-surface/40 px-3 py-2.5 hover:bg-background dark:hover:bg-slate-900/50 hover:shadow-sm transition-all ${meta.hoverBorder}`}
+                          className={`group flex items-center gap-3 rounded-xl border border-border/60 bg-surface/60 px-3 py-2.5 hover:bg-hover hover:shadow-sm transition-all ${meta.hoverBorder}`}
                         >
                           <div className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black ${meta.cardNumBg} ${meta.cardNumText}`}>
                             {moduleNum}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors truncate">
+                              <span className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
                                 {m.title}
                               </span>
                               {hasTheory && (
@@ -779,7 +779,7 @@ export default function DSAIndexPage() {
                           {indexed > 0 && (
                             <span className="hidden sm:inline text-[11px] text-muted-foreground shrink-0">{indexed}</span>
                           )}
-                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 transition-colors shrink-0" />
+                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                         </Link>
                       );
                     })}
@@ -814,13 +814,13 @@ export default function DSAIndexPage() {
                   <Link
                     key={q.slug}
                     href={`/dsa/problem/${q.slug}`}
-                    className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-border bg-background hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm transition-all"
+                    className="group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-border bg-background hover:border-primary/40 hover:shadow-sm transition-all"
                   >
-                    <span className="shrink-0 w-6 h-6 rounded-full bg-surface border border-border group-hover:border-blue-200 dark:border-blue-500/20 flex items-center justify-center text-[11px] font-bold text-muted-foreground group-hover:text-blue-500 dark:text-blue-400 transition-colors">
+                    <span className="shrink-0 w-6 h-6 rounded-full bg-surface border border-border group-hover:border-primary/30 flex items-center justify-center text-[11px] font-bold text-muted-foreground group-hover:text-primary transition-colors">
                       {i + 1}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors truncate">
+                      <div className="text-[13px] font-semibold text-foreground group-hover:text-primary transition-colors truncate">
                         {q.title}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
@@ -863,13 +863,13 @@ export default function DSAIndexPage() {
                 <Link
                   key={cat.slug}
                   href={`/dsa/${cat.slug}`}
-                  className="group flex items-center gap-3 rounded-xl border border-border bg-background hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm px-3.5 py-3 transition-all"
+                  className="group flex items-center gap-3 rounded-xl border border-border bg-background hover:border-primary/40 hover:shadow-sm px-3.5 py-3 transition-all"
                 >
                   <div className={`shrink-0 w-9 h-9 rounded-lg border flex items-center justify-center ${meta.bg}`}>
                     <Icon className={`h-4 w-4 ${meta.accent}`} />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-foreground group-hover:text-blue-700 dark:text-blue-400 truncate transition-colors">{cat.name}</div>
+                    <div className="text-sm font-semibold text-foreground group-hover:text-primary truncate transition-colors">{cat.name}</div>
                     <div className="text-xs text-muted-foreground mt-0.5">{cat.count} problems</div>
                   </div>
                 </Link>

@@ -361,7 +361,7 @@ export default function StackPage({
 
   return (
     <div
-      className={cn("min-h-screen font-sans", premiumCourse ? "bg-[#111111]" : "bg-[#111111]")}
+      className={cn("min-h-screen font-sans bg-background")}
       style={{
         backgroundImage: [
           "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
@@ -479,7 +479,7 @@ export default function StackPage({
               <div className="px-6 py-4 flex items-center gap-3 flex-wrap">
                 <Link
                   href={`/${domainSlug}`}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg dark:bg-surface text-foreground font-bold text-sm hover:dark:bg-surface transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface text-foreground font-bold text-sm hover:bg-hover transition-colors"
                 >
                   <Layers className="h-4 w-4" />
                   Back to roadmap
@@ -656,10 +656,10 @@ export default function StackPage({
                 if (!matchesQuery) return null;
                 const isRevExpanded = expandedSubcats.has(REVISION_SUBCAT_SLUG);
                 return (
-                  <div className="rounded-2xl overflow-hidden bg-background border border-default dark:border-default/20/80 shadow-[0_4px_24px_rgba(30,64,175,0.25)]">
+                  <div className="rounded-2xl overflow-hidden bg-background border border-default dark:border-default/80 shadow-[0_4px_24px_rgba(30,64,175,0.25)]">
                     <button
                       onClick={() => toggleSubcat(REVISION_SUBCAT_SLUG)}
-                      className="relative w-full flex items-center gap-4 px-5 py-4 transition-colors border-b border-default dark:border-default/60 bg-surface border border-default hover: hover: hover: overflow-hidden"
+                      className="relative w-full flex items-center gap-4 px-5 py-4 transition-colors border-b border-default dark:border-default/60 bg-surface overflow-hidden"
                     >
                       <span className="absolute right-14 top-1/2 -translate-y-1/2 text-[3.5rem] font-black text-white/[0.06] select-none pointer-events-none leading-none tabular-nums">
                         00
@@ -734,7 +734,7 @@ export default function StackPage({
                     {/* Left colored accent bar */}
                     <div className={cn(
                       "w-1 h-9 rounded-full shrink-0",
-                      hasQuestions ? "bg-surface border border-default dark:" : "bg-slate-600 dark:bg-slate-800"
+                      hasQuestions ? "bg-surface border border-default" : "bg-muted-foreground/30"
                     )} />
 
                     <div className="flex-1 text-left min-w-0 relative z-10">
@@ -841,7 +841,7 @@ export default function StackPage({
                         </div>
                       ) : sc.questions.length === 0 ? (
                         <div className="px-5 py-6 text-center">
-                          <div className="inline-flex items-center gap-2 text-muted-foreground text-xs bg-surface px-4 py-2 rounded-lg border border-dashed border-border bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/50">
+                          <div className="inline-flex items-center gap-2 text-muted-foreground text-xs bg-surface px-4 py-2 rounded-lg border border-dashed border-border bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/50">
                             <AlertCircle className="h-3.5 w-3.5" />
                             <span>
                               {sc.contentCount} questions ready to import
@@ -862,7 +862,7 @@ export default function StackPage({
 
           {/* Completion Banner */}
           {allQuestions.length > 0 && !hasActiveFilters && (
-            <section className="mb-8 p-7 rounded-2xl bg-surface border border-default border border-border flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-xl">
+            <section className="mb-8 p-7 rounded-2xl bg-surface border border-border flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-xl">
               <div className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-[0.08] pointer-events-none">
                 <Award className="w-64 h-64 text-foreground" />
               </div>

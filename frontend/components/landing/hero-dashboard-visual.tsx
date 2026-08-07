@@ -44,7 +44,7 @@ export function HeroDashboardVisual() {
                             {/* Left Sidebar - User Info */}
                             <div className="col-span-3 space-y-3">
                                 {/* Welcome Card */}
-                                <div className="bg-surface border border-default border border-border/50 rounded-lg p-3">
+                                <div className="bg-surface border border-border/50 rounded-lg p-3">
                                     <div className="text-[9px] text-muted-foreground uppercase tracking-wide mb-1">Welcome Back,</div>
                                     <div className="text-lg font-bold text-foreground mb-2">Dear User</div>
                                     <div className="flex items-center gap-2 text-[9px] text-muted-foreground">

@@ -69,7 +69,7 @@ export function ConceptExplainerLayout({
 
       {/* Real-World Analogy */}
       {analogy && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 px-5 py-4">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/60 px-5 py-4">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-[11px] font-bold text-amber-800 dark:text-amber-400 uppercase tracking-widest">Real-World Analogy</span>
           </div>
@@ -125,8 +125,8 @@ export function ConceptExplainerLayout({
       {(keyPoints || codeExample) && (
         <div className={`grid gap-4 ${keyPoints && codeExample ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
           {keyPoints && (
-            <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-950/20/40 overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 bg-blue-100 dark:bg-blue-950/20/60 border-b border-default dark:border-default/20">
+            <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-950/40 overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 bg-blue-100 dark:bg-blue-950/60 border-b border-default dark:border-default/20">
                 <Star className="h-4 w-4 text-primary dark:text-primary" />
                 <span className="text-[11px] font-bold text-primary dark:text-primary uppercase tracking-wide">Key Points</span>
               </div>
@@ -158,7 +158,7 @@ export function ConceptExplainerLayout({
 
       {/* Say This In Interview — moved last so it's the finale */}
       {interviewScript && (
-        <div className="rounded-xl border-2 border-default dark:border-default/30 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 overflow-hidden">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-surface overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 bg-surface border-b-2 border-default dark:border-default/20">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />

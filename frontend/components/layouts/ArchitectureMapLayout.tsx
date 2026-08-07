@@ -132,8 +132,8 @@ export function ArchitectureMapLayout({
 
       {/* Error Mapping */}
       {errorMapping && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-red-50 dark:bg-red-500/10 dark:bg-red-950/20/40 overflow-hidden">
-          <div className="px-5 py-3 bg-red-100 dark:bg-red-950/20/50 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-red-50 dark:bg-red-500/10 dark:bg-red-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-red-100 dark:bg-red-950/50 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-red-800 dark:text-red-400 uppercase tracking-wide">Common Errors & What Causes Them</span>
           </div>
           <div className="px-5 py-4">
@@ -145,7 +145,7 @@ export function ArchitectureMapLayout({
       {/* Interview Talking Points */}
       {talkingPoints && (
         <div className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-blue-50/40 dark:bg-blue-500/10 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-blue-100 dark:bg-blue-950/20/50 border-b border-blue-200 dark:border-blue-500/20">
+          <div className="flex items-center gap-2 px-5 py-3 bg-blue-100 dark:bg-blue-950/50 border-b border-blue-200 dark:border-blue-500/20">
             <CheckSquare className="h-4 w-4 text-blue-700 dark:text-blue-400" />
             <span className="text-xs font-bold text-blue-800 dark:text-blue-400 uppercase tracking-wide">Interview Talking Points</span>
           </div>
@@ -157,8 +157,8 @@ export function ArchitectureMapLayout({
 
       {/* Speakable */}
       {speakable && (
-        <div className="rounded-xl border-2 border-default dark:border-default/30 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-default dark:border-default/20 dark:border-default/60">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-surface overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

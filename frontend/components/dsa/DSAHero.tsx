@@ -12,7 +12,7 @@ const BG_GRID = {
 /**
  * Standard hero block for DSA pages.
  *
- * Dark #0f1014 background with grid texture and violet radial glow —
+ * Dark bg-hero background with grid texture and violet radial glow —
  * consistent across every DSA surface (category, pattern, company,
  * difficulty, module, sheet).
  */
@@ -36,7 +36,7 @@ export function DSAHero({
   cta?: ReactNode;
 }) {
   return (
-    <header className="mb-8 relative overflow-hidden rounded-2xl bg-[#0f1014] text-primary-foreground dark:text-foreground border border-white/[0.06] shadow-xl shadow-blue-950/10 ring-1 ring-white/[0.04]">
+    <header className="mb-8 relative overflow-hidden rounded-2xl bg-hero text-code-foreground border border-white/[0.06] shadow-xl shadow-blue-950/10 ring-1 ring-white/[0.04]">
       {/* Grid texture */}
       <div className="pointer-events-none absolute inset-0" style={BG_GRID} aria-hidden />
       {/* Violet radial glow */}
@@ -52,22 +52,22 @@ export function DSAHero({
         aria-hidden
       />
       {/* Bottom fade */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#0f1014] to-transparent" aria-hidden />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-hero to-transparent" aria-hidden />
 
       <div className="relative px-6 sm:px-8 pt-7 pb-8">
         {/* Eyebrow */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-blue-500 dark:border-blue-500/50 dark:border-blue-700/25 bg-blue-500 dark:bg-blue-800/10 px-3.5 py-1.5 mb-4">
-          {EyebrowIcon && <EyebrowIcon className="h-3.5 w-3.5 text-blue-600 dark:text-blue-300" />}
-          <span className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300">{eyebrow}</span>
+        <div className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3.5 py-1.5 mb-4">
+          {EyebrowIcon && <EyebrowIcon className="h-3.5 w-3.5 text-primary" />}
+          <span className="text-xs font-bold uppercase tracking-widest text-primary">{eyebrow}</span>
         </div>
 
         {/* Title */}
-        <h1 className="text-3xl sm:text-[2.25rem] font-black text-primary-foreground dark:text-foreground mb-2.5 leading-[1.1] tracking-tight">
+        <h1 className="type-title text-code-foreground mb-2.5">
           {title}
         </h1>
 
         {/* Tagline */}
-        <p className="text-sm sm:text-base text-zinc-400 dark:text-zinc-300 mb-4 leading-relaxed max-w-2xl">
+        <p className="text-sm sm:text-base text-code-foreground/70 mb-4 leading-relaxed max-w-2xl">
           {tagline}
         </p>
 
@@ -85,7 +85,7 @@ export function DSAHero({
 
         {/* Body */}
         {body && (
-          <div className="text-sm leading-relaxed text-zinc-400 dark:text-zinc-300 mb-4 max-w-2xl space-y-2">
+          <div className="text-sm leading-relaxed text-code-foreground/70 mb-4 max-w-2xl space-y-2">
             {body}
           </div>
         )}
@@ -112,13 +112,13 @@ export function DSAStatCard({
   value: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-background/[0.05] border border-white/[0.08] px-4 py-3 transition-colors hover:bg-background/[0.07] hover:border-blue-500 dark:border-blue-500/50 dark:border-blue-700/25">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500 dark:bg-blue-800/15 shrink-0">
-        <Icon className="h-4 w-4 text-blue-700 dark:text-blue-300" />
+    <div className="flex items-center gap-3 rounded-xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 transition-colors hover:bg-white/[0.08] hover:border-primary/50">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 shrink-0">
+        <Icon className="h-4 w-4 text-primary" />
       </div>
       <div className="min-w-0">
-        <div className="text-base font-black text-primary-foreground dark:text-foreground leading-none">{value}</div>
-        <div className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 leading-none mt-1.5 truncate">
+        <div className="text-base font-black text-code-foreground leading-none">{value}</div>
+        <div className="text-[11px] font-medium text-code-foreground/60 leading-none mt-1.5 truncate">
           {label}
         </div>
       </div>

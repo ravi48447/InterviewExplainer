@@ -256,7 +256,7 @@ function QuestionPageLayoutInner({
   return (
     <div
       className={`min-h-screen font-sans transition-colors duration-200 ${
-        d ? "bg-[#111111] text-muted-foreground" : "bg-surface text-foreground"
+        d ? "bg-background text-muted-foreground" : "bg-surface text-foreground"
       }`}
       style={
         d
@@ -280,7 +280,7 @@ function QuestionPageLayoutInner({
           <div
             className={`hidden lg:block shrink-0 self-start sticky top-0 border-r overflow-y-auto h-screen transition-colors duration-200 ${
               d
-                ? "border-border/50 bg-[#1a1a1a]"
+                ? "border-border/50 bg-surface"
                 : "border-border/80 bg-background"
             }`}
           >
@@ -291,7 +291,7 @@ function QuestionPageLayoutInner({
         {/* ── Main content ── */}
         <main
           className={`flex-1 min-w-0 transition-colors duration-200 ${
-            d ? "bg-[#1a1a1a]" : "bg-background"
+            d ? "bg-surface" : "bg-background"
           }`}
         >
           <article
@@ -363,7 +363,7 @@ function QuestionPageLayoutInner({
               <div
                 className={`sticky top-1 z-30 -mx-2 mb-5 flex items-center gap-2 rounded-lg border px-3 py-2 shadow-lg backdrop-blur ${
                   d
-                    ? "border-slate-600 dark:border-slate-700/50 bg-[#222222]/95 shadow-black/40"
+                    ? "border-slate-600 dark:border-slate-700/50 bg-surface-elevated/95 shadow-black/40"
                     : "border-border bg-background/95 shadow-slate-200/60"
                 }`}
               >
@@ -559,7 +559,7 @@ function QuestionPageLayoutInner({
                 <div
                   className={`mb-6 rounded-xl border overflow-hidden ${
                     d
-                      ? "border-border/60 bg-[#1e1e1e]"
+                      ? "border-border/60 bg-code"
                       : "border-border bg-surface"
                   }`}
                 >
@@ -588,8 +588,8 @@ function QuestionPageLayoutInner({
                       <div
                         className={`rounded-lg px-3 py-2.5 border ${
                           d
-                            ? "bg-[#101a2a] border-default dark:border-default/40"
-                            : "bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/60 border-default dark:border-default/20/60"
+                            ? "bg-info/10 border-default dark:border-default/40"
+                            : "bg-primary/10 border-primary/20"
                         }`}
                       >
                         <div
@@ -612,8 +612,8 @@ function QuestionPageLayoutInner({
                       <div
                         className={`rounded-lg px-3 py-2.5 border ${
                           d
-                            ? "bg-[#1a1408] border-default dark:border-default/40"
-                            : "bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 border-default dark:border-default/20/60"
+                            ? "bg-warning/10 border-default dark:border-default/40"
+                            : "bg-warning/10 border-warning/20"
                         }`}
                       >
                         <div
@@ -636,8 +636,8 @@ function QuestionPageLayoutInner({
                       <div
                         className={`rounded-lg px-3 py-2.5 border ${
                           d
-                            ? "bg-[#0d1c14] border-default dark:border-default/40"
-                            : "bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/60 border-default dark:border-default/20/60"
+                            ? "bg-success/10 border-default dark:border-default/40"
+                            : "bg-success/10 border-success/20"
                         }`}
                       >
                         <div
@@ -666,15 +666,15 @@ function QuestionPageLayoutInner({
                 <div
                   className={`rounded-xl overflow-hidden shadow-lg ${
                     d
-                      ? "border border-default dark:border-default/50 bg-[#0d1c15] shadow-black/40"
-                      : "border border-default dark:border-default/20/70 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/40 shadow-sm"
+                      ? "border border-default dark:border-default/50 bg-success/10 shadow-black/40"
+                      : "border border-success/20 bg-success/10 shadow-sm"
                   }`}
                 >
                   <div
                     className={`flex items-center gap-2 px-5 py-2.5 border-b ${
                       d
                         ? "border-default dark:border-default/50 bg-emerald-900 dark:bg-emerald-800/30"
-                        : "border-default dark:border-default/20/60 bg-emerald-100 dark:bg-emerald-950/20/40"
+                        : "border-success/20 bg-success/10"
                     }`}
                   >
                     <MessageSquare
@@ -701,7 +701,7 @@ function QuestionPageLayoutInner({
                     <MarkdownContent content={answerMarkdown} />
                     <div
                       className={`mt-5 pt-4 border-t ${
-                        d ? "border-default dark:border-default/50" : "border-default dark:border-default/20/50"
+                        d ? "border-default dark:border-default/50" : "border-default dark:border-default/20"
                       }`}
                     >
                       <MarkCompleteButton questionId={Number(data.id)} />
@@ -717,7 +717,7 @@ function QuestionPageLayoutInner({
                 <div
                   className={`rounded-xl overflow-hidden shadow-md ${
                     d
-                      ? "border border-border/60 bg-[#1a1a1a] shadow-black/40"
+                      ? "border border-border/60 bg-surface shadow-black/40"
                       : "border border-border bg-background shadow-slate-100/60"
                   }`}
                 >
@@ -754,15 +754,15 @@ function QuestionPageLayoutInner({
                 <div
                   className={`rounded-xl overflow-hidden ${
                     d
-                      ? "border border-default dark:border-default/40 bg-[#13131f]"
-                      : "border border-default dark:border-default/20/70 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40"
+                      ? "border border-default dark:border-default/40 bg-surface"
+                      : "border border-primary/20 bg-primary/10"
                   }`}
                 >
                   <div
                     className={`flex items-center gap-2 px-5 py-2.5 border-b ${
                       d
                         ? "border-default dark:border-default/50 bg-blue-900 dark:bg-blue-800/20"
-                        : "border-default dark:border-default/20/60 bg-blue-100 dark:bg-blue-950/20/40"
+                        : "border-primary/20 bg-primary/10"
                     }`}
                   >
                     <HelpCircle
@@ -828,7 +828,7 @@ function QuestionPageLayoutInner({
                     )}
                     className={`sm:w-auto sm:max-w-[40%] flex items-center gap-2 rounded-xl border px-4 py-3 transition-all ${
                       d
-                        ? "border-border/60 dark:bg-surface/60 hover:border-slate-600 dark:border-slate-700 hover:dark:bg-surface"
+                        ? "border-border/60 bg-surface/60 hover:border-border hover:bg-hover"
                         : "border-border bg-surface hover:border-border hover:bg-surface"
                     }`}
                   >
@@ -901,8 +901,8 @@ function QuestionPageLayoutInner({
                 href={nextCurriculumModule.href}
                 className={`group mt-8 block rounded-xl border hover:shadow-md transition-all overflow-hidden ${
                   d
-                    ? "border-default/40 bg-surface border border-default hover:border-default/60 hover:shadow-sm"
-                    : "border-default dark:border-default/20 dark:border-default/60 bg-gradient-to-br  via-white to-white dark:via-zinc-900 dark:to-zinc-900 hover:border-default dark:border-default/30 hover:shadow-sm"
+                    ? "border-default/40 bg-surface hover:border-default/60 hover:shadow-sm"
+                    : "border-default dark:border-default/20 bg-gradient-to-br  via-white to-white dark:via-zinc-900 dark:to-zinc-900 hover:border-default dark:border-default/30 hover:shadow-sm"
                 }`}
               >
                 <div className="px-5 py-4 flex items-center gap-4">
@@ -988,7 +988,7 @@ function QuestionPageLayoutInner({
                         className={`group flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
                           d
                             ? "border-border/60 dark:bg-surface/60 hover:border-default dark:border-default/50 hover:bg-slate-700 dark:bg-slate-800/60"
-                            : "border-border bg-background hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/40"
+                            : "border-border bg-background hover:border-default hover:bg-primary/10"
                         }`}
                       >
                         <div className="flex-1 min-w-0">
@@ -1027,7 +1027,7 @@ function QuestionPageLayoutInner({
                 aria-labelledby="roadmap-cta-heading"
                 className={`mt-8 rounded-xl border shadow-sm overflow-hidden ${
                   d
-                    ? "border-default/40 bg-surface border border-default"
+                    ? "border-default/40 bg-surface"
                     : "border-default dark:border-default/20 bg-gradient-to-br  via-white to-white dark:via-zinc-900 dark:to-zinc-900"
                 }`}
               >
@@ -1092,7 +1092,7 @@ function QuestionPageLayoutInner({
         <aside
           className={`hidden xl:flex w-[280px] shrink-0 flex-col self-start sticky top-0 border-l overflow-y-auto h-screen transition-colors duration-200 ${
             d
-              ? "border-border/50 bg-[#1a1a1a]"
+              ? "border-border/50 bg-surface"
               : "border-border/80 bg-background"
           }`}
         >
@@ -1277,7 +1277,7 @@ function QuestionPageLayoutInner({
                             ? "bg-blue-900/40 text-primary font-semibold"
                             : "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary font-semibold"
                           : d
-                          ? "text-muted-foreground hover:text-muted-foreground hover:dark:bg-surface/70"
+                          ? "text-muted-foreground hover:text-foreground hover:bg-surface/70"
                           : "text-muted-foreground hover:text-foreground hover:bg-surface"
                       }`}
                     >

@@ -36,15 +36,15 @@ function NutshellCard({ children }: { children: React.ReactNode }) {
       <div
         className={`rounded-xl overflow-hidden shadow-md ${
           d
-            ? "border border-default dark:border-default/50 bg-[#1a1408] shadow-black/40"
-            : "border border-default dark:border-default/20/80 bg-amber-50/70 dark:bg-amber-500/10 shadow-sm"
+            ? "border border-default dark:border-default/50 bg-warning/10 shadow-black/40"
+            : "border border-default dark:border-default/20 bg-amber-50/70 dark:bg-amber-500/10 shadow-sm"
         }`}
       >
         <div
           className={`flex items-center gap-2 px-5 py-2.5 border-b ${
             d
               ? "border-default dark:border-default/50 bg-amber-900 dark:bg-amber-800/30"
-              : "border-default dark:border-default/20/60 bg-amber-100 dark:bg-amber-950/20/50"
+              : "border-default dark:border-default/20 bg-amber-100 dark:bg-amber-950/20"
           }`}
         >
           <Lightbulb className={`h-3.5 w-3.5 ${d ? "text-amber-600" : "text-amber-600 dark:text-amber-400"}`} />

@@ -17,9 +17,9 @@ function toDisplayName(slug: string): string {
 }
 
 const LEVEL_META: Record<Level, { label: string; range: string; color: string; colorClass: string }> = {
-  beginner: { label: "Beginner", range: "0–2 yrs", color: "#10b981", colorClass: "bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20" },
-  intermediate: { label: "Intermediate", range: "2–5 yrs", color: "#f59e0b", colorClass: "bg-amber-100 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 border-default dark:border-default/20" },
-  advanced: { label: "Advanced", range: "5+ yrs", color: "#ef4444", colorClass: "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400 border-default dark:border-default/20" },
+  beginner: { label: "Beginner", range: "0–2 yrs", color: "hsl(var(--difficulty-easy))", colorClass: "bg-success/10 dark:bg-success/20 text-success dark:text-success border-default dark:border-default/20" },
+  intermediate: { label: "Intermediate", range: "2–5 yrs", color: "hsl(var(--difficulty-medium))", colorClass: "bg-warning/10 dark:bg-warning/20 text-warning dark:text-warning border-default dark:border-default/20" },
+  advanced: { label: "Advanced", range: "5+ yrs", color: "hsl(var(--difficulty-hard))", colorClass: "bg-destructive/10 dark:bg-destructive/20 text-destructive dark:text-destructive border-default dark:border-default/20" },
 };
 
 export const metadata: Metadata = {
@@ -137,7 +137,7 @@ export default function InterviewIndexPage() {
         <main className="flex-1 min-w-0">
           {/* Hero Header */}
           <header className="mb-6 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-            <div className="relative px-6 py-5 bg-surface border border-default dark:">
+            <div className="relative px-6 py-5 bg-surface border border-default">
               <div className="flex flex-wrap gap-2 mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary border border-default dark:border-default/20 shadow-sm">
                   Interview Preparation
@@ -202,7 +202,7 @@ export default function InterviewIndexPage() {
 
                 <div className="grid grid-cols-1 gap-3">
                   {tracks.map(({ track, levels, totalQs: trackQs }) => (
-                    <div key={track} className="border rounded-[12px] border-border shadow-sm bg-[#f8f9fa] overflow-hidden hover:border-border hover:shadow-md transition-all">
+                    <div key={track} className="border rounded-[12px] border-border shadow-sm bg-surface-subtle overflow-hidden hover:border-border hover:shadow-md transition-all">
                       <div className="flex items-center justify-between p-4 sm:px-5">
                         <div className="flex items-center gap-3">
                           <div className="shrink-0 w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground">
@@ -214,7 +214,7 @@ export default function InterviewIndexPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="border-t border-slate-100 dark:border-slate-800/60 bg-background px-4 py-3">
+                      <div className="border-t border-border bg-background px-4 py-3">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                           {levels.map(({ level, stackCount, questionCount }) => {
                             const lm = LEVEL_META[level];
@@ -222,20 +222,20 @@ export default function InterviewIndexPage() {
                               <Link
                                 key={level}
                                 href={`/interview/${lang}/${track}/${level}`}
-                                className="group/link flex items-center justify-between p-3 rounded-lg hover:bg-[#f8f9fa] transition-all duration-200"
+                                className="group/link flex items-center justify-between p-3 rounded-lg hover:bg-surface-subtle transition-all duration-200"
                               >
                                 <div className="flex items-center gap-3">
                                   <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: lm.color + '20' }}>
                                     <GraduationCap className="h-3 w-3" style={{ color: lm.color }} />
                                   </div>
                                   <div>
-                                    <span className="text-[13px] font-bold text-foreground group-hover/link:text-[#2e64e5] transition-colors">{lm.label}</span>
+                                    <span className="text-[13px] font-bold text-foreground group-hover/link:text-primary transition-colors">{lm.label}</span>
                                     <span className="text-[11px] text-muted-foreground ml-1.5">{lm.range}</span>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-[11px] font-medium text-muted-foreground">{stackCount}S · {questionCount}Q</span>
-                                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover/link:text-[#2e64e5] group-hover/link:translate-x-0.5 transition-all" />
+                                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover/link:text-primary group-hover/link:translate-x-0.5 transition-all" />
                                 </div>
                               </Link>
                             );
@@ -259,8 +259,8 @@ export default function InterviewIndexPage() {
         {/* ─── RIGHT SIDEBAR ─── */}
         <aside className="hidden xl:flex w-[300px] shrink-0 flex-col gap-4 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
           {/* At a Glance */}
-          <div className="rounded-xl border border-default dark:border-default/20 bg-surface border border-default shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-surface border border-default border-b border-default dark:border-default/20">
+          <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-surface border border-default border-b dark:border-default/20">
               <div className="flex items-center gap-2">
                 <Zap className="h-4 w-4 text-primary dark:text-primary" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">At a Glance</h3>

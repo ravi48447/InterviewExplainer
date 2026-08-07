@@ -32,21 +32,25 @@ const trackIcon: Record<string, React.ReactNode> = {
   analysis:           <Briefcase className="h-4 w-4" />,
 };
 
+// Domain track accent colors — categorical identifiers (not UI chrome).
+// Mapped to the restrained --chart-* semantic palette (P01-T021): one
+// accent family, perceptually distinct, theme-aware. Tracks that shared a
+// hue in V1 now share a chart token so the categorical set stays compact.
 const trackColor: Record<string, string> = {
-  frontend:           "#3B82F6",
-  backend:            "#0ea5e9",
-  fullstack:          "#8b5cf6",
-  'data-engineering': "#f59e0b",
-  'ml-ai':            "#ec4899",
-  cicd:               "#10b981",
-  cloud:              "#0ea5e9",
-  infrastructure:     "#10b981",
-  sre:                "#14b8a6",
-  'sql-analytics':    "#f59e0b",
-  'python-analysis':  "#f59e0b",
-  visualization:      "#a855f7",
-  'case-studies':     "#f97316",
-  analysis:           "#ef4444",
+  frontend:           "hsl(var(--chart-1))",  // indigo
+  backend:            "hsl(var(--chart-1))",  // indigo (same family, FE/BE share)
+  fullstack:          "hsl(var(--chart-4))",  // violet
+  'data-engineering': "hsl(var(--chart-3))",  // amber
+  'ml-ai':            "hsl(var(--chart-5))",  // rose
+  cicd:               "hsl(var(--chart-2))",  // green
+  cloud:              "hsl(var(--chart-1))",  // indigo
+  infrastructure:     "hsl(var(--chart-2))",  // green
+  sre:                "hsl(var(--chart-2))",  // green
+  'sql-analytics':    "hsl(var(--chart-3))",  // amber
+  'python-analysis':  "hsl(var(--chart-3))",  // amber
+  visualization:      "hsl(var(--chart-4))",  // violet
+  'case-studies':     "hsl(var(--chart-3))",  // amber
+  analysis:           "hsl(var(--chart-5))",  // rose
 };
 
 const LANG_ORDER = [
@@ -272,7 +276,7 @@ export default function DomainsPage() {
                         filters.track === "" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-hover border border-border"
                       )}>All Tracks</button>
                     {uniqueTracks.map(t => {
-                      const color  = trackColor[t.slug] ?? "#64748b";
+                      const color  = trackColor[t.slug] ?? "hsl(var(--muted-foreground))";
                       const icon   = trackIcon[t.slug] ?? <Layers className="h-4 w-4" />;
                       const active = filters.track === t.slug;
                       return (
@@ -561,7 +565,7 @@ export default function DomainsPage() {
 }
 
 function DomainCard({ domain, index = 0 }: { domain: ContentDomain; index?: number }) {
-  const color  = trackColor[domain.trackSlug] ?? "#64748b";
+  const color  = trackColor[domain.trackSlug] ?? "hsl(var(--muted-foreground))";
   const meta   = EXPERIENCE_LEVELS[domain.level];
 
   const brief: Record<ExperienceLevelKey, string> = {

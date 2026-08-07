@@ -211,7 +211,7 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
           </div>
 
           {/* Progress Tracker */}
-          <div className="rounded-xl border border-default dark:border-default/20 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 shadow-sm p-4">
+          <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
               <Award className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Your Progress</h3>
@@ -244,7 +244,7 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
           {/* Domain Hero Header */}
           <header className="mb-6 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
             {/* Top Section with Gradient */}
-            <div className="relative px-6 py-5 bg-surface border border-default dark:">
+            <div className="relative px-6 py-5 bg-surface border border-default">
               <div className="flex flex-wrap gap-2 mb-3">
                 {domain.language && (
                   <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary border border-default dark:border-default/20 shadow-sm">
@@ -333,8 +333,8 @@ function DomainClassicPage({ domainSlug }: { domainSlug: string }) {
         <aside className="hidden xl:flex w-[300px] shrink-0 flex-col gap-4 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
 
           {/* Learning Stats */}
-          <div className="rounded-xl border border-default dark:border-default/20 bg-surface border border-default shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-surface border border-default border-b border-default dark:border-default/20">
+          <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-surface border border-default border-b dark:border-default/20">
               <div className="flex items-center gap-2">
                 <Zap className="h-4 w-4 text-primary dark:text-primary" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">At a Glance</h3>

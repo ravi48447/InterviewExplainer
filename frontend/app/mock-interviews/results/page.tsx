@@ -262,14 +262,14 @@ function MockInterviewResultsContent() {
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <RadarChart data={mockData.skillsRadar}>
-                    <PolarGrid stroke="#e2e8f0" />
+                    <PolarGrid stroke="hsl(var(--border))" />
                     <PolarAngleAxis dataKey="skill" tick={{ fontSize: 12, fontWeight: 600 }} />
                     <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
                     <Radar
                       name="Your Score"
                       dataKey="score"
-                      stroke="#3b82f6"
-                      fill="#3b82f6"
+                      stroke="hsl(var(--primary))"
+                      fill="hsl(var(--primary))"
                       fillOpacity={0.5}
                       strokeWidth={2}
                     />
@@ -449,7 +449,7 @@ function MockInterviewResultsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
-              className="bg-surface border border-default rounded-2xl border-2 border-default dark:border-default/20 shadow-lg p-6"
+              className="bg-surface border-2 border-default dark:border-default/20 rounded-2xl shadow-lg p-6"
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-lg bg-surface flex items-center justify-center">

@@ -11,7 +11,7 @@ const buttonVariants = cva(
       variant: {
         default: 'bg-primary text-primary-foreground shadow hover:-translate-y-[2px] hover:shadow-lg hover:shadow-primary/25',
         accent: 'bg-accent text-accent-foreground hover:bg-accent/80 border border-border hover:-translate-y-[2px]',
-        success: 'bg-success text-white hover:bg-success/90 shadow-sm hover:-translate-y-[2px]',
+        success: 'bg-success text-success-foreground hover:bg-success/90 shadow-sm hover:-translate-y-[2px]',
         premium: 'bg-primary text-primary-foreground shadow hover:-translate-y-[2px] hover:shadow-lg hover:shadow-primary/25',
         destructive:
           'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm',

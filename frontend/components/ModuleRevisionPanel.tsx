@@ -29,8 +29,8 @@ export function openRevisionPdfWindow(
   const esc = revision.title.replace(/</g, "");
   w.document.write(
     `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${esc}</title>` +
-      `<style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:44rem;margin:24px;line-height:1.55;color:#111}` +
-      `h1{font-size:1.4rem;font-weight:800;margin:0 0 12px}h2{font-size:1.05rem;font-weight:700;margin:22px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}p{margin:0 0 10px}code,pre{background:#f4f4f5;border-radius:4px;font-size:0.9em}pre{padding:10px;overflow:auto}ul{padding-left:1.2rem;margin:6px 0 10px}table{border-collapse:collapse;margin:8px 0}th,td{border:1px solid #d4d4d8;padding:4px 8px;font-size:0.95em}th{background:#f4f4f5;text-align:left}</style></head><body>` +
+      `<style>body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:44rem;margin:24px;line-height:1.55;color:hsl(var(--text-primary))}` +
+      `h1{font-size:1.4rem;font-weight:800;margin:0 0 12px}h2{font-size:1.05rem;font-weight:700;margin:22px 0 8px;border-bottom:1px solid hsl(var(--border));padding-bottom:4px}p{margin:0 0 10px}code,pre{background:hsl(var(--muted));border-radius:4px;font-size:0.9em}pre{padding:10px;overflow:auto}ul{padding-left:1.2rem;margin:6px 0 10px}table{border-collapse:collapse;margin:8px 0}th,td{border:1px solid hsl(var(--border));padding:4px 8px;font-size:0.95em}th{background:hsl(var(--muted));text-align:left}</style></head><body>` +
       bodyHtml +
       `</body></html>`,
   );

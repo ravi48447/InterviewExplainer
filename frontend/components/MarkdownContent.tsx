@@ -207,7 +207,7 @@ function buildRendererOptions() {
       blockquote(this: any, token: any) {
         const { tokens } = token;
         const body = this.parser.parse(tokens);
-        const cls = 'border-l-4 border-default/60 dark:border-default/60 pl-4 py-2 my-4 bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/30 rounded-r-lg text-muted-foreground italic';
+        const cls = 'border-l-4 border-primary/60 pl-4 py-2 my-4 bg-primary/10 rounded-r-lg text-muted-foreground italic';
         return `<blockquote class="${cls}">${body}</blockquote>`;
       },
 
@@ -221,11 +221,11 @@ function buildRendererOptions() {
             const body = this.parser.parse(item.tokens);
             if (ordered) {
               const num = counter++;
-              const badgeCls = 'mt-[3px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-surface dark:bg-slate-700/70 text-[11px] font-bold text-foreground dark:text-muted-foreground border border-border dark:border-slate-600/60';
+              const badgeCls = 'mt-[3px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-surface text-[11px] font-bold text-foreground border border-border';
               const textCls = 'flex-1 text-[15.5px] leading-[1.75] text-foreground dark:text-muted-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
               return `<li class="flex items-start gap-3"><span class="${badgeCls}">${num}</span><div class="${textCls}">${body}</div></li>`;
             }
-            const dotCls = 'mt-[9px] h-[7px] w-[7px] rounded-full bg-blue-500 dark:bg-blue-400 shrink-0';
+            const dotCls = 'mt-[9px] h-[7px] w-[7px] rounded-full bg-primary shrink-0';
             const textCls = 'flex-1 text-[15.5px] leading-[1.75] text-foreground dark:text-muted-foreground min-w-0 [&>p]:mb-2 [&>p:last-child]:mb-0';
             return `<li class="flex items-start gap-3"><span class="${dotCls}"></span><div class="${textCls}">${body}</div></li>`;
           })
@@ -235,7 +235,7 @@ function buildRendererOptions() {
 
       strong(token: any) {
         const { text } = token;
-        const cls = 'font-bold text-foreground dark:text-white';
+        const cls = 'font-bold text-foreground';
         return `<strong class="${cls}">${text}</strong>`;
       },
 
@@ -247,7 +247,7 @@ function buildRendererOptions() {
 
       codespan(token: any) {
         const { text } = token;
-        const cls = 'bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/60 text-primary dark:text-primary dark:text-primary rounded px-[6px] py-[2px] text-[0.86em] font-mono font-medium border border-default/70 dark:border-default/50';
+        const cls = 'bg-primary/10 text-primary rounded px-[6px] py-[2px] text-[0.86em] font-mono font-medium border border-primary/30';
         return `<code class="${cls}">${text}</code>`;
       },
 
@@ -281,7 +281,7 @@ function buildRendererOptions() {
       table(this: any, token: any) {
         const { header, rows } = token;
         const thCls = 'px-4 py-3 bg-surface dark:bg-surface font-bold text-foreground dark:text-muted-foreground border-b border-border dark:border-border/60 text-left text-[11.5px] uppercase tracking-[0.08em]';
-        const tdCls = 'px-4 py-3 border-b border-slate-100 dark:border-slate-800/60 dark:border-border/40 text-foreground dark:text-muted-foreground text-[14px] leading-[1.6] align-top';
+        const tdCls = 'px-4 py-3 border-b border-border/60 text-foreground text-[14px] leading-[1.6] align-top';
         const trEvenCls = 'bg-surface/50 dark:bg-surface/30';
         const containerCls = 'overflow-x-auto my-6 rounded-lg border border-border dark:border-border/60';
         const theadCls = 'bg-surface dark:bg-surface';

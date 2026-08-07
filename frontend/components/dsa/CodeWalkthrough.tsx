@@ -217,10 +217,10 @@ export function CodeWalkthrough({
   return (
     <div className="rounded-xl overflow-hidden my-3 shadow-xl ring-1 ring-slate-950/5 border border-border">
       {/* Tab bar — filename + lang pill + copy */}
-      <div className="flex items-stretch justify-between bg-[#21252b] border-b border-[#181a1f]">
+      <div className="flex items-stretch justify-between bg-code-surface border-b border-code-border">
         <div className="flex items-stretch">
           {/* Filename tab */}
-          <div className="flex items-center gap-2 px-4 py-2 bg-[#282c34] text-slate-200 dark:text-slate-300 border-r border-[#181a1f] border-t-2 border-t-sky-500">
+          <div className="flex items-center gap-2 px-4 py-2 bg-code text-slate-200 dark:text-slate-300 border-r border-code-border border-t-2 border-t-sky-500">
             <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
               {fileBase}.{fileExt}
             </span>
@@ -248,7 +248,7 @@ export function CodeWalkthrough({
           background + default text color kick in, then pin text-slate-100 dark:text-slate-300
           as a safety floor. */}
       {built.source ? (
-        <div className="hljs overflow-x-auto bg-[#282c34] text-slate-100 dark:text-slate-300">
+        <div className="hljs overflow-x-auto bg-code text-slate-100 dark:text-slate-300">
           <div
             className="grid grid-cols-[auto_1fr] text-[13.5px] leading-[1.7] font-mono min-w-max"
             style={{
@@ -271,7 +271,7 @@ export function CodeWalkthrough({
                         ? "text-amber-300/90 bg-amber-400/10 border-default/40 font-bold"
                         : isExplained
                           ? "text-amber-200 bg-amber-400/20 border-default/60 font-black"
-                          : "text-slate-500 border-slate-700/60 bg-[#21252b]",
+                          : "text-slate-500 border-slate-700/60 bg-code-surface",
                     )}
                     style={{ minWidth: `${gutterWidth + 2}ch` }}
                   >
@@ -317,7 +317,7 @@ export function CodeWalkthrough({
           </div>
         </div>
       ) : (
-        <p className="px-4 py-6 text-[13px] text-slate-500 dark:text-slate-400 italic bg-[#282c34]">
+        <p className="px-4 py-6 text-[13px] text-slate-500 dark:text-slate-400 italic bg-code">
           Code coming soon for {LANG_DISPLAY[active] ?? active}.
         </p>
       )}
@@ -325,7 +325,7 @@ export function CodeWalkthrough({
       {/* Footer — status-bar-like strip, tells the reader what the
           yellow rows mean without a second section. */}
       {annotationCount > 0 && built.source && (
-        <div className="px-4 py-1.5 bg-[#21252b] border-t border-[#181a1f] text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <div className="px-4 py-1.5 bg-code-surface border-t border-code-border text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-4 bg-amber-400 dark:bg-amber-800/30 border border-default dark:border-default/60 rounded-sm" />
             <span>

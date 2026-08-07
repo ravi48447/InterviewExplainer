@@ -36,7 +36,7 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
       className={
         isPrep
           ? "mb-10 rounded-2xl border border-border bg-background p-5 sm:p-6 shadow-sm"
-          : "py-12 sm:py-14 bg-background border-y border-slate-100 dark:border-slate-800/60"
+          : "py-12 sm:py-14 bg-background border-y border-border/60"
       }
     >
       <div className={isPrep ? "" : "w-full px-6 sm:px-12 lg:px-20"}>
@@ -70,7 +70,7 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
             {STANDALONE_PREP_TRACKS.map((t) => (
               <div
                 key={t.id}
-                className="flex flex-col gap-2 rounded-xl border border-border bg-surface/60 p-4 sm:p-5 hover:border-default dark:border-default/20 hover:bg-background transition-colors text-left"
+                className="flex flex-col gap-2 rounded-xl border border-border bg-surface/60 p-4 sm:p-5 hover:border-default hover:bg-background transition-colors text-left"
               >
                 <div className="flex gap-4">
                   <TrackIcon icon={t.icon} />
@@ -81,10 +81,10 @@ export function PrepTrackSurfaces({ variant }: PrepTrackSurfacesProps) {
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 mt-1">
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/60 mt-1">
                   <Link
                     href={t.href}
-                    className="inline-flex items-center gap-1.5 rounded-lg dark:bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:dark:bg-surface transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-hover transition-colors"
                   >
                     Open track
                     <ArrowRight className="h-3.5 w-3.5" />

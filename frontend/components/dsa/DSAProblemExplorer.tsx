@@ -65,7 +65,7 @@ export function DSAProblemExplorer({
               onClick={() => setDiff(d)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
                 diff === d
-                  ? d === "all"    ? "bg-slate-900 dark:bg-surface text-white dark:text-foreground border-slate-900 dark:border-slate-700"
+                  ? d === "all"    ? "bg-primary text-primary-foreground border-primary"
                   : d === "easy"   ? "bg-emerald-600 dark:bg-emerald-800 text-primary-foreground dark:text-foreground border-default dark:border-default"
                   : d === "medium" ? "bg-amber-500 dark:bg-amber-800 text-primary-foreground dark:text-foreground border-default dark:border-default"
                   :                  "bg-red-600 dark:bg-red-800 text-primary-foreground dark:text-foreground border-default dark:border-default"
@@ -83,7 +83,7 @@ export function DSAProblemExplorer({
         <select
           value={module}
           onChange={(e) => setModule(e.target.value)}
-          className="ml-1 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-secondary bg-background focus:outline-none focus:border-blue-400 dark:border-blue-700 hover:border-border transition-colors"
+          className="ml-1 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-secondary bg-background focus:outline-none focus:border-primary hover:border-border transition-colors"
         >
           <option value="all">All Modules</option>
           {moduleMap.map((m) => (
@@ -93,16 +93,16 @@ export function DSAProblemExplorer({
 
         {/* Search */}
         <div className="relative ml-auto shrink-0 w-48 lg:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 dark:text-slate-400 pointer-events-none" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
             type="search"
             placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-2xl border border-slate-200 dark:border-slate-500/20 bg-slate-50 dark:bg-slate-950/20 py-2 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-100 shadow-sm dark:shadow-md placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-slate-400 dark:focus:border-white/40 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:focus:ring-white/10 transition-all"
+            className="w-full rounded-2xl border border-border bg-background py-2 pl-10 pr-4 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
               <X className="h-4 w-4" />
             </button>
           )}
@@ -111,7 +111,7 @@ export function DSAProblemExplorer({
         {hasFilter && (
           <button
             onClick={() => { setDiff("all"); setModule("all"); setSearch(""); }}
-            className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:text-blue-800 dark:text-blue-400 transition-colors"
+            className="text-xs text-primary font-semibold hover:text-primary transition-colors"
           >
             Reset
           </button>
@@ -119,12 +119,12 @@ export function DSAProblemExplorer({
       </div>
 
       {/* ── Result count ── */}
-      <div className="text-xs text-slate-500 dark:text-slate-400 mb-2 font-medium">
+      <div className="text-xs text-muted-foreground mb-2 font-medium">
         {filtered.length} problem{filtered.length !== 1 ? "s" : ""}
       </div>
 
       {/* ── Table header ── */}
-      <div className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 px-3 py-2 border-b border-slate-100 dark:border-slate-800/60 text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+      <div className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 px-3 py-2 border-b border-border/60 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
         <span>#</span>
         <span>Problem</span>
         <span>Difficulty</span>
@@ -133,7 +133,7 @@ export function DSAProblemExplorer({
       </div>
 
       {/* ── Rows ── */}
-      <div className="divide-y divide-slate-50">
+      <div className="divide-y divide-border/60">
         {filtered.map((p, i) => {
           const d = DIFF[p.difficulty];
           if (!p.authored) {
@@ -142,11 +142,11 @@ export function DSAProblemExplorer({
                 key={p.slug}
                 className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 items-center px-3 py-2.5 opacity-40 cursor-not-allowed"
               >
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">{i + 1}</span>
+                <span className="text-[11px] text-muted-foreground font-mono tabular-nums">{i + 1}</span>
                 <span className="text-sm text-muted-foreground truncate">{p.title}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border w-fit ${d.badge}`}>{d.label}</span>
-                <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block truncate">{p.moduleTitle}</span>
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 border border-border px-1.5 py-0.5 rounded">Soon</span>
+                <span className="text-xs text-muted-foreground hidden sm:block truncate">{p.moduleTitle}</span>
+                <span className="text-[10px] font-bold text-muted-foreground border border-border px-1.5 py-0.5 rounded">Soon</span>
               </div>
             );
           }
@@ -154,22 +154,22 @@ export function DSAProblemExplorer({
             <Link
               key={p.slug}
               href={`/dsa/problem/${p.slug}`}
-              className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 items-center px-3 py-2.5 hover:bg-blue-50 dark:bg-blue-500/10 group transition-colors"
+              className="grid grid-cols-[1.75rem_1fr_5.5rem_auto] sm:grid-cols-[1.75rem_1fr_5.5rem_auto_auto] gap-x-4 items-center px-3 py-2.5 hover:bg-primary/10 group transition-colors"
             >
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">{i + 1}</span>
-              <span className="text-sm font-medium text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors truncate">{p.title}</span>
+              <span className="text-[11px] text-muted-foreground font-mono tabular-nums">{i + 1}</span>
+              <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{p.title}</span>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border w-fit ${d.badge}`}>{d.label}</span>
-              <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block truncate">{p.moduleTitle}</span>
-              <ArrowRight className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 group-hover:text-blue-400 dark:text-blue-300 transition-colors" />
+              <span className="text-xs text-muted-foreground hidden sm:block truncate">{p.moduleTitle}</span>
+              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
             </Link>
           );
         })}
       </div>
 
       {filtered.length === 0 && (
-        <div className="text-center py-12 text-slate-500 dark:text-slate-400 text-sm">
+        <div className="text-center py-12 text-muted-foreground text-sm">
           No problems match your filters.{" "}
-          <button onClick={() => { setDiff("all"); setModule("all"); setSearch(""); }} className="text-blue-600 dark:text-blue-400 font-semibold hover:underline">
+          <button onClick={() => { setDiff("all"); setModule("all"); setSearch(""); }} className="text-primary font-semibold hover:underline">
             Clear filters
           </button>
         </div>

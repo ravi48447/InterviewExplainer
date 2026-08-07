@@ -343,7 +343,7 @@ export default async function SeoModulePage({
                   aria-hidden
                 />
                 <div className="relative pl-4 sm:pl-5">
-                  <div className="px-4 sm:px-6 pt-7 pb-6 sm:pt-8 sm:pb-7 bg-gradient-to-br from-slate-50/90 via-white  dark:from-slate-900/40 dark:via-background dark:">
+                  <div className="px-4 sm:px-6 pt-7 pb-6 sm:pt-8 sm:pb-7 bg-gradient-to-br from-surface-subtle via-surface to-background">
                     <div className="flex flex-wrap items-center gap-2 mb-3">
                       <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary dark:text-primary">
                         {entry.pillarName}
@@ -390,15 +390,15 @@ export default async function SeoModulePage({
                         className="flex items-center gap-1.5 text-xs"
                         title={`${diffMix.easy} easy · ${diffMix.medium} medium · ${diffMix.hard} hard`}
                       >
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400 font-bold border border-default dark:border-default/20/80">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-success/10 text-success font-bold border border-success/20">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-800" />
                           {diffMix.easy}
                         </span>
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-400 font-bold border border-default dark:border-default/20/80">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-warning/10 text-warning-foreground font-bold border border-warning/20">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 dark:bg-amber-800" />
                           {diffMix.medium}
                         </span>
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-50 dark:bg-rose-500/10 text-rose-900 dark:text-rose-400 font-bold border border-rose-100 dark:border-rose-500/20/80">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-destructive/10 text-destructive font-bold border border-destructive/20">
                           <span className="w-1.5 h-1.5 rounded-full bg-rose-500 dark:bg-rose-800" />
                           {diffMix.hard}
                         </span>
@@ -418,7 +418,7 @@ export default async function SeoModulePage({
                         </Link>
                         <Link
                           href={`/${entry.seoSlug}#reading-path`}
-                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-background text-foreground font-semibold text-sm hover:border-default dark:border-default hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/50 transition-colors"
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-background text-foreground font-semibold text-sm hover:border-default hover:bg-primary/10 transition-colors"
                         >
                           <ListOrdered className="h-4 w-4 text-muted-foreground shrink-0" />
                           How to read this module
@@ -514,7 +514,7 @@ export default async function SeoModulePage({
                   aria-labelledby="top-asked-heading"
                   className="mb-8 rounded-2xl border border-border/90 bg-background shadow-md shadow-slate-200/30 overflow-hidden ring-1 ring-slate-900/[0.03]"
                 >
-                  <div className="px-5 py-3.5 bg-surface via-orange-50/50 dark:via-orange-950/40 to-white border-b border-default dark:border-default/20/80 flex items-center gap-2  ">
+                  <div className="px-5 py-3.5 bg-surface border-b border-default dark:border-default/20 flex items-center gap-2">
                     <Flame className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     <h2
                       id="top-asked-heading"
@@ -531,7 +531,7 @@ export default async function SeoModulePage({
                       <li key={t.question.slug}>
                         <Link
                           href={`/${entry.seoSlug}/${t.question.slug}`}
-                          className="group flex items-start gap-3 px-5 py-3 hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/50 transition-colors"
+                          className="group flex items-start gap-3 px-5 py-3 hover:bg-primary/10 transition-colors"
                         >
                           <span className="mt-0.5 shrink-0 w-6 h-6 rounded-md dark:bg-surface text-white font-black text-[11px] flex items-center justify-center group-hover:bg-blue-600 dark:bg-blue-800 transition-colors">
                             {idx + 1}
@@ -657,7 +657,7 @@ export default async function SeoModulePage({
                     <li key={q.slug}>
                       <Link
                         href={`/${entry.seoSlug}/${q.slug}`}
-                        className="flex items-start gap-2.5 px-4 py-2 text-left hover:bg-blue-50 dark:bg-blue-500/10 dark:bg-blue-950/20/50 transition-colors group"
+                        className="flex items-start gap-2.5 px-4 py-2 text-left hover:bg-primary/10 transition-colors group"
                       >
                         <span className="mt-0.5 flex h-6 min-w-[1.5rem] items-center justify-center rounded-md dark:bg-surface text-[10px] font-bold text-white tabular-nums group-hover:bg-blue-600 dark:bg-blue-800 shrink-0">
                           {i + 1}

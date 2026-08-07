@@ -96,8 +96,8 @@ export function CodeWorkshopLayout({
 
       {/* Best Practices */}
       {bestPractices && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-950/20/60 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-950/60 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wide">Best Practices</span>
           </div>
           <div className="px-5 py-4">
@@ -130,8 +130,8 @@ export function CodeWorkshopLayout({
 
       {/* Speakable */}
       {speakable && (
-        <div className="rounded-xl border-2 border-default dark:border-default/30 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-default dark:border-default/20 dark:border-default/60">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-surface overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

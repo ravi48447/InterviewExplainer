@@ -21,14 +21,14 @@ function HighwayStrip({ className }: { className?: string }) {
     <div
       className={cn(
         "pointer-events-none relative h-full w-full min-h-[2.5rem] overflow-hidden rounded-xl",
-        "bg-[#1a1e2a]",
+        "bg-hero-elevated",
         "shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07),0_4px_24px_-4px_rgba(0,0,0,0.5)]",
         className,
       )}
       aria-hidden
     >
       {/* asphalt texture gradient */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#22263a] via-[#1a1e2a] to-[#14172200]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-hero-elevated via-hero-elevated to-transparent" />
       {/* left shoulder double line */}
       <div className="absolute inset-y-0 left-2.5 w-px bg-background/10" />
       <div className="absolute inset-y-0 left-3.5 w-px bg-background/6" />
@@ -68,7 +68,7 @@ function RoadStop({ n, expanded, compact }: { n: number; expanded: boolean; comp
           "relative flex shrink-0 items-center justify-center rounded-2xl border-2 font-black text-white transition-all duration-300",
           compact ? "h-10 w-10 text-xs" : "h-12 w-12 text-sm lg:h-[3.25rem] lg:w-[3.25rem] lg:text-base",
           expanded
-            ? "border-default dark:border-default/30 dark:border-default/80 bg-surface border border-default shadow-lg shadow-sm"
+            ? "border-default dark:border-default/30 bg-surface shadow-lg"
             : "border-slate-600 dark:border-slate-700/70 bg-surface border border-default shadow-md shadow-black/30",
         )}
       >
@@ -97,7 +97,7 @@ function MobileLaneHaze({ toStop }: { toStop: "left" | "right" }) {
       />
       <div className="h-2.5 w-7 shrink-0 overflow-hidden rounded-sm border border-slate-500 dark:border-slate-700/25 shadow-inner">
         <div className="h-1.5 w-full bg-gradient-to-b from-slate-50 dark:from-slate-950/40 to-slate-800" />
-        <div className="h-0.5 w-full bg-amber-200 dark:bg-amber-900/40/45" />
+        <div className="h-0.5 w-full bg-amber-200 dark:bg-amber-900/40" />
       </div>
       <div
         className={cn(

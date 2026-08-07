@@ -260,7 +260,7 @@ export default function LoginPage() {
 
                 <Button 
                   type="submit" 
-                  className="w-full h-11 rounded-xl bg-gradient-to-r from-[#2563EB] to-[#7C3AED] hover:from-[#1d4ed8] hover:to-[#6d28d9] text-foreground font-semibold transition-all duration-200 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(124,58,237,0.23)] hover:-translate-y-0.5"
+                  className="w-full h-11 rounded-xl bg-gradient-to-r from-primary to-primary hover:from-primary/90 hover:to-primary/90 text-primary-foreground font-semibold transition-all duration-200 shadow-[0_4px_14px_0_hsl(var(--primary)/0.39)] hover:shadow-[0_6px_20px_0_hsl(var(--primary)/0.23)] hover:-translate-y-0.5"
                   disabled={!canSubmit}
                 >
                   {isSubmitting ? (
@@ -356,7 +356,7 @@ export default function LoginPage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="p-6 rounded-3xl bg-gradient-to-b from-slate-50 to-slate-200/80 dark:from-surface dark:to-[#0A0A0A]/80 border border-border dark:border-white/10 relative overflow-hidden backdrop-blur-sm"
+            className="p-6 rounded-3xl bg-gradient-to-b from-surface-subtle to-muted dark:from-surface dark:to-background/80 border border-border dark:border-white/10 relative overflow-hidden backdrop-blur-sm"
           >
             {/* Glowing spot */}
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-50 dark:bg-blue-950/20 rounded-full blur-2xl" />

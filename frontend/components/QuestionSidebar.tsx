@@ -204,13 +204,13 @@ function QuestionLink({
       scroll={false}
       className={`flex items-start gap-2.5 py-1.5 pl-3 pr-3 text-[12px] leading-snug rounded-lg transition-all ${
         isCurrent
-          ? 'text-foreground font-bold bg-blue-50 dark:bg-blue-500/10 border-l-4 border-default dark:border-default'
+          ? 'text-foreground font-bold bg-primary/10 border-l-4 border-primary'
           : 'text-foreground hover:text-foreground hover:bg-surface outline-none focus:ring-2 focus:ring-ring'
       }`}
     >
       <span
         className={`text-[11px] font-bold min-w-[24px] h-[17px] rounded px-1.5 flex items-center justify-center shrink-0 mt-[2px] ${
-          isCurrent ? 'bg-blue-600 dark:bg-blue-800 text-white' : 'bg-slate-300 dark:bg-slate-800 text-foreground'
+          isCurrent ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
         }`}
       >
         Q{number}

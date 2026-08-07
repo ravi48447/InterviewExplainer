@@ -53,8 +53,8 @@ export function ProblemDetectiveLayout({
 
       {/* Symptoms */}
       {symptoms && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/60 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-amber-100 dark:bg-amber-950/20/50 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/60 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-amber-100 dark:bg-amber-950/50 border-b border-default dark:border-default/20">
             <List className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             <span className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wide">How to Recognize It (Symptoms)</span>
           </div>
@@ -143,8 +143,8 @@ export function ProblemDetectiveLayout({
 
       {/* Prevention */}
       {prevention && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/40 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-emerald-100 dark:bg-emerald-950/20/50 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/40 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-emerald-100 dark:bg-emerald-950/50 border-b border-default dark:border-default/20">
             <Shield className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
             <span className="text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wide">How to Prevent It</span>
           </div>
@@ -156,8 +156,8 @@ export function ProblemDetectiveLayout({
 
       {/* Speakable */}
       {speakable && (
-        <div className="rounded-xl border-2 border-default dark:border-default/30 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-default dark:border-default/20 dark:border-default/60">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-surface overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b border-default dark:border-default/20">
             <Mic className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">3-Sentence Interview Answer</span>
           </div>

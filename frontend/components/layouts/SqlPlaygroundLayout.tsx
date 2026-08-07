@@ -93,8 +93,8 @@ export function SqlPlaygroundLayout({
 
       {/* Output Preview */}
       {outputPreview && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/20/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-950/20/50 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-950/50 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wide">Query Output</span>
           </div>
           <div className="px-5 py-4 overflow-x-auto">
@@ -105,8 +105,8 @@ export function SqlPlaygroundLayout({
 
       {/* EXPLAIN ANALYZE output */}
       {explainOutput && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/20/40 overflow-hidden">
-          <div className="flex items-center gap-2 px-5 py-3 bg-amber-100 dark:bg-amber-950/20/50 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-amber-50 dark:bg-amber-500/10 dark:bg-amber-950/40 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 bg-amber-100 dark:bg-amber-950/50 border-b border-default dark:border-default/20">
             <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             <span className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wide">EXPLAIN ANALYZE Output</span>
           </div>
@@ -130,8 +130,8 @@ export function SqlPlaygroundLayout({
 
       {/* Performance Tips */}
       {performanceTips && (
-        <div className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-orange-50 dark:bg-orange-500/10 dark:bg-orange-950/20/40 overflow-hidden">
-          <div className="px-5 py-3 bg-orange-100 dark:bg-orange-950/20/50 border-b border-orange-200 dark:border-orange-500/20">
+        <div className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-orange-50 dark:bg-orange-500/10 dark:bg-orange-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-orange-100 dark:bg-orange-950/50 border-b border-orange-200 dark:border-orange-500/20">
             <span className="text-xs font-bold text-orange-800 dark:text-orange-400 uppercase tracking-wide">Performance Notes</span>
           </div>
           <div className="px-5 py-4">
@@ -155,8 +155,8 @@ export function SqlPlaygroundLayout({
 
       {/* Function Reference */}
       {functionRef && (
-        <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-950/20/40 overflow-hidden">
-          <div className="px-5 py-3 bg-blue-100 dark:bg-blue-950/20/50 border-b border-default dark:border-default/20">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-blue-50 dark:bg-blue-950/40 overflow-hidden">
+          <div className="px-5 py-3 bg-blue-100 dark:bg-blue-950/50 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-primary dark:text-primary uppercase tracking-wide">Function Reference</span>
           </div>
           <div className="px-5 py-4">
@@ -167,8 +167,8 @@ export function SqlPlaygroundLayout({
 
       {/* Speakable */}
       {speakable && (
-        <div className="rounded-xl border-2 border-default dark:border-default/30 dark:border-default/60 bg-surface border border-default dark:to-teal-950/40 overflow-hidden">
-          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b-2 border-default dark:border-default/20 dark:border-default/60">
+        <div className="rounded-xl border border-default dark:border-default/20 bg-surface overflow-hidden">
+          <div className="px-5 py-3 bg-emerald-100 dark:bg-emerald-900/30 border-b border-default dark:border-default/20">
             <span className="text-xs font-bold text-foreground uppercase tracking-wide">Interview Answer</span>
           </div>
           <div className="px-5 py-5">

@@ -247,7 +247,7 @@ export default function ComparePage() {
 
         {/* Hero */}
         <header className="mb-12 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-          <div className="relative px-8 py-8 bg-surface border border-default dark:">
+          <div className="relative px-8 py-8 bg-surface border border-default">
             <div className="flex items-center gap-2 mb-3">
               <ArrowLeftRight className="h-5 w-5 text-primary dark:text-primary" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-primary dark:text-primary">
