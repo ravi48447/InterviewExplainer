@@ -1,14 +1,14 @@
 # Interview Explainer V2 Migration Tracker
 
 **Status:** In progress
-**Last updated:** Session 5 — Phase 01 deferred visual validation gates (T035/T053/T063) — PASSED, token defects fixed
+**Last updated:** Session 6 — Phase 01 spacing scale + layout primitives (T086–T117)
 
 ## Phase Status
 
 | Phase | Title | Tasks | Done | Status |
 |-------|-------|------:|-----:|--------|
 | 00 | Repository, Frontend, Backend & Production Truth | 120 | 0 | Pending (audit phase) |
-| 01 | Root UI Architecture & Design System Rebuild | 327 | 92 | **In progress** |
+| 01 | Root UI Architecture & Design System Rebuild | 327 | 113 | **In progress** |
 | 02 | Root SEO, Indexing, Routing & URL Rebuild | 551 | 0 | Pending |
 | 03 | — | 431 | 0 | Pending |
 | 04 | — | 479 | 0 | Pending |
@@ -28,9 +28,11 @@
 
 ## Current Task
 
-**Phase 01 — Workstream F (typography strategy) + deferred visual validation**
+**Phase 01 — Workstream G (spacing/surface/layout primitives)**
 
-Batch 4 (this session): P01-T036 → P01-T039 light-theme surface refinement + shared-shell semantic cleanup.
+Batch 12 (this session): P01-T086 → T117 — canonical spacing scale, border-width/radius/shadow scales, page/reading/wide width tokens, and 12 layout primitives (page/reading/wide containers, section, stack, cluster, grid, split/sidebar, sticky region, full-width breakout, responsive visibility). Tailwind config extended so all scales resolve through the new tokens. Tailwind compiles clean; tsc reports zero new errors.
+
+Batch 4 (prior session): P01-T036 → P01-T039 light-theme surface refinement + shared-shell semantic cleanup.
 Batch 5 (this session): P01-T040 → P01-T044 light-theme route surface cleanup across DSA, company, roadmap, cheatsheet, SEO, and landing journeys.
 Batch 6 (this session): P01-T045 → P01-T052 dark-theme depth contract + shared primitive cleanup.
 Batch 7 (this session): P01-T054 → P01-T062 typography roles, type scale, tracking, and reusable utilities.
@@ -78,11 +80,32 @@ Batch 1 (prior session): P01-T011 → P01-T035 — global CSS reorganization, ba
 - P01-T035 Validate Semantic Color Contrast — DONE (zero pairs below 3:1 in light theme after fixing `--success`/`--difficulty-easy`/dark `--text-inverse`; 33 pass 4.5:1, 8 large-only)
 - P01-T053 Validate dark-theme contrast — DONE (zero pairs below 3:1 in dark theme; 35 pass 4.5:1, 6 large-only)
 - P01-T063 Validate typography scale and wrapping — DONE (scale monotonic & fluid, line-heights decrease with size, tracking tokens correct, `text-wrap: balance` on headings, compiled CSS verified)
+- P01-T086 Establish Canonical Spacing Scale — DONE (`--space-0`…`--space-24`, 4px-base modular scale, theme-independent)
+- P01-T071 Define Canonical Reading Width — DONE (`--reading-width: 42rem`)
+- P01-T072 Define Wide Content Width — DONE (`--wide-width: 90rem`)
+- P01-T073 Define Standard Page Width — DONE (`--content-width: 72rem`)
+- P01-T075 Separate Reading Width from Page Width — DONE (three distinct width tokens)
+- P01-T090 Establish Page Edge Padding — DONE (`--page-gutter` + responsive bumps via `.page-container`)
+- P01-T100 Establish Border Width Rules — DONE (`--border-w-0/1/2/4`)
+- P01-T101 Establish Radius Scale — DONE (`--radius-xs`…`--radius-full` + `--radius` alias)
+- P01-T103 Establish Shadow Scale — DONE (`--shadow-xs`…`--shadow-xl`, light + dark variants)
+- P01-T106 Build Canonical Page Container — DONE (`PageContainer` with `wide`/`reading`/`noPadding`)
+- P01-T107 Build Canonical Reading Container — DONE (`ReadingContainer`)
+- P01-T108 Build Canonical Wide Container — DONE (`WideContainer`)
+- P01-T109 Build Canonical Section Component — DONE (`Section` with `spacing` + `as`)
+- P01-T110 Build Canonical Stack Layout Primitive — DONE (`Stack` with `gap` + `align`)
+- P01-T111 Build Canonical Inline Layout Primitive — DONE (`Cluster` with `gap`/`justify`/`align`)
+- P01-T112 Build Canonical Grid Primitive — DONE (`Grid` with `cols=1–4/auto` + `minItemWidth`)
+- P01-T113 Build Canonical Split Layout — DONE (`SplitLayout` with `sidebarSide`/`sidebarWidth`)
+- P01-T114 Build Canonical Sidebar Layout — DONE (SplitLayout sidebar variant)
+- P01-T115 Build Canonical Sticky Region Primitive — DONE (`StickyRegion` with `top`/`maxHeight`)
+- P01-T116 Build Canonical Full-Width Breakout — DONE (`FullWidthBreakout`)
+- P01-T117 Build Canonical Responsive Visibility Utilities — DONE (`ResponsiveVisibility` with `showOn`)
 
 ## Next Recommended Tasks
 
-- Phase 01's deferred validation gates (T035/T053/T063) are complete. The build-independent cleanup trajectory (T064–T079) and the visual validation gates are all DONE. Remaining Phase 01 work is the broader task list in `tasks/PHASE_01/phase01.md` (not present in this frontend-only tree) plus a human screenshot regression pass on representative routes (home, DSA, a question page, a course module) to close the perceptual layer.
-- Recommend proceeding to Phase 02 (Root SEO, Indexing, Routing & URL Rebuild) once the perceptual pass is cleared.
+- Phase 01 foundation now covers the full token substrate (color, typography, spacing, radius, shadow, width) plus 12 layout primitives. The next coherent batch is the component-build layer: T119–T148 (button, card, badge/tag families) and T149–T167 (form inputs + search). These build directly on the primitives landed in this batch.
+- A human screenshot regression pass on representative routes (home, DSA, a question page, a course module) remains to close the perceptual layer before mass page migration.
 
 ## Blockers
 
