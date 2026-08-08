@@ -243,3 +243,43 @@ Records the significant design/engineering decisions made during Phase 02, with 
 **Why:** There is no server-side session-store endpoint. `sessionStorage` survives refreshes within the tab without persisting abandoned sessions forever (cleared on tab close). The `finish()` path clears the key after evaluation. History is shown as an empty-state CTA until a persistence API exists.
 
 **How to apply:** Use `useInterviewSession()` for the full lifecycle. Do not read `sessionStorage` directly. History routes should show an empty state, not mock data.
+
+## D28 — Data layers use the default `apiClient`, not a named `apiFetch` (P11, T…data-layer)
+
+**Decision:** Every Phase 11–13 data layer (`lib/resume`, `lib/opportunity`, `lib/community`) imports `apiClient` as the default export from `@/lib/api-client` and calls `apiClient.get/post/patch`, returning `res.data ?? null`.
+
+**Why:** `lib/api-client.ts` only exports a default axios instance. An earlier draft imported a non-existent named `apiFetch`, which fails tsc. The default instance already carries baseURL `/api`, `withCredentials`, and the JWT interceptor, so data-layer paths must NOT repeat the `/api` prefix (e.g. `/resume`, `/opportunities`, `/community`).
+
+**How to apply:** `import apiClient from "@/lib/api-client"`; `const res = await apiClient.get<T>("/resume", { params }); return res.data ?? null;`. Never prefix data paths with `/api`.
+
+## D29 — Community UGC pages are indexable; contribution + moderation are noindex (P13, SEO split)
+
+**Decision:** Public community surfaces — company intelligence (`/community/companies/[company]`) and reported questions (`/community/questions/[id]`) — are indexable discovery pages (RouteFamily `company`/`question`). The contribution form (`/community/contribute`) and any moderation surface are `noindex, follow` (RouteFamily `dashboard`/`internal`).
+
+**Why:** Company/question pages are legitimate search-landing surfaces that help candidates research employers and questions. The contribution form and moderation tools are authenticated, non-public workflows that should never be indexed.
+
+**How to apply:** Public community routes use `buildCompanyIntelligenceMetadata`/`buildReportedQuestionMetadata` (indexable, `revalidate: 3600`). Contribution/moderation use their `noindex` variants with `robots: { index: false, follow: true }`.
+
+## D30 — Platform layer is dependency-free and edge-safe (P14, T026..T238)
+
+**Decision:** `lib/platform/` ships zero runtime dependencies (no zod, no Redis client, no logger framework). The rate-limit store is an interface (`RateLimitStore`) with an in-memory default; the logger writes JSON lines to stdout/stderr directly.
+
+**Why:** The platform layer must run in the Next.js edge runtime (middleware) and be unit-testable in isolation. Any dependency pulled in here is forced into the edge bundle. Keeping it dependency-free preserves a small, auditable security/auth/cache surface and makes the Redis-backed rate-limit store a drop-in swap for multi-instance production.
+
+**How to apply:** Import from `@/lib/platform`. For multi-instance production, implement `RateLimitStore` against Redis and pass it to `checkRateLimit`; do not edit the core. Add zod at the route handler layer, not in `lib/platform/validation`.
+
+## D31 — Security headers are split between next.config and middleware, no duplication (P14, T101..T108)
+
+**Decision:** `next.config.mjs` keeps owning the four headers it already set (`X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`). `middleware.ts` layers the headers next.config did not own — CSP, HSTS, COOP, CORP — sourced from `buildSecurityHeaders()`.
+
+**Why:** next.config's `X-Frame-Options: DENY` is stricter than middleware's `SAMEORIGIN`; duplicating it would create ambiguity. Splitting by ownership avoids redundant header writes while still completing the full P14-T101..T108 header set on every response.
+
+**How to apply:** Do not re-set the four next.config headers in middleware. To change CSP/HSTS/COOP/CORP, edit `lib/platform/security-headers.ts` only.
+
+## D32 — V2 program is declared complete; remaining work converts to the product backlog (P15, T742..T743)
+
+**Decision:** All 16 phases (00–15) are marked complete in this tracker. Operational/release runbooks that are not frontend code (env definitions, secret rotation, backup/DR, analytics, search-console, launch smoke tests, post-launch monitoring windows) are recorded as contracts in `lib/platform/` and the Phase 15 report, and converted into normal product backlog items rather than blocking the migration program.
+
+**Why:** The frontend migration's deliverable — the canonical v2 architecture, all product surfaces, and the shared platform layer — is complete and tsc-clean. Holding the program open for infrastructure/ops runbooks that live outside this repo would prevent closure. P15-T742/T743 explicitly call for converting remaining work to the backlog and declaring the program complete.
+
+**How to apply:** New production-readiness work is sized and prioritized as normal product tickets against `lib/platform/` contracts, not as V2 migration tasks.
