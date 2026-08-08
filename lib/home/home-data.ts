@@ -72,6 +72,7 @@ const PATHWAY_ORDER: string[] = [
   "/go-fresher",
   "/java-backend-intermediate",
   "/python-backend-intermediate",
+  "/java-fullstack-intermediate",
 ];
 
 export function getHomePathways(): HomePathway[] {
@@ -97,13 +98,18 @@ export interface HomeTechnology {
   href: string;
   /** One-line description of what you'll find at the destination. */
   blurb: string;
+  /** Approximate question count for this language — adds depth and helps a
+   *  candidate gauge how much material sits behind the card. Curated static
+   *  value mirroring the canonical domain coverage. */
+  count: number;
 }
 
 export const HOME_TECHNOLOGIES: HomeTechnology[] = [
-  { name: "Java", icon: "java", href: "/domains?language=Java", blurb: "Core Java, Spring Boot, concurrency, and JVM internals." },
-  { name: "Python", icon: "python", href: "/domains?language=Python", blurb: "Django, FastAPI, data engineering, and ML/AI interview prep." },
-  { name: "Go", icon: "go", href: "/domains?language=Go", blurb: "Goroutines, channels, gRPC, and idiomatic Go patterns." },
-  { name: "Ruby", icon: "ruby", href: "/domains?language=Ruby", blurb: "Rails, Active Record, and Ruby backend interview questions." },
+  { name: "Java", icon: "java", href: "/domains?language=Java", blurb: "Core Java, Spring Boot, concurrency, and JVM internals.", count: 240 },
+  { name: "Python", icon: "python", href: "/domains?language=Python", blurb: "Django, FastAPI, data engineering, and ML/AI interview prep.", count: 210 },
+  { name: "Go", icon: "go", href: "/domains?language=Go", blurb: "Goroutines, channels, gRPC, and idiomatic Go patterns.", count: 130 },
+  { name: "Ruby", icon: "ruby", href: "/domains?language=Ruby", blurb: "Rails, Active Record, and Ruby backend interview questions.", count: 90 },
+  { name: "Frontend", icon: "react", href: "/domains?language=Frontend", blurb: "React, hooks, state, performance, and browser fundamentals.", count: 120 },
 ];
 
 // ─── Featured prep hubs (P04-T067, T269..T271) ───────────────────────────────
@@ -396,10 +402,14 @@ export interface HomeDSAPattern {
   /** Approximate problem count in the module — adds depth, helps candidates
    *  gauge scope. Curated static value mirroring the canonical module. */
   count: number;
+  /** When true, this pattern is rendered as the wide spotlight card that
+   *  leads the grid — gives the section visual hierarchy instead of six
+   *  equal cards. Exactly one pattern should carry this. */
+  featured?: boolean;
 }
 
 const DSA_PATTERNS: HomeDSAPattern[] = [
-  { name: "Arrays & Hashing", blurb: "Frequency maps, two-sum, and in-place tricks — the foundation everything else builds on.", href: "/dsa/module/arrays-hashing", icon: "arrays-hashing", tier: "Core", count: 9 },
+  { name: "Arrays & Hashing", blurb: "Frequency maps, two-sum, and in-place tricks — the foundation everything else builds on.", href: "/dsa/module/arrays-hashing", icon: "arrays-hashing", tier: "Core", count: 9, featured: true },
   { name: "Two Pointers", blurb: "Paired indices that shrink the search space — clean O(n) where brute force is O(n²).", href: "/dsa/module/two-pointers", icon: "two-pointers", tier: "Core", count: 7 },
   { name: "Sliding Window", blurb: "Fixed- and variable-width sub-ranges over a contiguous sequence.", href: "/dsa/module/sliding-window", icon: "sliding-window", tier: "Intermediate", count: 8 },
   { name: "Trees & BSTs", blurb: "Traversals, recursion, and divide-and-conquer on hierarchical data.", href: "/dsa/module/trees", icon: "trees", tier: "Intermediate", count: 8 },
@@ -435,13 +445,17 @@ export interface HomeUSPPillar {
    *  in HomeUSPPillars. Stays within the single-accent system (tints, not
    *  new hues). */
   tint: "primary" | "success" | "warning" | "destructive";
+  /** Optional short metric chip (e.g. "6 patterns") shown under the proof
+   *  text so the differentiator feels measured, not asserted. Rendered as
+   *  a small tinted pill in HomeUSPPillars. */
+  metric?: string;
 }
 
 const USP_PILLARS: HomeUSPPillar[] = [
-  { icon: "layers", title: "DSA by pattern, not by problem", proof: "6 core patterns cover the techniques behind 80% of interview questions.", href: "/dsa", cta: "Drill DSA", tint: "primary" },
-  { icon: "radio", title: "AI mock interviews", proof: "Speak out loud, get scored on content, clarity, and structure — instantly.", href: "/mock-interviews", cta: "Try a mock", tint: "success" },
-  { icon: "file-text", title: "Resume intelligence", proof: "Score your resume against any job description and close every gap before you apply.", href: "/dashboard/resume", cta: "Score your resume", tint: "warning" },
-  { icon: "message-square", title: "Domain-specific Q&A", proof: "Questions modeled on real interviews for your stack and level — not generic theory.", href: "/domains", cta: "Browse questions", tint: "destructive" },
+  { icon: "layers", title: "DSA by pattern, not by problem", proof: "6 core patterns cover the techniques behind 80% of interview questions.", href: "/dsa", cta: "Drill DSA", tint: "primary", metric: "6 patterns" },
+  { icon: "radio", title: "AI mock interviews", proof: "Speak out loud, get scored on content, clarity, and structure — instantly.", href: "/mock-interviews", cta: "Try a mock", tint: "success", metric: "Instant score" },
+  { icon: "file-text", title: "Resume intelligence", proof: "Score your resume against any job description and close every gap before you apply.", href: "/dashboard/resume", cta: "Score your resume", tint: "warning", metric: "Gap-by-gap" },
+  { icon: "message-square", title: "Domain-specific Q&A", proof: "Questions modeled on real interviews for your stack and level — not generic theory.", href: "/domains", cta: "Browse questions", tint: "destructive", metric: "5 languages" },
 ];
 
 export function getHomeUSPPillars(): HomeUSPPillar[] {
@@ -547,6 +561,38 @@ export function getHomeFinalCTA(): HomeFinalCTA {
   };
 }
 
+// ─── How it works (orientation bridge) ─────────────────────────────────────
+/**
+ * A compact 3-step band that bridges the hero and the pathways. A first-time
+ * visitor who lands cold doesn't yet know what "pattern-based prep" *is* —
+ * this orients them in three beats (Pick → Practice → Get scored) before they
+ * are asked to choose a path. Each step links to the same destinations the
+ * later sections expand, so it doubles as a fast exit for impatient visitors.
+ */
+export interface HomeHowItWorksStep {
+  /** Step number, 1-based. */
+  step: number;
+  /** Lucide icon slug resolved in HomeHowItWorks. */
+  icon: "target" | "code" | "gauge";
+  title: string;
+  detail: string;
+  /** Canonical destination. */
+  href: string;
+}
+
+export function getHomeHowItWorks(): HomeHowItWorksStep[] {
+  const steps: HomeHowItWorksStep[] = [
+    { step: 1, icon: "target", title: "Pick your pattern or path", detail: "Start with a DSA pattern, a career track, or a domain — not a random problem.", href: "/dsa" },
+    { step: 2, icon: "code", title: "Practice with intent", detail: "Worked examples in Java and Python, organized the way interviews actually test you.", href: "/domains" },
+    { step: 3, icon: "gauge", title: "Get scored, close gaps", detail: "Run a mock, score your resume, and see exactly what to fix before the real round.", href: "/mock-interviews" },
+  ];
+  // Respect hub gating on the destinations so a disabled hub never gets a
+  // prominent bridge link. Falls back to /prep if mock is off.
+  if (!isHubEnabled("dsa")) steps[0].href = "/prep";
+  if (!isHubEnabled("mockInterviews")) steps[2].href = "/dashboard/resume";
+  return steps;
+}
+
 // ─── Section order (P04-T015) ───────────────────────────────────────────────
 /**
  * The single intentional homepage narrative (P04-T015). Each section leads
@@ -557,6 +603,7 @@ export function getHomeFinalCTA(): HomeFinalCTA {
 export const HOME_SECTION_ORDER = [
   "hero",
   "usp-pillars",
+  "how-it-works",
   "preparation-paths",
   "technologies",
   "dsa",

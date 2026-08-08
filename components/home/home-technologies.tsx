@@ -19,7 +19,7 @@ export function HomeTechnologies() {
   return (
     <section
       aria-labelledby="home-technologies-heading"
-      className="border-b border-border bg-surface"
+      className="border-b border-border bg-background"
     >
       <PageContainer className="py-16 sm:py-20">
         <SectionHeader
@@ -27,7 +27,10 @@ export function HomeTechnologies() {
           title="Explore by technology"
           description="Domain-specific questions for your primary language and track."
           actions={
-            <Link href="/domains" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-sm">
+            <Link
+              href="/domains"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-medium text-primary transition-colors duration-200 ease-out hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
               Explore all domains
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
@@ -42,7 +45,7 @@ export function HomeTechnologies() {
             className="mt-10"
           />
         ) : (
-          <ul className="mt-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <ul className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {HOME_TECHNOLOGIES.map((tech) => (
               <li key={tech.name}>
                 <Link
@@ -58,10 +61,15 @@ export function HomeTechnologies() {
                   <p className="mt-1 text-sm text-muted-foreground leading-relaxed flex-1">
                     {tech.blurb}
                   </p>
-                  <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">
-                    Start practicing
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                  </span>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {tech.count} questions
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
+                      Practice
+                      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                    </span>
+                  </div>
                 </Link>
               </li>
             ))}

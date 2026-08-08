@@ -39,11 +39,17 @@ export function HomeDSA() {
   const patterns = getHomeDSAPatterns();
   if (patterns.length === 0) return null;
 
+  // Split the spotlight pattern off so the section leads with visual hierarchy
+  // instead of six equal cards. Falls back to "all in the grid" if no pattern
+  // is flagged featured (or if it was filtered out by the launch config).
+  const featured = patterns.find((p) => p.featured);
+  const rest = featured ? patterns.filter((p) => p !== featured) : patterns;
+
   return (
     <section
       id="dsa"
       aria-labelledby="home-dsa-heading"
-      className="border-b border-border bg-background"
+      className="border-b border-border bg-surface"
     >
       <PageContainer className="py-16 sm:py-20">
         <SectionHeader
@@ -61,8 +67,12 @@ export function HomeDSA() {
           }
         />
 
-        <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {patterns.map((p) => {
+        {featured && (
+          <FeaturedPatternCard pattern={featured} />
+        )}
+
+        <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {rest.map((p) => {
             const Icon = PATTERN_ICONS[p.icon] ?? Layers;
             return (
               <li key={p.href}>
@@ -130,3 +140,48 @@ export function HomeDSA() {
     </section>
   );
 }
+
+/**
+ * FeaturedPatternCard — the wide spotlight that leads the DSA grid.
+ *
+ * DSA is the homepage's primary CTA destination, so the section earns a
+ * moment of visual elevation: the foundation pattern ("Arrays & Hashing")
+ * renders full-width with a larger icon tile, a "Start here" eyebrow, and
+ * more room for its copy. The remaining five patterns sit in the standard
+ * grid below, so a candidate still sees the full ladder at a glance.
+ */
+function FeaturedPatternCard({ pattern }: { pattern: NonNullable<ReturnType<typeof getHomeDSAPatterns>[number]> }) {
+  const Icon = PATTERN_ICONS[pattern.icon] ?? Layers;
+  return (
+    <Link
+      href={pattern.href}
+      className="group mt-10 flex flex-col gap-6 rounded-lg border border-primary/30 bg-card p-6 transition-colors duration-200 ease-out hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:flex-row sm:items-center sm:gap-8 sm:p-8"
+    >
+      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 sm:h-16 sm:w-16">
+        <Icon className="h-7 w-7 text-primary sm:h-8 sm:w-8" aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="type-label text-primary">Start here</p>
+        <h3 className="mt-1.5 text-lg font-semibold text-foreground leading-tight sm:text-xl">
+          {pattern.name}
+        </h3>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground leading-relaxed">
+          {pattern.blurb}
+        </p>
+        <div className="mt-3 flex items-center gap-2">
+          <Badge variant={TIER_VARIANT[pattern.tier] ?? "warning"} className="text-xs font-medium">
+            {pattern.tier}
+          </Badge>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {pattern.count} problems
+          </span>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2 self-start text-sm font-medium text-primary sm:self-center">
+        Start practicing
+        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+      </div>
+    </Link>
+  );
+}
+

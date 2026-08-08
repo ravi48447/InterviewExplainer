@@ -2,6 +2,7 @@ import dynamic from "next/dynamic";
 import {
   HomeHero,
   HomeUSPPillars,
+  HomeHowItWorks,
   HomePathways,
   HomeTechnologies,
   HomeDSA,
@@ -21,12 +22,13 @@ import {
  * next. It is NOT "everything on one page".
  *
  * Section order (P04-T015) follows the psychological arc:
- *   LAND (hero) → DIFFERENTIATE (USP pillars) → CHOOSE A PATH (pathways) →
- *   DISCOVER (technologies, DSA, featured questions) → SEE THE PRODUCTS
- *   (mock showcase, resume showcase) → TRUST (trust) → CONVERT (final CTA) →
- *   CONTINUE (footer discovery). Every section leads somewhere meaningful
- *   (P04-T019) with no dead ends (P04-T020). The page bookends with matching
- *   CTA hierarchy (hero opens, final CTA closes).
+ *   LAND (hero) → DIFFERENTIATE (USP pillars) → ORIENT (how it works) →
+ *   CHOOSE A PATH (pathways) → DISCOVER (technologies, DSA, featured
+ *   questions) → SEE THE PRODUCTS (mock showcase, resume showcase) →
+ *   TRUST (trust) → CONVERT (final CTA) → CONTINUE (footer discovery).
+ *   Every section leads somewhere meaningful (P04-T019) with no dead ends
+ *   (P04-T020). The page bookends with matching CTA hierarchy (hero opens,
+ *   final CTA closes).
  *
  * Background rhythm: sections alternate bg-background ↔ bg-surface so the eye
  * moves down the page instead of seeing a flat card wall. Featured-product
@@ -55,6 +57,9 @@ export default function HomePage() {
 
       {/* DIFFERENTIATE: why this, not a generic prep site. */}
       <HomeUSPPillars />
+
+      {/* ORIENT: a 3-step bridge for cold visitors who don't know the model. */}
+      <HomeHowItWorks />
 
       {/* CHOOSE A PATH + DISCOVER CONTENT. */}
       <HomePathways />

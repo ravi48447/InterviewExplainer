@@ -23,22 +23,26 @@ const PILLAR_ICONS: Record<string, LucideIcon> = {
   "message-square": MessageSquare,
 };
 
-const TINT_CLASSES: Record<HomeUSPPillar["tint"], { icon: string; cta: string }> = {
+const TINT_CLASSES: Record<HomeUSPPillar["tint"], { icon: string; cta: string; metric: string }> = {
   primary: {
     icon: "border-primary/20 bg-primary/5 text-primary",
     cta: "text-primary",
+    metric: "border-primary/20 bg-primary/5 text-primary",
   },
   success: {
     icon: "border-success/20 bg-success/5 text-success",
     cta: "text-success",
+    metric: "border-success/20 bg-success/5 text-success",
   },
   warning: {
     icon: "border-warning/20 bg-warning/5 text-warning",
     cta: "text-warning",
+    metric: "border-warning/20 bg-warning/5 text-warning",
   },
   destructive: {
     icon: "border-destructive/20 bg-destructive/5 text-destructive",
     cta: "text-destructive",
+    metric: "border-destructive/20 bg-destructive/5 text-destructive",
   },
 };
 
@@ -83,6 +87,16 @@ export function HomeUSPPillars() {
                   <p className="text-sm text-muted-foreground leading-relaxed flex-1">
                     {p.proof}
                   </p>
+                  {p.metric && (
+                    <span
+                      className={cn(
+                        "mt-4 inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold",
+                        tint.metric,
+                      )}
+                    >
+                      {p.metric}
+                    </span>
+                  )}
                   <span className={cn("mt-4 inline-flex items-center gap-1 text-sm font-medium", tint.cta)}>
                     {p.cta}
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />

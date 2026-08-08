@@ -24,7 +24,7 @@ export function HomePathways() {
     <section
       id="preparation-paths"
       aria-labelledby="home-pathways-heading"
-      className="border-b border-border bg-background"
+      className="border-b border-border bg-surface"
     >
       <PageContainer className="py-16 sm:py-20">
         <SectionHeader

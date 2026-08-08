@@ -22,30 +22,32 @@ export function HomeFinalCTA() {
       className="border-b border-border bg-background"
     >
       <PageContainer className="py-16 sm:py-20">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2
-            id="home-final-cta-heading"
-            className="type-section text-foreground leading-tight"
-          >
-            {data.headline}
-          </h2>
-          <p className="mt-4 text-base text-muted-foreground leading-relaxed">
-            {data.supporting}
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
-            <Link
-              href={data.primaryCta.href}
-              className={cn(buttonVariants({ variant: "primary", size: "lg" }), "shadow-sm")}
+        <div className="mx-auto max-w-3xl rounded-2xl border border-primary/15 bg-primary/[0.03] px-6 py-12 text-center sm:px-12 sm:py-14">
+          <div className="mx-auto max-w-2xl">
+            <h2
+              id="home-final-cta-heading"
+              className="type-section text-foreground leading-tight"
             >
-              {data.primaryCta.label}
-              <ArrowRight className="ml-1" aria-hidden="true" />
-            </Link>
-            <Link
-              href={data.secondaryCta.href}
-              className={cn(buttonVariants({ variant: "outline", size: "lg" }))}
-            >
-              {data.secondaryCta.label}
-            </Link>
+              {data.headline}
+            </h2>
+            <p className="mt-4 text-base text-muted-foreground leading-relaxed">
+              {data.supporting}
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
+              <Link
+                href={data.primaryCta.href}
+                className={cn(buttonVariants({ variant: "primary", size: "lg" }), "shadow-sm")}
+              >
+                {data.primaryCta.label}
+                <ArrowRight className="ml-1" aria-hidden="true" />
+              </Link>
+              <Link
+                href={data.secondaryCta.href}
+                className={cn(buttonVariants({ variant: "outline", size: "lg" }))}
+              >
+                {data.secondaryCta.label}
+              </Link>
+            </div>
           </div>
         </div>
       </PageContainer>

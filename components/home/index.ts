@@ -10,6 +10,7 @@
 
 export { HomeHero } from "./home-hero";
 export { HomeUSPPillars } from "./home-usp-pillars";
+export { HomeHowItWorks } from "./home-how-it-works";
 export { HomePathways } from "./home-pathways";
 export { HomeTechnologies } from "./home-technologies";
 export { HomeDSA } from "./home-dsa";

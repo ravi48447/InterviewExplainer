@@ -23,7 +23,7 @@ export function HomeFeaturedQuestions() {
   return (
     <section
       aria-labelledby="home-featured-questions-heading"
-      className="border-b border-border bg-surface"
+      className="border-b border-border bg-background"
     >
       <PageContainer className="py-16 sm:py-20">
         <SectionHeader
@@ -59,6 +59,12 @@ export function HomeFeaturedQuestions() {
                   className="absolute left-0 top-1/2 h-0 w-0.5 -translate-y-1/2 rounded-full bg-primary transition-all duration-200 ease-out group-hover:h-2/3 group-focus-visible:h-2/3"
                   aria-hidden="true"
                 />
+                <span
+                  className="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-xs font-semibold tabular-nums text-muted-foreground transition-colors duration-200 ease-out group-hover:border-primary/30 group-hover:text-primary"
+                  aria-hidden="true"
+                >
+                  {String(i + 1).padStart(2, "0")}
+                </span>
                 <div className="min-w-0 flex-1">
                   {/* P04-T105: title is the visual focus. */}
                   <h3 className="truncate text-base font-medium text-foreground group-hover:text-primary">
