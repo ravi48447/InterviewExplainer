@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PageContainer } from "@/components/page-container";
@@ -13,10 +13,16 @@ import { HOME_HERO, getHomeContentStats } from "@/lib/home/home-data";
  * proof element (ScoreRing + sample question) that *shows* the product's
  * intelligence rather than describing it. Trust microline derived from
  * content (no hardcoded stats). Server-rendered.
+ *
+ * Visual gravity: an eyebrow label anchors *what this is* before the promise;
+ * the primary CTA carries an icon to read as the heavier action; the trust
+ * row sits in a structured hairline-bordered strip so it reads as a real
+ * signal, not an afterthought.
  */
 export function HomeHero() {
   const stats = getHomeContentStats();
   const questionCount = stats.find((s) => s.label.startsWith("Curated"))?.value;
+  const languages = stats.find((s) => s.label === "Languages live today")?.value;
 
   return (
     <section
@@ -27,6 +33,11 @@ export function HomeHero() {
         <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
           {/* Copy */}
           <div className="max-w-2xl">
+            <p className="type-label text-primary mb-4 flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              Interview prep, rethought
+            </p>
+
             <h1
               id="home-hero-heading"
               className="type-display text-foreground leading-[1.05] tracking-tight"
@@ -41,7 +52,7 @@ export function HomeHero() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
                 href={HOME_HERO.primaryCta.href}
-                className={cn(buttonVariants({ variant: "primary", size: "lg" }))}
+                className={cn(buttonVariants({ variant: "primary", size: "lg" }), "shadow-sm")}
               >
                 {HOME_HERO.primaryCta.label}
                 <ArrowRight className="ml-1" aria-hidden="true" />
@@ -54,10 +65,36 @@ export function HomeHero() {
               </Link>
             </div>
 
-            {questionCount && (
-              <p className="mt-6 text-sm text-muted-foreground">
-                <span className="font-semibold text-foreground">{questionCount}</span> curated questions · {stats.find((s) => s.label === "Languages live today")?.value ?? "Java & Python"} live today
-              </p>
+            {/* Structured trust row — reads as a real signal, not an afterthought. */}
+            {(questionCount || languages) && (
+              <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-5 text-sm text-muted-foreground">
+                {questionCount && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-semibold text-foreground tabular-nums">{questionCount}</span>
+                    curated questions
+                  </span>
+                )}
+                {questionCount && languages && (
+                  <span className="h-3 w-px bg-border" aria-hidden="true" />
+                )}
+                {languages && (
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-semibold text-foreground">{languages}</span>
+                    live today
+                  </span>
+                )}
+                {stats.find((s) => s.label === "DSA patterns covered")?.value && (
+                  <>
+                    <span className="h-3 w-px bg-border" aria-hidden="true" />
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-semibold text-foreground tabular-nums">
+                        {stats.find((s) => s.label === "DSA patterns covered")?.value}
+                      </span>
+                      DSA patterns
+                    </span>
+                  </>
+                )}
+              </div>
             )}
           </div>
 

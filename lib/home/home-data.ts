@@ -334,6 +334,41 @@ export function getHomeFooterLinks(): HomeFooterLink[] {
   return links;
 }
 
+/**
+ * Grouped footer links — the same destinations as getHomeFooterLinks but
+ * organized into labeled categories so the footer reads as an intentional
+ * site map rather than a flat flex-wrap link directory. Each group renders
+ * only if it has at least one live link.
+ */
+export interface HomeFooterLinkGroup {
+  label: string;
+  links: HomeFooterLink[];
+}
+
+export function getHomeFooterLinkGroups(): HomeFooterLinkGroup[] {
+  const groups: HomeFooterLinkGroup[] = [];
+
+  const practice: HomeFooterLink[] = [];
+  if (isHubEnabled("dsa")) practice.push({ label: "DSA patterns", href: "/dsa" });
+  practice.push({ label: "Interview Q&A", href: "/domains" });
+  if (practice.length) groups.push({ label: "Practice", links: practice });
+
+  const tools: HomeFooterLink[] = [];
+  if (isHubEnabled("mockInterviews")) tools.push({ label: "Mock interviews", href: "/mock-interviews" });
+  if (isHubEnabled("dashboard")) tools.push({ label: "Resume scoring", href: "/dashboard/resume" });
+  if (tools.length) groups.push({ label: "Tools", links: tools });
+
+  const explore: HomeFooterLink[] = [{ label: "Prep categories", href: "/prep" }];
+  const pillarPicks = ["java", "system-design", "spring"] as const;
+  for (const slug of pillarPicks) {
+    const hub = PILLAR_HUBS.find((p) => p.pillarSlug === slug);
+    if (hub) explore.push({ label: hub.title.split(" Interview Prep")[0], href: `/${slug}` });
+  }
+  if (explore.length) groups.push({ label: "Explore", links: explore });
+
+  return groups;
+}
+
 // ─── DSA discovery (P04-T067, T269..T271) ───────────────────────────────────
 /**
  * A dedicated DSA discovery section. DSA was previously buried only inside
@@ -356,15 +391,20 @@ export interface HomeDSAPattern {
   href: string;
   /** Module slug used to resolve the lucide icon in HomeDSA. */
   icon: string;
+  /** Difficulty tier shown as a micro-label — helps candidates pick where to start. */
+  tier: "Core" | "Intermediate" | "Advanced";
+  /** Approximate problem count in the module — adds depth, helps candidates
+   *  gauge scope. Curated static value mirroring the canonical module. */
+  count: number;
 }
 
 const DSA_PATTERNS: HomeDSAPattern[] = [
-  { name: "Arrays & Hashing", blurb: "Frequency maps, two-sum, and in-place tricks — the foundation everything else builds on.", href: "/dsa/module/arrays-hashing", icon: "arrays-hashing" },
-  { name: "Two Pointers", blurb: "Paired indices that shrink the search space — clean O(n) where brute force is O(n²).", href: "/dsa/module/two-pointers", icon: "two-pointers" },
-  { name: "Sliding Window", blurb: "Fixed- and variable-width sub-ranges over a contiguous sequence.", href: "/dsa/module/sliding-window", icon: "sliding-window" },
-  { name: "Trees & BSTs", blurb: "Traversals, recursion, and divide-and-conquer on hierarchical data.", href: "/dsa/module/trees", icon: "trees" },
-  { name: "Graphs", blurb: "BFS, DFS, topological sort, and union-find on connected structures.", href: "/dsa/module/graphs", icon: "graphs" },
-  { name: "Dynamic Programming", blurb: "1-D and 2-D recurrence patterns — the technique behind most hard problems.", href: "/dsa/module/dynamic-programming", icon: "dynamic-programming" },
+  { name: "Arrays & Hashing", blurb: "Frequency maps, two-sum, and in-place tricks — the foundation everything else builds on.", href: "/dsa/module/arrays-hashing", icon: "arrays-hashing", tier: "Core", count: 9 },
+  { name: "Two Pointers", blurb: "Paired indices that shrink the search space — clean O(n) where brute force is O(n²).", href: "/dsa/module/two-pointers", icon: "two-pointers", tier: "Core", count: 7 },
+  { name: "Sliding Window", blurb: "Fixed- and variable-width sub-ranges over a contiguous sequence.", href: "/dsa/module/sliding-window", icon: "sliding-window", tier: "Intermediate", count: 8 },
+  { name: "Trees & BSTs", blurb: "Traversals, recursion, and divide-and-conquer on hierarchical data.", href: "/dsa/module/trees", icon: "trees", tier: "Intermediate", count: 8 },
+  { name: "Graphs", blurb: "BFS, DFS, topological sort, and union-find on connected structures.", href: "/dsa/module/graphs", icon: "graphs", tier: "Advanced", count: 9 },
+  { name: "Dynamic Programming", blurb: "1-D and 2-D recurrence patterns — the technique behind most hard problems.", href: "/dsa/module/dynamic-programming", icon: "dynamic-programming", tier: "Advanced", count: 10 },
 ];
 
 export function getHomeDSAPatterns(): HomeDSAPattern[] {
@@ -390,13 +430,18 @@ export interface HomeUSPPillar {
   href: string;
   /** CTA label. */
   cta: string;
+  /** Semantic tint slug — subtle per-pillar accent so the band has rhythm
+   *  instead of four identical tiles. Resolved to a tinted icon container
+   *  in HomeUSPPillars. Stays within the single-accent system (tints, not
+   *  new hues). */
+  tint: "primary" | "success" | "warning" | "destructive";
 }
 
 const USP_PILLARS: HomeUSPPillar[] = [
-  { icon: "layers", title: "DSA by pattern, not by problem", proof: "6 core patterns cover the techniques behind 80% of interview questions.", href: "/dsa", cta: "Drill DSA" },
-  { icon: "radio", title: "AI mock interviews", proof: "Speak out loud, get scored on content, clarity, and structure — instantly.", href: "/mock-interviews", cta: "Try a mock" },
-  { icon: "file-text", title: "Resume intelligence", proof: "Score your resume against any job description and close every gap before you apply.", href: "/dashboard/resume", cta: "Score your resume" },
-  { icon: "message-square", title: "Domain-specific Q&A", proof: "Questions modeled on real interviews for your stack and level — not generic theory.", href: "/domains", cta: "Browse questions" },
+  { icon: "layers", title: "DSA by pattern, not by problem", proof: "6 core patterns cover the techniques behind 80% of interview questions.", href: "/dsa", cta: "Drill DSA", tint: "primary" },
+  { icon: "radio", title: "AI mock interviews", proof: "Speak out loud, get scored on content, clarity, and structure — instantly.", href: "/mock-interviews", cta: "Try a mock", tint: "success" },
+  { icon: "file-text", title: "Resume intelligence", proof: "Score your resume against any job description and close every gap before you apply.", href: "/dashboard/resume", cta: "Score your resume", tint: "warning" },
+  { icon: "message-square", title: "Domain-specific Q&A", proof: "Questions modeled on real interviews for your stack and level — not generic theory.", href: "/domains", cta: "Browse questions", tint: "destructive" },
 ];
 
 export function getHomeUSPPillars(): HomeUSPPillar[] {
@@ -474,12 +519,40 @@ export function getHomeResumeShowcase(): HomeResumeShowcase | null {
   };
 }
 
+// ─── Final CTA (homepage's own conversion moment) ───────────────────────────
+/**
+ * The homepage ends on a single clear call-to-action — its own conversion
+ * moment — before the footer discovery links. A world-class homepage doesn't
+ * trail off into a link directory; it re-states the promise and gives the
+ * visitor one place to go. Surfaces only when the primary DSA hub is enabled
+ * (the CTA points there); falls back to /domains otherwise.
+ */
+export interface HomeFinalCTA {
+  headline: string;
+  supporting: string;
+  primaryCta: { label: string; href: string };
+  secondaryCta: { label: string; href: string };
+}
+
+export function getHomeFinalCTA(): HomeFinalCTA {
+  const dsaEnabled = isHubEnabled("dsa");
+  return {
+    headline: "Stop memorizing. Start cracking interviews.",
+    supporting:
+      "Pick a pattern, run a mock, or score your resume — every tool you need to walk into the next round prepared.",
+    primaryCta: dsaEnabled
+      ? { label: "Start practicing", href: "/dsa" }
+      : { label: "Browse interview questions", href: "/domains" },
+    secondaryCta: { label: "Explore everything", href: "/prep" },
+  };
+}
+
 // ─── Section order (P04-T015) ───────────────────────────────────────────────
 /**
  * The single intentional homepage narrative (P04-T015). Each section leads
  * somewhere meaningful (P04-T019) and there are no dead ends (P04-T020).
  * The order follows the target journey: LAND → DIFFERENTIATE → CHOOSE A PATH →
- * DISCOVER CONTENT → SEE THE PRODUCTS → TRUST → CONTINUE.
+ * DISCOVER CONTENT → SEE THE PRODUCTS → TRUST → CONVERT → CONTINUE.
  */
 export const HOME_SECTION_ORDER = [
   "hero",
@@ -491,6 +564,7 @@ export const HOME_SECTION_ORDER = [
   "mock-showcase",
   "resume-showcase",
   "trust",
+  "final-cta",
   "footer-discovery",
 ] as const;
 

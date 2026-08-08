@@ -17,5 +17,6 @@ export { HomeFeaturedQuestions } from "./home-featured-questions";
 export { HomeMockShowcase } from "./home-mock-showcase";
 export { HomeResumeShowcase } from "./home-resume-showcase";
 export { HomeTrust } from "./home-trust";
+export { HomeFinalCTA } from "./home-final-cta";
 export { HomeFooterDiscovery } from "./home-footer-discovery";
 export { HomeSearchEntry } from "./home-search-entry";

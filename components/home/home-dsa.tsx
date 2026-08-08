@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Zap, Layers, MoveHorizontal, Frame, GitBranch, Network, Workflow, type LucideIcon } from "lucide-react";
 import { SectionHeader } from "@/components/ui/section-header";
 import { PageContainer } from "@/components/page-container";
+import { Badge } from "@/components/ui/badge";
 import { getHomeDSAPatterns } from "@/lib/home/home-data";
 
 /**
@@ -26,6 +27,12 @@ const PATTERN_ICONS: Record<string, LucideIcon> = {
   trees: GitBranch,
   graphs: Network,
   "dynamic-programming": Workflow,
+};
+
+const TIER_VARIANT: Record<string, "success" | "warning" | "destructive"> = {
+  Core: "success",
+  Intermediate: "warning",
+  Advanced: "destructive",
 };
 
 export function HomeDSA() {
@@ -67,10 +74,18 @@ export function HomeDSA() {
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-surface">
                       <Icon className="h-5 w-5 text-foreground" aria-hidden="true" />
                     </span>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <h3 className="text-base font-semibold text-foreground leading-tight">
                         {p.name}
                       </h3>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <Badge variant={TIER_VARIANT[p.tier] ?? "warning"} className="text-xs font-medium">
+                          {p.tier}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {p.count} problems
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <p className="mt-3 flex-1 text-sm text-muted-foreground leading-relaxed">
@@ -78,7 +93,7 @@ export function HomeDSA() {
                   </p>
                   <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">
                     Start practicing
-                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
                   </span>
                 </Link>
               </li>

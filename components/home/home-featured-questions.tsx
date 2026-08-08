@@ -51,8 +51,14 @@ export function HomeFeaturedQuestions() {
             <li key={`${q.href}-${i}`}>
               <Link
                 href={q.href}
-                className="group flex items-center justify-between gap-4 py-4 transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md"
+                className="group relative flex items-center justify-between gap-4 py-4 pl-5 transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md"
               >
+                {/* Hover accent rail — a small primary bar on the left edge
+                     so rows feel curated rather than dumped. */}
+                <span
+                  className="absolute left-0 top-1/2 h-0 w-0.5 -translate-y-1/2 rounded-full bg-primary transition-all duration-200 ease-out group-hover:h-2/3 group-focus-visible:h-2/3"
+                  aria-hidden="true"
+                />
                 <div className="min-w-0 flex-1">
                   {/* P04-T105: title is the visual focus. */}
                   <h3 className="truncate text-base font-medium text-foreground group-hover:text-primary">

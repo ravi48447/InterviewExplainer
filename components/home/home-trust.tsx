@@ -41,11 +41,13 @@ export function HomeTrust() {
           />
         ) : (
         <>
-        {/* P04-T145: stats are a restrained signal, not the primary message. */}
+        {/* P04-T145: stats are a restrained signal, not the primary message.
+            Grouped in a hairline-bordered band so they read as a real stat
+            strip, not loose typography. */}
         {stats.length > 0 && (
-          <dl className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <dl className="mt-10 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
             {stats.map((stat) => (
-              <div key={stat.label} className="flex flex-col">
+              <div key={stat.label} className="flex flex-col bg-card p-5">
                 <dt className="text-sm font-medium text-muted-foreground">
                   {stat.label}
                 </dt>

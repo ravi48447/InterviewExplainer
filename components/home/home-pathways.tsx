@@ -4,6 +4,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { PageContainer } from "@/components/page-container";
 import { TechIcon } from "@/components/tech-icon";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { getHomePathways } from "@/lib/home/home-data";
 
 /**
@@ -64,17 +65,17 @@ export function HomePathways() {
                     <h3 className="text-base font-semibold text-foreground leading-tight">
                       {path.title}
                     </h3>
-                    <p className="mt-1 text-xs font-medium text-muted-foreground">
-                      {path.level}
+                    <p className="mt-1.5">
+                      <Badge variant="outline" className="text-xs font-medium">{path.level}</Badge>
                     </p>
                   </div>
                 </div>
-                <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+                <p className="mt-3 text-sm text-muted-foreground leading-relaxed flex-1">
                   {path.topics}
                 </p>
                 <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary">
                   Start learning
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
                 </span>
               </Link>
             </li>
