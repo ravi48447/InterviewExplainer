@@ -1,4 +1,3 @@
-import dynamic from "next/dynamic";
 import {
   HomeHero,
   HomeUSPPillars,
@@ -13,6 +12,7 @@ import {
   HomeFinalCTA,
   HomeFooterDiscovery,
 } from "@/components/home";
+import { HomeSearchEntry } from "@/components/home/home-search-entry";
 
 /**
  * Homepage — V2 public entry experience (P04-T031..T479).
@@ -37,15 +37,12 @@ import {
  *
  * Server component: all discovery sections are server-rendered (P04-T047/
  * T260/T278/T282) so the homepage is indexable without JS and the major hubs
- * are crawlable (P04-T264/T443). The only client island is the search entry,
- * dynamically imported with no SSR so it never blocks first render and adds
- * zero JS when the search hub is disabled (P04-T065/T283/T289/T290).
+ * are crawlable (P04-T264/T443). The only client island is the search entry
+ * — a "use client" component imported directly. Next.js draws the client
+ * boundary automatically, and HomeSearchEntry renders null when the search
+ * hub is disabled, so a disabled indexer adds no client JS to the page
+ * (P04-T065/T283/T289/T290).
  */
-const HomeSearchEntry = dynamic(
-  () => import("@/components/home/home-search-entry").then((m) => m.HomeSearchEntry),
-  { ssr: false, loading: () => null },
-);
-
 export default function HomePage() {
   return (
     <main id="main" className="flex-1 bg-background">

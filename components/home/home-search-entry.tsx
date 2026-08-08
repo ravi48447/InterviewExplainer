@@ -24,8 +24,10 @@ import { GlobalSearch } from "@/modules/search/components/GlobalSearch";
  *     robots policy + the modal-only rendering.
  *
  * This is the only client component on the homepage besides the shell's own
- * islands (P04-T281/T282). It is dynamically imported with no SSR by
- * app/page.tsx so it never blocks first render (P04-T283/T290).
+ * islands (P04-T281/T282). app/page.tsx imports it directly; Next.js draws
+ * the client boundary automatically, and this component returns null when
+ * the search hub is disabled so it never blocks first render and adds no
+ * client JS in that case (P04-T283/T290).
  */
 export function HomeSearchEntry() {
   if (!isHubEnabled("search")) return null;
