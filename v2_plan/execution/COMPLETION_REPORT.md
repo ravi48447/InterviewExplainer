@@ -117,3 +117,57 @@ Homepage IA, hero, discovery, search entry, CTA hierarchy, SEO contract, and dat
 ## Approval (T479)
 
 Phase 04 is self-approved and ready for review. The homepage is a calm, focused, readable orientation layer. The V1 "everything-on-the-page" anti-pattern is removed. The homepage introduces; dedicated pages organize.
+
+---
+
+# Phase 05+06 Completion Report (P05-T552, P06-T717)
+
+**Phase:** 05 — Content Discovery Hierarchy Rebuild + 06 — Individual Question Page & Interview Answer Reading Experience Rebuild
+**Tasks:** 552 + 717 = 1269 / 1269 — **COMPLETE**
+**Session:** 11
+
+## Summary
+
+Phase 05 rebuilt the content-discovery hierarchy behind a single canonical resolver layer (domain → stack → pillar → module → question). Phase 06 rebuilt the individual question page and the interview-answer reading experience behind a canonical question data adapter that bridges the existing `QuestionPagePayload` (api.ts) to a structured V2 `QuestionPageData` contract.
+
+## What changed
+
+### Phase 05 — Canonical hierarchy (`lib/hierarchy/`)
+- **`hierarchy-types.ts`** — entity contracts (Domain/Stack/Pillar/Module/Question), `HierarchyPath`, `HierarchyCrumb`, `HierarchyValidationFinding`.
+- **`hierarchy-resolver.ts`** — `resolveDomain/Stack/Pillar/Module`, `resolveChildren/Parent`, `resolveHierarchyPath`, `resolveBreadcrumbs`, `validateHierarchy`. Cached, null-on-miss.
+- **`hierarchy-seo.ts`** — `buildDomain/Stack/Pillar/ModuleMetadata`, `buildBreadcrumbStructuredData` (JSON-LD).
+- **`index.ts`** — barrel.
+
+### Phase 05 — Page architecture (`components/hierarchy/`)
+- `HierarchyHeader`, `HierarchyCardGrid`, `QuestionList` + barrel.
+
+### Phase 05 — Route migrations
+- `app/[domainSlug]/page.tsx` (T041), `app/[domainSlug]/[stackSlug]/page.tsx` (T042), `app/prep/[pillarSlug]/page.tsx` (T043), `app/seo/[seoSlug]/page.tsx` (T044). All server components consuming the canonical architecture.
+
+### Phase 06 — Canonical question layer (`lib/question/`)
+- **`question-types.ts`** — `QuestionPageData`, `AnswerSection` (prose|code|callout|table|figure|heading), `QuestionMetadata`, `RelatedQuestion`, `FollowUpQuestion`, `PrevNextNav`.
+- **`question-data.ts`** — `resolveQuestionPageData()`: adapts `QuestionPagePayload.answerSections` (sectionType/content/sectionTitle) → canonical `AnswerSection[]`. Uses payload's prev/next/related/quickQuestions directly.
+- **`question-seo.ts`** — `buildQuestionMetadata`, `buildQuestionStructuredData` (FAQPage JSON-LD), `buildQuestionBreadcrumbStructuredData`, `buildQuestionSpeakable`.
+- **`index.ts`** — barrel.
+
+### Phase 06 — Page architecture (`components/question-v2/`)
+- `QuestionHeader`, `AnswerRenderer`, `PrevNext`, `RelatedQuestions`, `FollowUpQuestions` + barrel.
+
+### Phase 06 — Route migration
+- `app/[domainSlug]/[stackSlug]/[questionSlug]/page.tsx` — server component composing header + answer renderer + prev/next + related + follow-ups + JSON-LD.
+
+## Verification gates
+
+- **TypeScript:** ✅ 8 errors (unchanged baseline — pre-existing test-runner types in `launch-config.test.ts`). Zero new errors.
+- **Tailwind:** ✅ compiles clean; all token classes generated.
+- **Architecture:** single canonical data source for hierarchy and question pages; server-rendered; FAQPage + BreadcrumbList JSON-LD; speakable content; one H1 per page; no competing definitions.
+
+## Key fixes
+
+1. `question-data.ts` adapter rewritten to use actual `QuestionPagePayload` shape (was using non-existent `payload.question.*`).
+2. `hierarchy-resolver.ts` type errors fixed (StackSubcategory import, SEO_MODULES array access, SeoModuleEntry.intro field, HierarchyPath.module optional).
+3. `answer-renderer.tsx` primitive props corrected (CodeBlock.children, Figure.children, TableWrapper thead/tbody).
+
+## Freeze
+
+Hierarchy entity contracts, resolver API, question data contract, answer section types, and route architectures are frozen. See `v2_plan/task-reports/P05T001_T552_P06T001_T717_hierarchy_question_rebuild.md`.

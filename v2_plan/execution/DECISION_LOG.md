@@ -187,3 +187,27 @@ Records the significant design/engineering decisions made during Phase 02, with 
 **Why:** Hard-coded counts drift from reality and become misleading. Animated counters delay content visibility and violate reduced-motion. Statistics as the primary message read as marketing, not orientation.
 
 **How to apply:** Add a stat by extending `getHomeContentStats()` with a canonical-data-derived value. Never hard-code a number in `app/page.tsx` or a home section component.
+
+## D21 — Hierarchy resolution is owned by a single canonical resolver layer, not scattered across content-reader/seo-pillars/seo-slugs (P05-A/B, T021–T031)
+
+**Decision:** `lib/hierarchy/hierarchy-resolver.ts` is the ONE place that resolves domain → stack → pillar → module → question. All V2 discovery pages import from `@/lib/hierarchy`, never from `@/lib/content-reader` or `@/lib/seo-pillars` directly for hierarchy resolution.
+
+**Why:** Before V2, hierarchy knowledge was spread across content-reader (`getVisibleStackSlugs`, `getSubcategoriesWithQuestions`), seo-pillars (`PILLAR_HUBS`), and seo-slugs (`SEO_MODULES`). Pages reached into all three, producing competing definitions and inconsistent breadcrumbs. A single resolver layer gives one unambiguous convention and one place to add caching/validation.
+
+**How to apply:** When building a discovery page, call `resolveDomain`/`resolveStack`/`resolvePillar`/`resolveModule`/`resolveBreadcrumbs` from `@/lib/hierarchy`. Do not import `PILLAR_HUBS` or `SEO_MODULES` directly in a route or component — go through the resolver.
+
+## D22 — Question page data is adapted from QuestionPagePayload through a single canonical adapter, never consumed raw (P06-A/B, T041–T060)
+
+**Decision:** `lib/question/question-data.ts` `resolveQuestionPageData()` is the ONE adapter between content-reader's `QuestionPagePayload` (api.ts) and the V2 question page. All question-v2 components consume `QuestionPageData`, never the raw payload.
+
+**Why:** The API's `QuestionPagePayload` has a storage-oriented shape (`answerSections` with `sectionType`/`content`/`sectionTitle` strings). The rendering layer needs structured sections (prose/code/callout/table/figure/heading). Coupling components to the API shape would force every component to re-parse markdown and would break if the API schema changes. The adapter absorbs that coupling in one place.
+
+**How to apply:** When building question page UI, call `resolveQuestionPageData(domain, stack, question)` and pass the resulting `QuestionPageData` to components. Do not import `getQuestionPagePayload` or `QuestionPagePayload` directly in a component.
+
+## D23 — HierarchyPath.module is optional because a question may not belong to a resolvable module (P05-B, T030)
+
+**Decision:** `HierarchyPath.module` is `ModuleEntity?` (optional), not required. `resolveHierarchyPath` returns `{ domain, stack }` (no module) when the question's subcategory cannot be resolved.
+
+**Why:** Some questions live in the `_root` subcategory or have slug mismatches between `questions.json` and `complete-qa.json`. Forcing a module would either 404 valid questions or require a synthetic "uncategorized" module entity. Making it optional lets the path degrade gracefully — breadcrumbs and structured data still render with domain → stack → question.
+
+**How to apply:** Consumers of `resolveHierarchyPath` must handle the no-module case. Do not assume `path.module` is non-null.

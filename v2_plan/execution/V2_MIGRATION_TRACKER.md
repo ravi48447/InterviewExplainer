@@ -1,7 +1,7 @@
 # Interview Explainer V2 Migration Tracker
 
-**Status:** Phase 04 COMPLETE
-**Last updated:** Session 10 — Phase 04 Homepage & Public Discovery Experience Rebuild (T001–T479)
+**Status:** Phase 06 COMPLETE
+**Last updated:** Session 11 — Phase 05+06 Content Discovery Hierarchy & Individual Question Page Rebuild (T001–T552 + T001–T717)
 
 ## Phase Status
 
@@ -12,8 +12,8 @@
 | 02 | Root SEO, Indexing, Routing & URL Rebuild | 551 | 551 | **✅ DONE** |
 | 03 | Global Application Shell & Shared Component Migration | 431 | 431 | **✅ DONE** |
 | 04 | Homepage & Public Discovery Experience Rebuild | 479 | 479 | **✅ DONE** |
-| 05 | — | 552 | 0 | Pending |
-| 06 | — | 717 | 0 | Pending |
+| 05 | Content Discovery Hierarchy Rebuild | 552 | 552 | **✅ DONE** |
+| 06 | Individual Question Page & Interview Answer Reading Experience Rebuild | 717 | 717 | **✅ DONE** |
 | 07 | — | 594 | 0 | Pending |
 | 08 | — | 692 | 0 | Pending |
 | 09 | — | 684 | 0 | Pending |
