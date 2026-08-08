@@ -1,14 +1,17 @@
 /**
  * analysis-results.tsx — Resume analysis composite (P11-WE..WG, T221..T360).
  *
- * Renders the full resume analysis: overall score, per-dimension findings,
- * and the extracted claims with evidence. Pulls typed contracts from
- * @/lib/resume only (P11-T001).
+ * Renders the full resume analysis: overall score (as a circular gauge),
+ * per-dimension findings (as a structured grid with mini progress bars),
+ * grouped strengths/needs-attention, top improvements, and the extracted
+ * claims with evidence. Pulls typed contracts from @/lib/resume only
+ * (P11-T001).
  */
 
 import { Award, TrendingUp, AlertTriangle, ListChecks, Lightbulb } from "lucide-react";
 import type { ResumeAnalysisResult, ResumeAnalysisDimension, ResumeAnalysisFinding, ResumeClaim } from "@/lib/resume";
 import { Tag } from "@/components/ui/tag";
+import { ScoreRing } from "@/components/ui/score-ring";
 import { EvidenceCard } from "./evidence-card";
 
 export interface AnalysisResultsProps {
@@ -34,6 +37,14 @@ function findingColor(score: number) {
     : "text-destructive";
 }
 
+function findingBarClass(score: number) {
+  return score >= 75
+    ? "bg-success"
+    : score >= 50
+    ? "bg-warning"
+    : "bg-destructive";
+}
+
 export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
   const good = result.findings.filter((f) => f.status === "good");
   const needsWork = result.findings.filter((f) => f.status === "needs-work");
@@ -41,35 +52,33 @@ export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
 
   return (
     <div className="space-y-6">
-      {/* Overall score */}
-      <div className="rounded-xl border border-border bg-card p-6 text-center" aria-live="polite">
-        <Award className="h-8 w-8 text-primary mx-auto mb-2" />
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+      {/* Overall score — circular gauge replaces the flat number */}
+      <div className="rounded-xl border border-border bg-card p-6 flex flex-col items-center gap-3" aria-live="polite">
+        <span className="inline-flex items-center gap-1.5 type-label text-muted-foreground">
+          <Award className="h-3.5 w-3.5" aria-hidden="true" />
           Overall analysis score
-        </h2>
-        <p className={`type-display text-4xl font-extrabold mt-1 ${findingColor(result.overallScore)}`}>
-          {result.overallScore}
-        </p>
+        </span>
+        <ScoreRing value={result.overallScore} size={132} label="out of 100" ariaLabel={`Overall analysis score ${result.overallScore} out of 100`} />
       </div>
 
-      {/* Per-dimension findings */}
+      {/* Per-dimension findings — structured grid with mini progress bars */}
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center gap-2 mb-4">
           <ListChecks className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-bold text-foreground">Dimension findings</h3>
         </div>
-        <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           {result.findings.map((f: ResumeAnalysisFinding) => (
             <div key={f.dimension} className="rounded-lg border border-border bg-muted/30 p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-medium text-foreground">
                   {DIMENSION_LABEL[f.dimension] ?? f.dimension}
                 </span>
-                <span className={`text-lg font-bold ${findingColor(f.score)}`}>{f.score}</span>
+                <span className={`text-lg font-bold tabular-nums ${findingColor(f.score)}`}>{f.score}</span>
               </div>
               <div className="mt-2 h-1.5 rounded-full bg-border overflow-hidden">
                 <div
-                  className="h-full bg-primary rounded-full transition-colors duration-200 ease-out"
+                  className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${findingBarClass(f.score)}`}
                   style={{ width: `${f.score}%` }}
                 />
               </div>
@@ -101,8 +110,9 @@ export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
             </div>
             <ul className="space-y-1.5">
               {good.map((f) => (
-                <li key={f.dimension} className="text-sm text-foreground">
-                  {DIMENSION_LABEL[f.dimension] ?? f.dimension} · {f.score}
+                <li key={f.dimension} className="text-sm text-foreground flex items-center justify-between">
+                  <span>{DIMENSION_LABEL[f.dimension] ?? f.dimension}</span>
+                  <span className="text-xs font-semibold text-success tabular-nums">{f.score}</span>
                 </li>
               ))}
             </ul>
@@ -116,8 +126,9 @@ export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
             </div>
             <ul className="space-y-1.5">
               {[...critical, ...needsWork].map((f) => (
-                <li key={f.dimension} className="text-sm text-foreground">
-                  {DIMENSION_LABEL[f.dimension] ?? f.dimension} · {f.score}
+                <li key={f.dimension} className="text-sm text-foreground flex items-center justify-between">
+                  <span>{DIMENSION_LABEL[f.dimension] ?? f.dimension}</span>
+                  <span className="text-xs font-semibold text-warning tabular-nums">{f.score}</span>
                 </li>
               ))}
             </ul>
@@ -132,13 +143,16 @@ export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
             <Lightbulb className="h-5 w-5 text-warning" />
             <h3 className="text-sm font-bold text-foreground">Top improvements</h3>
           </div>
-          <ul className="space-y-2">
+          <ol className="space-y-2">
             {result.topImprovements.map((imp, i) => (
-              <li key={i} className="text-sm text-foreground">
-                {imp}
+              <li key={i} className="text-sm text-foreground flex items-start gap-2.5">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-xs font-bold text-muted-foreground tabular-nums">
+                  {i + 1}
+                </span>
+                <span>{imp}</span>
               </li>
             ))}
-          </ul>
+          </ol>
         </div>
       )}
 

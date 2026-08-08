@@ -3,6 +3,7 @@ import {
   HomeHero,
   HomePathways,
   HomeTechnologies,
+  HomeDSA,
   HomeFeaturedQuestions,
   HomeCapabilities,
   HomeTrust,
@@ -49,6 +50,7 @@ export default function HomePage() {
       {/* P04-T017: mid-page discovery helps users explore preparation paths. */}
       <HomePathways />
       <HomeTechnologies />
+      <HomeDSA />
       <HomeFeaturedQuestions />
 
       {/* P04-T125: capabilities explained through user outcomes. */}

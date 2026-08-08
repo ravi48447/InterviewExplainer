@@ -328,6 +328,44 @@ export function getHomeFooterLinks(): HomeFooterLink[] {
   return links;
 }
 
+// ─── DSA discovery (P04-T067, T269..T271) ───────────────────────────────────
+/**
+ * A dedicated DSA discovery section. DSA was previously buried only inside
+ * getHomeCapabilities() and the footer — visitors had no visible path into
+ * the pattern-based practice hub from the homepage. This surfaces the core
+ * interview patterns as whole-card entry points so a candidate can jump
+ * straight into the technique they want to drill.
+ *
+ * The pattern set is a *curated* static list (not a runtime scan of the
+ * content index) mirroring the canonical modules in dsaPageContent.ts —
+ * the homepage is an orientation layer, not an exhaustive catalog. Each
+ * href resolves to a real /dsa route. Surfaces only when isHubEnabled("dsa").
+ */
+export interface HomeDSAPattern {
+  /** Human-readable pattern name. */
+  name: string;
+  /** One-line description of the technique. */
+  blurb: string;
+  /** Canonical destination (a /dsa route). */
+  href: string;
+  /** Module slug used to resolve the lucide icon in HomeDSA. */
+  icon: string;
+}
+
+const DSA_PATTERNS: HomeDSAPattern[] = [
+  { name: "Arrays & Hashing", blurb: "Frequency maps, two-sum, and in-place tricks — the foundation everything else builds on.", href: "/dsa/module/arrays-hashing", icon: "arrays-hashing" },
+  { name: "Two Pointers", blurb: "Paired indices that shrink the search space — clean O(n) where brute force is O(n²).", href: "/dsa/module/two-pointers", icon: "two-pointers" },
+  { name: "Sliding Window", blurb: "Fixed- and variable-width sub-ranges over a contiguous sequence.", href: "/dsa/module/sliding-window", icon: "sliding-window" },
+  { name: "Trees & BSTs", blurb: "Traversals, recursion, and divide-and-conquer on hierarchical data.", href: "/dsa/module/trees", icon: "trees" },
+  { name: "Graphs", blurb: "BFS, DFS, topological sort, and union-find on connected structures.", href: "/dsa/module/graphs", icon: "graphs" },
+  { name: "Dynamic Programming", blurb: "1-D and 2-D recurrence patterns — the technique behind most hard problems.", href: "/dsa/module/dynamic-programming", icon: "dynamic-programming" },
+];
+
+export function getHomeDSAPatterns(): HomeDSAPattern[] {
+  if (!isHubEnabled("dsa")) return [];
+  return DSA_PATTERNS;
+}
+
 // ─── Section order (P04-T015) ───────────────────────────────────────────────
 /**
  * The single intentional homepage narrative (P04-T015). Each section leads
@@ -339,6 +377,7 @@ export const HOME_SECTION_ORDER = [
   "hero",
   "preparation-paths",
   "technologies",
+  "dsa",
   "featured-questions",
   "capabilities",
   "trust",

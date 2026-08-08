@@ -11,6 +11,7 @@
 export { HomeHero } from "./home-hero";
 export { HomePathways } from "./home-pathways";
 export { HomeTechnologies } from "./home-technologies";
+export { HomeDSA } from "./home-dsa";
 export { HomeFeaturedQuestions } from "./home-featured-questions";
 export { HomeCapabilities } from "./home-capabilities";
 export { HomeTrust } from "./home-trust";

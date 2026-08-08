@@ -54,7 +54,7 @@ export default function MockInterviewsPage() {
             <Zap className="h-3.5 w-3.5" />
             Mock Interviews
           </div>
-          <h1 className="type-display text-4xl sm:text-5xl font-extrabold tracking-tight text-foreground mb-4">
+          <h1 className="type-display text-foreground mb-4">
             Practice like it&apos;s the real thing
           </h1>
           <p className="text-muted-foreground text-sm max-w-2xl mx-auto">
@@ -95,7 +95,7 @@ export default function MockInterviewsPage() {
                     </p>
                   </div>
                   {m.badge && (
-                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-primary text-primary-foreground">
+                    <span className="type-label px-1.5 py-0.5 rounded bg-primary text-primary-foreground normal-case">
                       {m.badge}
                     </span>
                   )}

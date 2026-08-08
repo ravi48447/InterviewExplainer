@@ -14,9 +14,11 @@ import { Button } from '@/components/ui/button';
 import { ErrorState } from '@/components/ui/error-state';
 import { Tag } from '@/components/ui/tag';
 import { Badge } from '@/components/ui/badge';
+import { PageContainer } from '@/components/page-container';
+import { ScoreRing } from '@/components/ui/score-ring';
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
+  ResponsiveContainer
 } from 'recharts';
 
 export function MockInterviewResultsContent() {
@@ -26,7 +28,6 @@ export function MockInterviewResultsContent() {
   const mockType = searchParams?.get('type') || 'audio';
   const domainSlug = searchParams?.get('domain');
 
-  const [showConfetti, setShowConfetti] = useState(false);
   const [resultsData, setResultsData] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
   const [parseError, setParseError] = useState(false);
@@ -38,7 +39,6 @@ export function MockInterviewResultsContent() {
   useEffect(() => {
     if (!mounted) return;
 
-    // Try to load real results from sessionStorage
     const storedResults = sessionStorage.getItem('mockResults');
     if (storedResults) {
       try {
@@ -51,14 +51,6 @@ export function MockInterviewResultsContent() {
     }
   }, [mounted]);
 
-  useEffect(() => {
-    if (score >= 75) {
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 3000);
-    }
-  }, [score]);
-
-  // Fallback mock data if no real results available
   const mockData = resultsData || {
     overallScore: score,
     passStatus: score >= 70 ? 'pass' : 'fail',
@@ -135,133 +127,117 @@ export function MockInterviewResultsContent() {
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-success';
-    if (score >= 70) return 'text-primary';
-    if (score >= 60) return 'text-warning';
+    if (score >= 75) return 'text-success';
+    if (score >= 50) return 'text-warning';
     return 'text-destructive';
   };
 
-  const getScoreGradient = (score: number) => {
-    if (score >= 80) return 'from-success to-success';
-    if (score >= 70) return 'from-primary to-primary';
-    if (score >= 60) return 'from-warning to-warning';
-    return 'from-destructive to-destructive';
+  const getBarClass = (score: number) => {
+    if (score >= 75) return 'bg-success';
+    if (score >= 50) return 'bg-warning';
+    return 'bg-destructive';
   };
 
-  const getScoreBg = (score: number) => {
-    if (score >= 80) return 'bg-success/10';
-    if (score >= 70) return 'bg-primary/10';
-    if (score >= 60) return 'bg-warning/10';
-    return 'bg-destructive/10';
+  const QUESTION_ICONS: Record<string, any> = {
+    'coding': Code2,
+    'system-design': GitBranch,
+    'behavioral': MessageSquare,
   };
 
   if (parseError) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40 flex items-center justify-center p-6">
-        <ErrorState
-          title="Could not load results"
-          description="Your saved interview results could not be read. Please try taking another mock interview."
-          retryLabel="Back to mock interviews"
-          onRetry={() => router.push('/mock-interviews')}
-          className="max-w-2xl w-full"
-        />
+      <div className="bg-background">
+        <PageContainer className="py-20">
+          <ErrorState
+            title="Could not load results"
+            description="Your saved interview results could not be read. Please try taking another mock interview."
+            retryLabel="Back to mock interviews"
+            onRetry={() => router.push('/mock-interviews')}
+            className="max-w-2xl mx-auto"
+          />
+        </PageContainer>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  ">
-      {/* Hero Section */}
-      <div className={cn("bg-gradient-to-r", getScoreGradient(mockData.overallScore), "text-white")}>
-        <div className="w-full min-w-0 px-6 lg:px-12 py-16">
+    <div className="bg-background">
+      {/* Hero — token-based, readable colors. ScoreRing instead of flat 8xl number */}
+      <div className="border-b border-border bg-surface">
+        <PageContainer className="py-14">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-center"
+            className="flex flex-col items-center text-center gap-6"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-background/20 backdrop-blur-sm mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-card">
               {mockData.passStatus === 'pass' ? (
-                <Badge variant="success" dot className="bg-transparent text-white border-white/20">
-                  <Trophy className="h-4 w-4" />
-                  <span className="text-sm font-bold">Interview Complete</span>
-                </Badge>
+                <>
+                  <Trophy className="h-4 w-4 text-success" />
+                  <span className="text-sm font-bold text-foreground">Interview Complete</span>
+                </>
               ) : (
-                <Badge variant="warning" dot className="bg-transparent text-white border-white/20">
-                  <Target className="h-4 w-4" />
-                  <span className="text-sm font-bold">Keep Practicing</span>
-                </Badge>
+                <>
+                  <Target className="h-4 w-4 text-warning" />
+                  <span className="text-sm font-bold text-foreground">Keep Practicing</span>
+                </>
               )}
             </div>
 
-            <div className="mb-6">
-              <div className="relative inline-block">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.2, type: 'spring' }}
-                  aria-live="polite"
-                  aria-atomic="true"
-                  className="text-8xl font-extrabold mb-2"
-                >
-                  {mockData.overallScore}
-                </motion.div>
-                <div className="absolute -top-4 -right-8">
-                  {mockData.passStatus === 'pass' && (
-                    <motion.div
-                      initial={{ scale: 0, rotate: -180 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      transition={{ delay: 0.4, type: 'spring' }}
-                    >
-                      <CheckCircle2 className="h-12 w-12 text-foreground" />
-                    </motion.div>
-                  )}
-                </div>
-              </div>
-              <p className="text-2xl font-extrabold mb-2">
+            <ScoreRing
+              value={mockData.overallScore}
+              size={168}
+              stroke={10}
+              label="overall score"
+              ariaLabel={`Overall interview score ${mockData.overallScore} out of 100`}
+            />
+
+            <div>
+              <h1 className="type-title text-foreground mb-2">
                 {mockData.passStatus === 'pass' ? 'Great Performance!' : 'Keep Improving!'}
-              </p>
-              <p className="text-lg opacity-90">
+              </h1>
+              <p className="text-base text-muted-foreground max-w-md">
                 {mockData.passStatus === 'pass'
                   ? 'You demonstrated strong interview skills'
                   : 'Focus on the areas below to improve your performance'}
               </p>
             </div>
 
-            <div className="flex items-center justify-center gap-8 text-sm font-bold">
-              <div className="flex flex-col items-center">
-                <Clock className="h-6 w-6 mb-1" />
-                <span>{mockData.completionTime}</span>
+            <div className="flex flex-wrap items-center justify-center gap-6 text-sm font-medium">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="h-4 w-4 text-primary" />
+                <span className="text-foreground">{mockData.completionTime}</span>
               </div>
-              <div className="flex flex-col items-center">
-                <Target className="h-6 w-6 mb-1" />
-                <span>{mockData.questionsAnswered}/{mockData.totalQuestions} Questions</span>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Target className="h-4 w-4 text-primary" />
+                <span className="text-foreground">{mockData.questionsAnswered}/{mockData.totalQuestions} Questions</span>
               </div>
-              <div className="flex flex-col items-center">
-                <TrendingUp className="h-6 w-6 mb-1" />
-                <span>{mockData.improvement} vs Last</span>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                <span className="text-foreground">{mockData.improvement} vs Last</span>
               </div>
             </div>
           </motion.div>
-        </div>
+        </PageContainer>
       </div>
 
-      <div className="w-full min-w-0 px-6 lg:px-12 -mt-8 pb-20">
+      <PageContainer className="-mt-6 pb-20">
         {/* Quick Actions */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="flex items-center justify-center gap-4 mb-12"
+          className="flex flex-wrap items-center justify-center gap-3 mb-10"
         >
-          <Button variant="outline" size="lg" className="font-semibold bg-background shadow-lg">
+          <Button variant="outline" size="lg" className="font-semibold">
             <Download className="h-4 w-4 mr-2" />
             Download Report
           </Button>
-          <Button variant="outline" size="lg" className="font-semibold bg-background shadow-lg">
+          <Button variant="outline" size="lg" className="font-semibold">
             <Share2 className="h-4 w-4 mr-2" />
             Share Results
           </Button>
-          <Button size="lg" asChild className="font-bold bg-surface border border-default transition-colors duration-200 ease-out shadow-lg">
+          <Button size="lg" asChild className="font-semibold">
             <Link href="/mock-interviews">
               <Zap className="h-4 w-4 mr-2" />
               Try Another Mock
@@ -269,7 +245,7 @@ export function MockInterviewResultsContent() {
           </Button>
         </motion.div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column: Detailed Breakdown */}
           <div className="lg:col-span-2 space-y-6">
             {/* Skills Radar Chart */}
@@ -277,15 +253,15 @@ export function MockInterviewResultsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="bg-background rounded-2xl border-2 border-border shadow-lg p-8"
+              className="rounded-xl border border-border bg-card p-6 sm:p-8"
             >
-              <h2 className="text-2xl font-extrabold text-foreground mb-6">Skills Assessment</h2>
+              <h2 className="type-section text-foreground mb-6">Skills Assessment</h2>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <RadarChart data={mockData.skillsRadar}>
                     <PolarGrid stroke="hsl(var(--border))" />
-                    <PolarAngleAxis dataKey="skill" tick={{ fontSize: 12, fontWeight: 600 }} />
-                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
+                    <PolarAngleAxis dataKey="skill" tick={{ fontSize: 12, fontWeight: 600, fill: 'hsl(var(--muted-foreground))' }} />
+                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
                     <Radar
                       name="Your Score"
                       dataKey="score"
@@ -296,93 +272,88 @@ export function MockInterviewResultsContent() {
                     />
                   </RadarChart>
                 </ResponsiveContainer>
-              </div>
+  </div>
             </motion.div>
 
             {/* Question-by-Question Breakdown */}
-            {mockData.questionDetails.map((q: any, idx: number) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 + idx * 0.1 }}
-                className="bg-background rounded-2xl border-2 border-border shadow-lg p-8"
-              >
-                <div className="flex items-start justify-between mb-6">
-                  <div className="flex items-start gap-4 flex-1">
-                    <div className={cn(
-                      "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
-                      q.type === 'coding' && "bg-surface ",
-                      q.type === 'system-design' && "bg-surface ",
-                      q.type === 'behavioral' && "bg-warning/10"
-                    )}>
-                      {q.type === 'coding' && <Code2 className="h-6 w-6 text-foreground" />}
-                      {q.type === 'system-design' && <GitBranch className="h-6 w-6 text-foreground" />}
-                      {q.type === 'behavioral' && <MessageSquare className="h-6 w-6 text-foreground" />}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                        Question {idx + 1} • <Badge variant="outline" className="ml-1">{q.type?.replace('-', ' ') || 'technical'}</Badge>
-                      </p>
-                      <h3 className="text-xl font-extrabold text-foreground mb-2">{q.question || q.title}</h3>
-                      <p className="text-sm text-muted-foreground">Time spent: {q.timeSpent || 'N/A'}</p>
+            {mockData.questionDetails.map((q: any, idx: number) => {
+              const QIcon = QUESTION_ICONS[q.type] || Code2;
+              return (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 + idx * 0.1 }}
+                  className="rounded-xl border border-border bg-card p-6 sm:p-8"
+                >
+                  <div className="flex items-start justify-between gap-4 mb-6">
+                    <div className="flex items-start gap-4 flex-1 min-w-0">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-border bg-surface">
+                        <QIcon className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="type-label text-muted-foreground mb-1.5">
+                          Question {idx + 1} • <Badge variant="outline" className="ml-1">{q.type?.replace('-', ' ') || 'technical'}</Badge>
+                        </p>
+                        <h3 className="text-lg font-bold text-foreground mb-1.5">{q.question || q.title}</h3>
+                        <p className="text-sm text-muted-foreground">Time spent: {q.timeSpent || 'N/A'}</p>
 
-                      {/* Link to review full answer if available */}
-                      {q.reviewUrl && q.score < 80 && (
-                        <Link
-                          href={q.reviewUrl}
-                          className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary text-xs font-bold hover:bg-primary/20 transition-colors"
-                        >
-                          <BookOpen className="h-3 w-3" />
-                          Review Full Answer & Explanation
-                          <ArrowRight className="h-3 w-3" />
-                        </Link>
-                      )}
+                        {q.reviewUrl && q.score < 80 && (
+                          <Link
+                            href={q.reviewUrl}
+                            className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-primary text-xs font-bold hover:bg-primary/10 transition-colors"
+                          >
+                            <BookOpen className="h-3.5 w-3.5" />
+                            Review Full Answer & Explanation
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className={cn("text-4xl font-extrabold mb-1", getScoreColor(q.score))}>
-                      {q.score}
+                    <div className="text-right shrink-0">
+                      <div className={cn("text-3xl font-bold tabular-nums", getScoreColor(q.score))}>
+                        {q.score}
+                      </div>
+                      <p className="type-label text-muted-foreground">SCORE</p>
                     </div>
-                    <p className="text-xs font-bold text-muted-foreground">SCORE</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Strengths */}
-                  <div className="p-4 rounded-xl bg-success/10 border border-success/20">
-                    <div className="flex items-center gap-2 mb-3">
-                      <ThumbsUp className="h-5 w-5 text-success" />
-                      <h4 className="text-sm font-extrabold text-success">What Went Well</h4>
-                    </div>
-                    <ul className="space-y-2">
-                      {q.strengths.map((strength: string, i: number) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-success">
-                          <CheckCircle2 className="h-4 w-4 text-success shrink-0 mt-0.5" />
-                          <span>{strength}</span>
-                        </li>
-                      ))}
-                    </ul>
                   </div>
 
-                  {/* Improvements */}
-                  <div className="p-4 rounded-xl bg-warning/10 border border-warning/20">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Lightbulb className="h-5 w-5 text-warning" />
-                      <h4 className="text-sm font-extrabold text-warning">Areas to Improve</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Strengths */}
+                    <div className="p-4 rounded-lg border border-border bg-surface">
+                      <div className="flex items-center gap-2 mb-3">
+                        <ThumbsUp className="h-4 w-4 text-success" />
+                        <h4 className="text-sm font-bold text-foreground">What Went Well</h4>
+                      </div>
+                      <ul className="space-y-2">
+                        {q.strengths.map((strength: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                            <CheckCircle2 className="h-4 w-4 text-success shrink-0 mt-0.5" />
+                            <span>{strength}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <ul className="space-y-2">
-                      {q.improvements.map((improvement: string, i: number) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-warning">
-                          <AlertCircle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
-                          <span>{improvement}</span>
-                        </li>
-                      ))}
-                    </ul>
+
+                    {/* Improvements */}
+                    <div className="p-4 rounded-lg border border-border bg-surface">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Lightbulb className="h-4 w-4 text-warning" />
+                        <h4 className="text-sm font-bold text-foreground">Areas to Improve</h4>
+                      </div>
+                      <ul className="space-y-2">
+                        {q.improvements.map((improvement: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                            <AlertCircle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                            <span>{improvement}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              );
+            })}
           </div>
 
           {/* Right Column: Summary & Recommendations */}
@@ -392,36 +363,37 @@ export function MockInterviewResultsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
-              className="bg-background rounded-2xl border-2 border-border shadow-lg p-6 sticky top-6"
+              className="rounded-xl border border-border bg-card p-6 lg:sticky lg:top-6"
             >
-              <h3 className="text-lg font-extrabold text-foreground mb-4">Category Scores</h3>
+              <h3 className="type-section text-foreground mb-5">Category Scores</h3>
               <div className="space-y-4">
-                {Object.entries(mockData.breakdown).map(([category, data]: [string, any]) => (
-                  <div key={category}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        {category === 'coding' && <Code2 className="h-4 w-4 text-primary dark:text-primary" />}
-                        {category === 'systemDesign' && <GitBranch className="h-4 w-4 text-primary dark:text-primary" />}
-                        {category === 'behavioral' && <MessageSquare className="h-4 w-4 text-warning" />}
-                        <span className="text-sm font-bold text-foreground capitalize">
-                          {category.replace(/([A-Z])/g, ' $1')}
+                {Object.entries(mockData.breakdown).map(([category, data]: [string, any]) => {
+                  const CatIcon = category === 'coding' ? Code2 : category === 'systemDesign' ? GitBranch : MessageSquare;
+                  return (
+                    <div key={category}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <CatIcon className="h-4 w-4 text-primary" />
+                          <span className="text-sm font-medium text-foreground capitalize">
+                            {category.replace(/([A-Z])/g, ' $1')}
+                          </span>
+                        </div>
+                        <span className={cn("text-sm font-bold tabular-nums", getScoreColor(data.score))}>
+                          {data.score}
                         </span>
                       </div>
-                      <span className={cn("text-lg font-extrabold", getScoreColor(data.score))}>
-                        {data.score}
-                      </span>
+                      <div className="w-full h-2 rounded-full bg-muted overflow-hidden mb-2">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${data.score}%` }}
+                          transition={{ delay: 0.8, duration: 0.8 }}
+                          className={cn("h-full rounded-full transition-[width] duration-700 ease-out", getBarClass(data.score))}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">{data.feedback}</p>
                     </div>
-                    <div className="w-full h-2 bg-surface rounded-full overflow-hidden mb-2">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${data.score}%` }}
-                        transition={{ delay: 0.8, duration: 0.8 }}
-                        className={cn("h-full bg-gradient-to-r", getScoreGradient(data.score))}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">{data.feedback}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </motion.div>
 
@@ -430,29 +402,19 @@ export function MockInterviewResultsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.7 }}
-              className="bg-background rounded-2xl border-2 border-border shadow-lg p-6"
+              className="rounded-xl border border-border bg-card p-6"
             >
-              <h3 className="text-lg font-extrabold text-foreground mb-4">Recommended Practice</h3>
+              <h3 className="type-section text-foreground mb-5">Recommended Practice</h3>
               <div className="space-y-3">
                 {mockData.recommendations.map((rec: any, idx: number) => (
                   <Link
                     key={idx}
                     href="/domains"
-                    className={cn(
-                      "flex items-center justify-between p-4 rounded-xl border-2 transition-colors duration-200 ease-out group",
-                      rec.priority === 'high' && "bg-surface border-default hover:border-primary",
-                      rec.priority === 'medium' && "bg-warning/10 border-warning/20 hover:border-warning/40",
-                      rec.priority === 'low' && "bg-surface border-default hover:border-primary"
-                    )}
+                    className="flex items-center justify-between p-4 rounded-lg border border-border bg-surface hover:border-primary/30 transition-colors duration-200 ease-out group"
                   >
                     <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "w-10 h-10 rounded-lg flex items-center justify-center",
-                        rec.priority === 'high' && "bg-primary",
-                        rec.priority === 'medium' && "bg-warning/20",
-                        rec.priority === 'low' && "bg-surface"
-                      )}>
-                        <rec.icon className="h-5 w-5 text-white" />
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-card">
+                        <rec.icon className="h-5 w-5 text-primary" />
                       </div>
                       <div>
                         <p className="text-sm font-bold text-foreground">{rec.title}</p>
@@ -470,18 +432,18 @@ export function MockInterviewResultsContent() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
-              className="bg-surface border-2 border-default dark:border-default/20 rounded-2xl shadow-lg p-6"
+              className="rounded-xl border border-primary/30 bg-primary/5 p-6"
             >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-surface flex items-center justify-center">
-                  <Award className="h-5 w-5 text-foreground" />
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-card">
+                  <Award className="h-5 w-5 text-primary" />
                 </div>
-                <h3 className="text-lg font-extrabold text-foreground">Keep Going!</h3>
+                <h3 className="type-section text-foreground">Keep Going!</h3>
               </div>
-              <p className="text-sm text-foreground mb-4">
+              <p className="text-sm text-muted-foreground mb-4">
                 Consistent practice is key to interview success. Take another mock to track your improvement.
               </p>
-              <Button asChild className="w-full font-bold bg-surface border border-default transition-colors duration-200 ease-out">
+              <Button asChild className="w-full font-semibold">
                 <Link href="/mock-interviews">
                   Start New Mock
                   <ArrowRight className="h-4 w-4 ml-2" />
@@ -490,7 +452,7 @@ export function MockInterviewResultsContent() {
             </motion.div>
           </div>
         </div>
-      </div>
+      </PageContainer>
     </div>
   );
 }
