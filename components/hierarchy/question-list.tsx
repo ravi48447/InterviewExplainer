@@ -56,14 +56,14 @@ export function QuestionList({
   }
 
   return (
-    <ul className="divide-y divide-border" aria-live="polite">
+    <ul className="divide-y divide-border/60" aria-live="polite">
       {questions.map((q) => (
         <li key={q.slug}>
           <Link
             href={q.href}
             className={cn(
               "group flex items-center justify-between gap-3 py-3.5 px-1",
-              "transition-colors hover:bg-muted/30",
+              "transition-colors hover:bg-surface",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             )}
           >

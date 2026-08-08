@@ -14,6 +14,13 @@ import {
  * "Explore DSA another way" — standard cross-link strip appearing at the
  * bottom of every DSA listing page. Helps users pivot between browse
  * dimensions (by module, pattern, difficulty, company, sheet).
+ *
+ * V2 learning-site treatment: the cross-links now read as a quiet in-page
+ * nav rather than a row of competing colour tiles. A single indigo accent
+ * (icon tile) carries the visual identity; borders are softened to
+ * `border-border/60` with a `hover:border-primary/30` lift. No translate/scale
+ * motion — the card signals interactivity through border + arrow alone, the
+ * same vocabulary the rest of the learning surface uses.
  */
 export function DSAExploreBar({ exclude }: { exclude?: string }) {
   const links: Array<{
@@ -22,7 +29,6 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
     blurb: string;
     key: string;
     icon: LucideIcon;
-    accent: string;
   }> = [
     {
       key: "curriculum",
@@ -30,15 +36,13 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
       label: "Curriculum",
       blurb: "18 modules · theory + practice",
       icon: BookOpen,
-      accent: "text-primary dark:text-primary bg-blue-50 dark:bg-blue-500/10 border-default dark:border-default/20",
     },
     {
       key: "sheets",
-      href: "/dsa#plans",
+      href: "/dsa#sheets",
       label: "Curated sheets",
       blurb: "Blind 75, NeetCode 150, Grind 75",
       icon: ListChecks,
-      accent: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-default dark:border-default/20",
     },
     {
       key: "difficulty",
@@ -46,53 +50,51 @@ export function DSAExploreBar({ exclude }: { exclude?: string }) {
       label: "By difficulty",
       blurb: "Easy · Medium · Hard",
       icon: Gauge,
-      accent: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-default dark:border-default/20",
     },
     {
       key: "patterns",
-      href: "/dsa#problems",
+      href: "/dsa#patterns",
       label: "By pattern",
       blurb: "Sliding window, DFS, DP, greedy…",
       icon: Workflow,
-      accent: "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-100 dark:border-blue-500/20",
     },
     {
       key: "companies",
-      href: "/dsa/company/amazon",
+      href: "/dsa#companies",
       label: "By company",
       blurb: "FAANG + top tech",
       icon: Building2,
-      accent: "text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 border-orange-100 dark:border-orange-500/20",
     },
   ];
   const filtered = exclude ? links.filter((l) => l.key !== exclude) : links;
   return (
-    <section className="mt-12 pt-8 border-t border-border mb-10">
-      <p className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1.5">
+    <section className="mt-12 border-t border-border/60 pt-10">
+      <p className="type-label mb-1 flex items-center gap-1.5 text-primary">
         <Compass className="h-3.5 w-3.5" />
         Keep exploring
       </p>
-      <h2 className="text-xl font-black text-foreground tracking-tight mb-4">
+      <h2 className="font-display text-xl font-bold tracking-tight text-foreground">
         Browse DSA another way
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {filtered.map((l) => {
           const Icon = l.icon;
           return (
             <Link
               key={l.key}
               href={l.href}
-              className="group flex flex-col rounded-2xl border border-border bg-background hover:border-blue-300 dark:border-blue-500/30 hover:shadow-md hover:-translate-y-0.5 transition-all p-4"
+              className="group flex flex-col rounded-lg border border-border/60 bg-card p-5 transition-colors duration-200 ease-out hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              <div className={`w-9 h-9 rounded-lg border flex items-center justify-center mb-3 ${l.accent}`}>
-                <Icon className="h-4 w-4" />
-              </div>
-              <div className="text-sm font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors">
+              <span className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface">
+                <Icon className="h-4 w-4 text-primary" />
+              </span>
+              <div className="mt-3 text-sm font-semibold text-foreground transition-colors duration-200 ease-out group-hover:text-primary">
                 {l.label}
               </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">{l.blurb}</div>
-              <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400">
-                Explore <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+              <div className="mt-1 text-xs leading-snug text-muted-foreground">{l.blurb}</div>
+              <div className="mt-3 flex items-center gap-1 text-xs font-semibold text-primary">
+                Explore
+                <ArrowRight className="h-3 w-3 transition-transform duration-200 ease-out group-hover:translate-x-0.5" />
               </div>
             </Link>
           );

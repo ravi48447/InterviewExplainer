@@ -4,10 +4,15 @@
  * Resolves each group's `problemSlugs` to `DSAProblemIndex` entries from the
  * in-memory index and renders them with `DSAProblemRow` (which requires a
  * 1-based `position`).
+ *
+ * V2 learning-site treatment: PageContainer, hairline stat band, softened
+ * borders, and group panels that read as clear sections rather than a flat
+ * divided list.
  */
-import { ChevronRight } from "lucide-react"
+import { ListChecks } from "lucide-react"
 import { DSABreadcrumb } from "@/components/dsa/DSABreadcrumb"
 import { DSAProblemRow } from "@/components/dsa/DSAProblemRow"
+import { PageContainer } from "@/components/page-container"
 import { getDSAIndex } from "@/lib/contentV2"
 import type { DSAProblemIndex } from "@/lib/contentV2-types"
 import type { DSASheetPageData } from "@/lib/dsa"
@@ -20,41 +25,53 @@ export function DSASheetView({ data }: { data: DSASheetPageData }) {
   let runningPosition = 0
 
   return (
-    <div className="page-container py-6 lg:py-8">
+    <PageContainer className="py-14 sm:py-16">
       <DSABreadcrumb trail={breadcrumbs} />
 
-      <header className="mb-8">
-        <h1 className="type-display text-foreground mb-2">{sheetName}</h1>
-        <div className="flex flex-wrap gap-3 mb-4">
-          {heroStats.map((s) => (
-            <div key={s.label} className="rounded-lg border border-border bg-card px-4 py-2">
-              <span className="font-semibold text-primary">{s.value}</span>{" "}
-              <span className="text-xs text-muted-foreground">{s.label}</span>
-            </div>
-          ))}
+      <header className="mb-12">
+        <div className="flex items-center gap-2">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-surface">
+            <ListChecks className="h-5 w-5 text-primary" />
+          </span>
+          <h1 className="type-display text-foreground">{sheetName}</h1>
         </div>
+        {heroStats.length > 0 && (
+          <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border/60 bg-border/60 sm:grid-cols-3 lg:grid-cols-4">
+            {heroStats.map((s) => (
+              <div key={s.label} className="bg-card px-5 py-4">
+                <dd className="font-display text-2xl font-bold tabular-nums text-primary">
+                  {s.value}
+                </dd>
+                <dt className="type-label mt-1 text-muted-foreground">{s.label}</dt>
+              </div>
+            ))}
+          </dl>
+        )}
       </header>
 
-      {groups.map((group) => (
-        <section key={group.groupSlug} className="mb-8">
-          <div className="flex items-center gap-1.5 mb-3">
-            <ChevronRight className="h-4 w-4 text-primary" />
-            <h2 className="type-section text-foreground">{group.title}</h2>
-            <span className="text-xs text-muted-foreground">({group.problemSlugs.length})</span>
-          </div>
-          {group.blurb && <p className="text-sm text-muted-foreground mb-3">{group.blurb}</p>}
-          <div className="divide-y divide-border rounded-lg border border-border bg-card">
-            {group.problemSlugs.map((slug) => {
-              const problem = bySlug.get(slug)
-              runningPosition += 1
-              if (!problem) return null
-              return <DSAProblemRow key={slug} problem={problem} position={runningPosition} />
-            })}
-          </div>
-        </section>
-      ))}
+      <div className="space-y-8">
+        {groups.map((group) => (
+          <section key={group.groupSlug}>
+            <div className="flex items-baseline gap-2">
+              <h2 className="type-section text-foreground">{group.title}</h2>
+              <span className="text-sm text-muted-foreground">({group.problemSlugs.length})</span>
+            </div>
+            {group.blurb && (
+              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{group.blurb}</p>
+            )}
+            <div className="mt-4 divide-y divide-border/60 overflow-hidden rounded-lg border border-border/60 bg-card">
+              {group.problemSlugs.map((slug) => {
+                const problem = bySlug.get(slug)
+                runningPosition += 1
+                if (!problem) return null
+                return <DSAProblemRow key={slug} problem={problem} position={runningPosition} />
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
 
-      <p className="text-sm text-muted-foreground">{totalProblems} problems total.</p>
-    </div>
+      <p className="mt-8 text-sm text-muted-foreground">{totalProblems} problems total.</p>
+    </PageContainer>
   )
 }

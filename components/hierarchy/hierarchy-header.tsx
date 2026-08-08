@@ -35,9 +35,9 @@ export function HierarchyHeader({
   return (
     <header
       className={cn(
-        "page-container py-10 sm:py-12 lg:py-14",
+        "page-container py-14 sm:py-16",
         variant === "surface" && "bg-surface",
-        variant === "default" && "border-b border-border"
+        variant === "default" && "border-b border-border/60 bg-background"
       )}
     >
       <div className="max-w-3xl">

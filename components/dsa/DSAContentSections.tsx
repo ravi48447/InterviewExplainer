@@ -14,6 +14,13 @@ import type { DSAPageContent } from "@/lib/dsaPageContent";
  *
  * `id` anchors the block so a page nav / "Guide" link can jump to it. The FAQ
  * is also emitted as FAQPage JSON-LD for SEO.
+ *
+ * V2 learning-site treatment: replaces the multi-colour gradient panels with
+ * the restrained token system — `bg-card` / `bg-surface` cards with
+ * `border-border/60`, the single indigo `--primary` accent, and the homepage
+ * card pattern. The structural layout (overview + playbook side by side,
+ * pitfalls grid, FAQ disclosure) is preserved so information density is not
+ * lost — only the visual chrome is aligned to the system.
  */
 export function DSAContentSections({
   content,
@@ -40,7 +47,7 @@ export function DSAContentSections({
       : null;
 
   return (
-    <section id={id} className="scroll-mt-24 mb-12 space-y-6">
+    <section id={id} className="scroll-mt-24 mb-12 space-y-8">
       {faqJsonLd && (
         <script
           type="application/ld+json"
@@ -50,27 +57,27 @@ export function DSAContentSections({
 
       {/* Heading */}
       <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1 flex items-center gap-1.5">
+        <p className="type-label mb-1 flex items-center gap-1.5 text-primary">
           <Compass className="h-3.5 w-3.5" />
           {kicker}
         </p>
-        <h2 className="text-2xl font-black text-foreground tracking-tight">{heading}</h2>
+        <h2 className="font-display text-2xl font-bold tracking-tight text-foreground">
+          {heading}
+        </h2>
       </div>
 
       {/* Overview + Study playbook side by side on wide screens */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-6 items-start">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr] items-start">
         {/* Overview prose */}
         {content.overview.length > 0 && (
-          <div className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden">
-            <div className="px-6 pt-5 pb-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface ">
-              <p className="text-xs font-bold uppercase tracking-widest text-primary dark:text-primary flex items-center gap-1.5">
-                <BookOpen className="h-3.5 w-3.5" />
-                Overview
-              </p>
+          <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
+            <div className="flex items-center gap-1.5 border-b border-border/60 bg-surface px-5 py-3">
+              <BookOpen className="h-3.5 w-3.5 text-primary" />
+              <p className="type-label text-muted-foreground">Overview</p>
             </div>
-            <div className="px-6 py-5 space-y-3.5">
+            <div className="space-y-3.5 px-5 py-5">
               {content.overview.map((p, i) => (
-                <p key={i} className="text-[15px] leading-[1.75] text-foreground">
+                <p key={i} className="type-body text-foreground">
                   {p}
                 </p>
               ))}
@@ -80,25 +87,25 @@ export function DSAContentSections({
 
         {/* Study playbook */}
         {content.studyTips.length > 0 && (
-          <div className="rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-background shadow-sm overflow-hidden">
-            <div className="px-6 pt-5 pb-3 border-b border-blue-100 dark:border-blue-500/20 bg-gradient-to-br from-blue-50 dark:from-blue-950/40 to-blue-50/30 dark:to-blue-950/40  ">
-              <p className="text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-400 flex items-center gap-1.5">
-                <Compass className="h-3.5 w-3.5" />
-                Study playbook
-              </p>
+          <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
+            <div className="flex items-center gap-1.5 border-b border-border/60 bg-surface px-5 py-3">
+              <Compass className="h-3.5 w-3.5 text-primary" />
+              <p className="type-label text-muted-foreground">Study playbook</p>
             </div>
-            <ol className="p-4 space-y-2.5">
+            <ol className="space-y-2.5 p-4">
               {content.studyTips.map((tip, i) => (
                 <li
                   key={i}
-                  className="flex items-start gap-3 rounded-xl border border-slate-100 dark:border-slate-800/60 bg-surface/60 p-3.5"
+                  className="flex items-start gap-3 rounded-lg border border-border/60 bg-surface p-3.5"
                 >
-                  <span className="shrink-0 w-6 h-6 rounded-lg bg-blue-600 dark:bg-blue-800 text-primary-foreground dark:text-foreground flex items-center justify-center text-xs font-black">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
                     {i + 1}
                   </span>
                   <div>
-                    <div className="text-sm font-bold text-foreground mb-0.5">{tip.title}</div>
-                    <div className="text-[13px] text-secondary leading-relaxed">{tip.body}</div>
+                    <div className="text-sm font-bold text-foreground">{tip.title}</div>
+                    <div className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+                      {tip.body}
+                    </div>
                   </div>
                 </li>
               ))}
@@ -109,17 +116,15 @@ export function DSAContentSections({
 
       {/* Pitfalls */}
       {content.pitfalls.length > 0 && (
-        <div className="rounded-2xl border border-rose-200 dark:border-rose-500/20 bg-background shadow-sm overflow-hidden">
-          <div className="px-6 pt-5 pb-3 border-b border-rose-100 dark:border-rose-500/20 bg-gradient-to-br from-rose-50 dark:from-rose-950/40 to-rose-50/30 dark:to-rose-950/40  ">
-            <p className="text-xs font-bold uppercase tracking-widest text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Common pitfalls
-            </p>
+        <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
+          <div className="flex items-center gap-1.5 border-b border-border/60 bg-surface px-5 py-3">
+            <AlertTriangle className="h-3.5 w-3.5 text-primary" />
+            <p className="type-label text-muted-foreground">Common pitfalls</p>
           </div>
-          <ul className="px-6 py-5 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2.5">
+          <ul className="grid grid-cols-1 gap-x-8 gap-y-2.5 px-5 py-5 md:grid-cols-2">
             {content.pitfalls.map((p, i) => (
-              <li key={i} className="flex items-start gap-2.5 text-[14px] text-foreground leading-relaxed">
-                <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-rose-500 dark:bg-rose-800 shrink-0" />
+              <li key={i} className="flex items-start gap-2.5 text-sm leading-relaxed text-foreground">
+                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                 <span>{p}</span>
               </li>
             ))}
@@ -130,7 +135,7 @@ export function DSAContentSections({
       {/* FAQ */}
       {content.faqs.length > 0 && (
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-primary dark:text-primary mb-3 flex items-center gap-1.5">
+          <p className="type-label mb-3 flex items-center gap-1.5 text-primary">
             <HelpCircle className="h-3.5 w-3.5" />
             Frequently asked
           </p>
@@ -138,16 +143,16 @@ export function DSAContentSections({
             {content.faqs.map((f, i) => (
               <details
                 key={i}
-                className="group rounded-xl border border-border bg-background hover:border-blue-200 dark:border-blue-500/20 transition-colors"
+                className="group rounded-lg border border-border/60 bg-card transition-colors hover:border-primary/30"
               >
-                <summary className="flex items-center justify-between gap-4 px-5 py-3.5 cursor-pointer list-none">
-                  <span className="text-sm font-semibold text-foreground group-hover:text-blue-700 dark:text-blue-400 transition-colors leading-snug flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-300 shrink-0 mt-0.5" />
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-3.5">
+                  <span className="flex items-start gap-2 text-sm font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     {f.q}
                   </span>
-                  <ChevronRight className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0 group-open:rotate-90 transition-transform" />
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
                 </summary>
-                <div className="px-5 pb-4 pl-12 text-sm text-secondary leading-relaxed">
+                <div className="px-5 pb-4 pl-12 text-sm leading-relaxed text-muted-foreground">
                   {f.a}
                 </div>
               </details>

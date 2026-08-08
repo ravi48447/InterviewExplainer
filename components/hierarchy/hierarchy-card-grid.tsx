@@ -60,8 +60,8 @@ export function HierarchyCardGrid({
           <Link
             href={item.href}
             className={cn(
-              "group flex h-full flex-col gap-2 rounded-lg border border-border bg-card p-5",
-              "transition-colors duration-200 ease-out hover:border-strong hover:bg-muted/50",
+              "group flex h-full flex-col gap-2 rounded-lg border border-border/60 bg-card p-5",
+              "transition-colors duration-200 ease-out hover:border-primary/30",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             )}
           >

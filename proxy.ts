@@ -8,6 +8,7 @@ import {
   isDsaSeoSlug,
 } from "@/lib/seo-slugs";
 import { PILLAR_HUB_SLUGS } from "@/lib/seo-pillars";
+import { getAppConfig, buildSecurityHeaders } from "@/lib/platform";
 
 /**
  * Proxy — URL canonicalisation + personalised level redirect
@@ -208,6 +209,28 @@ function canonicalStackSlug(domainSlug: string, stackSlug: string): string {
 }
 
 export function proxy(request: NextRequest) {
+  const response = handleProxy(request);
+  applySecurityHeaders(response);
+  return response;
+}
+
+/**
+ * Applies the platform security headers (CSP, HSTS, cross-origin isolation)
+ * to every response leaving the proxy. next.config.mjs owns the headers this
+ * does not (X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+ * Permissions-Policy); this layers the ones next.config cannot set
+ * dynamically. Mirrors the former middleware.ts behaviour (P14-T101..T108).
+ */
+function applySecurityHeaders(response: NextResponse) {
+  const config = getAppConfig();
+  const headers = buildSecurityHeaders(config);
+  response.headers.set("Content-Security-Policy", headers.contentSecurityPolicy);
+  response.headers.set("Strict-Transport-Security", headers.strictTransportSecurity);
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  response.headers.set("Cross-Origin-Resource-Policy", "same-origin");
+}
+
+function handleProxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === "/") return NextResponse.next();
