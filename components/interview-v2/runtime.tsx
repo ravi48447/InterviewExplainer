@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Clock, Send, SkipForward, AlertCircle, Loader2, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export interface RuntimeProps {
   questionNumber: number;
@@ -107,7 +108,10 @@ export function Runtime({
         <span className="text-sm font-semibold text-muted-foreground">
           Question {questionNumber} of {totalQuestions}
         </span>
-        <div className={`flex items-center gap-1.5 text-sm font-bold ${lowTime ? "text-red-600 dark:text-red-400" : "text-foreground"}`}>
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          className={`flex items-center gap-1.5 text-sm font-bold ${lowTime ? "text-destructive" : "text-foreground"}`}>
           <Clock className="h-4 w-4" />
           {minutes}:{secs.toString().padStart(2, "0")}
         </div>
@@ -115,7 +119,7 @@ export function Runtime({
 
       <div className="h-1 rounded-full bg-border mb-6 overflow-hidden">
         <div
-          className="h-full bg-primary transition-all"
+          className="h-full bg-primary transition-[width] duration-200 ease-out"
           style={{ width: `${(questionNumber / totalQuestions) * 100}%` }}
         />
       </div>
@@ -151,7 +155,7 @@ export function Runtime({
       </div>
 
       {timeUp && (
-        <div className="flex items-center gap-2 mt-3 text-sm text-amber-600 dark:text-amber-400">
+        <div className="flex items-center gap-2 mt-3 text-sm text-warning" role="alert">
           <AlertCircle className="h-4 w-4" />
           Time is up — submitting your answer.
         </div>
@@ -159,30 +163,29 @@ export function Runtime({
 
       {/* Actions */}
       <div className="flex items-center justify-between gap-3 mt-6">
-        <button
+        <Button
           type="button"
           onClick={handleSkip}
           disabled={evaluating}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-border rounded-lg text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-surface disabled:opacity-50"
+          variant="outline"
+          className="touch-target"
         >
           <SkipForward className="h-4 w-4" />
           Skip
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={handleSubmit}
           disabled={evaluating || answer.trim().length === 0}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          loading={evaluating}
         >
-          {evaluating ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
+          {!evaluating && (
             <>
               {isLast ? "Finish & evaluate" : "Submit & next"}
-              {isLast ? <ArrowRight className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+              {isLast ? <ArrowRight className="h-4 w-4 ml-2" /> : <Send className="h-4 w-4 ml-2" />}
             </>
           )}
-        </button>
+        </Button>
       </div>
     </div>
   );

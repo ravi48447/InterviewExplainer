@@ -11,6 +11,16 @@ import { useMemo } from "react";
 import { Search, SlidersHorizontal, Inbox } from "lucide-react";
 import type { Opportunity, OpportunityFilter, WorkMode, SeniorityBand } from "@/lib/opportunity";
 import { OpportunityCard } from "./opportunity-card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ListSkeleton } from "@/components/ui/skeleton";
 
 export interface OpportunityListProps {
   opportunities: Opportunity[];
@@ -39,52 +49,58 @@ export function OpportunityList({
     <div className="space-y-4">
       {/* Filter bar */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            value={filter.query ?? ""}
-            onChange={(e) => onFilterChange({ ...filter, query: e.target.value })}
-            placeholder="Search roles, companies, skills…"
-            className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-          />
-        </div>
+        <Input
+          type="text"
+          value={filter.query ?? ""}
+          onChange={(e) => onFilterChange({ ...filter, query: e.target.value })}
+          placeholder="Search roles, companies, skills…"
+          leftIcon={<Search />}
+          aria-label="Search opportunities"
+        />
         <div className="flex flex-wrap items-center gap-2">
-          <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-          <select
-            value={filter.seniority ?? ""}
-            onChange={(e) =>
+          <SlidersHorizontal className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Select
+            value={filter.seniority ?? "all"}
+            onValueChange={(v) =>
               onFilterChange({
                 ...filter,
-                seniority: (e.target.value || undefined) as SeniorityBand | undefined,
+                seniority: v === "all" ? undefined : (v as SeniorityBand),
               })
             }
-            className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
-            <option value="">Any level</option>
-            {SENIORITY.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filter.workMode ?? ""}
-            onChange={(e) =>
+            <SelectTrigger className="h-8 w-auto text-xs" aria-label="Filter by seniority">
+              <SelectValue placeholder="Any level" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any level</SelectItem>
+              {SENIORITY.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={filter.workMode ?? "all"}
+            onValueChange={(v) =>
               onFilterChange({
                 ...filter,
-                workMode: (e.target.value || undefined) as WorkMode | undefined,
+                workMode: v === "all" ? undefined : (v as WorkMode),
               })
             }
-            className="rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
-            <option value="">Any mode</option>
-            {WORK_MODES.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="h-8 w-auto text-xs" aria-label="Filter by work mode">
+              <SelectValue placeholder="Any mode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any mode</SelectItem>
+              {WORK_MODES.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {m}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <label className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
             <input
               type="checkbox"
@@ -99,17 +115,15 @@ export function OpportunityList({
 
       {/* Results */}
       {loading ? (
-        <p className="text-center text-sm text-muted-foreground py-12">Loading opportunities…</p>
+        <ListSkeleton rows={4} />
       ) : opportunities.length === 0 ? (
-        <div className="text-center py-16">
-          <Inbox className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm font-medium text-foreground">No opportunities found</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Try adjusting your filters or updating your career target.
-          </p>
-        </div>
+        <EmptyState
+          icon={<Inbox />}
+          title="No opportunities found"
+          description="Try adjusting your filters or updating your career target."
+        />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2" aria-live="polite">
           {opportunities.map((opp) => (
             <OpportunityCard
               key={opp.id}

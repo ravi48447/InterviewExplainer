@@ -35,7 +35,7 @@ export function ThemeToggle() {
 
   if (!mounted) {
     // Reserve stable dimensions so the header doesn't shift (T045, T296).
-    return <span className="inline-flex h-9 w-9" aria-hidden="true" />
+    return <span className="inline-flex h-9 w-9 touch-target-lg" aria-hidden="true" />
   }
 
   const current = (theme as ThemeChoice) ?? 'system'
@@ -53,7 +53,7 @@ export function ThemeToggle() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 text-muted-foreground hover:text-foreground"
+          className="h-9 w-9 touch-target-lg text-muted-foreground hover:text-foreground"
           aria-label={`Switch theme. Current: ${current}`}
         >
           <Icon className="h-[1.15rem] w-[1.15rem]" aria-hidden="true" />

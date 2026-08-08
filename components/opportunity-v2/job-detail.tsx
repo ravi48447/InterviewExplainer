@@ -9,6 +9,17 @@
 
 import { Building2, MapPin, Banknote, Briefcase, Clock, ExternalLink, Bookmark, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tag } from "@/components/ui/tag";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import Link from "next/link";
 import type { Opportunity, WorkMode, SeniorityBand } from "@/lib/opportunity";
 
 export interface JobDetailProps {
@@ -45,6 +56,27 @@ export function JobDetail({ opportunity: opp, appliedStatus, onApply, onSave, bu
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumbs */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/dashboard">Dashboard</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/dashboard/opportunities">Opportunities</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{opp.title}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       {/* Header */}
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-start justify-between gap-4">
@@ -93,23 +125,15 @@ export function JobDetail({ opportunity: opp, appliedStatus, onApply, onSave, bu
               {appliedStatus}
             </Badge>
           ) : (
-            <button
-              onClick={onApply}
-              disabled={busy}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50 hover:opacity-90 transition-opacity"
-            >
-              <Send className="h-4 w-4" />
+            <Button onClick={onApply} disabled={busy} loading={busy}>
+              <Send />
               Apply now
-            </button>
+            </Button>
           )}
-          <button
-            onClick={onSave}
-            disabled={busy}
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground disabled:opacity-50 hover:bg-muted/40 transition-colors"
-          >
-            <Bookmark className="h-4 w-4" />
+          <Button onClick={onSave} disabled={busy} variant="outline">
+            <Bookmark />
             Save
-          </button>
+          </Button>
           {opp.applicationUrl && (
             <a
               href={opp.applicationUrl}
@@ -151,9 +175,9 @@ export function JobDetail({ opportunity: opp, appliedStatus, onApply, onSave, bu
           <h2 className="text-lg font-bold text-foreground mb-3">Skills</h2>
           <div className="flex flex-wrap gap-2">
             {opp.skills.map((s) => (
-              <Badge key={s} variant="outline">
+              <Tag key={s} variant="outline">
                 {s}
-              </Badge>
+              </Tag>
             ))}
           </div>
         </div>

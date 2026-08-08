@@ -12,8 +12,9 @@
  */
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export interface HierarchyCardItem {
   title: string;
@@ -39,7 +40,11 @@ export function HierarchyCardGrid({
 }: HierarchyCardGridProps) {
   if (items.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground py-8">{emptyMessage}</p>
+      <EmptyState
+        icon={<Layers className="h-6 w-6" />}
+        title="No content yet"
+        description={emptyMessage}
+      />
     );
   }
 
@@ -56,7 +61,7 @@ export function HierarchyCardGrid({
             href={item.href}
             className={cn(
               "group flex h-full flex-col gap-2 rounded-lg border border-border bg-card p-5",
-              "transition-colors hover:border-strong hover:bg-muted/50",
+              "transition-colors duration-200 ease-out hover:border-strong hover:bg-muted/50",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             )}
           >
@@ -65,7 +70,7 @@ export function HierarchyCardGrid({
                 {item.title}
               </h3>
               <ArrowRight
-                className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                className="size-4 shrink-0 text-muted-foreground transition-colors duration-200 ease-out group-hover:text-foreground"
                 aria-hidden="true"
               />
             </div>

@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, HelpCircle } from "lucide-react";
 import { SectionHeader } from "@/components/ui/section-header";
 import { PageContainer } from "@/components/page-container";
+import { EmptyState } from "@/components/ui/empty-state";
 import { getHomeFeaturedQuestions } from "@/lib/home/home-data";
 
 /**
@@ -17,7 +18,6 @@ import { getHomeFeaturedQuestions } from "@/lib/home/home-data";
  */
 export function HomeFeaturedQuestions() {
   const questions = getHomeFeaturedQuestions(5);
-  if (questions.length === 0) return null;
 
   return (
     <section
@@ -30,18 +30,26 @@ export function HomeFeaturedQuestions() {
           title="Featured interview questions"
           description="A small sample of the curated, domain-specific questions on the platform."
           actions={
-            <Link href="/domains" className="text-sm font-medium text-primary hover:underline">
+            <Link href="/domains" className="text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-sm">
               Browse all questions
             </Link>
           }
         />
 
-        <ul className="mt-10 divide-y divide-border">
+        {questions.length === 0 ? (
+          <EmptyState
+            icon={<HelpCircle aria-hidden="true" />}
+            title="No featured questions available yet"
+            description="We're curating domain-specific interview questions. Browse all questions to explore the full catalog."
+            className="mt-10"
+          />
+        ) : (
+        <ul className="mt-10 divide-y divide-border" aria-live="polite">
           {questions.map((q, i) => (
             <li key={`${q.href}-${i}`}>
               <Link
                 href={q.href}
-                className="group flex items-center justify-between gap-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md"
+                className="group flex items-center justify-between gap-4 py-4 transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md"
               >
                 <div className="min-w-0">
                   {/* P04-T105: title is the visual focus. */}
@@ -52,13 +60,14 @@ export function HomeFeaturedQuestions() {
                   <p className="mt-0.5 text-xs text-muted-foreground">{q.context}</p>
                 </div>
                 <ArrowRight
-                  className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+                  className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
                   aria-hidden="true"
                 />
               </Link>
             </li>
           ))}
         </ul>
+        )}
       </PageContainer>
     </section>
   );

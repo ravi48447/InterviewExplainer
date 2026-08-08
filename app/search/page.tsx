@@ -11,6 +11,7 @@
 import Link from "next/link";
 import { Search, Layers, BookOpen, Code2, TrendingUp } from "lucide-react";
 import { buildMetadata } from "@/lib/seo";
+import { cn } from "@/lib/utils";
 import { SearchInput } from "@/components/search-v2";
 
 export const metadata = buildMetadata({
@@ -50,10 +51,10 @@ export default function SearchPage() {
         {/* Header */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-card text-primary text-xs font-bold rounded-full mb-4 uppercase tracking-widest border border-border">
-            <Search className="h-3.5 w-3.5" />
+            <Search className="h-3.5 w-3.5" aria-hidden="true" />
             Search
           </div>
-          <h1 className="type-display text-4xl sm:text-5xl font-black tracking-tight text-foreground mb-3">
+          <h1 className="type-display text-4xl sm:text-5xl font-extrabold tracking-tight text-foreground mb-3">
             Find Any Question
           </h1>
           <p className="text-muted-foreground text-sm max-w-lg mx-auto">
@@ -76,7 +77,7 @@ export default function SearchPage() {
         <div className="mx-auto max-w-2xl mt-10">
           <div className="mb-10">
             <div className="flex items-center gap-2 mb-3">
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <TrendingUp className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 Popular Searches
               </span>
@@ -86,7 +87,12 @@ export default function SearchPage() {
                 <Link
                   key={term}
                   href={`/search?q=${encodeURIComponent(term)}`}
-                  className="px-4 py-2 rounded-xl bg-card border border-border text-sm font-semibold text-foreground hover:border-ring hover:text-primary hover:bg-surface transition-all shadow-sm"
+                  className={cn(
+                    "px-4 py-2 rounded-xl bg-card border border-border text-sm font-semibold text-foreground",
+                    "hover:border-ring hover:text-primary hover:bg-surface",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+                    "transition-colors duration-200 ease-out shadow-sm",
+                  )}
                 >
                   {term}
                 </Link>
@@ -96,7 +102,7 @@ export default function SearchPage() {
 
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <Layers className="h-4 w-4 text-muted-foreground" />
+              <Layers className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 Quick Links
               </span>
@@ -106,13 +112,18 @@ export default function SearchPage() {
                 <Link
                   key={href}
                   href={href}
-                  className="group flex items-center gap-4 p-5 rounded-xl bg-card border border-border hover:border-ring hover:shadow-md transition-all"
+                  className={cn(
+                    "group flex items-center gap-4 p-5 rounded-xl bg-card border border-border",
+                    "hover:border-ring hover:shadow-md",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface",
+                    "transition-colors duration-200 ease-out",
+                  )}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center shrink-0 group-hover:bg-card transition-colors">
-                    <Icon className="h-5 w-5 text-primary" />
+                  <div className="w-10 h-10 rounded-lg bg-surface border border-border flex items-center justify-center shrink-0 group-hover:bg-card transition-colors duration-200 ease-out">
+                    <Icon className="h-5 w-5 text-primary" aria-hidden="true" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
+                    <h3 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors duration-200 ease-out">
                       {title}
                     </h3>
                     <p className="text-xs text-muted-foreground">{desc}</p>

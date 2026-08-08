@@ -8,8 +8,18 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Loader2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Send } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { Tag } from "@/components/ui/tag";
 import type { ContributionType } from "@/lib/community";
 
 export interface ContributionFormProps {
@@ -69,79 +79,83 @@ export function ContributionForm({ onSubmit, busy }: ContributionFormProps) {
     <div className="rounded-xl border border-border bg-card p-6 space-y-4">
       <div className="flex flex-wrap gap-2">
         {TYPES.map((t) => (
-          <button
+          <Button
             key={t.value}
+            type="button"
+            variant={type === t.value ? "primary" : "outline"}
+            size="sm"
             onClick={() => setType(t.value)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold border transition-colors ${
-              type === t.value
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-background text-foreground hover:bg-muted/40"
-            }`}
+            aria-pressed={type === t.value}
           >
             {t.label}
-          </button>
+          </Button>
         ))}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Company">
-          <input
+          <Input
             value={company}
             onChange={(e) => setCompany(e.target.value)}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
             placeholder="e.g. Swiggy"
+            aria-label="Company"
           />
         </Field>
         <Field label="Role">
-          <input
+          <Input
             value={role}
             onChange={(e) => setRole(e.target.value)}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
             placeholder="e.g. Backend Engineer"
+            aria-label="Role"
           />
         </Field>
       </div>
 
       <Field label={type === "reported-question" ? "Question" : "Details"}>
-        <textarea
+        <Textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          className="w-full min-h-[100px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+          className="min-h-[100px]"
           placeholder={
             type === "reported-question"
               ? "What were you asked?"
               : "Share your experience…"
           }
+          aria-label={type === "reported-question" ? "Question" : "Details"}
         />
       </Field>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Difficulty">
-          <select
+          <Select
             value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value as "easy" | "medium" | "hard")}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+            onValueChange={(v) => setDifficulty(v as "easy" | "medium" | "hard")}
           >
-            {DIFFICULTIES.map((d) => (
-              <option key={d} value={d} className="capitalize">
-                {d}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger aria-label="Difficulty">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DIFFICULTIES.map((d) => (
+                <SelectItem key={d} value={d} className="capitalize">
+                  {d}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="Round (optional)">
-          <input
+          <Input
             value={round}
             onChange={(e) => setRound(e.target.value)}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
             placeholder="e.g. Technical round 2"
+            aria-label="Round (optional)"
           />
         </Field>
       </div>
 
       <Field label="Tags (optional)">
         <div className="flex gap-2">
-          <input
+          <Input
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
             onKeyDown={(e) => {
@@ -150,46 +164,47 @@ export function ContributionForm({ onSubmit, busy }: ContributionFormProps) {
                 addTag();
               }
             }}
-            className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
             placeholder="Add a tag and press Enter"
+            aria-label="Add a tag"
           />
-          <button
+          <Button
+            type="button"
+            variant="outline"
+            size="default"
             onClick={addTag}
-            className="rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground hover:bg-muted/40"
           >
             Add
-          </button>
+          </Button>
         </div>
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2">
             {tags.map((t) => (
-              <Badge
-                key={t}
-                variant="default"
-                className="cursor-pointer"
-              >
+              <Tag key={t} variant="outline" className="cursor-pointer">
                 <button
+                  type="button"
                   onClick={() => setTags(tags.filter((x) => x !== t))}
                   aria-label={`Remove ${t}`}
+                  className="touch-target"
                 >
                   {t} ×
                 </button>
-              </Badge>
+              </Tag>
             ))}
           </div>
         )}
       </Field>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
 
-      <button
+      <Button
+        type="button"
         onClick={handleSubmit}
         disabled={busy}
-        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50 hover:opacity-90 transition-opacity"
+        loading={busy}
       >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        <Send />
         Submit contribution
-      </button>
+      </Button>
     </div>
   );
 }

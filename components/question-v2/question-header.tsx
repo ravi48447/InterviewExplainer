@@ -11,7 +11,16 @@
 
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink as BreadcrumbLinkRaw,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Clock, BookOpen } from "lucide-react";
+import Link from "next/link";
 import type {
   QuestionPageData,
   QuestionMetadata,
@@ -34,22 +43,27 @@ export function QuestionHeader({ data }: QuestionHeaderProps) {
     <header className="border-b border-border">
       <div className="page-container py-8 sm:py-10 lg:py-12">
         {/* Breadcrumb trail — "where am I" (P06-T281). */}
-        <nav aria-label="Breadcrumb" className="mb-4">
-          <ol className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-            {breadcrumbs.map((crumb, i) => (
-              <li key={crumb.href} className="flex items-center gap-1.5">
-                {i > 0 && (
-                  <span className="text-muted-foreground/50" aria-hidden="true">
-                    /
-                  </span>
-                )}
-                <span className={cn(i === breadcrumbs.length - 1 && "font-medium text-foreground")}>
-                  {crumb.label}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </nav>
+        <Breadcrumb aria-label="Breadcrumb" className="mb-4">
+          <BreadcrumbList>
+            {breadcrumbs.map((crumb, i) => {
+              const isLast = i === breadcrumbs.length - 1;
+              return (
+                <BreadcrumbItem key={crumb.href}>
+                  {i > 0 && <BreadcrumbSeparator />}
+                  {isLast ? (
+                    <BreadcrumbPage className="text-xs">{crumb.label}</BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLinkRaw asChild>
+                      <Link href={crumb.href} className="text-xs text-muted-foreground">
+                        {crumb.label}
+                      </Link>
+                    </BreadcrumbLinkRaw>
+                  )}
+                </BreadcrumbItem>
+              );
+            })}
+          </BreadcrumbList>
+        </Breadcrumb>
 
         {/* Single H1 — the question (P06-T021/T061). */}
         <h1

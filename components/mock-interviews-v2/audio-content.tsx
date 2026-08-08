@@ -4,13 +4,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Mic, Volume2, Square, Play, Pause, CheckCircle2, Clock,
-  AlertCircle, ChevronRight, Send, Radio, Sparkles, MessageSquare,
-  User, Bot, FileText, Zap, SkipForward, Loader2
+  Mic, Volume2, Square, CheckCircle2, Clock,
+  AlertCircle, ChevronRight, Send, Radio, Sparkles,
+  User, Bot, FileText, SkipForward
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ReadAloudButton } from '@/components/speakable/ReadAloudButton';
+import { CardSkeleton } from '@/components/ui/skeleton';
+import { ErrorState } from '@/components/ui/error-state';
+import { Tag } from '@/components/ui/tag';
+import { Badge } from '@/components/ui/badge';
 
 interface Question {
   id: string;
@@ -441,34 +445,24 @@ export function AudioMockInterviewContent() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  flex items-center justify-center p-6  ">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8 text-center"
-        >
-          <Loader2 className="h-12 w-12 text-primary dark:text-primary animate-spin mx-auto mb-4" />
-          <h2 className="text-2xl font-black text-foreground mb-2">Loading Questions...</h2>
-          <p className="text-muted-foreground">Preparing your domain-specific interview</p>
-        </motion.div>
+        <div className="max-w-2xl w-full space-y-6">
+          <CardSkeleton className="p-8 h-64" />
+          <CardSkeleton className="p-4 h-32" />
+        </div>
       </div>
     );
   }
 
   if (error || !domainSlug) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  flex items-center justify-center p-6  ">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-2xl w-full bg-background rounded-2xl border-2 border-border shadow-2xl p-8 text-center"
-        >
-          <AlertCircle className="h-12 w-12 text-red-600 dark:text-red-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-black text-foreground mb-2">Error</h2>
-          <p className="text-muted-foreground mb-6">{error || 'No domain selected'}</p>
-          <Button onClick={() => router.push('/mock-interviews')} variant="outline">
-            Go Back
-          </Button>
-        </motion.div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  flex items-center justify-center p-6">
+        <ErrorState
+          title="Unable to load interview"
+          description={error || 'No domain selected'}
+          retryLabel="Go back"
+          onRetry={() => router.push('/mock-interviews')}
+          className="max-w-2xl w-full"
+        />
       </div>
     );
   }
@@ -485,7 +479,7 @@ export function AudioMockInterviewContent() {
             <div className="w-20 h-20 bg-surface rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Radio className="h-10 w-10 text-foreground" />
             </div>
-            <h1 className="text-3xl font-black text-foreground mb-2">
+            <h1 className="type-display text-3xl font-extrabold text-foreground mb-2">
               AI Voice Mock Interview
             </h1>
             <p className="text-muted-foreground">
@@ -522,11 +516,11 @@ export function AudioMockInterviewContent() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 rounded-xl bg-surface border border-border text-center">
-                <p className="text-2xl font-black text-foreground mb-1">{questions.length}</p>
+                <p className="text-2xl font-extrabold text-foreground mb-1">{questions.length}</p>
                 <p className="text-xs font-bold text-muted-foreground">Questions</p>
               </div>
               <div className="p-4 rounded-xl bg-surface border border-border text-center">
-                <p className="text-2xl font-black text-foreground mb-1">
+                <p className="text-2xl font-extrabold text-foreground mb-1">
                   ~{Math.floor(questions.reduce((acc, q) => acc + q.timeLimit, 0) / 60)} min
                 </p>
                 <p className="text-xs font-bold text-muted-foreground">Total Duration</p>
@@ -536,7 +530,7 @@ export function AudioMockInterviewContent() {
 
           <Button
             onClick={handleStartInterview}
-            className="w-full py-6 text-lg font-bold bg-surface border border-default hover: hover: shadow-lg"
+            className="w-full py-6 text-lg font-bold bg-surface border border-default transition-colors duration-200 ease-out shadow-lg"
           >
             <Radio className="h-5 w-5 mr-2" />
             Start Voice Interview
@@ -549,29 +543,32 @@ export function AudioMockInterviewContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 dark:from-slate-950/40  ">
       {/* Header */}
-      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-xl border-b border-border shadow-sm">
+      <div className="sticky top-0 z-[var(--z-sticky)] bg-background/95 backdrop-blur-xl border-b border-border shadow-sm">
         <div className="w-full min-w-0 px-6 py-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center">
-                  <span className="text-white text-sm font-black">{currentQuestionIndex + 1}</span>
+                  <span className="text-white text-sm font-extrabold">{currentQuestionIndex + 1}</span>
                 </div>
                 <div>
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                     Question {currentQuestionIndex + 1} of {questions.length}
                   </p>
-                  <p className="text-sm font-black text-foreground">AI Voice Interview</p>
+                  <p className="text-sm font-extrabold text-foreground">AI Voice Interview</p>
                 </div>
               </div>
             </div>
 
             {isRecording && (
-              <div className={cn(
+              <div
+                aria-live="polite"
+                aria-atomic="true"
+                className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-lg font-bold",
-                timeRemaining < 30 ? "bg-red-100 dark:bg-red-950/20 text-red-700 dark:text-red-400 animate-pulse" :
-                timeRemaining < 60 ? "bg-orange-100 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400" :
-                "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary"
+                timeRemaining < 30 ? "bg-destructive/10 text-destructive animate-pulse" :
+                timeRemaining < 60 ? "bg-warning/10 text-warning" :
+                "bg-primary/10 text-primary"
               )}>
                 <Clock className="h-5 w-5" />
                 {formatTime(timeRemaining)}
@@ -602,10 +599,10 @@ export function AudioMockInterviewContent() {
         >
           <div className="flex items-start gap-4 mb-6">
             <div className={cn(
-              "w-14 h-14 rounded-xl flex items-center justify-center shrink-0 transition-all",
+              "w-14 h-14 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-200 ease-out",
               isAIPlaying
-                ? "bg-surface scale-110 animate-pulse"
-                : "bg-surface "
+                ? "bg-surface animate-pulse"
+                : "bg-surface"
             )}>
               <Bot className="h-7 w-7 text-foreground" />
             </div>
@@ -620,13 +617,13 @@ export function AudioMockInterviewContent() {
                     transition={{ duration: 1.5, repeat: Infinity }}
                     className="flex items-center gap-1"
                   >
-                    <div className="w-1 h-1 bg-blue-600 dark:bg-blue-800 rounded-full" />
-                    <div className="w-1 h-1 bg-blue-600 dark:bg-blue-800 rounded-full" />
-                    <div className="w-1 h-1 bg-blue-600 dark:bg-blue-800 rounded-full" />
+                    <div className="w-1 h-1 bg-primary rounded-full" />
+                    <div className="w-1 h-1 bg-primary rounded-full" />
+                    <div className="w-1 h-1 bg-primary rounded-full" />
                   </motion.div>
                 )}
               </div>
-              <h2 className="text-2xl font-black text-foreground mb-4 leading-tight">
+              <h2 className="text-2xl font-extrabold text-foreground mb-4 leading-tight">
                 {currentQuestion.question}
               </h2>
               <div className="flex items-center gap-4">
@@ -645,7 +642,8 @@ export function AudioMockInterviewContent() {
                     onClick={stopSpeaking}
                     variant="outline"
                     size="sm"
-                    className="font-semibold text-red-600 dark:text-red-400"
+                    aria-label="Stop AI voice"
+                    className="font-semibold text-destructive"
                   >
                     <Square className="h-4 w-4 mr-2" />
                     Stop
@@ -669,7 +667,7 @@ export function AudioMockInterviewContent() {
                 ) : null}
               </div>
               {speechError && (
-                <p className="mt-3 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-default dark:border-default/20 rounded-lg px-3 py-2">
+                <p className="mt-3 text-xs font-semibold text-warning bg-warning/10 border border-default dark:border-default/20 rounded-lg px-3 py-2">
                   {speechError}
                 </p>
               )}
@@ -680,9 +678,9 @@ export function AudioMockInterviewContent() {
             <div className="text-sm text-muted-foreground">
               <span className="font-bold">Time Limit:</span> {Math.floor(currentQuestion.timeLimit / 60)} min {currentQuestion.timeLimit % 60} sec
             </div>
-            <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-3 py-1 rounded-full bg-slate-200 dark:bg-slate-800">
+            <Badge variant="outline" className="uppercase tracking-wider">
               {currentQuestion.difficulty}
-            </div>
+            </Badge>
           </div>
         </motion.div>
 
@@ -691,24 +689,24 @@ export function AudioMockInterviewContent() {
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className={cn(
-                "w-12 h-12 rounded-xl flex items-center justify-center transition-all",
+                "w-12 h-12 rounded-xl flex items-center justify-center transition-colors duration-200 ease-out",
                 isRecording
                   ? "bg-surface animate-pulse"
-                  : "bg-surface "
+                  : "bg-surface"
               )}>
                 <User className="h-6 w-6 text-foreground" />
               </div>
               <div>
                 <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Your Answer</p>
-                <p className="text-lg font-black text-foreground">
+                <p className="text-lg font-extrabold text-foreground">
                   {isRecording ? 'Recording...' : 'Ready to Record'}
                 </p>
               </div>
             </div>
 
             {isRecording && (
-              <div className="text-right">
-                <p className="text-2xl font-black text-foreground">{formatTime(recordingTime)}</p>
+              <div className="text-right" aria-live="polite" aria-atomic="true">
+                <p className="text-2xl font-extrabold text-foreground">{formatTime(recordingTime)}</p>
                 <p className="text-xs font-bold text-muted-foreground">Recording Time</p>
               </div>
             )}
@@ -742,7 +740,7 @@ export function AudioMockInterviewContent() {
               <Button
                 onClick={handleStartRecording}
                 disabled={isAIPlaying}
-                className="flex-1 py-6 text-lg font-bold bg-surface border border-default hover: hover: shadow-lg"
+                className="flex-1 py-6 text-lg font-bold bg-surface border border-default transition-colors duration-200 ease-out shadow-lg"
               >
                 <Mic className="h-5 w-5 mr-2" />
                 Start Recording
@@ -750,7 +748,8 @@ export function AudioMockInterviewContent() {
             ) : (
               <Button
                 onClick={handleStopRecording}
-                className="flex-1 py-6 text-lg font-bold bg-surface border border-default hover: hover:to-rose-700 shadow-lg"
+                aria-label="Stop recording"
+                className="flex-1 py-6 text-lg font-bold bg-destructive border border-destructive transition-colors duration-200 ease-out shadow-lg"
               >
                 <Square className="h-5 w-5 mr-2" />
                 Stop Recording
@@ -760,7 +759,8 @@ export function AudioMockInterviewContent() {
               onClick={handleSkipQuestion}
               disabled={isAIPlaying}
               variant="outline"
-              className="font-semibold px-6 py-6"
+              aria-label="Skip question"
+              className="font-semibold px-6 py-6 touch-target"
             >
               <SkipForward className="h-5 w-5" />
             </Button>
@@ -771,11 +771,13 @@ export function AudioMockInterviewContent() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-black text-foreground">Live Transcription</h3>
+                <h3 className="text-sm font-extrabold text-foreground">Live Transcription</h3>
               </div>
               <button
                 onClick={() => setShowTranscript(!showTranscript)}
-                className="text-xs font-bold text-primary dark:text-primary hover:text-primary dark:text-primary"
+                aria-label={showTranscript ? 'Hide transcription' : 'Show transcription'}
+                aria-expanded={showTranscript}
+                className="text-xs font-bold text-primary hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded touch-target"
               >
                 {showTranscript ? 'Hide' : 'Show'}
               </button>
@@ -814,7 +816,7 @@ export function AudioMockInterviewContent() {
             >
               <Button
                 onClick={handleNextQuestion}
-                className="w-full py-4 font-bold bg-surface border border-default hover: hover:"
+                className="w-full py-4 font-bold bg-surface border border-default transition-colors duration-200 ease-out"
               >
                 {currentQuestionIndex === questions.length - 1 ? (
                   <>
@@ -834,32 +836,32 @@ export function AudioMockInterviewContent() {
 
         {/* Questions Progress */}
         <div className="bg-background rounded-2xl border-2 border-border shadow-lg p-6">
-          <h3 className="text-lg font-black text-foreground mb-4">Interview Progress</h3>
+          <h3 className="text-lg font-extrabold text-foreground mb-4">Interview Progress</h3>
           <div className="grid grid-cols-5 gap-3">
             {questions.map((q, idx) => (
               <div
                 key={q.id}
                 className={cn(
-                  "p-3 rounded-xl border-2 text-center transition-all",
+                  "p-3 rounded-xl border-2 text-center transition-colors duration-200 ease-out",
                   idx === currentQuestionIndex
-                    ? "bg-blue-50 dark:bg-blue-950/20 border-default"
+                    ? "bg-primary/10 border-primary"
                     : answers[idx]
-                    ? "bg-emerald-50 dark:bg-emerald-500/10 border-default dark:border-default/30"
+                    ? "bg-success/10 border-success/30"
                     : "bg-surface border-border"
                 )}
               >
                 <div className={cn(
                   "w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2",
                   idx === currentQuestionIndex
-                    ? "bg-surface text-white"
+                    ? "bg-primary text-primary-foreground"
                     : answers[idx]
-                    ? "bg-surface text-white"
+                    ? "bg-success text-success-foreground"
                     : "bg-slate-200 dark:bg-slate-800 text-muted-foreground"
                 )}>
                   {answers[idx] ? (
                     <CheckCircle2 className="h-4 w-4" />
                   ) : (
-                    <span className="text-sm font-black">{idx + 1}</span>
+                    <span className="text-sm font-extrabold">{idx + 1}</span>
                   )}
                 </div>
                 <p className="text-xs font-bold text-muted-foreground capitalize truncate">{q.difficulty}</p>

@@ -17,23 +17,23 @@ const SEVERITY_META = {
   critical: {
     label: "Critical",
     icon: AlertCircle,
-    border: "border-red-500/40",
-    bg: "bg-red-500/5",
-    text: "text-red-600 dark:text-red-400",
+    border: "border-destructive/40",
+    bg: "bg-destructive/5",
+    text: "text-destructive",
   },
   moderate: {
     label: "Moderate",
     icon: AlertTriangle,
-    border: "border-amber-500/40",
-    bg: "bg-amber-500/5",
-    text: "text-amber-600 dark:text-amber-400",
+    border: "border-warning/40",
+    bg: "bg-warning/5",
+    text: "text-warning",
   },
   minor: {
     label: "Minor",
     icon: Info,
-    border: "border-blue-500/40",
-    bg: "bg-blue-500/5",
-    text: "text-blue-600 dark:text-blue-400",
+    border: "border-border",
+    bg: "bg-muted",
+    text: "text-muted-foreground",
   },
 } as const;
 

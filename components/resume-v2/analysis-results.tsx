@@ -8,6 +8,7 @@
 
 import { Award, TrendingUp, AlertTriangle, ListChecks, Lightbulb } from "lucide-react";
 import type { ResumeAnalysisResult, ResumeAnalysisDimension, ResumeAnalysisFinding, ResumeClaim } from "@/lib/resume";
+import { Tag } from "@/components/ui/tag";
 import { EvidenceCard } from "./evidence-card";
 
 export interface AnalysisResultsProps {
@@ -27,10 +28,10 @@ const DIMENSION_LABEL: Record<ResumeAnalysisDimension, string> = {
 
 function findingColor(score: number) {
   return score >= 75
-    ? "text-emerald-600 dark:text-emerald-400"
+    ? "text-success"
     : score >= 50
-    ? "text-amber-600 dark:text-amber-400"
-    : "text-red-600 dark:text-red-400";
+    ? "text-warning"
+    : "text-destructive";
 }
 
 export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
@@ -41,12 +42,12 @@ export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
   return (
     <div className="space-y-6">
       {/* Overall score */}
-      <div className="rounded-xl border border-border bg-card p-6 text-center">
+      <div className="rounded-xl border border-border bg-card p-6 text-center" aria-live="polite">
         <Award className="h-8 w-8 text-primary mx-auto mb-2" />
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           Overall analysis score
         </h2>
-        <p className={`text-4xl font-black mt-1 ${findingColor(result.overallScore)}`}>
+        <p className={`type-display text-4xl font-extrabold mt-1 ${findingColor(result.overallScore)}`}>
           {result.overallScore}
         </p>
       </div>
@@ -68,7 +69,7 @@ export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
               </div>
               <div className="mt-2 h-1.5 rounded-full bg-border overflow-hidden">
                 <div
-                  className="h-full bg-primary rounded-full transition-all"
+                  className="h-full bg-primary rounded-full transition-colors duration-200 ease-out"
                   style={{ width: `${f.score}%` }}
                 />
               </div>
@@ -79,7 +80,7 @@ export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
                 <ul className="mt-2 space-y-1">
                   {f.improvements.map((imp, i) => (
                     <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                      <Lightbulb className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                      <Lightbulb className="h-3.5 w-3.5 shrink-0 mt-0.5 text-warning" />
                       {imp}
                     </li>
                   ))}
@@ -93,9 +94,9 @@ export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
       {/* Strengths & risks summary */}
       <div className="grid gap-4 md:grid-cols-2">
         {good.length > 0 && (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+          <div className="rounded-xl border border-success/30 bg-success/5 p-5">
             <div className="flex items-center gap-2 mb-3">
-              <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <TrendingUp className="h-5 w-5 text-success" />
               <h3 className="text-sm font-bold text-foreground">Strong areas</h3>
             </div>
             <ul className="space-y-1.5">
@@ -108,9 +109,9 @@ export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
           </div>
         )}
         {(needsWork.length > 0 || critical.length > 0) && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
+          <div className="rounded-xl border border-warning/30 bg-warning/5 p-5">
             <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <AlertTriangle className="h-5 w-5 text-warning" />
               <h3 className="text-sm font-bold text-foreground">Needs attention</h3>
             </div>
             <ul className="space-y-1.5">
@@ -128,7 +129,7 @@ export function AnalysisResults({ result, claims }: AnalysisResultsProps) {
       {result.topImprovements.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-5">
           <div className="flex items-center gap-2 mb-3">
-            <Lightbulb className="h-5 w-5 text-amber-500" />
+            <Lightbulb className="h-5 w-5 text-warning" />
             <h3 className="text-sm font-bold text-foreground">Top improvements</h3>
           </div>
           <ul className="space-y-2">

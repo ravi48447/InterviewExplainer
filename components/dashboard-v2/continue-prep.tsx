@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { Clock, Play, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { ContinuePrepItem } from "@/lib/dashboard";
 
 export interface ContinuePrepProps {
@@ -17,27 +18,26 @@ export interface ContinuePrepProps {
 export function ContinuePrep({ items }: ContinuePrepProps) {
   if (items.length === 0) {
     return (
-      <section className="rounded-xl border border-border bg-card p-6">
-        <h2 className="text-lg font-bold text-foreground mb-1">Continue where you left off</h2>
-        <p className="text-sm text-muted-foreground">
-          Questions you start will show up here so you can resume instantly.
-        </p>
-      </section>
+      <EmptyState
+        icon={<Clock className="h-6 w-6" />}
+        title="Continue where you left off"
+        description="Questions you start will show up here so you can resume instantly."
+      />
     );
   }
 
   return (
     <section className="rounded-xl border border-border bg-card p-6">
-      <h2 className="text-lg font-bold text-foreground mb-4">Continue where you left off</h2>
+      <h2 className="type-display text-lg font-bold text-foreground mb-4">Continue where you left off</h2>
       <div className="space-y-2">
         {items.map((item) => (
           <Link
             key={item.questionId}
             href={`/${item.domainSlug}/${item.stackSlug}/${item.slug}`}
-            className="group flex items-center justify-between p-3 rounded-lg border border-border hover:border-ring transition-all"
+            className="group flex items-center justify-between p-3 rounded-lg border border-border hover:border-ring transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary line-clamp-1">
+              <h3 className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
                 {item.title}
               </h3>
               <div className="flex items-center gap-2 mt-1.5">
@@ -57,7 +57,7 @@ export function ContinuePrep({ items }: ContinuePrepProps) {
             </div>
             <span className="flex items-center gap-1 text-primary shrink-0">
               <Play className="h-4 w-4" />
-              <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="h-4 w-4 transition-colors" />
             </span>
           </Link>
         ))}

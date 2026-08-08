@@ -67,7 +67,7 @@ const NavLink = forwardRef<HTMLAnchorElement, NavLinkProps>(
           ref={ref}
           href={href}
           className={cn(
-            "group flex items-start gap-3 rounded-lg p-3 hover:bg-muted transition-colors select-none outline-none",
+            "group flex items-start gap-3 rounded-lg p-3 hover:bg-muted transition-colors select-none outline-none focus-visible:ring-2 focus-visible:ring-ring",
             className,
           )}
           {...props}
@@ -108,23 +108,23 @@ type LearnEntry = {
 
 const LEARN_SKILLS: LearnEntry[] = [
   { hub: "prepCategories",  href: "/prep",          title: "Prep by Topic",    description: "Every category & module SEO hub",   icon: <Compass className="h-4 w-4 text-primary"  /> },
-  { hub: "systemDesign",    href: "/system-design", title: "System Design",    description: "25+ real problems & architecture",  icon: <Network className="h-4 w-4 text-emerald-500" /> },
-  { hub: "dsa",             href: "/dsa",           title: "DSA Problems",     description: "450+ problems by pattern",          icon: <Code2   className="h-4 w-4 text-blue-500"  /> },
-  { hub: "behavioral",      href: "/behavioral",    title: "Behavioral",       description: "STAR method & company-specific",    icon: <Brain   className="h-4 w-4 text-amber-500"   /> },
+  { hub: "systemDesign",    href: "/system-design", title: "System Design",    description: "25+ real problems & architecture",  icon: <Network className="h-4 w-4 text-success" /> },
+  { hub: "dsa",             href: "/dsa",           title: "DSA Problems",     description: "450+ problems by pattern",          icon: <Code2   className="h-4 w-4 text-primary"  /> },
+  { hub: "behavioral",      href: "/behavioral",    title: "Behavioral",       description: "STAR method & company-specific",    icon: <Brain   className="h-4 w-4 text-warning"   /> },
   { hub: "topics",          href: "/topics",        title: "Topics & Concepts",description: "Microservices, caching, security",   icon: <Layers  className="h-4 w-4 text-primary"    /> },
 ];
 
 const LEARN_TOOLS: LearnEntry[] = [
-  { hub: "tools",           href: "/tools",    title: "Tools & Technologies", description: "Docker, Kafka, Redis, AWS",      icon: <Wrench         className="h-4 w-4 text-teal-500"   /> },
+  { hub: "tools",           href: "/tools",    title: "Tools & Technologies", description: "Docker, Kafka, Redis, AWS",      icon: <Wrench         className="h-4 w-4 text-primary"   /> },
   { hub: "compare",         href: "/compare",  title: "Compare X vs Y",       description: "Kafka vs RabbitMQ & 20+ more",    icon: <ArrowLeftRight className="h-4 w-4 text-primary"   /> },
-  { hub: "companies",       href: "/companies",title: "Company Prep",         description: "FAANG process & patterns",        icon: <Building2      className="h-4 w-4 text-orange-500" /> },
-  { hub: "interviewByLang", href: "/interview",title: "Browse by Language",   description: "Java, Python, Go & more",         icon: <Target         className="h-4 w-4 text-rose-500"   /> },
+  { hub: "companies",       href: "/companies",title: "Company Prep",         description: "FAANG process & patterns",        icon: <Building2      className="h-4 w-4 text-warning" /> },
+  { hub: "interviewByLang", href: "/interview",title: "Browse by Language",   description: "Java, Python, Go & more",         icon: <Target         className="h-4 w-4 text-destructive"   /> },
 ];
 
 const LEARN_RESOURCES: LearnEntry[] = [
-  { hub: "roadmaps",    href: "/roadmaps",    title: "Study Roadmaps", description: "4/8/12-week prep schedules",   icon: <Map       className="h-4 w-4 text-green-500"  /> },
-  { hub: "cheatsheets", href: "/cheatsheets", title: "Cheatsheets",    description: "Quick reference for interviews", icon: <Zap      className="h-4 w-4 text-yellow-500" /> },
-  { hub: "career",      href: "/career",      title: "Career Guide",   description: "Resume, negotiation, process",   icon: <Briefcase className="h-4 w-4 text-rose-500"   /> },
+  { hub: "roadmaps",    href: "/roadmaps",    title: "Study Roadmaps", description: "4/8/12-week prep schedules",   icon: <Map       className="h-4 w-4 text-success"  /> },
+  { hub: "cheatsheets", href: "/cheatsheets", title: "Cheatsheets",    description: "Quick reference for interviews", icon: <Zap      className="h-4 w-4 text-warning" /> },
+  { hub: "career",      href: "/career",      title: "Career Guide",   description: "Resume, negotiation, process",   icon: <Briefcase className="h-4 w-4 text-destructive"   /> },
 ];
 
 const visibleSkills    = LEARN_SKILLS.filter(e => isHubEnabled(e.hub));
@@ -206,20 +206,20 @@ export function SiteHeader() {
 
   const directLinkCls = (href: string) =>
     cn(
-      "inline-flex items-center gap-1.5 px-2 xl:px-3 h-9 text-sm font-medium transition-colors relative",
+      "inline-flex items-center gap-1.5 px-2 xl:px-3 h-9 text-sm font-medium transition-colors relative rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       isActive(href)
         ? "text-foreground"
         : "text-muted-foreground hover:text-foreground",
     );
 
   return (
-    <header className="dark sticky top-0 z-50 border-b border-white/10 bg-background/80 backdrop-blur-2xl text-foreground">
+    <header className="dark sticky top-0 z-[var(--z-sticky)] border-b border-white/10 bg-background/80 backdrop-blur-2xl text-foreground">
       <PageContainer className="flex h-16 items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 shrink-0 group">
           <div className="relative flex h-10 w-10 items-center justify-center">
-            <div className="absolute inset-0 bg-primary rounded-xl blur-md opacity-60 group-hover:opacity-80 transition-opacity" />
-            <div className="relative w-10 h-10 group-hover:scale-105 transition-transform duration-200">
+            <div className="absolute inset-0 bg-primary rounded-xl blur-md opacity-60" />
+            <div className="relative w-10 h-10">
               <svg viewBox="0 0 100 100" className="w-full h-full">
                 <defs>
                   <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -237,7 +237,7 @@ export function SiteHeader() {
               </div>
             </div>
           </div>
-          <span className="text-xl font-black tracking-tight text-foreground hidden sm:inline-block">
+          <span className="text-xl font-extrabold tracking-tight text-foreground hidden sm:inline-block">
             InterviewExplainer
           </span>
         </Link>
@@ -276,7 +276,7 @@ export function SiteHeader() {
                       <div className={cn("grid gap-5", activeColumns === 1 ? "grid-cols-1" : activeColumns === 2 ? "grid-cols-2" : "grid-cols-3")}>
                         {visibleSkills.length > 0 && (
                           <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3 px-1">
+                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground mb-3 px-1">
                               Interview Skills
                             </p>
                             <ul className="space-y-0.5">
@@ -289,7 +289,7 @@ export function SiteHeader() {
 
                         {visibleTools.length > 0 && (
                           <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3 px-1">
+                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground mb-3 px-1">
                               Tools & Comparisons
                             </p>
                             <ul className="space-y-0.5">
@@ -302,7 +302,7 @@ export function SiteHeader() {
 
                         {visibleResources.length > 0 && (
                           <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-3 px-1">
+                            <p className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground mb-3 px-1">
                               Resources
                             </p>
                             <ul className="space-y-0.5">
@@ -374,14 +374,15 @@ export function SiteHeader() {
             variant="ghost"
             size="icon"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="h-9 w-9 text-muted-foreground hover:text-foreground hidden sm:flex"
+            className="h-9 w-9 touch-target-lg text-muted-foreground hover:text-foreground hidden sm:flex"
+            aria-label="Toggle theme"
           >
             {mounted && (
               <>
                 {resolvedTheme === "dark" ? (
-                  <Moon className="h-[1.2rem] w-[1.2rem] transition-all" />
+                  <Moon className="h-[1.2rem] w-[1.2rem] transition-colors" />
                 ) : (
-                  <Sun className="h-[1.2rem] w-[1.2rem] transition-all" />
+                  <Sun className="h-[1.2rem] w-[1.2rem] transition-colors" />
                 )}
                 <span className="sr-only">Toggle theme</span>
               </>
@@ -443,7 +444,7 @@ export function SiteHeader() {
               <Button variant="ghost" size="sm" asChild className="font-medium text-muted-foreground hover:text-foreground hover:bg-transparent px-4">
                 <Link href="/login">Log in</Link>
               </Button>
-              <Button variant="premium" size="sm" asChild className="font-medium rounded-full px-5 transition-all hover:-translate-y-0.5 border border-white/10">
+              <Button variant="premium" size="sm" asChild className="font-medium rounded-full px-5 transition-colors border border-white/10">
                 <Link href="/signup">Sign up</Link>
               </Button>
             </div>
@@ -452,8 +453,9 @@ export function SiteHeader() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 lg:hidden text-muted-foreground"
+            className="h-9 w-9 touch-target-lg lg:hidden text-muted-foreground"
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label="Toggle navigation menu"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             <span className="sr-only">Menu</span>
@@ -481,7 +483,7 @@ export function SiteHeader() {
                         href={item.href}
                         onClick={() => setMobileOpen(false)}
                         className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors",
+                          "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           active
                             ? "bg-primary/10 text-primary"
                             : "text-muted-foreground hover:text-foreground hover:bg-muted",

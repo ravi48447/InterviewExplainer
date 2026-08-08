@@ -1,5 +1,7 @@
 import { SectionHeader } from "@/components/ui/section-header";
 import { PageContainer } from "@/components/page-container";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ShieldCheck } from "lucide-react";
 import { getHomeContentStats, getHomePrepHubs } from "@/lib/home/home-data";
 
 /**
@@ -15,7 +17,6 @@ import { getHomeContentStats, getHomePrepHubs } from "@/lib/home/home-data";
 export function HomeTrust() {
   const stats = getHomeContentStats();
   const hubs = getHomePrepHubs();
-  if (stats.length === 0 && hubs.length === 0) return null;
 
   return (
     <section
@@ -29,6 +30,15 @@ export function HomeTrust() {
           description="Every question is tailored to a language, track, and experience level — not recycled generic theory."
         />
 
+        {stats.length === 0 && hubs.length === 0 ? (
+          <EmptyState
+            icon={<ShieldCheck aria-hidden="true" />}
+            title="Trust signals coming soon"
+            description="Content statistics and preparation hub details are being assembled. Check back shortly."
+            className="mt-10"
+          />
+        ) : (
+        <>
         {/* P04-T145: stats are a restrained signal, not the primary message. */}
         {stats.length > 0 && (
           <dl className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
@@ -56,6 +66,8 @@ export function HomeTrust() {
               </li>
             ))}
           </ul>
+        )}
+        </>
         )}
       </PageContainer>
     </section>

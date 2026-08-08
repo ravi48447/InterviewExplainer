@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Code2, Cloud, Layout, Server, Database, Cpu, Sparkles } from "lucide-react";
 import { EXPERIENCE_LEVELS, LEVEL_KEYS, type ExperienceLevelKey } from "@/lib/levels";
+import { Tag } from "@/components/ui/tag";
 
 const roleFilters = ["All", "Backend", "Frontend", "Fullstack", "DevOps", "Data Analyst"];
 
@@ -107,7 +108,7 @@ export function DomainsContent() {
       {/* Page header */}
       <FadeInUp>
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl text-balance">
+          <h1 className="type-display text-2xl tracking-tight text-foreground sm:text-3xl text-balance">
             Choose your interview domain
           </h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground text-pretty leading-relaxed">
@@ -129,7 +130,7 @@ export function DomainsContent() {
                 key={filter}
                 type="button"
                 onClick={() => setActiveExp(filter as "All" | ExperienceLevelKey)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-200 ease-out ${
                   activeExp === filter
                     ? "border-primary/40 bg-primary/8 text-primary"
                     : "border-border/50 bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -146,7 +147,7 @@ export function DomainsContent() {
                 key={filter}
                 type="button"
                 onClick={() => setActiveRole(filter)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-200 ease-out ${
                   activeRole === filter
                     ? "border-primary/40 bg-primary/8 text-primary"
                     : "border-border/50 bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -178,11 +179,10 @@ export function DomainsContent() {
             >
               <Link href={`/domain/${domain.slug}`}>
                 <motion.div
-                  whileHover={{ y: -3 }}
                   transition={{ duration: 0.2, ease: "easeOut" }}
                   onHoverStart={() => setHoveredDomain(domain.slug)}
                   onHoverEnd={() => setHoveredDomain(null)}
-                  className="group relative flex h-full flex-col rounded-xl border border-border/50 bg-card p-5 cursor-pointer transition-all hover:glow-soft hover:border-primary/15"
+                  className="group relative flex h-full flex-col rounded-xl border border-border/50 bg-card p-5 cursor-pointer transition-colors duration-200 ease-out hover:glow-soft hover:border-primary/15"
                   role="link"
                   tabIndex={0}
                   aria-label={`${domain.name} interview domain, ${domain.questions} questions`}
@@ -219,12 +219,7 @@ export function DomainsContent() {
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {domain.techStack.map((tech) => (
-                        <span
-                          key={tech}
-                          className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
-                        >
-                          {tech}
-                        </span>
+                        <Tag key={tech} className="text-[10px]">{tech}</Tag>
                       ))}
                     </div>
                   </div>
@@ -236,12 +231,7 @@ export function DomainsContent() {
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {domain.categories.slice(0, 4).map((cat) => (
-                        <span
-                          key={cat}
-                          className="rounded bg-accent/50 px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground/70"
-                        >
-                          {cat}
-                        </span>
+                        <Tag key={cat} className="text-[10px]">{cat}</Tag>
                       ))}
                       {domain.categories.length > 4 && (
                         <span className="text-[10px] text-muted-foreground/50">
@@ -255,12 +245,7 @@ export function DomainsContent() {
                   <div className="flex items-center gap-3 mb-3 mt-auto">
                     <div className="flex gap-1">
                       {domain.roles.map((role) => (
-                        <span
-                          key={role}
-                          className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                        >
-                          {role}
-                        </span>
+                        <Tag key={role} className="text-[10px]">{role}</Tag>
                       ))}
                     </div>
                     <div className="h-3 w-px bg-border/50" />
@@ -282,9 +267,9 @@ export function DomainsContent() {
 
                   {/* CTA strip */}
                   <div className="flex items-center justify-end pt-3 border-t border-border/30">
-                    <span className="flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-all group-hover:opacity-100">
+                    <span className="flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-colors duration-200 ease-out group-hover:opacity-100">
                       Explore Domain
-                      <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                      <ArrowRight className="h-3 w-3 transition-colors duration-200 ease-out group-hover:text-primary" />
                     </span>
                   </div>
                 </motion.div>

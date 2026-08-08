@@ -6,22 +6,31 @@
  * recruiter-confirm) get stronger emphasis.
  */
 
-import { ShieldCheck, FileCheck, UserCheck, Globe, MessageSquare } from "lucide-react";
+import { ShieldCheck, FileCheck, UserCheck, Globe, MessageSquare, FileX } from "lucide-react";
 import type { EvidenceRecord, EvidenceType } from "@/lib/community";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export interface EvidenceDisplayProps {
   evidence: EvidenceRecord[];
 }
 
 const TYPE_META: Record<EvidenceType, { label: string; icon: typeof ShieldCheck; color: string }> = {
-  "verified-offer": { label: "Verified offer", icon: ShieldCheck, color: "text-emerald-600 dark:text-emerald-400" },
-  "recruiter-confirm": { label: "Recruiter confirmed", icon: UserCheck, color: "text-emerald-600 dark:text-emerald-400" },
-  "community-report": { label: "Community report", icon: MessageSquare, color: "text-blue-600 dark:text-blue-400" },
+  "verified-offer": { label: "Verified offer", icon: ShieldCheck, color: "text-success" },
+  "recruiter-confirm": { label: "Recruiter confirmed", icon: UserCheck, color: "text-success" },
+  "community-report": { label: "Community report", icon: MessageSquare, color: "text-info" },
   "public-source": { label: "Public source", icon: Globe, color: "text-muted-foreground" },
 };
 
 export function EvidenceDisplay({ evidence }: EvidenceDisplayProps) {
-  if (evidence.length === 0) return null;
+  if (evidence.length === 0) {
+    return (
+      <EmptyState
+        icon={<FileX />}
+        title="No evidence yet"
+        description="No corroborating evidence has been linked to this question."
+      />
+    );
+  }
   // Sort by trust descending.
   const sorted = [...evidence].sort((a, b) => b.trust - a.trust);
 
@@ -29,7 +38,7 @@ export function EvidenceDisplay({ evidence }: EvidenceDisplayProps) {
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-center gap-2 mb-3">
         <FileCheck className="h-5 w-5 text-primary" />
-        <h3 className="text-sm font-bold text-foreground">Evidence ({evidence.length})</h3>
+        <h3 className="type-display text-sm font-extrabold text-foreground">Evidence ({evidence.length})</h3>
       </div>
       <ul className="space-y-2">
         {sorted.map((e) => {

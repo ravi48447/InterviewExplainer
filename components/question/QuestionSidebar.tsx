@@ -71,7 +71,7 @@ export function QuestionSidebar({ topics, activeQuestionId }: QuestionSidebarPro
                             <button
                                 onClick={() => toggleTopic(topic.id)}
                                 className={cn(
-                                    "w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200 group",
+                                    "w-full flex items-center justify-between p-3 rounded-xl transition-colors duration-200 group",
                                     expandedTopics[topic.id] ? "bg-primary/5 text-foreground" : "text-muted-foreground hover:bg-foreground/5"
                                 )}
                             >
@@ -102,7 +102,7 @@ export function QuestionSidebar({ topics, activeQuestionId }: QuestionSidebarPro
                                                     key={q.id}
                                                     href={`/question/${q.id}`}
                                                     className={cn(
-                                                        "group flex items-center gap-3 p-2.5 rounded-lg text-[11px] font-medium transition-all duration-200",
+                                                        "group flex items-center gap-3 p-2.5 rounded-lg text-[11px] font-medium transition-colors duration-200",
                                                         q.id === activeQuestionId
                                                             ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
                                                             : "text-muted-foreground hover:bg-background/5 hover:text-foreground"

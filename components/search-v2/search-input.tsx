@@ -114,6 +114,9 @@ export function SearchInput({
     inputRef.current?.focus();
   }, []);
 
+  const isLoading = state.status === "loading";
+  const resultsCount = state.status === "success" ? state.results.length : 0;
+
   return (
     <div className={cn("w-full", className)}>
       <div className="relative">
@@ -132,12 +135,13 @@ export function SearchInput({
           role="searchbox"
           aria-expanded={state.status === "success" || state.status === "no_results"}
           aria-controls="search-results"
+          aria-busy={isLoading}
           className={cn(
             "w-full pl-10 pr-10 py-2.5 rounded-lg",
             "bg-surface border border-border",
             "text-foreground placeholder:text-muted-foreground",
-            "focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent",
-            "transition-colors",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus:border-transparent",
+            "transition-colors duration-200 ease-out",
           )}
         />
         {rawValue && (
@@ -145,37 +149,53 @@ export function SearchInput({
             type="button"
             onClick={handleClear}
             aria-label="Clear search"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            className={cn(
+              "touch-target absolute right-3 top-1/2 -translate-y-1/2",
+              "flex items-center justify-center",
+              "text-muted-foreground hover:text-foreground",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded",
+              "transition-colors duration-200 ease-out",
+            )}
           >
             <X className="h-4 w-4" />
           </button>
         )}
-        {state.status === "loading" && (
-          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
+        {isLoading && (
+          <Loader2
+            className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin"
+            aria-hidden="true"
+          />
         )}
       </div>
 
-      {state.status === "success" && (
-        <SearchResults
-          results={state.results}
-          activeIndex={activeIndex}
-          onSelect={onSelectResult}
-        />
-      )}
+      <div
+        id="search-results"
+        aria-live="polite"
+        aria-busy={isLoading}
+        aria-setsize={resultsCount}
+      >
+        {state.status === "success" && (
+          <SearchResults
+            results={state.results}
+            activeIndex={activeIndex}
+            onSelect={onSelectResult}
+          />
+        )}
 
-      {state.status === "no_results" && state.query && (
-        <NoResults
-          query={state.query}
-          suggestions={getNoResultsSuggestions(state.query)}
-          onSelectSuggestion={(s) => {
-            if (s.url) {
-              window.location.href = s.url;
-            } else if (s.query) {
-              handleChange(s.query);
-            }
-          }}
-        />
-      )}
+        {state.status === "no_results" && state.query && (
+          <NoResults
+            query={state.query}
+            suggestions={getNoResultsSuggestions(state.query)}
+            onSelectSuggestion={(s) => {
+              if (s.url) {
+                window.location.href = s.url;
+              } else if (s.query) {
+                handleChange(s.query);
+              }
+            }}
+          />
+        )}
+      </div>
     </div>
   );
 }

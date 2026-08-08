@@ -7,12 +7,35 @@
 
 import { History, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { Application } from "@/lib/opportunity";
+import type { Application, ApplicationStatus } from "@/lib/opportunity";
 import { STATUS_LABEL } from "@/lib/opportunity";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import Link from "next/link";
 
 export interface ApplicationDetailProps {
   application: Application;
 }
+
+/** Map application status to semantic badge variant (C4 — color tokens). */
+const STATUS_VARIANT: Record<
+  ApplicationStatus,
+  "default" | "success" | "warning" | "destructive" | "primary" | "info"
+> = {
+  saved: "default",
+  applied: "info",
+  screening: "info",
+  interviewing: "warning",
+  offer: "success",
+  rejected: "destructive",
+  withdrawn: "default",
+};
 
 export function ApplicationDetail({ application: app }: ApplicationDetailProps) {
   const events = [...app.events].sort(
@@ -21,6 +44,27 @@ export function ApplicationDetail({ application: app }: ApplicationDetailProps) 
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumbs */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/dashboard">Dashboard</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/dashboard/pipeline">Pipeline</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{app.opportunityId}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       {/* Header */}
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center justify-between gap-3">
@@ -32,7 +76,7 @@ export function ApplicationDetail({ application: app }: ApplicationDetailProps) 
               Applied {new Date(app.appliedAt).toLocaleDateString()}
             </p>
           </div>
-          <Badge variant="primary" className="capitalize">
+          <Badge variant={STATUS_VARIANT[app.status]} className="capitalize">
             {STATUS_LABEL[app.status]}
           </Badge>
         </div>
@@ -44,22 +88,24 @@ export function ApplicationDetail({ application: app }: ApplicationDetailProps) 
       {/* Timeline */}
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center gap-2 mb-4">
-          <History className="h-5 w-5 text-primary" />
+          <History className="h-5 w-5 text-primary" aria-hidden="true" />
           <h2 className="text-lg font-bold text-foreground">Timeline</h2>
         </div>
         {events.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No events yet.</p>
+          <p className="text-sm text-muted-foreground" role="status">
+            No events yet.
+          </p>
         ) : (
-          <ol className="relative border-l-2 border-border ml-3 space-y-5">
+          <ol className="relative border-l-2 border-border ml-3 space-y-5" aria-live="polite">
             {events.map((evt) => (
               <li key={evt.id} className="pl-5 relative">
                 <span className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-primary border-2 border-card" />
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-foreground capitalize">
+                  <Badge variant={STATUS_VARIANT[evt.status]} className="capitalize">
                     {STATUS_LABEL[evt.status]}
-                  </span>
+                  </Badge>
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
+                    <Clock className="h-3 w-3" aria-hidden="true" />
                     {new Date(evt.occurredAt).toLocaleString()}
                   </span>
                 </div>

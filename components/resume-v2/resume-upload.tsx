@@ -10,6 +10,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { UploadCloud, FileText, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { CardSkeleton } from "@/components/ui/skeleton";
 import type { ResumeDocument, ProcessingStatus } from "@/lib/resume";
 
 export interface ResumeUploadProps {
@@ -69,7 +70,7 @@ export function ResumeUpload({ activeResume, onUpload, busy }: ResumeUploadProps
           setDragOver(false);
           void handleFiles(e.dataTransfer.files);
         }}
-        className={`flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-colors ${
+        className={`touch-target flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
           dragOver
             ? "border-primary bg-primary/5"
             : "border-border hover:border-primary/50 hover:bg-muted/40"
@@ -92,7 +93,7 @@ export function ResumeUpload({ activeResume, onUpload, busy }: ResumeUploadProps
       </div>
 
       {error && (
-        <p className="mt-3 text-sm text-red-600 dark:text-red-400 flex items-center gap-1.5">
+        <p className="mt-3 text-sm text-destructive flex items-center gap-1.5" role="alert">
           <XCircle className="h-4 w-4" />
           {error}
         </p>
@@ -100,9 +101,11 @@ export function ResumeUpload({ activeResume, onUpload, busy }: ResumeUploadProps
 
       {activeResume && (
         <div className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
-          <statusMeta.icon
-            className={`h-5 w-5 ${statusMeta.color} ${status === "extracting" || status === "parsing" || status === "analyzing" ? "animate-spin" : ""}`}
-          />
+          {status === "extracting" || status === "parsing" || status === "analyzing" ? (
+            <CardSkeleton className="h-5 w-5 rounded-full" />
+          ) : (
+            <statusMeta.icon className={`h-5 w-5 ${statusMeta.color}`} />
+          )}
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-foreground truncate flex items-center gap-1.5">
               <FileText className="h-4 w-4 shrink-0" />
@@ -118,9 +121,9 @@ export function ResumeUpload({ activeResume, onUpload, busy }: ResumeUploadProps
 
 const STATUS_META: Record<ProcessingStatus, { label: string; icon: typeof UploadCloud; color: string }> = {
   queued: { label: "Queued for processing", icon: Loader2, color: "text-muted-foreground" },
-  extracting: { label: "Extracting text…", icon: Loader2, color: "text-blue-600 dark:text-blue-400" },
-  parsing: { label: "Parsing structure…", icon: Loader2, color: "text-blue-600 dark:text-blue-400" },
-  analyzing: { label: "Analyzing claims…", icon: Loader2, color: "text-blue-600 dark:text-blue-400" },
-  ready: { label: "Ready", icon: CheckCircle2, color: "text-emerald-600 dark:text-emerald-400" },
-  failed: { label: "Processing failed", icon: XCircle, color: "text-red-600 dark:text-red-400" },
+  extracting: { label: "Extracting text…", icon: Loader2, color: "text-muted-foreground" },
+  parsing: { label: "Parsing structure…", icon: Loader2, color: "text-muted-foreground" },
+  analyzing: { label: "Analyzing claims…", icon: Loader2, color: "text-muted-foreground" },
+  ready: { label: "Ready", icon: CheckCircle2, color: "text-success" },
+  failed: { label: "Processing failed", icon: XCircle, color: "text-destructive" },
 };

@@ -6,7 +6,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Inbox } from "lucide-react";
+import { Inbox } from "lucide-react";
 import {
   fetchCompanyIntelligence,
   fetchContributions,
@@ -14,6 +14,9 @@ import {
 } from "@/lib/community";
 import type { CompanyInterviewIntelligence } from "@/lib/community";
 import { CompanyIntelligence } from "./company-intelligence";
+import { CardSkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
 
 export interface CompanyIntelligenceShellProps {
   company: string;
@@ -22,49 +25,76 @@ export interface CompanyIntelligenceShellProps {
 export function CompanyIntelligenceShell({ company }: CompanyIntelligenceShellProps) {
   const [intel, setIntel] = useState<CompanyInterviewIntelligence | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      // Try the aggregated endpoint first; fall back to client-side aggregation
-      // from the raw contributions list.
-      let result = await fetchCompanyIntelligence(company);
-      if (!result) {
-        const contributions = await fetchContributions({ company });
-        if (contributions.length > 0) {
-          result = aggregateCompanyIntelligence(company, contributions);
+      setError(false);
+      try {
+        // Try the aggregated endpoint first; fall back to client-side aggregation
+        // from the raw contributions list.
+        let result = await fetchCompanyIntelligence(company);
+        if (!result) {
+          const contributions = await fetchContributions({ company });
+          if (contributions.length > 0) {
+            result = aggregateCompanyIntelligence(company, contributions);
+          }
         }
-      }
-      if (!cancelled) {
-        setIntel(result);
-        setLoading(false);
+        if (!cancelled) {
+          setIntel(result);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [company]);
+  }, [company, retryCount]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="space-y-4" aria-label="Loading company intelligence">
+        <CardSkeleton className="p-6" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
+        <CardSkeleton />
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <ErrorState
+        title="Couldn't load company intelligence"
+        description={`We were unable to fetch interview intelligence for ${company}. Please try again.`}
+        retryLabel="Retry"
+        onRetry={() => {
+          setError(false);
+          setLoading(true);
+          setRetryCount((c) => c + 1);
+        }}
+      />
     );
   }
 
   if (!intel) {
     return (
-      <div className="text-center py-24">
-        <Inbox className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-        <p className="text-sm font-medium text-foreground">
-          No community intelligence for {company} yet.
-        </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Be the first to share an interview experience.
-        </p>
-      </div>
+      <EmptyState
+        icon={<Inbox />}
+        title={`No intelligence for ${company} yet`}
+        description="Be the first to share an interview experience for this company."
+      />
     );
   }
 

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { CheckCircle2, Target, Trophy, Clock, PlayCircle, BookCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
 
 interface InterviewCoachProps {
     timeToAnswer: string;
@@ -49,7 +48,7 @@ export function InterviewCoach({ timeToAnswer, interviewerExpects }: InterviewCo
                 <ul className="space-y-3">
                     {cleanExpectations.map((goal, idx) => (
                         <li key={idx} className="flex gap-3 text-xs leading-relaxed group">
-                            <div className="mt-0.5 shrink-0 uppercase font-black text-[9px] text-primary/40 group-hover:text-primary transition-colors">0{idx + 1}</div>
+                            <div className="mt-0.5 shrink-0 uppercase font-extrabold text-[9px] text-primary/40 group-hover:text-primary transition-colors">0{idx + 1}</div>
                             <span className="font-medium text-muted-foreground group-hover:text-foreground transition-colors">{goal}</span>
                         </li>
                     ))}
@@ -68,15 +67,15 @@ export function InterviewCoach({ timeToAnswer, interviewerExpects }: InterviewCo
                             key={item.id}
                             onClick={() => toggleCheck(item.id)}
                             className={cn(
-                                "w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 text-left border",
+                                "w-full flex items-center gap-3 p-3 rounded-xl transition-colors duration-200 text-left border",
                                 item.completed
-                                    ? "bg-green-500 dark:bg-green-800/5 border-green-500 dark:border-green-700/20 text-white dark:text-green-400 font-bold"
+                                    ? "bg-success/10 border-success/20 text-success font-bold"
                                     : "bg-foreground/5 border-border/50 text-muted-foreground hover:border-border"
                             )}
                         >
                             <div className={cn(
-                                "h-4 w-4 rounded-full border flex items-center justify-center transition-all",
-                                item.completed ? "bg-green-500 dark:bg-green-800 border-green-500 dark:border-green-700" : "border-white/20"
+                                "h-4 w-4 rounded-full border flex items-center justify-center transition-colors",
+                                item.completed ? "bg-success border-success" : "border-border"
                             )}>
                                 {item.completed && <CheckCircle2 className="h-3 w-3 text-foreground" />}
                             </div>
@@ -88,19 +87,19 @@ export function InterviewCoach({ timeToAnswer, interviewerExpects }: InterviewCo
 
             {/* Reward/XP */}
             <div className="space-y-4 pt-8 mt-auto">
-                <div className="p-5 rounded-2xl bg-gradient-to-br from-yellow-50 dark:from-yellow-950/10 to-transparent border border-yellow-500 dark:border-yellow-700/20 text-center relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:scale-110 transition-transform">
-                        <Trophy className="h-12 w-12 text-yellow-500 dark:text-yellow-400" />
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-warning/10 to-transparent border border-warning/20 text-center relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-10">
+                        <Trophy className="h-12 w-12 text-warning" />
                     </div>
                     <div className="relative z-10">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-yellow-600 dark:text-yellow-400 mb-1">Potential Reward</p>
-                        <div className="text-3xl font-black text-foreground">+50 XP</div>
+                        <p className="text-[10px] font-extrabold uppercase tracking-widest text-warning mb-1">Potential Reward</p>
+                        <div className="text-3xl font-extrabold text-foreground">+50 XP</div>
                         <p className="text-[10px] font-medium text-muted-foreground mt-2">Awarded on topic mastery</p>
                     </div>
                 </div>
 
-                <button className="w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all group">
-                    <PlayCircle className="h-4 w-4 group-hover:rotate-12 transition-transform" />
+                <button className="touch-target w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-primary text-primary-foreground font-extrabold text-xs uppercase tracking-widest shadow-xl shadow-primary/20 hover:opacity-90 transition-colors">
+                    <PlayCircle className="h-4 w-4" />
                     Start Mock Practice
                 </button>
             </div>

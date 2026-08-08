@@ -16,20 +16,20 @@ const PRIORITY_META = {
   P0: {
     label: "Critical",
     icon: Flame,
-    chip: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30",
-    text: "text-red-600 dark:text-red-400",
+    chip: "bg-destructive/10 text-destructive border-destructive/30",
+    text: "text-destructive",
   },
   P1: {
     label: "Important",
     icon: TrendingUp,
-    chip: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
-    text: "text-amber-600 dark:text-amber-400",
+    chip: "bg-warning/10 text-warning border-warning/30",
+    text: "text-warning",
   },
   P2: {
     label: "Nice to have",
     icon: Leaf,
-    chip: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
-    text: "text-blue-600 dark:text-blue-400",
+    chip: "bg-muted text-muted-foreground border-border",
+    text: "text-muted-foreground",
   },
 } as const;
 

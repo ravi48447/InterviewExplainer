@@ -8,6 +8,7 @@
 
 import { Quote, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tag } from "@/components/ui/tag";
 import type { ResumeClaim } from "@/lib/resume";
 
 export interface EvidenceCardProps {
@@ -18,10 +19,10 @@ export function EvidenceCard({ claim }: EvidenceCardProps) {
   const confidencePct = Math.round(claim.confidence * 100);
   const confColor =
     confidencePct >= 75
-      ? "text-emerald-600 dark:text-emerald-400"
+      ? "text-success"
       : confidencePct >= 50
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-red-600 dark:text-red-400";
+      ? "text-warning"
+      : "text-destructive";
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -42,12 +43,9 @@ export function EvidenceCard({ claim }: EvidenceCardProps) {
           {claim.associatedSkills.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2">
               {claim.associatedSkills.map((s) => (
-                <span
-                  key={s}
-                  className="text-xs rounded-md bg-primary/10 text-primary px-2 py-0.5 font-medium"
-                >
+                <Tag key={s} variant="default">
                   {s}
-                </span>
+                </Tag>
               ))}
             </div>
           )}

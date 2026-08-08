@@ -10,6 +10,8 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, XCircle, TrendingUp, RotateCcw, Clock, Award } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tag } from "@/components/ui/tag";
 import type { SessionEvaluation, InterviewQuestion } from "@/lib/interview";
 
 export interface ResultsProps {
@@ -22,10 +24,10 @@ export function Results({ evaluation, questions, onRestart }: ResultsProps) {
   const score = evaluation.overallScore;
   const scoreColor =
     score >= 80
-      ? "text-emerald-600 dark:text-emerald-400"
+      ? "text-success"
       : score >= 60
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-red-600 dark:text-red-400";
+      ? "text-warning"
+      : "text-destructive";
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -33,7 +35,7 @@ export function Results({ evaluation, questions, onRestart }: ResultsProps) {
       <div className="rounded-xl border border-border bg-card p-8 text-center">
         <Award className="h-10 w-10 text-primary mx-auto mb-3" />
         <h1 className="type-display text-3xl font-bold text-foreground">Your results</h1>
-        <p className={`text-5xl font-black mt-4 ${scoreColor}`}>{score}%</p>
+        <p className={`text-5xl font-extrabold mt-4 ${scoreColor}`} aria-live="polite" aria-atomic="true">{score}%</p>
         <p className="text-sm text-muted-foreground mt-3 max-w-md mx-auto">{evaluation.summary}</p>
         <div className="flex items-center justify-center gap-6 mt-6 text-sm">
           <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -72,11 +74,11 @@ export function Results({ evaluation, questions, onRestart }: ResultsProps) {
 
               {r.strengths.length > 0 && (
                 <div className="mb-2">
-                  <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mb-1">Strengths</p>
+                  <p className="text-xs font-semibold text-success mb-1">Strengths</p>
                   <ul className="space-y-0.5">
                     {r.strengths.map((s, j) => (
                       <li key={j} className="text-xs text-foreground flex items-start gap-1.5">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0 mt-0.5" />
                         {s}
                       </li>
                     ))}
@@ -86,11 +88,11 @@ export function Results({ evaluation, questions, onRestart }: ResultsProps) {
 
               {r.improvements.length > 0 && (
                 <div className="mb-2">
-                  <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">To improve</p>
+                  <p className="text-xs font-semibold text-warning mb-1">To improve</p>
                   <ul className="space-y-0.5">
                     {r.improvements.map((s, j) => (
                       <li key={j} className="text-xs text-foreground flex items-start gap-1.5">
-                        <TrendingUp className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <TrendingUp className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
                         {s}
                       </li>
                     ))}
@@ -102,9 +104,9 @@ export function Results({ evaluation, questions, onRestart }: ResultsProps) {
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-xs text-muted-foreground">Missed keywords:</span>
                   {r.keywordsMissed.map((k) => (
-                    <span key={k} className="text-[11px] px-1.5 py-0.5 rounded bg-surface border border-border text-muted-foreground">
+                    <Tag key={k} variant="outline" className="text-[11px]">
                       {k}
-                    </span>
+                    </Tag>
                   ))}
                 </div>
               )}
@@ -125,20 +127,19 @@ export function Results({ evaluation, questions, onRestart }: ResultsProps) {
 
       {/* Actions */}
       <div className="flex items-center justify-center gap-3">
-        <button
+        <Button
           onClick={onRestart}
-          className="inline-flex items-center gap-2 px-5 py-2.5 border border-border rounded-lg text-sm font-semibold text-foreground hover:bg-surface"
+          variant="outline"
         >
-          <RotateCcw className="h-4 w-4" />
+          <RotateCcw className="h-4 w-4 mr-2" />
           New session
-        </button>
-        <Link
-          href="/dashboard"
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90"
-        >
-          Back to dashboard
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+        </Button>
+        <Button asChild>
+          <Link href="/dashboard">
+            Back to dashboard
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Link>
+        </Button>
       </div>
     </div>
   );

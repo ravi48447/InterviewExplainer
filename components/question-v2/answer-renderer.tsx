@@ -21,6 +21,8 @@ import { CodeBlock } from "@/components/ui/code-block";
 import { Callout } from "@/components/ui/callout";
 import { TableWrapper } from "@/components/ui/table-wrapper";
 import { Figure } from "@/components/ui/figure";
+import { EmptyState } from "@/components/ui/empty-state";
+import { BookOpen } from "lucide-react";
 import type { AnswerSection } from "@/lib/question";
 
 export interface AnswerRendererProps {
@@ -28,7 +30,15 @@ export interface AnswerRendererProps {
 }
 
 export function AnswerRenderer({ sections }: AnswerRendererProps) {
-  if (sections.length === 0) return null;
+  if (sections.length === 0) {
+    return (
+      <EmptyState
+        icon={<BookOpen className="h-6 w-6" />}
+        title="No answer yet"
+        description="This question does not have an answer written yet."
+      />
+    );
+  }
 
   return (
     <div className="reading-container space-y-6">

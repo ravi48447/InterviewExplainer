@@ -14,7 +14,13 @@ import { GlobalSearch } from '@/modules/search/components/GlobalSearch'
  *
  * The keyboard shortcut (Ctrl/Cmd+K), desktop input, mobile icon button, and
  * modal live in GlobalSearch — we don't duplicate them (T104, AB). The modal
- * renders canonical URLs in its results (T102) via the SearchModal layer.
+ * renders canonical URLs in its results (T102) via the SearchModal layer,
+ * which owns its own focus-management and dropdown z-index (C6).
+ *
+ * Accessibility: the search trigger is an icon-only / compact control on
+ * small screens, so the underlying island is responsible for exposing an
+ * `aria-label` on every icon-only button and for trapping focus inside the
+ * modal while it is open (aria-modal=true, Escape to close, focus return).
  */
 export function HeaderSearch() {
   if (!isHubEnabled('search')) return null

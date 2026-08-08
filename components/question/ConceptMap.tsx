@@ -21,57 +21,57 @@ const colorMap: Record<
 > = {
   amber: {
     border: "border-default dark:border-default/20",
-    bg: "bg-amber-50/30 dark:bg-amber-950/20",
-    headerBg: "bg-amber-50 dark:bg-amber-500/10",
+    bg: "bg-warning/5 dark:bg-warning/10",
+    headerBg: "bg-warning/10 dark:bg-warning/10",
     headerBorder: "border-default dark:border-default/20",
-    headerText: "text-amber-800 dark:text-amber-400",
-    dot: "bg-amber-400",
-    number: "bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400",
+    headerText: "text-warning",
+    dot: "bg-warning",
+    number: "bg-warning/20 text-warning",
   },
   blue: {
     border: "border-default dark:border-default/20",
-    bg: "bg-blue-50/30 dark:bg-blue-950/20",
-    headerBg: "bg-blue-50 dark:bg-blue-500/10",
+    bg: "bg-primary/5 dark:bg-primary/10",
+    headerBg: "bg-primary/10 dark:bg-primary/10",
     headerBorder: "border-default dark:border-default/20",
     headerText: "text-primary dark:text-primary",
-    dot: "bg-blue-400",
-    number: "bg-blue-100 dark:bg-blue-950/30 text-primary dark:text-primary",
+    dot: "bg-primary",
+    number: "bg-primary/20 text-primary dark:text-primary",
   },
   emerald: {
     border: "border-default dark:border-default/20",
-    bg: "bg-emerald-50/30 dark:bg-emerald-950/20",
-    headerBg: "bg-emerald-50 dark:bg-emerald-500/10",
+    bg: "bg-success/5 dark:bg-success/10",
+    headerBg: "bg-success/10 dark:bg-success/10",
     headerBorder: "border-default dark:border-default/20",
-    headerText: "text-emerald-800 dark:text-emerald-400",
-    dot: "bg-emerald-400",
-    number: "bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400",
+    headerText: "text-success",
+    dot: "bg-success",
+    number: "bg-success/20 text-success",
   },
   violet: {
-    border: "border-blue-200 dark:border-blue-500/20",
-    bg: "bg-blue-50/30 dark:bg-blue-950/20",
-    headerBg: "bg-blue-50 dark:bg-blue-500/10",
-    headerBorder: "border-blue-200 dark:border-blue-500/20",
-    headerText: "text-blue-800 dark:text-blue-400",
-    dot: "bg-blue-400",
-    number: "bg-blue-100 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400",
+    border: "border-primary/20",
+    bg: "bg-primary/5 dark:bg-primary/10",
+    headerBg: "bg-primary/10 dark:bg-primary/10",
+    headerBorder: "border-primary/20",
+    headerText: "text-primary dark:text-primary",
+    dot: "bg-primary",
+    number: "bg-primary/20 text-primary dark:text-primary",
   },
   indigo: {
     border: "border-default dark:border-default/20",
-    bg: "bg-blue-50/30 dark:bg-blue-950/20",
-    headerBg: "bg-blue-50 dark:bg-blue-500/10",
+    bg: "bg-primary/5 dark:bg-primary/10",
+    headerBg: "bg-primary/10 dark:bg-primary/10",
     headerBorder: "border-default dark:border-default/20",
     headerText: "text-primary dark:text-primary",
-    dot: "bg-blue-400",
-    number: "bg-blue-100 dark:bg-blue-950/30 text-primary dark:text-primary",
+    dot: "bg-primary",
+    number: "bg-primary/20 text-primary dark:text-primary",
   },
   rose: {
-    border: "border-rose-200 dark:border-rose-500/20",
-    bg: "bg-rose-50/30 dark:bg-rose-950/20",
-    headerBg: "bg-rose-50 dark:bg-rose-500/10",
-    headerBorder: "border-rose-200 dark:border-rose-500/20",
-    headerText: "text-rose-800 dark:text-rose-400",
-    dot: "bg-rose-400 dark:bg-rose-800",
-    number: "bg-rose-100 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400",
+    border: "border-destructive/20",
+    bg: "bg-destructive/5 dark:bg-destructive/10",
+    headerBg: "bg-destructive/10 dark:bg-destructive/10",
+    headerBorder: "border-destructive/20",
+    headerText: "text-destructive",
+    dot: "bg-destructive",
+    number: "bg-destructive/20 text-destructive",
   },
   slate: {
     border: "border-border",
@@ -135,7 +135,7 @@ export function ConceptMap({
       : "grid-cols-2 lg:grid-cols-4";
 
   return (
-    <div className="my-6 not-prose">
+    <div className="my-6 not-prose" aria-live="polite">
       {title && (
         <div className="flex items-center gap-2 mb-4">
           <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -154,7 +154,7 @@ export function ConceptMap({
             >
               {/* Header */}
               <div className={`px-4 py-3 ${c.headerBg} border-b ${c.headerBorder}`}>
-                <div className={`text-[12px] font-black uppercase tracking-widest ${c.headerText}`}>
+                <div className={`text-[12px] font-extrabold uppercase tracking-widest ${c.headerText}`}>
                   {card.title}
                 </div>
                 {card.subtitle && (

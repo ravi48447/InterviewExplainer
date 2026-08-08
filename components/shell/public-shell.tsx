@@ -68,7 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
  */
 function AuthShellFrame() {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl" role="banner">
+    <header className="sticky top-0 z-[var(--z-sticky)] w-full border-b border-border/60 bg-background/80 backdrop-blur-xl" role="banner">
       <div className="flex h-14 items-center justify-center px-4">
         <a
           href="/"
@@ -92,7 +92,7 @@ function DashboardShellFrame({ pathname }: { pathname: string }) {
     pathname === href || pathname.startsWith(href + '/')
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl" role="banner">
+    <header className="sticky top-0 z-[var(--z-sticky)] w-full border-b border-border/60 bg-background/80 backdrop-blur-xl" role="banner">
       <div className="flex h-14 items-center gap-3 px-4 sm:px-6">
         <a
           href="/"
@@ -112,7 +112,7 @@ function DashboardShellFrame({ pathname }: { pathname: string }) {
               href={l.href}
               aria-current={isActive(l.href) ? 'page' : undefined}
               className={
-                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors ' +
+                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ' +
                 (isActive(l.href)
                   ? 'text-foreground bg-muted'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground')

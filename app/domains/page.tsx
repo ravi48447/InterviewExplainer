@@ -186,11 +186,11 @@ export default function DomainsPage() {
               <div className="flex gap-3 shrink-0">
                 <div className="text-center px-5 py-3 bg-primary/10 rounded-xl border border-primary/20">
                   <div className="text-[11px] text-primary font-semibold mb-1">Live Paths</div>
-                  <div className="text-2xl font-black text-primary">{liveCount}</div>
+                  <div className="text-2xl font-extrabold text-primary">{liveCount}</div>
                 </div>
                 <div className="text-center px-5 py-3 bg-success/10 rounded-xl border border-success/20">
                   <div className="text-[11px] text-success font-semibold mb-1">Questions</div>
-                  <div className="text-2xl font-black text-success">{totalQuestions > 1000 ? `${(totalQuestions / 1000).toFixed(1)}k+` : totalQuestions}</div>
+                  <div className="text-2xl font-extrabold text-success">{totalQuestions > 1000 ? `${(totalQuestions / 1000).toFixed(1)}k+` : totalQuestions}</div>
                 </div>
               </div>
             </div>
@@ -240,7 +240,7 @@ export default function DomainsPage() {
                   <select
                     value={filters.language}
                     onChange={e => setFilters(f => ({ ...f, language: e.target.value }))}
-                    className="w-full bg-background border border-border rounded-lg h-10 px-3 text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/10 focus:outline-none transition-all text-foreground"
+                    className="w-full bg-background border border-border rounded-lg h-10 px-3 text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/10 focus:outline-none transition-colors text-foreground"
                   >
                     <option value="">All Languages ({langKeys.length})</option>
                     {langKeys.map(lang => <option key={lang} value={lang}>{lang}</option>)}
@@ -259,7 +259,7 @@ export default function DomainsPage() {
                       placeholder="Find a path..."
                       value={filters.search}
                       onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-                      className="w-full bg-background border border-border rounded-lg h-10 pl-10 pr-3 text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/10 focus:outline-none transition-all text-foreground"
+                      className="w-full bg-background border border-border rounded-lg h-10 pl-10 pr-3 text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/10 focus:outline-none transition-colors text-foreground"
                     />
                   </div>
                 </div>
@@ -272,7 +272,7 @@ export default function DomainsPage() {
                   <div className="space-y-1.5">
                     <button
                       onClick={() => setFilters(f => ({ ...f, track: "" }))}
-                      className={cn("w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all",
+                      className={cn("w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors",
                         filters.track === "" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-hover border border-border"
                       )}>All Tracks</button>
                     {uniqueTracks.map(t => {
@@ -282,7 +282,7 @@ export default function DomainsPage() {
                       return (
                         <button key={t.slug}
                           onClick={() => setFilters(f => ({ ...f, track: active ? "" : t.slug }))}
-                          className={cn("w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                          className={cn("w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2",
                             active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-hover border border-border"
                           )}
                         >
@@ -306,7 +306,7 @@ export default function DomainsPage() {
                       return (
                         <button key={key}
                           onClick={() => setFilters(f => ({ ...f, level: active ? "" : key }))}
-                          className={cn("w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all",
+                          className={cn("w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-bold border transition-colors",
                             active ? "bg-primary text-primary-foreground shadow-sm border-transparent" : "bg-card border-border text-muted-foreground hover:bg-hover"
                           )}
                         >
@@ -326,7 +326,7 @@ export default function DomainsPage() {
                 <div className="px-4 py-3 bg-surface border-t border-border">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground font-medium">
-                      Showing <span className="font-black text-foreground">{filtered.length}</span> of {domains.length}
+                      Showing <span className="font-extrabold text-foreground">{filtered.length}</span> of {domains.length}
                     </span>
                     <button onClick={resetAll} className="text-primary hover:text-primary/80 font-bold">Clear All</button>
                   </div>
@@ -406,8 +406,8 @@ export default function DomainsPage() {
                           setExpandedLang(p => ({ ...p, [lang]: !p[lang] }));
                           setTimeout(() => document.getElementById(`lang-${lang}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
                         }}
-                        className={cn("inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold border transition-all shadow-sm",
-                          expandedLang[lang] ? "bg-primary text-primary-foreground border-primary scale-105" : "bg-card border-border text-muted-foreground hover:bg-hover"
+                        className={cn("inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold border transition-colors shadow-sm",
+                          expandedLang[lang] ? "bg-primary text-primary-foreground border-primary" : "bg-card border-border text-muted-foreground hover:bg-hover"
                         )}
                       >
                         <TechIcon name={lang.toLowerCase()} className="h-4 w-4" />
@@ -427,7 +427,7 @@ export default function DomainsPage() {
               {langKeys.map(lang => (
                 <div key={lang} id={`lang-${lang}`} className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
                   <button onClick={() => toggle(lang)}
-                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-surface/50 transition-all border-none">
+                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-surface/50 transition-colors border-none">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-surface flex items-center justify-center shadow-sm border border-border">
                         <TechIcon name={lang.toLowerCase()} className="h-6 w-6" />
@@ -491,7 +491,7 @@ export default function DomainsPage() {
                   return (
                     <button key={key}
                       onClick={() => setFilters(f => ({ ...f, level: f.level === key ? "" : key }))}
-                      className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-left border",
+                      className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left border",
                         filters.level === key ? "border-primary bg-surface shadow-sm" : "border-transparent hover:bg-hover"
                       )}
                     >
@@ -575,7 +575,7 @@ function DomainCard({ domain, index = 0 }: { domain: ContentDomain; index?: numb
 
   const cardInner = (
     <div className={cn(
-      "h-full border rounded-lg p-4 transition-all",
+      "h-full border rounded-lg p-4 transition-colors",
       domain.hasContent
         ? "bg-card border-border hover:bg-hover/30 hover:border-muted-foreground/30 shadow-sm group"
         : "bg-surface border-border border-dashed opacity-50 cursor-default"

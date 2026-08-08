@@ -9,7 +9,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { FileText, BarChart3, Target, Loader2 } from "lucide-react";
+import { BarChart3, Target, FileText } from "lucide-react";
 import {
   fetchActiveResume,
   fetchCandidateProfile,
@@ -27,6 +27,19 @@ import type {
   ParsedJobDescription,
   JobMatchResult as JM,
 } from "@/lib/resume";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { CardSkeleton, TextSkeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorState } from "@/components/ui/error-state";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { ResumeUpload } from "./resume-upload";
 import { AnalysisResults } from "./analysis-results";
 import { JobMatchResults } from "./job-match-results";
@@ -39,37 +52,43 @@ export function ResumeShell() {
   const [analysis, setAnalysis] = useState<ResumeAnalysisResult | null>(null);
   const [match, setMatch] = useState<JobMatchResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<Error | null>(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"analysis" | "match">("analysis");
   const [jdText, setJdText] = useState("");
   const [parsedJob, setParsedJob] = useState<ParsedJobDescription | null>(null);
 
+  const loadAll = useCallback(async (signal: { cancelled: boolean }) => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const active = await fetchActiveResume(DEMO_USER);
+      if (signal.cancelled) return;
+      setResume(active);
+      if (active) {
+        const [p, a] = await Promise.all([
+          fetchCandidateProfile(active.id),
+          fetchResumeAnalysis(active.id),
+        ]);
+        if (signal.cancelled) return;
+        setProfile(p);
+        setAnalysis(a);
+      }
+    } catch (err) {
+      if (!signal.cancelled) setLoadError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      if (!signal.cancelled) setLoading(false);
+    }
+  }, []);
+
   // Initial load — fetch the active resume + derived data.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const active = await fetchActiveResume(DEMO_USER);
-        if (cancelled) return;
-        setResume(active);
-        if (active) {
-          const [p, a] = await Promise.all([
-            fetchCandidateProfile(active.id),
-            fetchResumeAnalysis(active.id),
-          ]);
-          if (cancelled) return;
-          setProfile(p);
-          setAnalysis(a);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+    const signal = { cancelled: false };
+    void loadAll(signal);
     return () => {
-      cancelled = true;
+      signal.cancelled = true;
     };
-  }, []);
+  }, [loadAll]);
 
   const handleUpload = useCallback(async () => {
     setBusy(true);
@@ -84,6 +103,8 @@ export function ResumeShell() {
         setProfile(p);
         setAnalysis(a);
       }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setBusy(false);
     }
@@ -92,6 +113,7 @@ export function ResumeShell() {
   const handleParseJob = useCallback(async () => {
     if (!jdText.trim() || !resume) return;
     setBusy(true);
+    setLoadError(null);
     try {
       // Save the JD as a job target, then parse.
       const job = await saveJobTarget({
@@ -122,6 +144,8 @@ export function ResumeShell() {
         }
         setTab("match");
       }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setBusy(false);
     }
@@ -129,14 +153,42 @@ export function ResumeShell() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="max-w-4xl mx-auto space-y-6" aria-live="polite" aria-busy="true">
+        <CardSkeleton className="p-6" />
+        <div className="space-y-3">
+          <TextSkeleton lines={2} />
+          <TextSkeleton lines={4} />
+        </div>
       </div>
+    );
+  }
+
+  if (loadError && !resume) {
+    return (
+      <ErrorState
+        title="Could not load your resume"
+        description="We were unable to fetch your resume data. Please try again."
+        retryLabel="Retry"
+        onRetry={() => void loadAll({ cancelled: false })}
+      />
     );
   }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Breadcrumb: Dashboard > Resume (C10) */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>Resume</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <ResumeUpload activeResume={resume} onUpload={handleUpload} busy={busy} />
 
       {/* JD paste → match */}
@@ -146,20 +198,21 @@ export function ResumeShell() {
             <Target className="h-5 w-5 text-primary" />
             <h3 className="text-sm font-bold text-foreground">Match against a job description</h3>
           </div>
-          <textarea
+          <Textarea
             value={jdText}
             onChange={(e) => setJdText(e.target.value)}
             placeholder="Paste a job description here to see your match score and skill gaps…"
-            className="w-full min-h-[120px] rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+            className="min-h-[120px]"
           />
-          <button
+          <Button
             onClick={handleParseJob}
             disabled={busy || !jdText.trim()}
-            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50 hover:opacity-90 transition-opacity"
+            loading={busy}
+            className="mt-3"
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
+            {!busy && <Target className="h-4 w-4" />}
             Analyze match
-          </button>
+          </Button>
         </div>
       )}
 
@@ -171,18 +224,29 @@ export function ResumeShell() {
         </div>
       )}
 
-      {tab === "analysis" && analysis && (
-        <AnalysisResults result={analysis} claims={profile?.claims} />
-      )}
-      {tab === "match" && match && <JobMatchResults result={match} />}
+      {/* Analysis / match results with aria-live (C9) */}
+      <div aria-live="polite">
+        {loadError && resume && (
+          <ErrorState
+            title="Analysis failed"
+            description="Something went wrong while analyzing your resume or job match. Please try again."
+            retryLabel="Retry"
+            onRetry={() => void loadAll({ cancelled: false })}
+          />
+        )}
+        {!loadError && tab === "analysis" && analysis && (
+          <AnalysisResults result={analysis} claims={profile?.claims} />
+        )}
+        {!loadError && tab === "match" && match && <JobMatchResults result={match} />}
+      </div>
 
+      {/* Empty state when no resume uploaded (C8) */}
       {!resume && (
-        <div className="text-center py-12">
-          <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">
-            Upload your resume to unlock analysis and job matching.
-          </p>
-        </div>
+        <EmptyState
+          icon={<FileText className="h-10 w-10" />}
+          title="No resume yet"
+          description="Upload your resume to unlock evidence-backed analysis and job matching."
+        />
       )}
     </div>
   );
@@ -205,7 +269,8 @@ function TabButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
+      aria-label={label}
+      className={`touch-target flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
         active
           ? "border-primary text-primary"
           : "border-transparent text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:hover:text-muted-foreground"

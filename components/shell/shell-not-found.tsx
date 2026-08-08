@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { SearchX, Home, Compass, Code2, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { isHubEnabled } from '@/lib/launch-config'
 
 /**
@@ -23,17 +24,13 @@ export function ShellNotFound() {
   const visible = hubLinks.filter((h) => h.show)
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col items-center px-4 py-16 text-center sm:px-6 lg:py-24">
-      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <SearchX className="h-7 w-7" aria-hidden="true" />
-      </div>
-      <p className="text-sm font-semibold uppercase tracking-wide text-primary">404</p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-        We couldn&rsquo;t find that page
-      </h1>
-      <p className="mt-2 max-w-md text-sm text-muted-foreground">
-        The page may have moved or never existed. Here are some places to go next.
-      </p>
+    <div className="mx-auto w-full max-w-xl px-4 py-16 sm:px-6 lg:py-24">
+      <h1 className="sr-only">Page not found</h1>
+      <EmptyState
+        icon={<SearchX />}
+        title="We couldn't find that page"
+        description="The page may have moved or never existed. Here are some places to go next."
+      />
 
       <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
         <Button asChild>
@@ -53,7 +50,7 @@ export function ShellNotFound() {
       </div>
 
       {isHubEnabled('search') && (
-        <p className="mt-6 text-sm text-muted-foreground">
+        <p className="mt-6 text-center text-sm text-muted-foreground">
           Or{' '}
           <Link href="/search" className="font-medium text-foreground underline-offset-4 hover:underline">
             search for what you need

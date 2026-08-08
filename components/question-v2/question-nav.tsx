@@ -13,9 +13,10 @@
  */
 
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, ChevronRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronRight, Compass } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import type {
   PrevNextNav,
   RelatedQuestion,
@@ -88,7 +89,15 @@ export interface RelatedQuestionsProps {
 }
 
 export function RelatedQuestions({ questions }: RelatedQuestionsProps) {
-  if (questions.length === 0) return null;
+  if (questions.length === 0) {
+    return (
+      <EmptyState
+        icon={<Compass className="h-6 w-6" />}
+        title="No related questions"
+        description="There are no related questions for this topic yet."
+      />
+    );
+  }
 
   return (
     <section aria-labelledby="related-heading">
@@ -135,10 +144,18 @@ export interface FollowUpQuestionsProps {
 }
 
 export function FollowUpQuestions({ questions }: FollowUpQuestionsProps) {
-  if (questions.length === 0) return null;
+  if (questions.length === 0) {
+    return (
+      <EmptyState
+        icon={<Compass className="h-6 w-6" />}
+        title="No follow-up questions"
+        description="There are no follow-up questions for this topic yet."
+      />
+    );
+  }
 
   return (
-    <section aria-labelledby="followup-heading">
+    <section aria-labelledby="followup-heading" aria-live="polite">
       <h2 id="followup-heading" className="type-section mb-3">
         Follow-Up Questions
       </h2>

@@ -197,12 +197,12 @@ function buildToc(sections: AnswerSection[]): TocItem[] {
  * ────────────────────────────────────────────────────────────────────────── */
 
 const CM_COLORS: Record<string, { bar: string; chip: string }> = {
-  amber: { bar: "bg-amber-400", chip: "text-amber-950 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10" },
-  blue: { bar: "bg-blue-400", chip: "text-white dark:text-primary bg-blue-50 dark:bg-blue-500/10" },
-  emerald: { bar: "bg-emerald-400", chip: "text-white dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10" },
-  violet: { bar: "bg-blue-400", chip: "text-white dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10" },
-  indigo: { bar: "bg-blue-400", chip: "text-white dark:text-primary bg-blue-50 dark:bg-blue-500/10" },
-  rose: { bar: "bg-rose-400", chip: "text-white dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10" },
+  amber: { bar: "bg-warning", chip: "text-warning bg-warning/10" },
+  blue: { bar: "bg-primary", chip: "text-primary bg-primary/10" },
+  emerald: { bar: "bg-success", chip: "text-success bg-success/10" },
+  violet: { bar: "bg-primary", chip: "text-primary bg-primary/10" },
+  indigo: { bar: "bg-primary", chip: "text-primary bg-primary/10" },
+  rose: { bar: "bg-destructive", chip: "text-destructive bg-destructive/10" },
   slate: { bar: "bg-slate-400 dark:bg-slate-800", chip: "text-foreground bg-surface" },
 };
 
@@ -233,7 +233,7 @@ function ConceptMapLight({
   if (cards.length === 0) return null;
 
   return (
-    <div className="my-8">
+    <div className="my-8" aria-live="polite">
       {title && (
         <h3
           id={slugify(title)}
@@ -293,7 +293,7 @@ function ConceptMapLight({
 function TopToc({ items }: { items: TocItem[] }) {
   return (
     <nav className="mb-8 rounded-xl border border-border/70 bg-surface/60 px-5 py-4">
-      <div className="text-[10.5px] font-black uppercase tracking-[0.18em] text-muted-foreground mb-2.5">
+      <div className="text-[10.5px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground mb-2.5">
         On this page
       </div>
       <ul className="flex flex-wrap gap-x-5 gap-y-1.5">
@@ -387,7 +387,7 @@ export function DeepDiveArticle({ sections, followupQuestions }: Props) {
           <ol className="rounded-2xl border border-border/80 bg-background px-6 py-6 sm:px-8 sm:py-7 space-y-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
             {followupQuestions!.map((q, i) => (
               <li key={i} className="flex items-start gap-3.5">
-                <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary text-[11px] font-black border border-default dark:border-default/20">
+                <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary text-[11px] font-extrabold border border-default dark:border-default/20">
                   {i + 1}
                 </span>
                 <span className="text-[15.5px] leading-[1.65] text-foreground pt-[1px]">

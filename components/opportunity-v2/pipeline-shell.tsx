@@ -8,7 +8,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import {
   fetchApplications,
   buildPipeline,
@@ -17,6 +16,10 @@ import {
 } from "@/lib/opportunity";
 import type { Application, ApplicationStatus, PipelineColumn } from "@/lib/opportunity";
 import { PipelineKanban } from "./pipeline-kanban";
+import { CardSkeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/ui/error-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FolderKanban } from "lucide-react";
 
 const DEMO_USER = "demo-user";
 
@@ -24,24 +27,25 @@ export function PipelineShell() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [columns, setColumns] = useState<PipelineColumn[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const apps = await fetchApplications(DEMO_USER);
+      setApplications(apps);
+      setColumns(buildPipeline(apps));
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error("Failed to load pipeline"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const apps = await fetchApplications(DEMO_USER);
-        if (cancelled) return;
-        setApplications(apps);
-        setColumns(buildPipeline(apps));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    load();
+  }, [load]);
 
   const handleMove = useCallback(
     async (applicationId: string, toStatus: ApplicationStatus) => {
@@ -62,14 +66,30 @@ export function PipelineShell() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="max-w-7xl mx-auto space-y-6" aria-live="polite">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
+        <CardSkeleton className="h-64" />
       </div>
     );
   }
 
+  if (error) {
+    return (
+      <ErrorState
+        title="Couldn't load your pipeline"
+        description={error.message}
+        retryLabel="Try again"
+        onRetry={load}
+      />
+    );
+  }
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6" aria-live="polite">
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="Active" value={stats.activeCount} />
@@ -79,12 +99,13 @@ export function PipelineShell() {
       </div>
 
       {applications.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-sm font-medium text-foreground">No applications yet</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Save or apply to opportunities to populate your pipeline.
-          </p>
-        </div>
+        <EmptyState
+          icon={<FolderKanban />}
+          title="No applications yet"
+          description="Save or apply to opportunities to populate your pipeline."
+          actionText="Browse opportunities"
+          onAction={() => (window.location.href = "/dashboard/opportunities")}
+        />
       ) : (
         <PipelineKanban columns={columns} onMove={handleMove} />
       )}

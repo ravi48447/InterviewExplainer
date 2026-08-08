@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { Play, ArrowUpRight, BookCheck, Layers, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tag } from "@/components/ui/tag";
 
 export function StackHeader({
   premiumCourse,
@@ -50,12 +51,12 @@ export function StackHeader({
         <div className="flex items-start justify-between gap-6">
           <div className="flex-1 min-w-0">
             <p className={cn(
-              "text-[10px] font-black uppercase tracking-[0.24em] mb-2",
-              premiumCourse ? "text-amber-600 dark:text-amber-300" : "text-primary dark:text-primary",
+              "text-[10px] font-extrabold uppercase tracking-[0.24em] mb-2",
+              premiumCourse ? "text-warning dark:text-warning" : "text-primary dark:text-primary",
             )}>
               Interview Track
             </p>
-            <h1 className="text-[1.85rem] font-black text-white tracking-tight leading-tight">
+            <h1 className="type-display text-[1.85rem] text-white tracking-tight leading-tight">
               {stack.name}
               {activeSubcatName && (
                 <span className="font-bold text-primary dark:text-primary">
@@ -69,19 +70,19 @@ export function StackHeader({
               </p>
             )}
             <div className="mt-4 flex items-center gap-2 flex-wrap">
-              <span className="rounded-md border border-white/20 bg-background/10 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+              <Tag className="border border-white/20 bg-background/10 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
                 {mergedSubcatsLength} topics
-              </span>
-              <span className="rounded-md border border-default dark:border-default/30 bg-blue-500 dark:bg-blue-800/15 px-2.5 py-1 text-[11px] font-semibold text-white dark:text-primary">
+              </Tag>
+              <Tag className="border border-default dark:border-default/30 bg-primary/15 px-2.5 py-1 text-[11px] font-semibold text-primary dark:text-primary">
                 {allQuestionsLength} questions
-              </span>
-              <span className="rounded-md border border-default dark:border-default/30 bg-amber-500 dark:bg-amber-800/15 px-2.5 py-1 text-[11px] font-semibold text-amber-950 dark:text-amber-300">
+              </Tag>
+              <Tag className="border border-default dark:border-default/30 bg-warning/15 px-2.5 py-1 text-[11px] font-semibold text-warning dark:text-warning">
                 ~{totalTime} min
-              </span>
+              </Tag>
               {pendingCount > 0 && (
-                <span className="rounded-md border border-white/10 bg-background/5 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                <Tag className="border border-white/10 bg-background/5 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
                   {pendingCount} pending
-                </span>
+                </Tag>
               )}
             </div>
             {firstQuestionSlug && (
@@ -89,10 +90,10 @@ export function StackHeader({
                 <Link
                   href={`/${domainSlug}/${stackSlug}/${firstQuestionSlug}`}
                   className={cn(
-                    "inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-all",
+                    "inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-colors duration-200 ease-out",
                     premiumCourse
-                      ? "bg-amber-500 dark:bg-amber-800 text-white hover:bg-amber-400 dark:bg-amber-800"
-                      : "bg-blue-500 dark:bg-blue-800 text-white hover:bg-blue-400 dark:bg-blue-800",
+                      ? "bg-warning text-white hover:bg-warning/90"
+                      : "bg-primary text-white hover:bg-primary/90",
                   )}
                 >
                   <Play className="h-4 w-4 fill-current" />
@@ -113,7 +114,7 @@ export function StackHeader({
 
           {/* Readiness ring */}
           <div className="hidden lg:flex flex-col items-center justify-center w-28 h-28 rounded-2xl border border-white/10 bg-background/5 shrink-0 gap-1">
-            <span className="text-3xl font-black text-white leading-none">{completionPct}%</span>
+            <span className="text-3xl font-extrabold text-white leading-none">{completionPct}%</span>
             <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">coverage</span>
             <div className="mt-1 w-14 h-1 rounded-full bg-background/10 overflow-hidden">
               <div
@@ -142,18 +143,18 @@ export function StackHeader({
           {allQuestionsLength}/{totalContentQ} loaded
         </div>
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" />
+          <Clock className="h-3.5 w-3.5 text-warning dark:text-warning" />
           {totalTime} min
         </div>
         <div className="ml-auto flex items-center gap-3 text-[11px]">
           <span className="flex items-center gap-1 text-muted-foreground">
-            <span className="w-2 h-2 rounded-full bg-green-500 dark:bg-green-800 inline-block" />{easyCt} easy
+            <span className="w-2 h-2 rounded-full bg-success inline-block" />{easyCt} easy
           </span>
           <span className="flex items-center gap-1 text-muted-foreground">
-            <span className="w-2 h-2 rounded-full bg-amber-500 dark:bg-amber-800 inline-block" />{medCt} med
+            <span className="w-2 h-2 rounded-full bg-warning inline-block" />{medCt} med
           </span>
           <span className="flex items-center gap-1 text-muted-foreground">
-            <span className="w-2 h-2 rounded-full bg-red-500 dark:bg-red-800 inline-block" />{hardCt} hard
+            <span className="w-2 h-2 rounded-full bg-destructive inline-block" />{hardCt} hard
           </span>
         </div>
       </div>

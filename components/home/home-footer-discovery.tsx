@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PageContainer } from "@/components/page-container";
+import { EmptyState } from "@/components/ui/empty-state";
 import { getHomeFooterLinks } from "@/lib/home/home-data";
 
 /**
@@ -15,7 +16,6 @@ import { getHomeFooterLinks } from "@/lib/home/home-data";
  */
 export function HomeFooterDiscovery() {
   const links = getHomeFooterLinks();
-  if (links.length === 0) return null;
 
   return (
     <nav aria-label="Explore the platform" className="border-b border-border bg-surface">
@@ -23,18 +23,24 @@ export function HomeFooterDiscovery() {
         <h2 className="text-sm font-semibold text-muted-foreground">
           Explore the platform
         </h2>
+        {links.length === 0 ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Discovery links will appear here once available.
+          </p>
+        ) : (
         <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
           {links.map((link) => (
             <li key={link.href}>
               <Link
                 href={link.href}
-                className="text-sm text-foreground hover:text-primary hover:underline"
+                className="text-sm text-foreground hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-sm"
               >
                 {link.label}
               </Link>
             </li>
           ))}
         </ul>
+        )}
       </PageContainer>
     </nav>
   );

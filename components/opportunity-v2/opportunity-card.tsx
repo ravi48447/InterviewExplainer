@@ -6,8 +6,8 @@
  */
 
 import Link from "next/link";
-import { MapPin, Briefcase, Banknote, Star, ArrowRight } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { MapPin, Briefcase, Banknote, Star } from "lucide-react";
+import { Tag } from "@/components/ui/tag";
 import type { Opportunity, WorkMode, SeniorityBand } from "@/lib/opportunity";
 
 export interface OpportunityCardProps {
@@ -44,27 +44,26 @@ export function OpportunityCard({ opportunity: opp, href }: OpportunityCardProps
     score == null
       ? ""
       : score >= 75
-      ? "text-emerald-600 dark:text-emerald-400"
+      ? "text-success"
       : score >= 50
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-red-600 dark:text-red-400";
+      ? "text-warning"
+      : "text-destructive";
 
   return (
     <Link
       href={href}
-      className="block rounded-xl border border-border bg-card p-5 hover:border-primary/50 hover:shadow-sm transition-all group"
+      className="block rounded-xl border border-border bg-card p-5 hover:border-primary/50 hover:shadow-sm transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-foreground truncate">{opp.title}</h3>
-            <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">{opp.company}</p>
         </div>
         {score != null && (
           <div className="text-center shrink-0">
-            <Star className={`h-4 w-4 mx-auto ${scoreColor}`} />
+            <Star className={`h-4 w-4 mx-auto ${scoreColor}`} aria-hidden="true" />
             <span className={`text-sm font-bold ${scoreColor}`}>{score}%</span>
           </div>
         )}
@@ -94,9 +93,7 @@ export function OpportunityCard({ opportunity: opp, href }: OpportunityCardProps
       {opp.skills.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-3">
           {opp.skills.slice(0, 5).map((s) => (
-            <Badge key={s} variant="outline" className="text-xs">
-              {s}
-            </Badge>
+            <Tag key={s}>{s}</Tag>
           ))}
           {opp.skills.length > 5 && (
             <span className="text-xs text-muted-foreground">+{opp.skills.length - 5}</span>

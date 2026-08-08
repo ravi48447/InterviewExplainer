@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { SectionHeader } from "@/components/ui/section-header";
 import { PageContainer } from "@/components/page-container";
+import { EmptyState } from "@/components/ui/empty-state";
 import { getHomeCapabilities } from "@/lib/home/home-data";
 
 /**
@@ -16,7 +17,6 @@ import { getHomeCapabilities } from "@/lib/home/home-data";
  */
 export function HomeCapabilities() {
   const capabilities = getHomeCapabilities();
-  if (capabilities.length === 0) return null;
 
   return (
     <section
@@ -30,6 +30,14 @@ export function HomeCapabilities() {
           description="Everything is organized around getting you interview-ready for your specific stack."
         />
 
+        {capabilities.length === 0 ? (
+          <EmptyState
+            icon={<Sparkles aria-hidden="true" />}
+            title="No capabilities available yet"
+            description="We're putting the finishing touches on our feature showcases. Check back soon."
+            className="mt-10"
+          />
+        ) : (
         <ul className="mt-10 grid gap-6 lg:grid-cols-2">
           {capabilities.map((cap) => (
             <li key={cap.href} className="flex flex-col">
@@ -41,7 +49,7 @@ export function HomeCapabilities() {
               </p>
               <Link
                 href={cap.href}
-                className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-sm"
               >
                 {cap.linkLabel}
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -49,6 +57,7 @@ export function HomeCapabilities() {
             </li>
           ))}
         </ul>
+        )}
       </PageContainer>
     </section>
   );

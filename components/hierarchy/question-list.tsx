@@ -11,9 +11,10 @@
  */
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export interface QuestionListItem {
   slug: string;
@@ -46,12 +47,16 @@ export function QuestionList({
 }: QuestionListProps) {
   if (questions.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground py-8">{emptyMessage}</p>
+      <EmptyState
+        icon={<MessageSquare className="h-6 w-6" />}
+        title="No questions yet"
+        description={emptyMessage}
+      />
     );
   }
 
   return (
-    <ul className="divide-y divide-border">
+    <ul className="divide-y divide-border" aria-live="polite">
       {questions.map((q) => (
         <li key={q.slug}>
           <Link
@@ -73,7 +78,7 @@ export function QuestionList({
               </span>
             </div>
             <ArrowRight
-              className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+              className="size-4 shrink-0 text-muted-foreground transition-colors duration-200 ease-out group-hover:text-foreground"
               aria-hidden="true"
             />
           </Link>

@@ -9,6 +9,15 @@
 import { fetchDomains } from "@/lib/api";
 import { InterviewShell } from "@/components/interview-v2";
 import { buildInterviewSetupMetadata } from "@/lib/interview";
+import Link from "next/link";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 export const metadata = buildInterviewSetupMetadata();
 
@@ -25,6 +34,20 @@ export default async function InterviewStartPage() {
 
   return (
     <main className="page-container py-12">
+      <Breadcrumb className="mb-6">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/mock-interviews">Mock Interviews</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>Start</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div className="text-center mb-10">
         <h1 className="type-display text-3xl sm:text-4xl font-bold text-foreground">
           Start a mock interview

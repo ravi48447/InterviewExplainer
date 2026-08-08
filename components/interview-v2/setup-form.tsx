@@ -9,9 +9,18 @@
 
 import { useState, useCallback, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, Video, Code2, GitBranch, MessageSquare, ArrowRight, Loader2 } from "lucide-react";
+import { Zap, Video, Code2, GitBranch, MessageSquare, ArrowRight } from "lucide-react";
 import { MOCK_TYPES, getMockType } from "@/lib/interview";
 import type { InterviewType, MockTypeOption } from "@/lib/interview";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const ICONS: Record<InterviewType, typeof Zap> = {
   "partial-mock": Zap,
@@ -68,19 +77,20 @@ export function SetupForm({ domains, onStart, starting = false }: SetupFormProps
                 key={m.id}
                 type="button"
                 onClick={() => setType(m.id)}
-                className={`text-left p-4 rounded-xl border transition-all ${
+                aria-pressed={selected}
+                className={`text-left p-4 rounded-xl border transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   selected
                     ? "border-primary bg-surface ring-1 ring-ring"
-                    : "border-border bg-card hover:border-ring"
+                    : "border-border bg-card hover:border-primary"
                 }`}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <Icon className="h-4 w-4 text-primary" />
                   <span className="text-sm font-semibold text-foreground">{m.title}</span>
                   {m.badge && (
-                    <span className="ml-auto text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-primary text-primary-foreground">
+                    <Badge variant="primary" className="ml-auto text-[10px] uppercase">
                       {m.badge}
-                    </span>
+                    </Badge>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">{m.description}</p>
@@ -99,54 +109,52 @@ export function SetupForm({ domains, onStart, starting = false }: SetupFormProps
           <label htmlFor="domain" className="text-sm font-semibold text-foreground block mb-1.5">
             Domain
           </label>
-          <select
-            id="domain"
-            value={domainSlug}
-            onChange={(e) => setDomainSlug(e.target.value)}
-            className="w-full rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            {domains.length === 0 && <option value="">No domains available</option>}
-            {domains.map((d) => (
-              <option key={d.slug} value={d.slug}>
-                {d.name}
-              </option>
-            ))}
-          </select>
+          <Select value={domainSlug} onValueChange={setDomainSlug}>
+            <SelectTrigger id="domain" className="w-full">
+              <SelectValue placeholder={domains.length === 0 ? "No domains available" : "Select a domain"} />
+            </SelectTrigger>
+            <SelectContent>
+              {domains.map((d) => (
+                <SelectItem key={d.slug} value={d.slug}>
+                  {d.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <label htmlFor="count" className="text-sm font-semibold text-foreground block mb-1.5">
             Questions
           </label>
-          <select
-            id="count"
-            value={count}
-            onChange={(e) => setCount(Number(e.target.value))}
-            className="w-full rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value={3}>3 questions</option>
-            <option value={5}>5 questions</option>
-            <option value={7}>7 questions</option>
-            <option value={10}>10 questions</option>
-          </select>
+          <Select value={String(count)} onValueChange={(v) => setCount(Number(v))}>
+            <SelectTrigger id="count" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="3">3 questions</SelectItem>
+              <SelectItem value="5">5 questions</SelectItem>
+              <SelectItem value="7">7 questions</SelectItem>
+              <SelectItem value="10">10 questions</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
 
-      <button
+      <Button
         type="submit"
         disabled={starting || !domainSlug}
-        className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+        loading={starting}
+        className="w-full"
       >
-        {starting ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
+        {!starting && (
           <>
             Start {getMockType(type)?.title}
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="h-4 w-4 ml-2" />
           </>
         )}
-      </button>
+      </Button>
     </form>
   );
 }

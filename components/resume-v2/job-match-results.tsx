@@ -12,43 +12,45 @@ import type { JobMatchResult, RequirementMapping, MatchStatus, InterviewRiskArea
 import { GapItem } from "./gap-item";
 import { RecommendationItem } from "./recommendation-item";
 
+function scoreColor(score: number) {
+  return score >= 75
+    ? "text-success"
+    : score >= 50
+    ? "text-warning"
+    : "text-destructive";
+}
+
 export interface JobMatchResultsProps {
   result: JobMatchResult;
 }
 
 const STATUS_META: Record<MatchStatus, { label: string; color: string; icon: typeof CheckCircle2 }> = {
-  strong: { label: "Strong match", color: "text-emerald-600 dark:text-emerald-400", icon: CheckCircle2 },
-  moderate: { label: "Moderate", color: "text-amber-600 dark:text-amber-400", icon: CheckCircle2 },
-  weak: { label: "Weak", color: "text-orange-600 dark:text-orange-400", icon: XCircle },
-  "no-match": { label: "No match", color: "text-red-600 dark:text-red-400", icon: XCircle },
+  strong: { label: "Strong match", color: "text-success", icon: CheckCircle2 },
+  moderate: { label: "Moderate", color: "text-warning", icon: CheckCircle2 },
+  weak: { label: "Weak", color: "text-warning", icon: XCircle },
+  "no-match": { label: "No match", color: "text-destructive", icon: XCircle },
 };
 
 const RISK_COLOR = {
-  high: "border-red-500/40 bg-red-500/5 text-red-600 dark:text-red-400",
-  medium: "border-amber-500/40 bg-amber-500/5 text-amber-600 dark:text-amber-400",
-  low: "border-blue-500/40 bg-blue-500/5 text-blue-600 dark:text-blue-400",
+  high: "border-destructive/40 bg-destructive/5 text-destructive",
+  medium: "border-warning/40 bg-warning/5 text-warning",
+  low: "border-border bg-muted text-muted-foreground",
 } as const;
 
 export function JobMatchResults({ result }: JobMatchResultsProps) {
   const score = result.overallMatchScore;
-  const scoreColor =
-    score >= 75
-      ? "text-emerald-600 dark:text-emerald-400"
-      : score >= 50
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-red-600 dark:text-red-400";
 
   const matched = result.mappings.filter((m) => m.matchStatus === "strong" || m.matchStatus === "moderate");
 
   return (
     <div className="space-y-6">
       {/* Score header */}
-      <div className="rounded-xl border border-border bg-card p-6 text-center">
+      <div className="rounded-xl border border-border bg-card p-6 text-center" aria-live="polite">
         <Target className="h-8 w-8 text-primary mx-auto mb-2" />
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           Overall match
         </h2>
-        <p className={`text-4xl font-black mt-1 ${scoreColor}`}>{score}%</p>
+        <p className={`type-display text-4xl font-extrabold mt-1 ${scoreColor(score)}`}>{score}%</p>
         <p className="text-xs text-muted-foreground mt-2">
           {matched.length}/{result.mappings.length} requirements covered
         </p>
@@ -108,7 +110,7 @@ export function JobMatchResults({ result }: JobMatchResultsProps) {
       {result.riskAreas.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-6">
           <div className="flex items-center gap-2 mb-4">
-            <ShieldAlert className="h-5 w-5 text-amber-500" />
+            <ShieldAlert className="h-5 w-5 text-warning" />
             <h3 className="text-lg font-bold text-foreground">Interview risk areas</h3>
           </div>
           <div className="space-y-2">

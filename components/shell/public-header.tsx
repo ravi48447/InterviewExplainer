@@ -21,7 +21,7 @@ import { ThemeToggle } from '@/components/shell/header/theme-toggle'
  *   <lg  → mobile drawer toggle + brand + actions (T053)
  *   lg+  → brand + desktop nav + search + actions + theme
  *
- * Stability: `sticky top-0 z-50` with backdrop blur (T054, W). The shell
+ * Stability: `sticky top-0 z-[var(--z-sticky)]` with backdrop blur (T054, W). The shell
  * always renders; auth/search never block the frame (T051).
  *
  * Ownership: the ONLY public header. Route-specific forks are forbidden
@@ -30,7 +30,7 @@ import { ThemeToggle } from '@/components/shell/header/theme-toggle'
 export function PublicHeader({ pathname = '/' }: { pathname?: string }) {
   return (
     <header
-      className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65"
+      className="sticky top-0 z-[var(--z-sticky)] w-full border-b border-border/60 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65"
       role="banner"
     >
       <div className="flex h-16 items-center gap-2 px-4 sm:px-6 lg:gap-3">

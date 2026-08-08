@@ -202,10 +202,10 @@ function QuestionLink({
     <Link
       href={`/${domainSlug}/${stackSlug}/${q.slug}`}
       scroll={false}
-      className={`flex items-start gap-2.5 py-1.5 pl-3 pr-3 text-[12px] leading-snug rounded-lg transition-all ${
+      className={`flex items-start gap-2.5 py-1.5 pl-3 pr-3 text-[12px] leading-snug rounded-lg transition-colors ${
         isCurrent
           ? 'text-foreground font-bold bg-primary/10 border-l-4 border-primary'
-          : 'text-foreground hover:text-foreground hover:bg-surface outline-none focus:ring-2 focus:ring-ring'
+          : 'text-foreground hover:text-foreground hover:bg-surface outline-none focus-visible:ring-2 focus-visible:ring-ring'
       }`}
     >
       <span

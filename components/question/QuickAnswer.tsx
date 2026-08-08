@@ -37,28 +37,24 @@ function NutshellCard({ children }: { children: React.ReactNode }) {
         className={`rounded-xl overflow-hidden shadow-md ${
           d
             ? "border border-default dark:border-default/50 bg-warning/10 shadow-black/40"
-            : "border border-default dark:border-default/20 bg-amber-50/70 dark:bg-amber-500/10 shadow-sm"
+            : "border border-default dark:border-default/20 bg-warning/5 shadow-sm"
         }`}
       >
         <div
           className={`flex items-center gap-2 px-5 py-2.5 border-b ${
             d
-              ? "border-default dark:border-default/50 bg-amber-900 dark:bg-amber-800/30"
-              : "border-default dark:border-default/20 bg-amber-100 dark:bg-amber-950/20"
+              ? "border-default dark:border-default/50 bg-warning/20"
+              : "border-default dark:border-default/20 bg-warning/10"
           }`}
         >
-          <Lightbulb className={`h-3.5 w-3.5 ${d ? "text-amber-600" : "text-amber-600 dark:text-amber-400"}`} />
+          <Lightbulb className={`h-3.5 w-3.5 text-warning`} />
           <span
-            className={`text-[11px] font-bold uppercase tracking-widest ${
-              d ? "text-amber-700" : "text-amber-700 dark:text-amber-400"
-            }`}
+            className={`text-[11px] font-bold uppercase tracking-widest text-warning`}
           >
             In a nutshell
           </span>
           <span
-            className={`ml-auto text-[11px] font-medium ${
-              d ? "text-amber-500" : "text-amber-600 dark:text-amber-400"
-            }`}
+            className={`ml-auto text-[11px] font-medium text-warning`}
           >
             Quick revision
           </span>
@@ -91,9 +87,7 @@ export function QuickAnswer({
             {bullets.map((point, i) => (
               <li key={i} className="flex items-start gap-3">
                 <span
-                  className={`mt-[8px] h-1.5 w-1.5 rounded-full shrink-0 ${
-                    d ? "bg-amber-500 dark:bg-amber-800" : "bg-amber-600 dark:bg-amber-800"
-                  }`}
+                  className={`mt-[8px] h-1.5 w-1.5 rounded-full shrink-0 bg-warning`}
                 />
                 <span
                   className={`text-[15.5px] leading-[1.7] ${
@@ -136,9 +130,7 @@ export function QuickAnswer({
             {sentences.map((point, i) => (
               <li key={i} className="flex items-start gap-3">
                 <span
-                  className={`mt-[8px] h-1.5 w-1.5 rounded-full shrink-0 ${
-                    d ? "bg-amber-500 dark:bg-amber-800" : "bg-amber-600 dark:bg-amber-800"
-                  }`}
+                  className={`mt-[8px] h-1.5 w-1.5 rounded-full shrink-0 bg-warning`}
                 />
                 <span
                   className={`text-[15.5px] leading-[1.7] ${

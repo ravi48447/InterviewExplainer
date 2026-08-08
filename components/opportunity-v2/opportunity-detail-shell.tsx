@@ -6,7 +6,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import {
   fetchOpportunity,
   createApplication,
@@ -14,6 +13,10 @@ import {
 } from "@/lib/opportunity";
 import type { Opportunity } from "@/lib/opportunity";
 import { JobDetail } from "./job-detail";
+import { CardSkeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/ui/error-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FileText } from "lucide-react";
 
 const DEMO_USER = "demo-user";
 
@@ -24,23 +27,26 @@ export interface OpportunityDetailShellProps {
 export function OpportunityDetailShell({ opportunityId }: OpportunityDetailShellProps) {
   const [opp, setOpp] = useState<Opportunity | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
       const data = await fetchOpportunity(opportunityId);
-      if (!cancelled) {
-        setOpp(data);
-        setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setOpp(data);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error("Failed to load opportunity"));
+    } finally {
+      setLoading(false);
+    }
   }, [opportunityId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleApply = useCallback(async () => {
     if (!opp) return;
@@ -66,17 +72,34 @@ export function OpportunityDetailShell({ opportunityId }: OpportunityDetailShell
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="space-y-4" aria-live="polite">
+        <CardSkeleton />
+        <CardSkeleton />
+        <CardSkeleton />
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <ErrorState
+        title="Couldn't load this opportunity"
+        description={error.message}
+        retryLabel="Try again"
+        onRetry={load}
+      />
     );
   }
 
   if (!opp) {
     return (
-      <p className="text-center text-sm text-muted-foreground py-24">
-        This opportunity is no longer available.
-      </p>
+      <EmptyState
+        icon={<FileText />}
+        title="Opportunity no longer available"
+        description="This opportunity may have been removed or expired."
+        actionText="Browse opportunities"
+        onAction={() => (window.location.href = "/dashboard/opportunities")}
+      />
     );
   }
 

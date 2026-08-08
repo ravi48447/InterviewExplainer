@@ -25,7 +25,7 @@ export function HomeTechnologies() {
           title="Explore by technology"
           description="Domain-specific questions for your primary language and track."
           actions={
-            <Link href="/domains" className="text-sm font-medium text-primary hover:underline">
+            <Link href="/domains" className="text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-sm">
               Explore all domains
             </Link>
           }
@@ -36,7 +36,7 @@ export function HomeTechnologies() {
             <li key={tech.name}>
               <Link
                 href={tech.href}
-                className="group flex h-full flex-col rounded-lg border border-border bg-card p-5 transition-colors duration-150 hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="group flex h-full flex-col rounded-lg border border-border bg-card p-5 transition-colors duration-200 ease-out hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <span className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-surface">
                   <TechIcon name={tech.icon} className="h-6 w-6" />

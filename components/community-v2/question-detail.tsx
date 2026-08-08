@@ -7,6 +7,15 @@
 
 import { MessageSquare, Users, ThumbsUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tag } from "@/components/ui/tag";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import type { ReportedQuestion } from "@/lib/community";
 import { EvidenceDisplay } from "./evidence-display";
 import type { EvidenceRecord } from "@/lib/community";
@@ -25,6 +34,22 @@ export function QuestionDetail({ question: q, evidence }: QuestionDetailProps) {
 
   return (
     <div className="space-y-6">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/community">Community</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/community">Questions</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{q.question.length > 40 ? q.question.slice(0, 40) + "…" : q.question}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <Badge variant="primary" className="capitalize">
@@ -35,7 +60,7 @@ export function QuestionDetail({ question: q, evidence }: QuestionDetailProps) {
           </Badge>
           <span className="text-xs text-muted-foreground">{q.company} · {q.role}</span>
         </div>
-        <h1 className="type-display text-xl sm:text-2xl font-bold text-foreground leading-relaxed">
+        <h1 className="type-display text-xl sm:text-2xl font-extrabold text-foreground leading-relaxed">
           {q.question}
         </h1>
         <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-muted-foreground">
@@ -52,9 +77,9 @@ export function QuestionDetail({ question: q, evidence }: QuestionDetailProps) {
         {q.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-3">
             {q.tags.map((t) => (
-              <Badge key={t} variant="default" className="text-xs">
+              <Tag key={t} variant="default" className="text-xs">
                 {t}
-              </Badge>
+              </Tag>
             ))}
           </div>
         )}
@@ -64,7 +89,7 @@ export function QuestionDetail({ question: q, evidence }: QuestionDetailProps) {
         <div className="rounded-xl border border-border bg-card p-6">
           <div className="flex items-center gap-2 mb-3">
             <MessageSquare className="h-5 w-5 text-primary" />
-            <h2 className="text-sm font-bold text-foreground">Community answer summary</h2>
+            <h2 className="type-display text-sm font-extrabold text-foreground">Community answer summary</h2>
           </div>
           <p className="text-sm text-foreground leading-relaxed">{q.answerSummary}</p>
         </div>

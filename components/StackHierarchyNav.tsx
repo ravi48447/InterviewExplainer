@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StackSubcategory, QuestionSummary } from "@/lib/api";
+import { ListSkeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/ui/error-state";
 
 interface HierarchyStack {
   id: number;
@@ -40,33 +42,43 @@ export default function StackHierarchyNav({
   const [subcats, setSubcats]         = useState<StackSubcategory[]>([]);
   const [expandedCats, setExpandedCats]     = useState<Set<string>>(new Set());
   const [expandedSubcats, setExpandedSubcats] = useState<Set<string>>(new Set());
+  const [catError, setCatError] = useState(false);
+  const [subcatError, setSubcatError] = useState(false);
 
   // Load stack list from JSON content directory
   useEffect(() => {
+    let cancelled = false;
+    setCatError(false);
     fetch(`/api/content/domain-stacks?domainSlug=${domainSlug}`)
       .then(r => r.ok ? r.json() : { categories: [] })
       .then(data => {
+        if (cancelled) return;
         const cats: HierarchyCategory[] = data.categories ?? [];
         setCategories(cats);
         // Auto-expand the category that contains the active stack
         const activeCat = cats.find(c => c.stacks.some(s => s.slug === activeStackSlug));
         if (activeCat) setExpandedCats(new Set([activeCat.slug]));
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setCatError(true); });
+    return () => { cancelled = true; };
   }, [domainSlug, activeStackSlug]);
 
   // Load subcategories + questions for active stack from JSON content
   useEffect(() => {
+    let cancelled = false;
+    setSubcatError(false);
     fetch(`/api/content/stack-questions?domainSlug=${domainSlug}&stackSlug=${activeStackSlug}`)
       .then(r => r.ok ? r.json() : [])
       .then((data: StackSubcategory[]) => {
+        if (cancelled) return;
         setSubcats(data);
         // Auto-expand subcats that have questions; always expand the active one
         const toExpand = new Set(data.filter(sc => sc.questionCount > 0).map(sc => sc.slug));
         if (activeSubcatSlug) toExpand.add(activeSubcatSlug);
         setExpandedSubcats(toExpand);
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setSubcatError(true); });
+    return () => { cancelled = true; };
   }, [domainSlug, activeStackSlug, activeSubcatSlug]);
 
   const toggleCat    = (slug: string) => setExpandedCats(prev => { const n = new Set(prev); n.has(slug) ? n.delete(slug) : n.add(slug); return n; });
@@ -87,16 +99,28 @@ export default function StackHierarchyNav({
 
       {/* Hierarchy tree */}
       <div className="rounded-xl border border-border bg-background/90 shadow-sm overflow-hidden">
-        <div className="px-4 py-2.5 bg-surface border border-default dark:from-slate-900/40 dark:to-slate-900/20 border-b border-border">
+        <div className="px-4 py-2.5 bg-surface border-b border-border">
           <div className="flex items-center gap-2">
             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Study Navigation</span>
           </div>
         </div>
 
-        <div className="overflow-y-auto max-h-[calc(100vh-240px)]">
-          {categories.length === 0 && (
-            <div className="px-4 py-6 text-[11px] text-muted-foreground text-center">Loading stacks…</div>
+        <div className="overflow-y-auto max-h-[calc(100vh-240px)]" aria-live="polite">
+          {catError && (
+            <ErrorState
+              title="Couldn't load stacks"
+              description="Please retry to load the study navigation."
+              onRetry={() => {
+                setCatError(false);
+                setCategories([]);
+              }}
+            />
+          )}
+          {!catError && categories.length === 0 && (
+            <div className="px-3 py-4">
+              <ListSkeleton rows={4} />
+            </div>
           )}
 
           {categories.map(cat => {
@@ -109,7 +133,7 @@ export default function StackHierarchyNav({
                 <button
                   onClick={() => toggleCat(cat.slug)}
                   className={cn(
-                    "w-full flex items-center justify-between px-3 py-2 text-[11px] font-black uppercase tracking-widest transition-colors",
+                    "w-full flex items-center justify-between px-3 py-2 text-[11px] font-extrabold uppercase tracking-widest transition-colors duration-200 ease-out",
                     hasActiveStack
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-surface hover:text-foreground"
@@ -140,7 +164,12 @@ export default function StackHierarchyNav({
 
                       {/* Subcategories — only shown for active stack */}
                       {isActive && (
-                        <div className="border-l-2 border-default dark:border-default/20 ml-5">
+                        <div className="border-l-2 border-border ml-5">
+                          {subcatError && (
+                            <div className="px-3 py-2">
+                              <p className="text-[11px] text-destructive dark:text-destructive" role="alert">Couldn't load questions. Please retry.</p>
+                            </div>
+                          )}
                           {subcats.map(sc => {
                             const isActiveSc = sc.slug === activeSubcatSlug;
                             const isExpSc    = expandedSubcats.has(sc.slug);

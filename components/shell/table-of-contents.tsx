@@ -75,7 +75,7 @@ export function TableOfContents({
               href={`#${h.id}`}
               aria-current={activeId === h.id ? 'true' : undefined}
               className={cn(
-                'block border-l-2 -ml-px py-1 transition-colors',
+                'block border-l-2 -ml-px py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm',
                 h.level === 3 ? 'pl-6' : 'pl-3',
                 activeId === h.id
                   ? 'border-primary font-medium text-foreground'

@@ -108,8 +108,8 @@ function CodeBlockGroup({
                     d ? "dark:bg-surface" : "bg-surface"
                   }`}
                 >
-                  <span className="h-2 w-2 rounded-full bg-red-400 dark:bg-red-800 shrink-0" />
-                  <span className="text-[11px] font-bold text-red-600 dark:text-red-300 uppercase tracking-wider">
+                  <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />
+                  <span className="text-[11px] font-bold text-destructive uppercase tracking-wider">
                     Without
                   </span>
                   {before.sectionTitle && (
@@ -174,8 +174,8 @@ function CodeBlockGroup({
                     d ? "dark:bg-surface" : "bg-surface"
                   }`}
                 >
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 dark:bg-emerald-800 shrink-0" />
-                  <span className="text-[11px] font-bold text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">
+                  <span className="h-2 w-2 rounded-full bg-success shrink-0" />
+                  <span className="text-[11px] font-bold text-success uppercase tracking-wider">
                     With
                   </span>
                   {after.sectionTitle && (
@@ -289,6 +289,7 @@ export function DetailedExplanation({
           className={`border-t px-4 py-4 ${
             d ? "border-border/60" : "border-border/80"
           }`}
+          aria-live="polite"
         >
           <div className="flex items-center gap-2 mb-4">
             <MessageCircle className="h-3.5 w-3.5 text-primary dark:text-primary" />
@@ -306,8 +307,8 @@ export function DetailedExplanation({
                 <span
                   className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
                     d
-                      ? "bg-blue-800 dark:bg-blue-800 text-primary"
-                      : "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-primary/10 text-primary dark:text-primary"
                   }`}
                 >
                   {i + 1}
@@ -508,8 +509,8 @@ function SectionRenderer({
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <CheckCircle className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
-          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+          <CheckCircle className="h-3.5 w-3.5 text-success" />
+          <span className="text-[11px] font-bold text-success uppercase tracking-wide">
             {title || "Best Practices"}
           </span>
         </div>
@@ -536,8 +537,8 @@ function SectionRenderer({
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
-          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+          <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+          <span className="text-[11px] font-bold text-warning uppercase tracking-wide">
             {title || "Watch Out"}
           </span>
         </div>
@@ -659,8 +660,8 @@ function SectionRenderer({
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Lightbulb className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
-          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+          <Lightbulb className="h-3.5 w-3.5 text-warning" />
+          <span className="text-[11px] font-bold text-warning uppercase tracking-wide">
             {title || "Approach"}
           </span>
         </div>
@@ -682,8 +683,8 @@ function SectionRenderer({
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Bug className="h-3.5 w-3.5 text-red-500 dark:text-red-400" />
-          <span className="text-[11px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wide">
+          <Bug className="h-3.5 w-3.5 text-destructive" />
+          <span className="text-[11px] font-bold text-destructive uppercase tracking-wide">
             {title || "The Problem"}
           </span>
         </div>
@@ -705,8 +706,8 @@ function SectionRenderer({
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Search className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
-          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+          <Search className="h-3.5 w-3.5 text-warning" />
+          <span className="text-[11px] font-bold text-warning uppercase tracking-wide">
             {title || "Diagnosis"}
           </span>
         </div>
@@ -783,8 +784,8 @@ function SectionRenderer({
         }`}
       >
         <div className="flex items-center gap-1.5 mb-2">
-          <Wrench className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
-          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+          <Wrench className="h-3.5 w-3.5 text-success" />
+          <span className="text-[11px] font-bold text-success uppercase tracking-wide">
             {title || "When to Use"}
           </span>
         </div>
@@ -860,8 +861,8 @@ function SectionRenderer({
             d ? "border-default dark:border-default/40" : "border-default dark:border-default/20"
           }`}
         >
-          <MessageCircle className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
-          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
+          <MessageCircle className="h-3.5 w-3.5 text-success" />
+          <span className="text-[11px] font-bold text-success uppercase tracking-wide">
             {title || "How to Answer in Interview"}
           </span>
         </div>

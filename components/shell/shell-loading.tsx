@@ -1,5 +1,4 @@
-import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
+import { Skeleton, TextSkeleton, CardSkeleton } from '@/components/ui/skeleton'
 
 /**
  * ShellLoading — canonical shell loading states (P03-T, T217..T227).
@@ -20,20 +19,20 @@ export function ShellLoading() {
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:px-8" aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading content…</span>
       {/* Breadcrumb placeholder */}
-      <div className="mb-6 flex items-center gap-2">
+      <div className="mb-6 flex items-center gap-2" aria-hidden="true">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-3" />
         <Skeleton className="h-4 w-32" />
       </div>
       {/* Title block */}
-      <Skeleton className="mb-3 h-9 w-3/4" />
-      <Skeleton className="mb-6 h-4 w-1/2" />
-      {/* Content blocks */}
-      <div className="space-y-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className={cn('h-4', i % 3 === 0 ? 'w-full' : i % 3 === 1 ? 'w-5/6' : 'w-2/3')} />
-        ))}
+      <div className="mb-6" aria-hidden="true">
+        <Skeleton className="mb-3 h-9 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
       </div>
+      {/* Content blocks */}
+      <TextSkeleton lines={6} className="mb-6" />
+      {/* Card placeholder to match expected layout */}
+      <CardSkeleton />
     </div>
   )
 }
@@ -46,9 +45,7 @@ export function ShellLoadingMinimal({ lines = 3 }: { lines?: number }) {
   return (
     <div className="space-y-2 p-2" aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading…</span>
-      {Array.from({ length: lines }).map((_, i) => (
-        <Skeleton key={i} className="h-4 w-full" />
-      ))}
+      <TextSkeleton lines={lines} />
     </div>
   )
 }

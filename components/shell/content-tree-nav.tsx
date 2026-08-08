@@ -71,7 +71,7 @@ function TreeItem({ node, depth }: { node: ContentTreeNode; depth: number }) {
             type="button"
             onClick={() => setOpen((p) => !p)}
             aria-label={open ? `Collapse ${node.label}` : `Expand ${node.label}`}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ChevronRight
               className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-90')}

@@ -6,6 +6,8 @@ import { FadeInUp, StaggerContainer, StaggerItem } from "@/components/motion-wra
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, ChevronRight, BookOpen, Users, Clock, Layers } from "lucide-react";
+import { Tag } from "@/components/ui/tag";
+import { ErrorState } from "@/components/ui/error-state";
 
 const domainData: Record<string, {
   name: string;
@@ -180,12 +182,13 @@ export function DomainHubContent({ slug }: { slug: string }) {
 
   if (!domain) {
     return (
-      <div className="w-full min-w-0 px-4 py-16 text-center">
-        <h1 className="text-xl font-bold text-foreground mb-2">Domain not found</h1>
-        <p className="text-sm text-muted-foreground mb-4">This domain is being prepared.</p>
-        <Link href="/domains">
-          <Button variant="outline" className="bg-transparent">Back to domains</Button>
-        </Link>
+      <div className="w-full min-w-0 px-4 py-16">
+        <ErrorState
+          title="Domain not found"
+          description="This domain is being prepared."
+          retryLabel="Back to domains"
+          onRetry={() => { if (typeof window !== "undefined") window.location.href = "/domains"; }}
+        />
       </div>
     );
   }
@@ -210,7 +213,7 @@ export function DomainHubContent({ slug }: { slug: string }) {
       {/* Domain Header */}
       <FadeInUp delay={0.05}>
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          <h1 className="type-display text-2xl tracking-tight text-foreground sm:text-3xl">
             {domain.name} Interviews
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -241,10 +244,9 @@ export function DomainHubContent({ slug }: { slug: string }) {
                 key={role.id}
                 type="button"
                 onClick={() => setSelectedRole(role.id)}
-                whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.99 }}
                 transition={{ duration: 0.15 }}
-                className={`relative flex flex-col items-start rounded-xl border p-4 text-left transition-all cursor-pointer ${
+                className={`relative flex flex-col items-start rounded-xl border p-4 text-left transition-colors duration-200 ease-out cursor-pointer ${
                   selectedRole === role.id
                     ? "border-primary/40 bg-primary/[0.04] glow-primary"
                     : "border-border/40 bg-card hover:border-border hover:glow-soft"
@@ -261,7 +263,7 @@ export function DomainHubContent({ slug }: { slug: string }) {
                 <p className="text-xs text-muted-foreground mb-2.5 leading-relaxed">{role.desc}</p>
                 <div className="flex flex-wrap gap-1 mb-2">
                   {role.tech.map((t) => (
-                    <span key={t} className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{t}</span>
+                    <Tag key={t} className="text-[10px]">{t}</Tag>
                   ))}
                 </div>
                 <span className="text-[11px] text-muted-foreground tabular-nums">{role.questions} questions</span>
@@ -282,10 +284,9 @@ export function DomainHubContent({ slug }: { slug: string }) {
                 key={exp.id}
                 type="button"
                 onClick={() => setSelectedExp(exp.id)}
-                whileHover={{ y: -1 }}
                 whileTap={{ scale: 0.99 }}
                 transition={{ duration: 0.15 }}
-                className={`relative flex flex-col items-start rounded-xl border p-3.5 text-left transition-all cursor-pointer ${
+                className={`relative flex flex-col items-start rounded-xl border p-3.5 text-left transition-colors duration-200 ease-out cursor-pointer ${
                   selectedExp === exp.id
                     ? "border-primary/40 bg-primary/[0.04] glow-primary"
                     : "border-border/40 bg-card hover:border-border hover:glow-soft"
@@ -325,12 +326,11 @@ export function DomainHubContent({ slug }: { slug: string }) {
                 {previewTopics.map((topic, i) => (
                   <motion.span
                     key={topic}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                     transition={{ duration: 0.2, delay: i * 0.05 }}
-                    className="rounded-lg bg-accent/50 px-3 py-1.5 text-xs font-medium text-accent-foreground"
                   >
-                    {topic}
+                    <Tag className="px-3 py-1.5 text-xs">{topic}</Tag>
                   </motion.span>
                 ))}
               </div>
@@ -345,7 +345,7 @@ export function DomainHubContent({ slug }: { slug: string }) {
           <Button
             size="lg"
             disabled={!canProceed}
-            className="h-10 gap-1.5 rounded-xl px-6 text-sm font-medium shadow-lg shadow-primary/15 transition-all hover:shadow-xl hover:shadow-primary/25 disabled:opacity-40 disabled:shadow-none"
+            className="h-10 gap-1.5 rounded-xl px-6 text-sm font-medium shadow-lg shadow-primary/15 transition-colors duration-200 ease-out hover:shadow-xl hover:shadow-primary/25 disabled:opacity-40 disabled:shadow-none"
           >
             Continue to Learning Path
             <ArrowRight className="h-3.5 w-3.5" />

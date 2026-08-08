@@ -8,15 +8,26 @@
  */
 
 import { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   resolveStack,
   resolveBreadcrumbs,
+  resolveDomain,
   buildStackMetadata,
 } from "@/lib/hierarchy";
 import { getSubcategoriesWithQuestions } from "@/lib/content-reader";
 import { HierarchyHeader, HierarchyCardGrid } from "@/components/hierarchy";
 import type { HierarchyCardItem } from "@/components/hierarchy";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { ErrorState } from "@/components/ui/error-state";
 
 export const revalidate = 3600;
 
@@ -40,6 +51,7 @@ export default async function StackPage({
 
   // Resolve subcategories (modules) with their questions for the card grid.
   let subcats: { slug: string; name: string; questionCount: number }[] = [];
+  let loadError = false;
   try {
     subcats = getSubcategoriesWithQuestions(domainSlug, stackSlug).map((s) => ({
       slug: s.slug,
@@ -47,7 +59,23 @@ export default async function StackPage({
       questionCount: s.questionCount,
     }));
   } catch {
-    // empty grid handled below
+    loadError = true;
+  }
+
+  if (loadError) {
+    return (
+      <div className="page-container py-12">
+        <ErrorState
+          title="Failed to load stack content"
+          description="The content for this stack could not be loaded. Please try again."
+          retryLabel="Retry"
+          onRetry={() => {
+            // Server component — trigger a re-render via router refresh
+            if (typeof window !== "undefined") window.location.reload();
+          }}
+        />
+      </div>
+    );
   }
 
   const items: HierarchyCardItem[] = subcats
@@ -69,8 +97,43 @@ export default async function StackPage({
     });
   }
 
+  const domain = resolveDomain(domainSlug);
+
   return (
     <div className="page-container">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            itemListElement: [
+              { "@type": "ListItem", position: 1, name: "Home", item: "/" },
+              { "@type": "ListItem", position: 2, name: domain?.title ?? domainSlug, item: `/${domainSlug}` },
+              { "@type": "ListItem", position: 3, name: stack.title, item: `/${domainSlug}/${stackSlug}` },
+            ],
+          }),
+        }}
+      />
+      <Breadcrumb className="mb-6">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href="/">Home</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link href={`/${domainSlug}`}>{domain?.title ?? domainSlug}</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{stack.title}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
       <HierarchyHeader
         title={stack.title}
         description={stack.description}

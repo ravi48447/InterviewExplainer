@@ -10,6 +10,7 @@ import type { StackHubData } from "@/lib/curriculum";
 import { difficultyColor, difficultyLabel } from "@/lib/curriculum";
 import { getCanonicalOrigin } from "@/lib/seo/config";
 import V2ContentTreeNav from "@/components/V2ContentTreeNav";
+import { Tag } from "@/components/ui/tag";
 
 export function StackHub({ data }: { data: StackHubData }) {
   const { lang, track, level, stack, stackName, description, questions, lvlMeta } = data;
@@ -43,7 +44,7 @@ export function StackHub({ data }: { data: StackHubData }) {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <div className="min-h-screen bg-surface border border-default dark:from-slate-950 font-sans text-foreground selection:bg-blue-200">
+      <div className="min-h-screen bg-surface font-sans text-foreground selection:bg-primary/20">
         <div className="w-full min-w-0 min-h-screen flex gap-6 px-6 py-6">
           {/* LEFT SIDEBAR — V2ContentTreeNav (preserved) */}
           <aside className="hidden lg:flex w-[300px] shrink-0 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
@@ -53,7 +54,7 @@ export function StackHub({ data }: { data: StackHubData }) {
           {/* MAIN COLUMN */}
           <main className="flex-1 min-w-0">
             <header className="mb-5 rounded-xl border border-border bg-background/90 backdrop-blur-sm shadow-lg overflow-hidden">
-              <div className="px-6 py-5 bg-surface border border-default">
+              <div className="px-6 py-5 bg-surface border-b border-border">
                 <nav className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground mb-3 flex-wrap" aria-label="Breadcrumb">
                   <Link href="/interview" className="hover:text-primary dark:text-primary transition-colors">Interview</Link>
                   <ChevronRight className="h-3 w-3 opacity-50" />
@@ -63,30 +64,30 @@ export function StackHub({ data }: { data: StackHubData }) {
                   <ChevronRight className="h-3 w-3 opacity-50" />
                   <Link href={`/interview/${lang}/${track}/${level}`} className="hover:text-primary dark:text-primary transition-colors">{lvlMeta.label}</Link>
                   <ChevronRight className="h-3 w-3 opacity-50" />
-                  <span className="text-foreground">{stackName}</span>
+                  <span className="text-foreground" aria-current="page">{stackName}</span>
                 </nav>
                 <div className="flex flex-wrap gap-2 mb-3">
-                  <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary border border-default dark:border-default/20 shadow-sm">{lang}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary border border-default dark:border-default/20 shadow-sm">{track}</span>
+                  <Tag className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 shadow-sm bg-primary/10 text-primary dark:text-primary border border-border">{lang}</Tag>
+                  <Tag className="text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 shadow-sm bg-primary/10 text-primary dark:text-primary border border-border">{track}</Tag>
                   <span className={`text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg border shadow-sm ${lvlMeta.colorClass}`}>{lvlMeta.label} · {lvlMeta.range}</span>
                 </div>
-                <h1 className="text-3xl font-black tracking-tight text-foreground mb-2">{stackName}</h1>
+                <h1 className="type-display text-3xl tracking-tight text-foreground mb-2">{stackName}</h1>
                 {description && <p className="text-sm text-foreground leading-relaxed max-w-3xl">{description}</p>}
               </div>
-              <div className="px-6 py-3 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900/40 dark:to-background border-t border-border">
+              <div className="px-6 py-3 bg-surface border-t border-border">
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-950/20 flex items-center justify-center">
-                      <BookOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <div className="w-9 h-9 rounded-lg bg-success/10 flex items-center justify-center">
+                      <BookOpen className="h-4 w-4 text-success dark:text-success" />
                     </div>
                     <div>
                       <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Questions</div>
                       <div className="text-lg font-bold text-foreground">{questions.length}</div>
                     </div>
                   </div>
-                  <div className="h-9 w-px bg-slate-200 dark:bg-slate-800" />
+                  <div className="h-9 w-px bg-border" />
                   <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-950/20 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
                       <Layers className="h-4 w-4 text-primary dark:text-primary" />
                     </div>
                     <div>
@@ -103,7 +104,7 @@ export function StackHub({ data }: { data: StackHubData }) {
                 <Link
                   key={`${idx}-${q.slug}`}
                   href={`/interview/${lang}/${track}/${level}/${stack}/${q.slug}`}
-                  className="group flex items-center justify-between p-3.5 rounded-[10px] border border-border shadow-sm bg-surface-subtle hover:border-border hover:shadow-md transition-all"
+                  className="group flex items-center justify-between p-3.5 rounded-[10px] border border-border shadow-sm bg-surface-subtle hover:border-border hover:shadow-md transition-colors duration-200 ease-out"
                 >
                   <div className="flex items-start gap-3 min-w-0 flex-1">
                     <div className="shrink-0 w-7 h-7 rounded-full bg-background border border-border text-muted-foreground flex items-center justify-center text-[11px] font-bold shadow-sm">
@@ -122,7 +123,7 @@ export function StackHub({ data }: { data: StackHubData }) {
                       </div>
                     </div>
                   </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary dark:text-primary group-hover:translate-x-1 transition-all shrink-0 ml-2" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary dark:text-primary transition-colors duration-200 ease-out shrink-0 ml-2" />
                 </Link>
               ))}
             </div>
@@ -130,7 +131,7 @@ export function StackHub({ data }: { data: StackHubData }) {
 
           {/* RIGHT SIDEBAR (kept minimal, parity with original) */}
           <aside className="hidden xl:flex w-[280px] shrink-0 flex-col gap-4 self-start sticky top-6 h-[calc(100vh-1.5rem)] overflow-y-auto custom-scrollbar">
-            <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm p-4  ">
+            <div className="rounded-xl border border-border bg-surface shadow-sm p-4  ">
               <div className="flex items-center gap-2 mb-3">
                 <GraduationCap className="h-4 w-4 text-primary dark:text-primary" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Stack Info</h3>
@@ -140,12 +141,12 @@ export function StackHub({ data }: { data: StackHubData }) {
                 <div className="flex justify-between text-xs"><span className="text-muted-foreground">Level</span><span className="font-bold" style={{ color: lvlMeta.color }}>{lvlMeta.label}</span></div>
               </div>
             </div>
-            <div className="rounded-xl border border-default dark:border-default/20 bg-surface shadow-sm p-4  ">
+            <div className="rounded-xl border border-border bg-surface shadow-sm p-4  ">
               <div className="flex items-center gap-2 mb-3">
                 <Filter className="h-4 w-4 text-primary dark:text-primary" />
                 <h3 className="text-xs font-bold text-foreground uppercase tracking-wide">Level</h3>
               </div>
-              <Link href={`/interview/${lang}/${track}/${level}`} className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-primary dark:text-primary hover:bg-blue-50 dark:bg-blue-500/10 rounded-lg transition-all border border-transparent hover:border-default dark:border-default/20">
+              <Link href={`/interview/${lang}/${track}/${level}`} className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:text-primary dark:text-primary hover:bg-primary/10 rounded-lg transition-colors duration-200 ease-out border border-transparent hover:border-border">
                 <span>← Back to {lvlMeta.label}</span>
               </Link>
             </div>

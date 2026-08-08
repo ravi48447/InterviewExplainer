@@ -8,6 +8,15 @@
 import Link from "next/link";
 import { Building2, Gauge, Clock, TrendingUp, ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tag } from "@/components/ui/tag";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import type { CompanyInterviewIntelligence, ReportedQuestion } from "@/lib/community";
 
 export interface CompanyIntelligenceProps {
@@ -16,23 +25,39 @@ export interface CompanyIntelligenceProps {
 
 const DIFFICULTY_COLOR = (score: number) =>
   score >= 70
-    ? "text-red-600 dark:text-red-400"
+    ? "text-destructive"
     : score >= 40
-    ? "text-amber-600 dark:text-amber-400"
-    : "text-emerald-600 dark:text-emerald-400";
+    ? "text-warning"
+    : "text-success";
 
 export function CompanyIntelligence({ intelligence: intel }: CompanyIntelligenceProps) {
   const diffColor = DIFFICULTY_COLOR(intel.difficultyScore);
 
   return (
     <div className="space-y-6">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/community">Community</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/community">Companies</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>{intel.company}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+
       {/* Header */}
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <Building2 className="h-6 w-6 text-primary" />
-              <h1 className="type-display text-2xl sm:text-3xl font-bold text-foreground">
+              <h1 className="type-display text-2xl sm:text-3xl font-extrabold text-foreground">
                 {intel.company}
               </h1>
             </div>
@@ -66,7 +91,7 @@ export function CompanyIntelligence({ intelligence: intel }: CompanyIntelligence
       {/* Typical rounds */}
       {intel.typicalRounds.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-5">
-          <h2 className="text-sm font-bold text-foreground mb-3">Typical rounds</h2>
+          <h2 className="type-display text-sm font-extrabold text-foreground mb-3">Typical rounds</h2>
           <div className="flex flex-wrap gap-2">
             {intel.typicalRounds.map((r, i) => (
               <Badge key={r} variant="default" className="flex items-center gap-1.5">
@@ -81,17 +106,17 @@ export function CompanyIntelligence({ intelligence: intel }: CompanyIntelligence
       {/* Top questions */}
       {intel.topQuestions.length > 0 && (
         <div>
-          <h2 className="text-lg font-bold text-foreground mb-3">Top reported questions</h2>
+          <h2 className="type-display text-lg font-extrabold text-foreground mb-3">Top reported questions</h2>
           <div className="space-y-2">
             {intel.topQuestions.map((q: ReportedQuestion) => (
               <Link
                 key={q.id}
                 href={`/community/questions/${q.id}`}
-                className="block rounded-lg border border-border bg-card p-4 hover:border-primary/50 transition-colors group"
+                className="block rounded-lg border border-border bg-card p-4 hover:border-primary/50 transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-sm font-medium text-foreground">{q.question}</p>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                  <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
                 </div>
                 <div className="flex items-center gap-2 mt-2">
                   <Badge variant="outline" className="capitalize text-xs">
@@ -110,12 +135,12 @@ export function CompanyIntelligence({ intelligence: intel }: CompanyIntelligence
       {/* Top tags */}
       {intel.topTags.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-5">
-          <h2 className="text-sm font-bold text-foreground mb-3">Frequently asked topics</h2>
+          <h2 className="type-display text-sm font-extrabold text-foreground mb-3">Frequently asked topics</h2>
           <div className="flex flex-wrap gap-2">
             {intel.topTags.map((t) => (
-              <Badge key={t.tag} variant="outline">
+              <Tag key={t.tag} variant="default">
                 {t.tag} · {t.count}
-              </Badge>
+              </Tag>
             ))}
           </div>
         </div>

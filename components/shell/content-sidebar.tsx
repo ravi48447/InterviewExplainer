@@ -30,7 +30,7 @@ export function ContentSidebar({
       )}
       aria-label={title ?? 'Content navigation'}
     >
-      <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pr-2 pb-8">
+      <div className="sticky top-20 z-[var(--z-sticky)] max-h-[calc(100vh-6rem)] overflow-y-auto pr-2 pb-8">
         {title && (
           <p className="mb-3 px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {title}

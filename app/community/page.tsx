@@ -16,7 +16,7 @@ export default function CommunityPage() {
   return (
     <main className="page-container py-12">
       <div className="text-center mb-10">
-        <h1 className="type-display text-3xl sm:text-4xl font-bold text-foreground">
+        <h1 className="type-display text-3xl sm:text-4xl font-extrabold text-foreground">
           Real interview intelligence
         </h1>
         <p className="text-sm text-muted-foreground mt-2 max-w-xl mx-auto">

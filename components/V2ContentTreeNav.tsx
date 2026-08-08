@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, ChevronDown, ArrowLeft, Circle, CheckCircle2, Layers, FolderOpen, Folder } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ListSkeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/ui/error-state";
 
 interface StackEntry {
   slug: string;
@@ -36,13 +38,17 @@ export default function V2ContentTreeNav({
   const [modules, setModules] = useState<ModuleGroup[]>([]);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [expandedStacks, setExpandedStacks] = useState<Set<string>>(new Set([activeStackSlug]));
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    setFetchError(false);
     fetch(`/api/v2/interview-nav?lang=${lang}&track=${track}&level=${level}`, {
       cache: 'no-store',
     })
       .then(r => r.ok ? r.json() : [])
       .then((data: unknown) => {
+        if (cancelled) return;
         // Guard: ensure we got the grouped format (ModuleGroup[]), not old flat format
         if (!Array.isArray(data) || data.length === 0) return;
         const isGrouped = 'moduleSlug' in (data[0] as object);
@@ -56,7 +62,10 @@ export default function V2ContentTreeNav({
           setExpandedModules(new Set([activeModule.moduleSlug]));
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setFetchError(true);
+      });
+    return () => { cancelled = true; };
   }, [lang, track, level, activeStackSlug]);
 
   const toggleModule = (slug: string) => {
@@ -93,9 +102,33 @@ export default function V2ContentTreeNav({
         </Link>
       </div>
 
-      <div className="p-2 max-h-[calc(100vh-120px)] overflow-y-auto">
-        {modules.length === 0 && (
-          <div className="px-3 py-6 text-[11px] text-muted-foreground text-center animate-pulse">Loading...</div>
+      <div className="p-2 max-h-[calc(100vh-120px)] overflow-y-auto" aria-live="polite">
+        {fetchError && (
+          <ErrorState
+            title="Couldn't load navigation"
+            description="Please retry to load the curriculum tree."
+            onRetry={() => {
+              setFetchError(false);
+              setModules([]);
+              // Re-trigger effect by toggling state
+              setTimeout(() => {
+                fetch(`/api/v2/interview-nav?lang=${lang}&track=${track}&level=${level}`, { cache: 'no-store' })
+                  .then(r => r.ok ? r.json() : [])
+                  .then((data: unknown) => {
+                    if (!Array.isArray(data) || data.length === 0) return;
+                    const isGrouped = 'moduleSlug' in (data[0] as object);
+                    if (!isGrouped) return;
+                    setModules(data as ModuleGroup[]);
+                  })
+                  .catch(() => setFetchError(true));
+              }, 0);
+            }}
+          />
+        )}
+        {!fetchError && modules.length === 0 && (
+          <div className="px-3 py-4">
+            <ListSkeleton rows={4} />
+          </div>
         )}
 
         {isFlatLayout
@@ -137,7 +170,7 @@ export default function V2ContentTreeNav({
 
                   {/* Stacks inside module */}
                   {isModuleExpanded && (
-                    <div className="ml-2 pl-2 border-l-2 border-slate-100 dark:border-slate-800/60 mb-1">
+                    <div className="ml-2 pl-2 border-l-2 border-border mb-1">
                       {renderStacks(stacks)}
                     </div>
                   )}
@@ -180,7 +213,7 @@ export default function V2ContentTreeNav({
           </button>
 
           {isExpanded && (
-            <div className="ml-4 pl-3 border-l-2 border-slate-100 dark:border-slate-800/60 mb-1 space-y-0.5">
+            <div className="ml-4 pl-3 border-l-2 border-border mb-1 space-y-0.5">
               {stack.questions.map((q, idx) => {
                 const isActiveQ = q.slug === activeQuestionSlug;
                 return (
@@ -188,7 +221,7 @@ export default function V2ContentTreeNav({
                     key={`${idx}-${q.slug}`}
                     href={`${basePath}/${stack.slug}/${q.slug}`}
                     className={cn(
-                      "flex items-start gap-2 pl-2 pr-2 py-1.5 text-[11px] rounded-lg transition-all",
+                      "flex items-start gap-2 pl-2 pr-2 py-1.5 text-[11px] rounded-lg transition-colors duration-200 ease-out",
                       isActiveQ
                         ? "bg-primary text-primary-foreground border border-primary font-medium shadow-sm"
                         : "text-muted-foreground hover:text-foreground hover:bg-surface"

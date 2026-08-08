@@ -8,10 +8,7 @@
 
 "use client";
 
-import Link from "next/link";
-import { ArrowRight, Clock } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
+import { Tag } from "@/components/ui/tag";
 import type { SearchResult } from "@/lib/search";
 import { SearchResultItem } from "./search-result-item";
 
@@ -31,15 +28,20 @@ export function SearchResults({ results, activeIndex, onSelect }: SearchResultsP
 
   return (
     <div
-      id="search-results"
       role="listbox"
-      aria-label="Search results"
+      aria-label={`Search results, ${results.length} found`}
+      aria-setsize={results.length}
       className="mt-2 w-full rounded-lg border border-border bg-surface shadow-lg overflow-hidden"
     >
+
+
       {groups.map((group) => (
         <div key={group.type} className="border-b border-border last:border-b-0">
-          <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide bg-card">
-            {group.type} ({group.results.length})
+          <div className="flex items-center justify-between px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide bg-card">
+            <span>{group.type}</span>
+            <Tag variant="default" className="normal-case tracking-normal">
+              {group.results.length}
+            </Tag>
           </div>
           {group.results.map((result) => {
             flatIndex++;

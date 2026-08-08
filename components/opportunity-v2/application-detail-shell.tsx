@@ -5,11 +5,14 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchApplications } from "@/lib/opportunity";
 import type { Application } from "@/lib/opportunity";
 import { ApplicationDetail } from "./application-detail";
+import { CardSkeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/ui/error-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FileText } from "lucide-react";
 
 const DEMO_USER = "demo-user";
 
@@ -20,34 +23,54 @@ export interface ApplicationDetailShellProps {
 export function ApplicationDetailShell({ applicationId }: ApplicationDetailShellProps) {
   const [app, setApp] = useState<Application | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const apps = await fetchApplications(DEMO_USER);
+      setApp(apps.find((a) => a.id === applicationId) ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error("Failed to load application"));
+    } finally {
+      setLoading(false);
+    }
+  }, [applicationId]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      const apps = await fetchApplications(DEMO_USER);
-      if (cancelled) return;
-      setApp(apps.find((a) => a.id === applicationId) ?? null);
-      if (!cancelled) setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [applicationId]);
+    load();
+  }, [load]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="space-y-4" aria-live="polite">
+        <CardSkeleton />
+        <CardSkeleton />
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <ErrorState
+        title="Couldn't load this application"
+        description={error.message}
+        retryLabel="Try again"
+        onRetry={load}
+      />
     );
   }
 
   if (!app) {
     return (
-      <p className="text-center text-sm text-muted-foreground py-24">
-        Application not found.
-      </p>
+      <EmptyState
+        icon={<FileText />}
+        title="Application not found"
+        description="This application may have been removed or the link is invalid."
+        actionText="Back to pipeline"
+        onAction={() => (window.location.href = "/dashboard/pipeline")}
+      />
     );
   }
 

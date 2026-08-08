@@ -14,11 +14,11 @@ import {
   FolderOpen,
   Grid3x3,
   Layers,
-  Loader2,
   Menu,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ListSkeleton } from "@/components/ui/skeleton";
 
 /**
  * Pillar-scoped left navigation.
@@ -227,7 +227,7 @@ export default function PillarTreeNav({
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header — crumbs-style so "you are here" is explicit: Pillar ▸ Module. */}
       <div className="px-4 pt-3 pb-2.5 border-b border-border shrink-0 bg-background">
-        <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">
+        <div className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground mb-1">
           You are here
         </div>
         <Link
@@ -248,11 +248,11 @@ export default function PillarTreeNav({
       </div>
 
       {/* Full tree */}
-      <div className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+      <div className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5" aria-live="polite">
           <div className="flex items-center justify-between gap-1.5 px-2 mb-2">
             <div className="flex items-center gap-1.5">
               <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">
                 Modules in {cleanPillar}
               </span>
             </div>
@@ -272,7 +272,7 @@ export default function PillarTreeNav({
               <div key={m.seoSlug}>
                 <div
                   className={cn(
-                    "flex items-center rounded-lg border-l-2 transition-all",
+                    "flex items-center rounded-lg border-l-2 transition-colors duration-200 ease-out",
                     isActiveModule
                       ? "border-primary bg-primary/10"
                       : "border-transparent hover:border-border hover:bg-surface",
@@ -311,7 +311,7 @@ export default function PillarTreeNav({
                       </span>
                     )}
                     {isLoading ? (
-                      <Loader2 className="h-3 w-3 text-primary dark:text-primary animate-spin inline" />
+                      <span className="h-3 w-3 rounded-full border-2 border-primary/40 border-t-primary animate-spin inline-block shrink-0" />
                     ) : (
                       <ChevronRight
                         className={cn(
@@ -346,7 +346,7 @@ export default function PillarTreeNav({
                                   ref={isActiveQ ? activeRef : undefined}
                                   onClick={() => setMobileOpen(false)}
                                   className={cn(
-                                    "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs leading-snug transition-all",
+                                    "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs leading-snug transition-colors duration-200 ease-out",
                                     isActiveQ
                                       ? "bg-primary text-primary-foreground font-bold shadow-sm"
                                       : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
@@ -381,7 +381,7 @@ export default function PillarTreeNav({
                           <button
                             onClick={() => toggleSubcat(subKey)}
                             className={cn(
-                              "w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs transition-colors",
+                              "w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs transition-colors duration-200 ease-out",
                               hasActiveQ
                                 ? "bg-primary/10 text-primary font-bold"
                                 : "text-muted-foreground hover:bg-surface font-semibold",
@@ -395,7 +395,7 @@ export default function PillarTreeNav({
                             <span className="flex-1 text-left truncate">
                               {sc.name}
                             </span>
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary shrink-0">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary dark:text-primary shrink-0">
                               {sc.questionCount}
                             </span>
                             <ChevronRight
@@ -417,7 +417,7 @@ export default function PillarTreeNav({
                                     ref={isActiveQ ? activeRef : undefined}
                                     onClick={() => setMobileOpen(false)}
                                     className={cn(
-                                      "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs leading-snug transition-all",
+                                      "flex items-start gap-1.5 px-2 py-1.5 rounded-md text-xs leading-snug transition-colors duration-200 ease-out",
                                       isActiveQ
                                         ? "bg-primary text-primary-foreground font-bold shadow-sm"
                                         : "text-muted-foreground hover:bg-primary/10 hover:text-primary",
@@ -452,14 +452,8 @@ export default function PillarTreeNav({
                 )}
 
                 {isExpanded && isLoading && subs.length === 0 && (
-                  <div className="ml-6 space-y-1.5 py-2">
-                    {[80, 65, 72].map((w) => (
-                      <div
-                        key={w}
-                        className="h-2.5 bg-surface rounded animate-pulse"
-                        style={{ width: `${w}%` }}
-                      />
-                    ))}
+                  <div className="ml-6 py-2">
+                    <ListSkeleton rows={3} />
                   </div>
                 )}
               </div>
@@ -475,24 +469,24 @@ export default function PillarTreeNav({
           <Link
             href={structuredTrackHref}
             onClick={() => setMobileOpen(false)}
-            className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-background hover:shadow-sm transition-all"
+            className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-background hover:shadow-sm transition-colors duration-200 ease-out"
           >
             <Compass className="h-3.5 w-3.5 text-primary dark:text-primary shrink-0" />
             <span className="flex-1 text-[12px] font-bold text-foreground group-hover:text-primary dark:group-hover:text-primary leading-tight">
               {structuredTrackCtaLabel}
             </span>
-            <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+            <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors duration-200 ease-out" />
           </Link>
           <Link
             href="/prep"
             onClick={() => setMobileOpen(false)}
-            className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-background hover:shadow-sm transition-all"
+            className="group flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-background hover:shadow-sm transition-colors duration-200 ease-out"
           >
             <Grid3x3 className="h-3.5 w-3.5 text-primary dark:text-primary shrink-0" />
             <span className="flex-1 text-[12px] font-bold text-foreground group-hover:text-primary dark:group-hover:text-primary leading-tight">
               Browse all categories
             </span>
-            <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+            <ArrowRight className="h-3 w-3 text-muted-foreground group-hover:text-primary dark:group-hover:text-primary transition-colors duration-200 ease-out" />
           </Link>
         </div>
     </div>
@@ -511,7 +505,7 @@ export default function PillarTreeNav({
       {/* Mobile FAB */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed bottom-6 left-4 z-40 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
+        className="lg:hidden fixed bottom-6 left-4 z-[var(--z-fixed)] w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-colors duration-200 ease-out touch-target focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         aria-label="Open navigation"
       >
         <Menu className="h-5 w-5" />
@@ -519,7 +513,7 @@ export default function PillarTreeNav({
 
       {/* Mobile drawer */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
+        <div className="lg:hidden fixed inset-0 z-[var(--z-drawer)] flex">
           <div
             className="absolute inset-0 bg-foreground /40 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
@@ -531,7 +525,8 @@ export default function PillarTreeNav({
               </span>
               <button
                 onClick={() => setMobileOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-surface transition-colors"
+                className="p-1.5 rounded-lg hover:bg-surface transition-colors touch-target focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                aria-label="Close navigation"
               >
                 <X className="h-4 w-4 text-muted-foreground" />
               </button>

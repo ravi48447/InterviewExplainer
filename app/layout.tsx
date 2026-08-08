@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AppShell } from "@/components/shell/public-shell";
 import { AuthProvider } from "@/context/auth-context";
 import { GlobalLoginPrompt } from "@/components/global-login-prompt";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 import "highlight.js/styles/atom-one-dark.css";
 import {
@@ -99,6 +100,7 @@ export default function RootLayout({
           <AuthProvider>
             <GlobalLoginPrompt />
             <AppShell>{children}</AppShell>
+            <Toaster />
           </AuthProvider>
         </ThemeProvider>
       </body>

@@ -103,8 +103,8 @@ export function DesktopLearnDropdown({ sections, pathname }: Props) {
           ref={panelRef}
           role="menu"
           className={cn(
-            'absolute left-0 top-full mt-1 rounded-xl border border-border bg-popover text-popover-foreground shadow-md z-50',
-            'animate-in fade-in-0 zoom-in-95',
+            'absolute left-0 top-full mt-1 rounded-xl border border-border bg-popover text-popover-foreground shadow-md z-[var(--z-dropdown)]',
+            'animate-in fade-in-0',
             widthClass,
           )}
         >

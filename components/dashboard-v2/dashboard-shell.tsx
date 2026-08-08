@@ -30,6 +30,8 @@ import type {
   DashboardEmptyState,
 } from "@/lib/dashboard";
 import { useUserState, useGuestData } from "@/lib/user";
+import { CardSkeleton, ListSkeleton } from "@/components/ui/skeleton";
+import { ErrorState } from "@/components/ui/error-state";
 import { ContinuePrep } from "./continue-prep";
 import { DailyPrep } from "./daily-prep";
 import { Recommendations } from "./recommendations";
@@ -53,6 +55,8 @@ export function DashboardShell() {
   const [dailyQueue, setDailyQueue] = useState<DailyQueue | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationSet | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     if (!ready) return;
@@ -62,6 +66,7 @@ export function DashboardShell() {
     }
     let cancelled = false;
     setLoading(true);
+    setLoadError(false);
     Promise.all([
       loadDashboardSummary().catch(() => null),
       loadContinuePrep().catch(() => []),
@@ -74,11 +79,14 @@ export function DashboardShell() {
       setDailyQueue(dq);
       setRecommendations(rec);
       setLoading(false);
+      // If the core summary failed to load, surface an error state so the
+      // user can retry rather than silently rendering an empty dashboard.
+      if (s === null) setLoadError(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [ready, status, hasGuest]);
+  }, [ready, status, hasGuest, retryNonce]);
 
   const isAuthenticated = status === "authenticated";
   const emptyState: DashboardEmptyState | null =
@@ -98,14 +106,29 @@ export function DashboardShell() {
   if (loading) {
     return (
       <div className="page-container py-12">
-        <div className="max-w-5xl mx-auto space-y-4">
-          <div className="h-28 rounded-xl bg-card border border-border animate-pulse" />
+        <div className="max-w-5xl mx-auto space-y-6" aria-busy="true" aria-live="polite">
+          <CardSkeleton className="h-28 rounded-xl" />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-24 rounded-lg bg-card border border-border animate-pulse" />
+              <CardSkeleton key={i} className="h-24 rounded-lg" />
             ))}
           </div>
-          <div className="h-48 rounded-lg bg-card border border-border animate-pulse" />
+          <ListSkeleton rows={4} className="rounded-lg border border-border bg-card p-4" />
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="page-container py-16">
+        <div className="max-w-2xl mx-auto">
+          <ErrorState
+            title="Dashboard unavailable"
+            description="We couldn't load your dashboard right now. Please try again."
+            retryLabel="Try again"
+            onRetry={() => setRetryNonce((n) => n + 1)}
+          />
         </div>
       </div>
     );
@@ -122,21 +145,7 @@ export function DashboardShell() {
   }
 
   if (!summary) {
-    return (
-      <div className="page-container py-16">
-        <div className="max-w-2xl mx-auto text-center">
-          <EmptyState
-            state={{
-              reason: "no_activity",
-              title: "Dashboard unavailable",
-              message: "We couldn't load your dashboard right now. Please try again later.",
-              ctaHref: "/",
-              ctaLabel: "Back to home",
-            }}
-          />
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -164,7 +173,11 @@ export function DashboardShell() {
         </header>
 
         {/* Quick stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div
+          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+          aria-live="polite"
+          aria-label="Dashboard summary statistics"
+        >
           {[
             { label: "Completed", value: summary.completedQuestions },
             { label: "Streak", value: `${summary.currentStreak}d` },

@@ -41,7 +41,7 @@ export function MobileNav() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 lg:hidden"
+          className="h-9 w-9 touch-target-lg lg:hidden"
           aria-label="Open navigation menu"
           aria-expanded={open}
           aria-controls="mobile-nav-content"
@@ -56,7 +56,7 @@ export function MobileNav() {
       >
         <SheetHeader className="border-b border-border px-5 py-4 text-left">
           <SheetTitle className="text-base font-semibold">
-            <Link href="/" className="text-foreground hover:text-primary" onClick={() => setOpen(false)}>
+            <Link href="/" className="text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md" onClick={() => setOpen(false)}>
               InterviewExplainer
             </Link>
           </SheetTitle>
@@ -70,7 +70,7 @@ export function MobileNav() {
                     type="button"
                     onClick={() => setExpanded((p) => (p === section.title ? null : section.title))}
                     aria-expanded={expanded === section.title}
-                    className="flex w-full items-center justify-between rounded-md px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+                    className="flex w-full items-center justify-between rounded-md px-2 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <span>{section.title}</span>
                     <span aria-hidden="true" className="text-[0.7rem]">
@@ -90,7 +90,7 @@ export function MobileNav() {
                           onClick={() => setOpen(false)}
                           aria-current={active ? 'page' : undefined}
                           className={cn(
-                            'flex items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors',
+                            'flex items-center gap-2.5 rounded-md px-2 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                             active
                               ? 'bg-primary/10 font-medium text-primary'
                               : 'text-foreground/80 hover:bg-muted hover:text-foreground',

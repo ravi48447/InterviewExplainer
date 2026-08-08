@@ -37,7 +37,7 @@ export function SiteFooter() {
                   <path d="M8 4L2 12L8 20M16 4L22 12L16 20M14 2L10 22" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
-              <span className="text-lg font-black text-foreground">InterviewExplainer</span>
+              <span className="text-lg font-extrabold text-foreground">InterviewExplainer</span>
             </div>
             <p className="text-sm text-muted-foreground mb-4 max-w-sm leading-relaxed">
               Master your tech interviews with domain-specific questions tailored to your exact stack and experience level.
@@ -47,28 +47,28 @@ export function SiteFooter() {
               <a
                 href="#"
                 aria-label="GitHub"
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-background border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-all"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-background border border-border text-muted-foreground transition-colors hover:text-primary hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Github className="h-4 w-4" />
               </a>
               <a
                 href="#"
                 aria-label="Twitter / X"
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-background border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-all"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-background border border-border text-muted-foreground transition-colors hover:text-primary hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Twitter className="h-4 w-4" />
               </a>
               <a
                 href="#"
                 aria-label="LinkedIn"
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-background border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-all"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-background border border-border text-muted-foreground transition-colors hover:text-primary hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Linkedin className="h-4 w-4" />
               </a>
               <a
                 href="mailto:support@interviewexplainer.com"
                 aria-label="Email support"
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-background border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-all"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-background border border-border text-muted-foreground transition-colors hover:text-primary hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Mail className="h-4 w-4" />
               </a>
@@ -83,7 +83,7 @@ export function SiteFooter() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5"
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                 >
                   <span>{link.label}</span>
                   {link.href === "/mock-interviews" && (
@@ -102,7 +102,7 @@ export function SiteFooter() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                 >
                   {link.label}
                 </Link>
@@ -118,7 +118,7 @@ export function SiteFooter() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                 >
                   {link.label}
                 </Link>
@@ -131,7 +131,7 @@ export function SiteFooter() {
         <div className="pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground flex items-center gap-1">
             &copy; {new Date().getFullYear()} InterviewExplainer. Made with{" "}
-            <Heart className="h-3 w-3 text-red-500 dark:text-red-400 fill-red-500 mx-0.5" /> for developers.
+            <Heart className="h-3 w-3 text-destructive fill-destructive mx-0.5" /> for developers.
           </p>
           <p className="text-xs text-muted-foreground/60">
             Content-first interview prep platform
