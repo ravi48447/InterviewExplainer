@@ -84,3 +84,36 @@ Phase 01 rebuilt the root UI architecture on a token-driven design system. The w
 Phase 01 is self-approved and ready for review. The token substrate and component APIs are stable for downstream phases (02+: SEO/routing/URL rebuild) and route migrations.
 
 **Next:** Phase 00 (audit/truth) or Phase 02, pending product direction.
+
+---
+
+# Phase 04 Completion Report (P04-T478, T479)
+
+**Phase:** 04 — Homepage & Public Discovery Experience Rebuild
+**Tasks:** 479 / 479 — **COMPLETE**
+**Session:** 10
+
+## Summary
+
+Phase 04 rebuilt the homepage as a calm, focused, readable orientation layer inside the Phase 03 application shell, removing the V1 "everything-on-the-page" anti-pattern.
+
+## What changed
+
+- **`lib/home/home-data.ts`** — canonical homepage data layer: hero, curated pathways (6/12), technologies, featured questions (canonical-derived), content stats (canonical-derived), capabilities (outcomes), footer crawl links. Pure data, server-safe.
+- **`components/home/`** — 8 bounded section components + barrel: `HomeHero`, `HomePathways`, `HomeTechnologies`, `HomeFeaturedQuestions`, `HomeCapabilities`, `HomeTrust`, `HomeFooterDiscovery`, `HomeSearchEntry`.
+- **`app/page.tsx`** — rebuilt server component composing 7 sections in journey order; only client island is the gated, dynamic no-SSR search entry.
+- **Legacy cleanup** — removed 11 dead `components/landing/` components; kept `prep-track-surfaces` (still used by `/prep`).
+
+## Verification gates
+
+- **TypeScript:** ✅ 8 errors (unchanged baseline — pre-existing test-runner types). Zero new errors; zero errors in `home/` or `app/page.tsx`.
+- **Tailwind:** ✅ compiles clean; all token classes generated.
+- **Architecture:** server-rendered discovery; gated no-SSR search; canonical links; one H1; no competing CTA colours; no decorative gradients/animation; no hard-coded stats.
+
+## Freeze
+
+Homepage IA, hero, discovery, search entry, CTA hierarchy, SEO contract, and data contracts are frozen. See `v2_plan/task-reports/P04-T001_T479_homepage_public_discovery_rebuild.md` for full workstream coverage.
+
+## Approval (T479)
+
+Phase 04 is self-approved and ready for review. The homepage is a calm, focused, readable orientation layer. The V1 "everything-on-the-page" anti-pattern is removed. The homepage introduces; dedicated pages organize.

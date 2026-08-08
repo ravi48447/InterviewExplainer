@@ -155,3 +155,35 @@ Records the significant design/engineering decisions made during Phase 02, with 
 **Why:** The public content shell needs crawlable, zero-JS containers. The shadcn sidebar ships a context provider and cookie state — appropriate for a dashboard, not for content navigation that must render on the server.
 
 **How to apply:** Use `ContentSidebar`/`ContextualSidebar` for public content routes. Reserve the shadcn `Sidebar` primitive for authenticated dashboard surfaces (Phase AF) where collapse-state persistence is desired.
+
+## D17 — The homepage is an orientation layer, not a feature catalogue (P04-A, T001–T010)
+
+**Decision:** The V2 homepage surfaces a *curated subset* of preparation pathways (6 of 12), four technology entry points, five featured questions (derived from canonical content), and a short footer crawl-distribution list. It does not enumerate every language, question, company, topic, feature, tool, roadmap, or statistic.
+
+**Why:** The V1 homepage tried to display everything (90vh gradient hero, animated dashboard, feature-card walls, 8-language grid, "Built Different" section, newsletter, giant final CTA). A new visitor could not understand what the product was or where to start. The homepage's primary job is orientation; dedicated pages organize depth.
+
+**How to apply:** Add new discovery surfaces by extending `lib/home/home-data.ts` and a bounded section in `components/home/`. Never re-add a feature-card wall, a "Built Different" superlative section, a newsletter capture, or a giant final CTA to the homepage. Curate; do not enumerate.
+
+## D18 — Homepage featured questions are derived from canonical content, never random or fake-trending (P04-I, T097–T109, T374–T375)
+
+**Decision:** `getHomeFeaturedQuestions(limit)` reads `getSubcategoriesWithQuestions` from the flagship Java/Python/Go tracks and takes the first question of each subcategory, memoised per-process. No random selection, no "trending"/"popular" labels without supporting logic.
+
+**Why:** Random or fake-trending featured content misleads users and search engines, and decouples the homepage from real content depth. Deriving from canonical content keeps the homepage honest and automatically reflects content changes.
+
+**How to apply:** To feature a different question set, change the `FEATURED_SEEDS` array in `lib/home/home-data.ts`. Never introduce a random picker or a hard-coded "trending" badge on the homepage.
+
+## D19 — Homepage search is gated by the `search` hub flag and dynamically imported with no SSR (P04-E, T049–T066, T289)
+
+**Decision:** `HomeSearchEntry` is a client component that returns `null` when `isHubEnabled("search")` is false. `app/page.tsx` imports it via `next/dynamic` with `{ ssr: false }`.
+
+**Why:** The search indexer is not populated for launch scope (`search: false` in `launch-config`). Loading the search dataset into the initial homepage bundle would inflate payload and block first render for a feature that is not live. The gate + dynamic no-SSR import means the homepage ships zero search JS until the hub is enabled.
+
+**How to apply:** When search is launch-ready, flip `search: true` in `lib/launch-config.ts`; the homepage search entry appears automatically. Do not import `GlobalSearch` directly into `app/page.tsx`.
+
+## D20 — Homepage content statistics are derived from canonical data, never hard-coded or animated (P04-M, T139–T145)
+
+**Decision:** `getHomeContentStats()` derives live language names from `ENABLED_LANGUAGES` and question counts from `getSubcategoriesWithQuestions`. Stats are rendered as plain text, never animated counters, and sit in the restrained trust section — not as the primary homepage message.
+
+**Why:** Hard-coded counts drift from reality and become misleading. Animated counters delay content visibility and violate reduced-motion. Statistics as the primary message read as marketing, not orientation.
+
+**How to apply:** Add a stat by extending `getHomeContentStats()` with a canonical-data-derived value. Never hard-code a number in `app/page.tsx` or a home section component.

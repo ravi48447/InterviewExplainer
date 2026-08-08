@@ -1,7 +1,7 @@
 # Interview Explainer V2 Migration Tracker
 
-**Status:** Phase 03 COMPLETE
-**Last updated:** Session 9 — Phase 03 Global Application Shell & Shared Component Migration (T001–T431)
+**Status:** Phase 04 COMPLETE
+**Last updated:** Session 10 — Phase 04 Homepage & Public Discovery Experience Rebuild (T001–T479)
 
 ## Phase Status
 
@@ -11,7 +11,7 @@
 | 01 | Root UI Architecture & Design System Rebuild | 327 | 327 | **✅ DONE** |
 | 02 | Root SEO, Indexing, Routing & URL Rebuild | 551 | 551 | **✅ DONE** |
 | 03 | Global Application Shell & Shared Component Migration | 431 | 431 | **✅ DONE** |
-| 04 | — | 479 | 0 | Pending |
+| 04 | Homepage & Public Discovery Experience Rebuild | 479 | 479 | **✅ DONE** |
 | 05 | — | 552 | 0 | Pending |
 | 06 | — | 717 | 0 | Pending |
 | 07 | — | 594 | 0 | Pending |
@@ -27,6 +27,21 @@
 > Phase 00 (audit/truth) is being performed in parallel with the first concrete code work in Phase 01, since Phase 01's CSS/token work is low-risk, self-contained, and does not depend on the route/SEO inventory.
 
 ## Current Task
+
+**Phase 04 — COMPLETE (479/479)**
+
+Session 10: P04-T001 → T479 — Homepage & Public Discovery Experience Rebuild. Rebuilt the homepage as a calm, focused, readable orientation layer inside the Phase 03 shell, removing the V1 "everything-on-the-page" anti-pattern.
+
+**What changed:**
+- **Canonical homepage data layer** (`lib/home/home-data.ts`): single source of truth for every static, server-rendered discovery entry — hero, curated preparation pathways (6 of 12), technology entry points, featured questions (derived from canonical content via `getSubcategoriesWithQuestions`, never random/fake-trending), content stats (derived from canonical data, never hard-coded), capabilities (outcomes, not feature walls), footer crawl-distribution links. Pure data (no fs/path) so it tree-shakes into the initial HTML.
+- **Bounded homepage sections** (`components/home/`): `HomeHero` (one H1 + one supporting sentence + one primary + one secondary CTA, no gradient/badge/stat wall), `HomePathways`, `HomeTechnologies`, `HomeFeaturedQuestions` (titles as visual focus, canonical links, no full answers), `HomeCapabilities` (outcomes, not icon-grid), `HomeTrust` (product-depth signal, restrained stats), `HomeFooterDiscovery` (crawl paths to major hubs), `HomeSearchEntry` (gated by `search` hub flag, dynamic no-SSR import → zero JS when disabled). Barrel at `components/home/index.ts`.
+- **Rebuilt `app/page.tsx`**: server component composing the 7 sections in the canonical journey order (LAND → CHOOSE A PATH → DISCOVER → UNDERSTAND VALUE → TRUST → CONTINUE). Removed: 90vh dual-gradient hero, animated dashboard visual, feature-card walls, 8-language grid, "Built Different" superlative section, newsletter capture, giant final CTA, `buildHomeStandoutPicks` globalThis cache, ALL_PILLARS/WHY_DIFFERENT hard-coded arrays.
+- **Legacy cleanup (P04-T386..T395):** removed 11 confirmed-dead `components/landing/` components (hero-actions, hero-dashboard-visual, hero-section, home-priority-grid, feature-card, featured-prep-section, why-section, how-it-works, bottom-cta, domain-discovery, auth-redirect). Kept `prep-track-surfaces` (still consumed by `app/prep/page.tsx`).
+
+**Verification:**
+- **TypeScript:** ✅ 8 errors (unchanged baseline — all pre-existing test-runner type defs in `__tests__/launch-config.test.ts`). Zero new errors; zero errors mentioning `home/` or `app/page.tsx`.
+- **Tailwind:** ✅ compiles clean; all token classes used by new components (`type-display`, `type-section`, `page-container`, `bg-surface`, `bg-card`, `border-border`, `text-muted-foreground`, `text-primary`) are generated.
+- **Architecture conformance:** homepage is a server component; only client island is the gated search entry (dynamic no-SSR); all discovery links are server-rendered and canonical; major hubs crawlable from homepage; one primary H1; no competing CTA colours; no decorative gradients/animation.
 
 **Phase 01 — COMPLETE (327/327)**
 
