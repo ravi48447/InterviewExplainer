@@ -48,6 +48,7 @@ import { DSAProblemTwoPaneShell } from "@/components/dsa/DSAProblemTwoPaneShell"
 import { DSABreadcrumb } from "@/components/dsa/DSABreadcrumb";
 import { DSAPill, DifficultyPill } from "@/components/dsa/DSAPills";
 import { ProblemSidebar } from "@/components/dsa/ProblemSidebar";
+import { DSAReadingNav, type ReadingSection } from "@/components/dsa/DSAReadingNav";
 import { cn } from "@/lib/utils";
 
 const SITE_URL =
@@ -456,14 +457,34 @@ export default async function DSAProblemPage({
     </div>
   );
 
+  // ─── Reading-nav section list ──────────────────────────────────────
+  // Built from the zones that actually render on this problem so the
+  // jump chips only show sections the reader can reach. Order matches
+  // the visual order of the page (the order the reader meets them).
+  const readingSections: ReadingSection[] = [];
+  if (problem.directAnswer) readingSections.push({ id: "zone-answer", label: "Answer" });
+  if (problem.remember) readingSections.push({ id: "zone-revise", label: "Revise" });
+  readingSections.push({ id: "zone-approaches", label: "Approaches" });
+  if (problem.approaches.some((a) => a.code && Object.keys(a.code).length > 0))
+    readingSections.push({ id: "zone-try", label: "Try it" });
+  if (hasMistakes) readingSections.push({ id: "zone-mistakes", label: "Mistakes" });
+  if (followupVariations.length > 0 || relatedByPattern.length > 0)
+    readingSections.push({ id: "zone-more", label: "More" });
+
   return (
     <DSAProblemTwoPaneShell jsonLd={jsonLd} leftPane={leftPane} rightPane={
       <article className="pb-16">
+        {/* Reading companion — sticky jump nav + scroll progress + resume.
+            Pinned to the top of the reading column so it stays in view as
+            the reader moves through the long-form answer. */}
+        {readingSections.length > 1 && (
+          <DSAReadingNav sections={readingSections} slug={slug} />
+        )}
         <DSABreadcrumb trail={breadcrumbTrail} />
 
         {/* ─── ZONE 1 · 30-SECOND ANSWER ─────────────────────────────── */}
         {problem.directAnswer && (
-          <section aria-label="Quick answer" className="mb-6">
+          <section id="zone-answer" aria-label="Quick answer" className="mb-6 scroll-mt-28">
             <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
               <div className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground">
                 <Zap className="h-4 w-4 text-primary-foreground" />
@@ -515,10 +536,14 @@ export default async function DSAProblemPage({
         )}
 
         {/* ─── ZONE 2 · THINGS TO REMEMBER / REVISE ─────────────────── */}
-        {problem.remember && <RevisionCard remember={problem.remember} />}
+        {problem.remember && (
+          <div id="zone-revise" className="scroll-mt-28">
+            <RevisionCard remember={problem.remember} />
+          </div>
+        )}
 
         {/* ─── ZONE 4 · PROBLEM SOLVING (approaches) ────────────────── */}
-        <section className="mb-8">
+        <section id="zone-approaches" className="mb-8 scroll-mt-28">
           <div className="mb-5 rounded-xl bg-card border border-border/60 px-5 py-4 text-foreground">
             <div className="flex items-end justify-between gap-4 flex-wrap">
               <div className="min-w-0">
@@ -713,7 +738,7 @@ export default async function DSAProblemPage({
             ? `${problem.examples[0].input}`
             : "";
           return (
-            <section className="mb-8">
+            <section id="zone-try" className="mb-8 scroll-mt-28">
               <div className="mb-4 flex items-center gap-2">
                 <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-success/10">
                   <Code2 className="h-4 w-4 text-success" />
@@ -737,7 +762,7 @@ export default async function DSAProblemPage({
 
         {/* ─── ZONE 6 · COMMON MISTAKES ─────────────────────────────── */}
         {hasMistakes && (
-          <section className="mb-8 rounded-xl border-2 border-rose-300 dark:border-rose-500/30 bg-rose-50/40 dark:bg-rose-500/10 overflow-hidden">
+          <section id="zone-mistakes" className="mb-8 scroll-mt-28 rounded-xl border-2 border-rose-300 dark:border-rose-500/30 bg-rose-50/40 dark:bg-rose-500/10 overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 dark:bg-rose-700 text-primary-foreground border-b border-rose-700 dark:border-rose-800">
               <Bug className="h-4 w-4" />
               <span className="text-xs font-black uppercase tracking-widest">
@@ -839,7 +864,7 @@ export default async function DSAProblemPage({
         )}
 
         {(followupVariations.length > 0 || relatedByPattern.length > 0) && (
-          <section className="mb-8">
+          <section id="zone-more" className="mb-8 scroll-mt-28">
             <h2 className="text-[18px] font-black text-foreground mb-3 flex items-baseline gap-2">
               More problems
               <span className="text-sm font-medium text-muted-foreground">
