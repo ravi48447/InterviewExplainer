@@ -6,6 +6,20 @@
  * across the app — every search surface uses this component (P07-T022).
  *
  * Client component — needs interactivity for debounce + keyboard nav.
+ *
+ * IMPORTANT (Next 16 build fix): This is a "use client" component, so it
+ * must NOT import anything that transitively pulls Node-only modules
+ * (`fs`, `path`) into the browser bundle. The previous version imported
+ * `search`/`getNoResultsSuggestions`/`normalizeQuery` from `@/lib/search`,
+ * whose barrel re-exports `search-index.ts` → `content-reader.ts`
+ * (`import fs from 'fs'`) and `contentV2.ts` (`import fs from 'fs'`), which
+ * broke `next build` with "Module not found: Can't resolve 'fs'".
+ *
+ * Fix: queries are now sent to the server-side `/api/search` route (which
+ * already builds the index from `contentV2`/`content-reader` and returns
+ * scored JSON). The response is mapped back into the canonical
+ * `SearchResult`/`SearchDocument` shape that `<SearchResults/>` and
+ * `<NoResults/>` already consume. No server-only code is imported here.
  */
 
 "use client";
@@ -13,11 +27,142 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Search, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { normalizeQuery, search, getNoResultsSuggestions } from "@/lib/search";
-import type { SearchState, SearchResult, NoResultsSuggestion } from "@/lib/search";
-import { DEFAULT_SEARCH_CONFIG } from "@/lib/search";
+// NOTE: import types + config from the LEAF module (search-types.ts), not the
+// @/lib/search barrel. The barrel re-exports runtime functions from
+// search-index.ts → content-reader.ts (which does `import fs from 'fs'`);
+// importing the barrel in a "use client" component drags that Node-only
+// module into the browser bundle and breaks `next build`. search-types.ts
+// is a pure types/constants module with no server-only imports.
+import type {
+  SearchState,
+  SearchResult,
+  SearchDocument,
+  SearchQuery,
+  NoResultsSuggestion,
+} from "@/lib/search/search-types";
+import { DEFAULT_SEARCH_CONFIG } from "@/lib/search/search-types";
 import { SearchResults } from "./search-results";
 import { NoResults } from "./no-results";
+
+// ─── /api/search response shape (server-side route) ──────────────────────────
+// See app/api/search/route.ts — this is the JSON contract the route returns.
+interface ApiSearchItem {
+  title: string;
+  slug: string;
+  domainSlug: string;
+  stackSlug: string;
+  questionSlug: string;
+  difficulty: string;
+  readingTime: number;
+  language: string;
+  track: string;
+  level: string;
+  stack: string;
+  type: "interview" | "tool";
+}
+
+/** Map one /api/search item → the canonical SearchResult the UI expects. */
+function toSearchResult(item: ApiSearchItem, score: number): SearchResult {
+  // Build the public canonical URL. Interview questions live under
+  // /{domainSlug}/{stackSlug}/{questionSlug}; shared tools under /prep/{stack}.
+  const url =
+    item.type === "interview" && item.domainSlug
+      ? `/${item.domainSlug}/${item.stackSlug}/${item.questionSlug}`
+      : item.type === "tool"
+        ? `/prep/${item.stackSlug}`
+        : `/domains`;
+
+  // Map the route's loose difficulty ("easy"/"medium"/"hard" as strings)
+  // to the typed union SearchDocument.difficulty expects.
+  const difficulty: SearchDocument["difficulty"] =
+    item.difficulty === "easy" || item.difficulty === "medium" || item.difficulty === "hard"
+      ? item.difficulty
+      : undefined;
+
+  // Map the route's entity type to the SearchEntityType union. The route
+  // only emits "interview" (a question) or "tool" (a resource); both render
+  // as documents the result list groups by `type`.
+  const type: SearchDocument["type"] =
+    item.type === "interview" ? "question" : "resource";
+
+  // Hierarchy path powers the "Java Backend › Spring Boot" breadcrumb line
+  // under each result title (see SearchResultItem).
+  const hierarchyPath = [item.language, item.track, item.level, item.stack].filter(
+    (s): s is string => Boolean(s && s !== "Shared"),
+  );
+
+  const document: SearchDocument = {
+    id: `${item.type}:${item.domainSlug || item.stackSlug}:${item.questionSlug}`,
+    type,
+    title: item.title,
+    url,
+    difficulty,
+    hierarchyPath,
+    readTimeMinutes: item.readingTime,
+    language: item.language,
+  };
+
+  return { document, score };
+}
+
+/** Tiny client-side normalizer (mirrors the server's normalizeQuery intent). */
+function normalizeQueryClient(raw: string): SearchQuery {
+  const normalized = raw.trim().toLowerCase().replace(/[^\w\s-]/g, " ");
+  const tokens = normalized.split(/\s+/).filter((t) => t.length > 0);
+  return { raw, normalized, tokens };
+}
+
+/** Build no-results suggestions client-side from the returned titles. */
+function buildNoResultsSuggestions(query: SearchQuery, titles: string[]): NoResultsSuggestion[] {
+  const suggestions: NoResultsSuggestion[] = [];
+
+  // Typo corrections: Levenshtein-1 against the first token of each title.
+  const titleSet = new Set(titles.map((t) => t.toLowerCase()));
+  const levenshtein = (a: string, b: string): number => {
+    const m = a.length, n = b.length;
+    if (Math.abs(m - n) > 1) return 99;
+    const dp = Array.from({ length: m + 1 }, (_, i) => i);
+    for (let j = 1; j <= n; j++) {
+      let prev = dp[0];
+      dp[0] = j;
+      for (let i = 1; i <= m; i++) {
+        const tmp = dp[i];
+        dp[i] = Math.min(dp[i] + 1, dp[i - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+        prev = tmp;
+      }
+    }
+    return dp[m];
+  };
+
+  for (const token of query.tokens) {
+    if (token.length < 3) continue;
+    for (const title of titleSet) {
+      const firstWord = title.split(/[\s-]+/)[0] ?? title;
+      const dist = levenshtein(token, firstWord);
+      if (dist === 1 && dist < token.length) {
+        suggestions.push({ query: title, reason: "typo_correction" });
+        if (suggestions.length >= 3) break;
+      }
+    }
+    if (suggestions.length >= 3) break;
+  }
+
+  // Browse suggestions — always offer a path forward (P07-T247).
+  suggestions.push({
+    query: "Browse all domains",
+    reason: "browse",
+    url: "/domains",
+    label: "Browse all domains",
+  });
+  suggestions.push({
+    query: "Browse pillars",
+    reason: "browse",
+    url: "/prep",
+    label: "Browse prep hubs",
+  });
+
+  return suggestions.slice(0, 5);
+}
 
 export interface SearchInputProps {
   /** Placeholder text (P07-T189). */
@@ -49,30 +194,73 @@ export function SearchInput({
     totalCount: 0,
   });
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [noResultsSuggestions, setNoResultsSuggestions] = useState<NoResultsSuggestion[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Track the latest in-flight request so a slow response can't overwrite a
+  // newer one (race guard for the debounced fetch loop).
+  const reqIdRef = useRef(0);
 
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus();
   }, [autoFocus]);
 
-  // Debounced search (P07-T).
+  // Debounced search — hits the server /api/search route (P07-T).
   const executeSearch = useCallback((raw: string) => {
+    const query = normalizeQueryClient(raw);
+
     if (raw.trim().length < DEFAULT_SEARCH_CONFIG.minQueryLength) {
+      reqIdRef.current++;
       setState({ status: "idle", query: null, results: [], totalCount: 0 });
+      setNoResultsSuggestions([]);
       return;
     }
 
-    const query = normalizeQuery(raw);
-    const results = search(query, DEFAULT_SEARCH_CONFIG.maxResults);
+    setState((prev) => ({ ...prev, status: "loading", query }));
+    const myReqId = ++reqIdRef.current;
 
-    setState({
-      status: results.length > 0 ? "success" : "no_results",
-      query,
-      results,
-      totalCount: results.length,
-    });
-    setActiveIndex(-1);
+    const url = `/api/search?q=${encodeURIComponent(raw)}&limit=${DEFAULT_SEARCH_CONFIG.maxResults}`;
+
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((items: ApiSearchItem[]) => {
+        if (myReqId !== reqIdRef.current) return; // stale response
+        const results = items.map((item, i) =>
+          toSearchResult(item, 1 - i * 0.001),
+        );
+        if (results.length > 0) {
+          setState({
+            status: "success",
+            query,
+            results,
+            totalCount: results.length,
+          });
+          setNoResultsSuggestions([]);
+        } else {
+          setState({
+            status: "no_results",
+            query,
+            results: [],
+            totalCount: 0,
+          });
+          setNoResultsSuggestions(
+            buildNoResultsSuggestions(query, items.map((i) => i.title)),
+          );
+        }
+        setActiveIndex(-1);
+      })
+      .catch(() => {
+        if (myReqId !== reqIdRef.current) return;
+        setState({
+          status: "error",
+          query,
+          results: [],
+          totalCount: 0,
+          error: "Search temporarily unavailable",
+        });
+        setNoResultsSuggestions([]);
+        setActiveIndex(-1);
+      });
   }, []);
 
   const handleChange = useCallback((value: string) => {
@@ -110,6 +298,7 @@ export function SearchInput({
   const handleClear = useCallback(() => {
     setRawValue("");
     setState({ status: "idle", query: null, results: [], totalCount: 0 });
+    setNoResultsSuggestions([]);
     setActiveIndex(-1);
     inputRef.current?.focus();
   }, []);
@@ -185,7 +374,7 @@ export function SearchInput({
         {state.status === "no_results" && state.query && (
           <NoResults
             query={state.query}
-            suggestions={getNoResultsSuggestions(state.query)}
+            suggestions={noResultsSuggestions}
             onSelectSuggestion={(s) => {
               if (s.url) {
                 window.location.href = s.url;
