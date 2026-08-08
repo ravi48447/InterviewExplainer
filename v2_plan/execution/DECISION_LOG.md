@@ -211,3 +211,35 @@ Records the significant design/engineering decisions made during Phase 02, with 
 **Why:** Some questions live in the `_root` subcategory or have slug mismatches between `questions.json` and `complete-qa.json`. Forcing a module would either 404 valid questions or require a synthetic "uncategorized" module entity. Making it optional lets the path degrade gracefully — breadcrumbs and structured data still render with domain → stack → question.
 
 **How to apply:** Consumers of `resolveHierarchyPath` must handle the no-module case. Do not assume `path.module` is non-null.
+
+## D24 — Search engine is client-side in-memory, not a server endpoint (P07, T188..T260)
+
+**Decision:** `lib/search/search-engine.ts` runs `normalizeQuery` + `search` against an in-memory index built by `getSearchIndex()` (cached per process). No `/api/search` dependency for the canonical input.
+
+**Why:** The content set is static and small enough to build client-side; an in-memory index gives instant results with zero network latency and zero infra. The legacy `app/search` hit `/api/search?q=...`; the canonical `SearchInput` calls `search()` directly. The `/api/search` route remains for backward compatibility but is no longer the canonical path.
+
+**How to apply:** Use `import { search, normalizeQuery } from "@/lib/search"` in search UIs. Do not fetch `/api/search` from new code.
+
+## D25 — Guest (anonymous) is a first-class auth state, not a fallback (P08, T001..T040)
+
+**Decision:** `AuthStatus` includes `"guest"` explicitly. `useUserState` returns `status: "guest"` when `hasGuestData()` is true and no user is authenticated. Bookmarks and progress transparently use guest localStorage in that state and the server when authenticated.
+
+**Why:** The product lets visitors bookmark and track progress before signing up, then merges that data on login. Treating guest as an explicit state (rather than "unauthenticated + secretly using localStorage") makes the UI honest about what's happening and makes the merge prompt actionable.
+
+**How to apply:** Branch on `status`, not on `user === null`. Use `useBookmarks(isAuthenticated)` / `useProgress(isAuthenticated)` — they handle both stores. Prompt merge via `useGuestData()` when `status === "guest"`.
+
+## D26 — Dashboard shell composes canonical sections; legacy modular cards stay in the legacy glue (P09, T241..T280)
+
+**Decision:** `components/dashboard-v2/dashboard-shell.tsx` composes the new canonical sections (ContinuePrep, DailyPrep, Recommendations, EmptyState) plus a lightweight summary header and quick stats. The richer existing modular cards (`SkillRadarCard`, `ActivityHeatmapCard`, `AchievementsCard`, etc.) remain composed by the legacy `app/dashboard` glue logic and are NOT re-wrapped by the new shell.
+
+**Why:** The legacy cards take granular props (e.g. `StatsGrid` needs `done`, `total`, `fmtTime`, `fmtAvg`) with ~400 lines of formatter glue. Reverse-engineering every formatter into the new shell would risk regressions and duplicate logic. The canonical shell owns the data flow + new prep surfaces; the existing cards continue to work where their glue already lives.
+
+**How to apply:** Import the new sections from `@/components/dashboard-v2`. The dashboard route renders `<DashboardShell/>`. If you need a legacy card in the new layout, pass it the same granular props the legacy page does.
+
+## D27 — Interview sessions persist in sessionStorage, not a server API (P10, T181..T260)
+
+**Decision:** `useInterviewSession` stores the in-flight session in `sessionStorage` (`ie_interview_session`) so a refresh mid-interview restores the current question and answers. Evaluation still hits `/api/mock-interviews/evaluate`. History has no persistence API yet.
+
+**Why:** There is no server-side session-store endpoint. `sessionStorage` survives refreshes within the tab without persisting abandoned sessions forever (cleared on tab close). The `finish()` path clears the key after evaluation. History is shown as an empty-state CTA until a persistence API exists.
+
+**How to apply:** Use `useInterviewSession()` for the full lifecycle. Do not read `sessionStorage` directly. History routes should show an empty state, not mock data.

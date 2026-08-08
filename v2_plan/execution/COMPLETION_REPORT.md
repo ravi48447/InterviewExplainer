@@ -171,3 +171,37 @@ Phase 05 rebuilt the content-discovery hierarchy behind a single canonical resol
 ## Freeze
 
 Hierarchy entity contracts, resolver API, question data contract, answer section types, and route architectures are frozen. See `v2_plan/task-reports/P05T001_T552_P06T001_T717_hierarchy_question_rebuild.md`.
+
+---
+
+# Session 12 — Phase 07–10: Search, User System, Dashboard, Mock Interview
+
+**Status:** ✅ COMPLETE (594 + 692 + 684 + 700 = 2,670 tasks)
+**Branch:** `intex-v2`
+**Files:** 39 added/modified
+
+## What was built
+
+Four phases delivered together, each following the canonical data-layer + page-architecture + route-migration pattern:
+
+1. **Phase 07 — Global Search:** `lib/search/` (types, index, engine with typo tolerance + acronym expansion), `components/search-v2/` (input, results, result-item, no-results), `app/search` migration.
+2. **Phase 08 — User System:** `lib/user/` (types, state wrapping existing auth-context, unified guest↔server bookmark + progress stores, SEO), `components/user-v2/` (auth-form, password-reset, bookmark-list, account-shell), 6 route migrations (login, signup, forgot/reset-password, account, profile).
+3. **Phase 09 — Dashboard:** `lib/dashboard/` (types, loaders with fallbacks, empty-state resolver, SEO), `components/dashboard-v2/` (continue-prep, daily-prep, recommendations, empty-state, shell), `app/dashboard` migration.
+4. **Phase 10 — Mock Interview:** `lib/interview/` (types, data, session state machine, SEO), `components/interview-v2/` (setup, runtime with timer, results, shell), 3 route migrations (landing, start, history).
+
+## Verification gates
+
+- **TypeScript:** ✅ 8 errors (unchanged baseline). Zero new errors.
+- **Tailwind:** ✅ compiles clean.
+- **Architecture:** single canonical import path per domain; server shells + client components; auth/interview-setup pages noindex; guest is a first-class state; graceful fallbacks when optional endpoints are absent.
+
+## Key fixes
+
+1. `search-engine.ts` levenshtein `const`→`let` for array swap (TS2588).
+2. `bookmark-list.tsx` Badge variant typed via `VariantProps<typeof badgeVariants>`; `Difficulty` imported from `@/lib/api`.
+3. `useUserState.login` adapts `(creds)` → legacy `login(email, password)`.
+4. `useInterviewSession` exposes `advance` via the hook (not a standalone export).
+
+## Freeze
+
+Search document/index/engine contracts, user/auth/bookmark/progress contracts, dashboard loader + empty-state contracts, and interview session/evaluation contracts are frozen. See `v2_plan/task-reports/P07T001_T594_P08T001_T692_P09T001_T684_P10T001_T700_search_user_dashboard_interview.md`.

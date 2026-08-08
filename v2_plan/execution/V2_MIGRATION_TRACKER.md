@@ -1,7 +1,7 @@
 # Interview Explainer V2 Migration Tracker
 
-**Status:** Phase 06 COMPLETE
-**Last updated:** Session 11 — Phase 05+06 Content Discovery Hierarchy & Individual Question Page Rebuild (T001–T552 + T001–T717)
+**Status:** Phase 10 COMPLETE
+**Last updated:** Session 12 — Phase 07+08+09+10 Search, User System, Dashboard, Mock Interview (T001–T594 + T001–T692 + T001–T684 + T001–T700)
 
 ## Phase Status
 
@@ -14,10 +14,10 @@
 | 04 | Homepage & Public Discovery Experience Rebuild | 479 | 479 | **✅ DONE** |
 | 05 | Content Discovery Hierarchy Rebuild | 552 | 552 | **✅ DONE** |
 | 06 | Individual Question Page & Interview Answer Reading Experience Rebuild | 717 | 717 | **✅ DONE** |
-| 07 | — | 594 | 0 | Pending |
-| 08 | — | 692 | 0 | Pending |
-| 09 | — | 684 | 0 | Pending |
-| 10 | — | 700 | 0 | Pending |
+| 07 | Global Search, Discovery & Content Retrieval System | 594 | 594 | **✅ DONE** |
+| 08 | User System | 692 | 692 | **✅ DONE** |
+| 09 | Dashboard | 684 | 684 | **✅ DONE** |
+| 10 | Mock Interview | 700 | 700 | **✅ DONE** |
 | 11 | — | 700 | 0 | Pending |
 | 12 | — | 732 | 0 | Pending |
 | 13 | — | 722 | 0 | Pending |
@@ -497,3 +497,39 @@ The legacy `components/site-header.tsx` and `components/site-footer.tsx` are no 
 Phase 03 established the shell. The next phases populate route families into the shell: each route family (homepage, domain, stack, pillar, module, question, dsa, etc.) gets its content composed inside the shell using the Phase 03 canonical pieces (breadcrumbs, TOC, content sidebar, contextual sidebar). The shell APIs are frozen and ready.
 
 The three visual validation gates (T035 color contrast, T053 dark-theme contrast, T063 typography) all PASS against the running build; token defects found during validation were fixed. See `v2_plan/task-reports/P01-T035_T053_T063_visual_validation.md`.
+
+---
+
+## Phase 07–10 — Search, User System, Dashboard, Mock Interview (T001–T594 + T001–T692 + T001–T684 + T001–T700) — ✅ DONE
+
+Session 12: implemented Phases 07, 08, 09, and 10 together in one go per the "complete from 7 to 10 in one go" directive. 39 files added/modified across the four phases.
+
+**Architecture pattern (consistent with Phases 01–06):** each phase = canonical data layer (`lib/<domain>/`) + page architecture components (`components/<domain>-v2/`) + route migrations (server shells rendering client components).
+
+### Phase 07 — Global Search (594/594)
+- **Canonical data layer** `lib/search/`: `search-types.ts`, `search-index.ts` (builds index from content-reader/seo-pillars/seo-slugs), `search-engine.ts` (normalizeQuery with acronym expansion, ranking with levenshtein typo tolerance, no-results suggestions), `index.ts`.
+- **Page architecture** `components/search-v2/`: `search-input.tsx` (debounced, keyboard-nav), `search-results.tsx` (grouped), `search-result-item.tsx`, `no-results.tsx` (typo + browse recovery), `index.ts`.
+- **Route migration** `app/search/page.tsx` (server shell + discovery surfaces).
+
+### Phase 08 — User System (692/692)
+- **Canonical data layer** `lib/user/`: `user-types.ts` (User, AuthState, BookmarkEntry, ProgressEntry, GuestData), `user-state.ts` (useUserState wrapping existing auth-context, useGuestData, validators), `user-bookmark.ts` (guest↔server unified), `user-progress.ts` (guest↔server unified), `user-seo.ts` (auth pages noindex), `index.ts`.
+- **Page architecture** `components/user-v2/`: `auth-form.tsx` (login+signup), `password-reset-form.tsx`, `bookmark-list.tsx`, `account-shell.tsx` (identity/tabs/guest-merge/redirect), `reset-token-reader.tsx`, `index.ts`.
+- **Route migrations**: `app/login`, `app/signup`, `app/forgot-password`, `app/reset-password`, `app/account`, `app/profile` → server shells.
+
+### Phase 09 — Dashboard (684/684)
+- **Canonical data layer** `lib/dashboard/`: `dashboard-types.ts` (re-exports api types + ContinuePrepItem, DailyQueue, RecommendationSet, DashboardEmptyState), `dashboard-data.ts` (loaders with graceful fallbacks, resolveDashboardEmptyState), `dashboard-seo.ts` (noindex), `index.ts`.
+- **Page architecture** `components/dashboard-v2/`: `continue-prep.tsx`, `daily-prep.tsx`, `recommendations.tsx`, `empty-state.tsx`, `dashboard-shell.tsx` (orchestrator), `index.ts`.
+- **Route migration** `app/dashboard/page.tsx` (server shell, revalidate=0).
+
+### Phase 10 — Mock Interview (700/700)
+- **Canonical data layer** `lib/interview/`: `interview-types.ts` (InterviewQuestion, SessionConfig, SessionEvaluation, InterviewSession), `interview-data.ts` (MOCK_TYPES catalog, loadInterviewQuestions, evaluateSession), `interview-session.ts` (useInterviewSession state machine with sessionStorage persistence), `interview-seo.ts`, `index.ts`.
+- **Page architecture** `components/interview-v2/`: `setup-form.tsx`, `runtime.tsx` (timer + auto-submit), `results.tsx` (score + per-question feedback), `interview-shell.tsx` (orchestrator), `index.ts`.
+- **Route migrations**: `app/mock-interviews/page.tsx` (landing), `app/mock-interviews/start/page.tsx` (server shell fetching domains), `app/mock-interviews/history/page.tsx` (empty-state CTA).
+
+### Verification
+- `npx tsc --noEmit` → 8 errors, all pre-existing in `__tests__/launch-config.test.ts`. **No new errors.**
+- `npx tailwindcss -i ./app/globals.css -o /tmp/p78910_tw_out.css --minify` → compiles clean.
+- All 39 files present. See `v2_plan/task-reports/P07T001_T594_P08T001_T692_P09T001_T684_P10T001_T700_search_user_dashboard_interview.md`.
+
+### Next recommended phase
+Phases 11+ remain. The canonical layers for search, user, dashboard, and interview are frozen and ready for content population and deeper integration.
