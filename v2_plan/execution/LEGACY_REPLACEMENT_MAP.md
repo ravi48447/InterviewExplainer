@@ -89,3 +89,23 @@ Maps legacy V1 patterns to their canonical V2 replacements. Use this when migrat
 | `bg-white` / `bg-gray-900` | `bg-background` / `bg-surface` | Theme-aware |
 | `text-gray-500` | `text-muted-foreground` | Theme-aware |
 | hardcoded shadow | `shadow-sm` / `shadow-md` | Tokenized |
+
+## Shell (Phase 03)
+
+| Legacy | V2 canonical | Notes |
+|--------|-------------|-------|
+| `components/site-header.tsx` | `components/shell/public-header.tsx` | Monolithic client header → server frame + client islands |
+| `components/site-footer.tsx` | `components/shell/public-footer.tsx` | Hand-rolled link groups → buildFooterGroups (SEO + gating) |
+| `components/ReadingProgressBar.tsx` | `components/shell/table-of-contents.tsx` | Progress bar folded into TOC scrollspy |
+| `components/ContentTreeNav.tsx` | `components/shell/content-tree-nav.tsx` | One of 5 legacy tree-navs → canonical |
+| `components/PillarTreeNav.tsx` | `components/shell/content-tree-nav.tsx` | Consolidated |
+| `components/StackHierarchyNav.tsx` | `components/shell/content-tree-nav.tsx` | Consolidated |
+| `components/V2ContentTreeNav.tsx` | `components/shell/content-tree-nav.tsx` | Consolidated |
+| `components/QuestionSidebar.tsx` | `components/shell/content-tree-nav.tsx` + `contextual-sidebar.tsx` | Split content tree vs contextual |
+| `app/loading.tsx` spinner + "Loading…" | `components/shell/shell-loading.tsx` | Layout-preserving skeleton |
+| `app/error.tsx` inline markup | `components/shell/shell-error.tsx` | Canonical route error |
+| `app/not-found.tsx` inline markup | `components/shell/shell-not-found.tsx` | Canonical 404 |
+| header theme toggle (in site-header) | `components/shell/header/theme-toggle.tsx` | One placement, 3 modes |
+| header user menu (in site-header) | `components/shell/header/header-user-actions.tsx` | Consolidated, no layout shift |
+| header search button (in site-header) | `components/shell/header/header-search.tsx` | Hub-gated wrapper around GlobalSearch |
+| header mobile nav (in site-header) | `components/shell/header/mobile-nav.tsx` | Sheet-based drawer |

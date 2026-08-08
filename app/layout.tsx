@@ -3,8 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/theme-provider";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
+import { AppShell } from "@/components/shell/public-shell";
 import { AuthProvider } from "@/context/auth-context";
 import { GlobalLoginPrompt } from "@/components/global-login-prompt";
 import "./globals.css";
@@ -80,9 +79,17 @@ export default function RootLayout({
         />
       )}
       <body
-        className={`${inter.variable} ${geistMono.variable} font-sans antialiased min-h-screen flex flex-col`}
+        className={`${inter.variable} ${geistMono.variable} font-sans antialiased min-h-screen`}
         suppressHydrationWarning
       >
+        {/*
+         * P03-T001..T031: Canonical application shell.
+         * Providers → AppShell (resolves variant → header/footer). The shell
+         * owns the skip-link, main landmark, header, and footer so they stay
+         * consistent across every route (T013, T014). AuthProvider wraps the
+         * shell so the header user-actions island can read auth state, but a
+         * failed/unknown auth state never blocks the shell (T051, T118).
+         */}
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -91,18 +98,8 @@ export default function RootLayout({
         >
           <AuthProvider>
             <GlobalLoginPrompt />
-            <a
-              href="#main-content"
-              className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-primary-foreground px-4 py-2 rounded-md z-50 font-medium transition-all"
-            >
-              Skip to content
-            </a>
-            <SiteHeader />
-            <main id="main-content" className="min-w-0 flex-1">
-              {children}
-            </main>
+            <AppShell>{children}</AppShell>
           </AuthProvider>
-          <SiteFooter />
         </ThemeProvider>
       </body>
     </html>

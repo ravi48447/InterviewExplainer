@@ -117,3 +117,41 @@ Records the significant design/engineering decisions made during Phase 02, with 
 **Decision:** Page 1 self-canonicalizes. Page 2+ emits `noindex, follow` with `rel prev/next` and a canonical tag pointing to page 1.
 
 **Why:** Indexing every pagination page creates duplicate-content clutter. Canonical-to-page-1 consolidates link equity; noindex prevents indexation of thin pagination variants (T132, T680–T699).
+
+## D12 — The application shell is a single AppShell resolver, not per-route layouts (P03-T013/T032)
+
+**Decision:** One `AppShell` client component resolves the shell variant (`public`/`auth`/`dashboard`/`app`) from `usePathname()` and renders the matching header/footer. Route-specific shell forks are forbidden.
+
+**Why:** Consistency across routes (T013, T014) and the shell must not remount on intra-variant navigation (W070). Per-route layout wrappers would duplicate the header/footer and drift. The variant is a property of the URL, not of the layout tree.
+
+**How to apply:** New routes do not add a layout-level header/footer. They render inside `AppShell` (already mounted at the root). Variant-specific behavior lives in the variant components (`PublicHeader`, `AuthShellFrame`, `DashboardShellFrame`), not in route layouts.
+
+## D13 — The header is a server-rendered frame with small client islands (P03-T033/T036)
+
+**Decision:** `PublicHeader` is a server component. Only interactive bits become client JS: mobile drawer (`MobileNav`), learn dropdown (`DesktopLearnDropdown`), theme toggle (`ThemeToggle`), user menu (`HeaderUserActions`), search modal (`HeaderSearch`). The brand and primary nav links render as crawlable `<a>` tags on the server.
+
+**Why:** Crawlability (search engines see nav links without JS — Z057, T034) and performance (the shell frame ships near-zero JS — AA). The navigation data layer (`navigation-data.ts`) is pure (no React) specifically so the server can render the link list.
+
+**How to apply:** Do not add `'use client'` to the header frame or nav data layer. New interactive header behavior is a new small client island imported by the frame, not a conversion of the frame to client.
+
+## D14 — Navigation data is pure data; icons are string names resolved by a map (P03-T062/T068)
+
+**Decision:** `navigation-data.ts` returns `ShellNavLink` objects where `icon` is a string (Lucide icon name). `nav-icons.tsx` (client) maps the string to the component. The header/nav render server-side using the string; client islands resolve the icon.
+
+**Why:** Server components can't pass component instances through props from a pure-data module, but they can pass strings. This keeps tree-shaking honest (only used icons are imported in the resolver) and the data layer server-safe.
+
+**How to apply:** Add new nav icons by adding the Lucide import to `nav-icons.tsx`'s map and the string name to the nav data. Never import Lucide icons in `navigation-data.ts`.
+
+## D15 — No bottom navigation on the public shell (P03-I, T097)
+
+**Decision:** The public content shell does not get a bottom tab bar. Mobile navigation uses the drawer (`MobileNav`). The dashboard shell may justify a bottom nav later.
+
+**Why:** Bottom nav competes with the content for the user's attention on mobile and duplicates the drawer's destinations. The shell exists to help users find content, not to be the product. A dashboard (task-oriented, few destinations) is the right place for a bottom bar; a content site is not.
+
+## D16 — The shadcn sidebar primitive is not used for public content sidebars (P03-O)
+
+**Decision:** `ContentSidebar` and `ContextualSidebar` are lightweight server-rendered containers (`<aside>` + sticky + internal scroll), not the shadcn `Sidebar` primitive (which is a cookie-backed provider meant for app dashboards).
+
+**Why:** The public content shell needs crawlable, zero-JS containers. The shadcn sidebar ships a context provider and cookie state — appropriate for a dashboard, not for content navigation that must render on the server.
+
+**How to apply:** Use `ContentSidebar`/`ContextualSidebar` for public content routes. Reserve the shadcn `Sidebar` primitive for authenticated dashboard surfaces (Phase AF) where collapse-state persistence is desired.
