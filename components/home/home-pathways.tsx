@@ -24,9 +24,9 @@ export function HomePathways() {
     <section
       id="preparation-paths"
       aria-labelledby="home-pathways-heading"
-      className="border-b border-border bg-surface"
+      className="border-b border-border/60 bg-surface"
     >
-      <PageContainer className="py-16 sm:py-20">
+      <PageContainer className="py-14 sm:py-16">
         <SectionHeader
           as="h2"
           title="Choose a preparation path"
@@ -55,7 +55,7 @@ export function HomePathways() {
             <li key={path.href}>
               <Link
                 href={path.href}
-                className="group flex h-full flex-col rounded-lg border border-border bg-card p-5 transition-colors duration-200 ease-out hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="group flex h-full flex-col rounded-lg border border-border/60 bg-card p-5 transition-colors duration-200 ease-out hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <div className="flex items-start gap-3">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-surface">

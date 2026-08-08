@@ -27,7 +27,7 @@ export function HomeHero() {
   return (
     <section
       aria-labelledby="home-hero-heading"
-      className="border-b border-border bg-background"
+      className="border-b border-border/60 bg-background"
     >
       <PageContainer className="py-16 sm:py-20 lg:py-24">
         <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
@@ -100,7 +100,7 @@ export function HomeHero() {
 
           {/* Compact proof element — shows the product's intelligence */}
           <div className="hidden lg:flex lg:justify-end">
-            <div className="relative w-full max-w-sm rounded-xl border border-border bg-card p-8 shadow-sm">
+            <div className="relative w-full max-w-sm rounded-xl border border-border/60 bg-card p-7">
               <div className="flex items-center gap-2 mb-6">
                 <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface">
                   <span className="text-xs font-bold text-primary">Q</span>

@@ -23,13 +23,13 @@ export function HomeMockShowcase() {
   return (
     <section
       aria-labelledby="home-mock-heading"
-      className="border-b border-border bg-primary/5"
+      className="border-b border-border/60 bg-primary/5"
     >
-      <PageContainer className="py-16 sm:py-20">
+      <PageContainer className="py-14 sm:py-16">
         <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
           {/* Visual proof — ScoreRing + voice waveform */}
           <div className="order-2 lg:order-1 flex flex-col items-center">
-            <div className="relative rounded-xl border border-border bg-card p-8 shadow-sm w-full max-w-sm">
+            <div className="relative rounded-xl border border-border/60 bg-card p-7 w-full max-w-sm">
               <div className="flex items-center gap-2 mb-6">
                 <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface">
                   <Radio className="h-4 w-4 text-primary" aria-hidden="true" />

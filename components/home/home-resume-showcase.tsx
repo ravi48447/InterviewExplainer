@@ -27,9 +27,9 @@ export function HomeResumeShowcase() {
   return (
     <section
       aria-labelledby="home-resume-heading"
-      className="border-b border-border bg-background"
+      className="border-b border-border/60 bg-background"
     >
-      <PageContainer className="py-16 sm:py-20">
+      <PageContainer className="py-14 sm:py-16">
         {/* Centered headline block */}
         <div className="max-w-2xl mx-auto text-center">
           <p className="type-label text-primary mb-3">Resume Intelligence</p>
@@ -43,7 +43,7 @@ export function HomeResumeShowcase() {
 
         {/* Compact proof spotlight — centered, narrower than the mock band's card */}
         <div className="mt-10 flex justify-center">
-          <div className="relative w-full max-w-sm rounded-xl border border-border bg-card p-7 shadow-sm">
+          <div className="relative w-full max-w-sm rounded-xl border border-border/60 bg-card p-6">
             <div className="flex items-center gap-2 mb-5">
               <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface">
                 <FileText className="h-4 w-4 text-primary" aria-hidden="true" />

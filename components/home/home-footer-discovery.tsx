@@ -18,7 +18,7 @@ export function HomeFooterDiscovery() {
   const groups = getHomeFooterLinkGroups();
 
   return (
-    <nav aria-label="Explore the platform" className="border-b border-border bg-surface">
+    <nav aria-label="Explore the platform" className="border-b border-border/60 bg-surface">
       <PageContainer className="py-12">
         <h2 className="type-label text-muted-foreground">
           Explore the platform

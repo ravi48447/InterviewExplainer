@@ -23,9 +23,9 @@ export function HomeFeaturedQuestions() {
   return (
     <section
       aria-labelledby="home-featured-questions-heading"
-      className="border-b border-border bg-background"
+      className="border-b border-border/60 bg-background"
     >
-      <PageContainer className="py-16 sm:py-20">
+      <PageContainer className="py-14 sm:py-16">
         <SectionHeader
           as="h2"
           title="Featured interview questions"

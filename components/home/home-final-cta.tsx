@@ -19,9 +19,9 @@ export function HomeFinalCTA() {
   return (
     <section
       aria-labelledby="home-final-cta-heading"
-      className="border-b border-border bg-background"
+      className="border-b border-border/60 bg-background"
     >
-      <PageContainer className="py-16 sm:py-20">
+      <PageContainer className="py-14 sm:py-16">
         <div className="mx-auto max-w-3xl rounded-2xl border border-primary/15 bg-primary/[0.03] px-6 py-12 text-center sm:px-12 sm:py-14">
           <div className="mx-auto max-w-2xl">
             <h2

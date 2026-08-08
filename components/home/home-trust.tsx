@@ -23,9 +23,9 @@ export function HomeTrust() {
   return (
     <section
       aria-labelledby="home-trust-heading"
-      className="border-b border-border bg-surface"
+      className="border-b border-border/60 bg-surface"
     >
-      <PageContainer className="py-16 sm:py-20">
+      <PageContainer className="py-14 sm:py-16">
         <SectionHeader
           as="h2"
           title="Built on real content depth"
@@ -66,7 +66,7 @@ export function HomeTrust() {
               <li key={hub.href}>
                 <Link
                   href={hub.href}
-                  className="group flex h-full flex-col rounded-lg border border-border bg-card p-5 transition-colors duration-200 ease-out hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="group flex h-full flex-col rounded-lg border border-border/60 bg-card p-5 transition-colors duration-200 ease-out hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <h3 className="text-sm font-semibold text-foreground group-hover:text-primary">
                     {hub.title}

@@ -27,7 +27,7 @@ export function HomeHowItWorks() {
   return (
     <section
       aria-labelledby="home-how-it-works-heading"
-      className="border-b border-border bg-background"
+      className="border-b border-border/60 bg-background"
     >
       <PageContainer className="py-14 sm:py-16">
         <div className="max-w-2xl mb-8">
@@ -47,7 +47,7 @@ export function HomeHowItWorks() {
               <li key={s.step}>
                 <Link
                   href={s.href}
-                  className="group relative flex h-full flex-col rounded-lg border border-border bg-card p-6 transition-colors duration-200 ease-out hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="group relative flex h-full flex-col rounded-lg border border-border/60 bg-card p-5 transition-colors duration-200 ease-out hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   {/* Step number — the focal point. Big, primary, tabular. */}
                   <div className="flex items-center justify-between">

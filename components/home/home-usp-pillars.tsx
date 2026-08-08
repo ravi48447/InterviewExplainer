@@ -53,7 +53,7 @@ export function HomeUSPPillars() {
   return (
     <section
       aria-labelledby="home-usp-heading"
-      className="border-b border-border bg-surface"
+      className="border-b border-border/60 bg-surface"
     >
       <PageContainer className="py-14 sm:py-16">
         <div className="max-w-2xl mb-8">
@@ -74,7 +74,7 @@ export function HomeUSPPillars() {
               <li key={p.href}>
                 <Link
                   href={p.href}
-                  className="group flex h-full flex-col rounded-lg border border-border bg-card p-6 transition-colors duration-200 ease-out hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="group flex h-full flex-col rounded-lg border border-border/60 bg-card p-5 transition-colors duration-200 ease-out hover:border-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <div className="flex items-center gap-3 mb-4">
                     <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border", tint.icon)}>
