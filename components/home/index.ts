@@ -9,11 +9,13 @@
  */
 
 export { HomeHero } from "./home-hero";
+export { HomeUSPPillars } from "./home-usp-pillars";
 export { HomePathways } from "./home-pathways";
 export { HomeTechnologies } from "./home-technologies";
 export { HomeDSA } from "./home-dsa";
 export { HomeFeaturedQuestions } from "./home-featured-questions";
-export { HomeCapabilities } from "./home-capabilities";
+export { HomeMockShowcase } from "./home-mock-showcase";
+export { HomeResumeShowcase } from "./home-resume-showcase";
 export { HomeTrust } from "./home-trust";
 export { HomeFooterDiscovery } from "./home-footer-discovery";
 export { HomeSearchEntry } from "./home-search-entry";

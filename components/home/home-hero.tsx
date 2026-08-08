@@ -2,64 +2,93 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { HOME_HERO } from "@/lib/home/home-data";
+import { PageContainer } from "@/components/page-container";
+import { ScoreRing } from "@/components/ui/score-ring";
+import { HOME_HERO, getHomeContentStats } from "@/lib/home/home-data";
 
 /**
- * HomeHero — calm, focused, readable opening (P04-T031..T048).
+ * HomeHero — orient in 3 seconds.
  *
- * Replaces the V1 90vh dual-gradient hero + animated dashboard visual with a
- * restrained, server-rendered orientation block:
- *   - one primary H1 (P04-T021/T032/T259/T438)
- *   - one concise supporting sentence (P04-T022/T033)
- *   - one primary CTA + one secondary discovery action (P04-T034/T035)
- *   - no badge wall, no decorative stats, no gradient text (P04-T037/T038/T039/T193)
- *   - no surface layering of cards-in-gradients (P04-T040)
- *   - subtle background, never reducing readability (P04-T041)
- *   - max text width for scanning (P04-T042)
- *   - stable vertical rhythm, no layout shift (P04-T043/T046)
- *   - mobile-first, no excessive height (P04-T044/T045)
- *   - primary content server-rendered (P04-T047) — this is a server component
- *   - CTA uses canonical URL (P04-T048)
+ * One USP-forward H1 + concise supporting line + one primary CTA + a compact
+ * proof element (ScoreRing + sample question) that *shows* the product's
+ * intelligence rather than describing it. Trust microline derived from
+ * content (no hardcoded stats). Server-rendered.
  */
 export function HomeHero() {
+  const stats = getHomeContentStats();
+  const questionCount = stats.find((s) => s.label.startsWith("Curated"))?.value;
+
   return (
     <section
       aria-labelledby="home-hero-heading"
       className="border-b border-border bg-background"
     >
-      <div className="page-container py-16 sm:py-20 lg:py-24">
-        {/* P04-T042: max text width for scanning. */}
-        <div className="max-w-2xl">
-          <h1
-            id="home-hero-heading"
-            className="type-display text-foreground leading-tight tracking-tight"
-          >
-            {HOME_HERO.headline}
-          </h1>
-
-          {/* P04-T022/T033: one concise supporting sentence, readable body size. */}
-          <p className="mt-4 max-w-xl text-lg text-muted-foreground leading-relaxed">
-            {HOME_HERO.supporting}
-          </p>
-
-          {/* P04-T023/T034/T035/T171/T172: one primary + one secondary CTA. */}
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Link
-              href={HOME_HERO.primaryCta.href}
-              className={cn(buttonVariants({ variant: "primary", size: "lg" }))}
+      <PageContainer className="py-16 sm:py-20 lg:py-24">
+        <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
+          {/* Copy */}
+          <div className="max-w-2xl">
+            <h1
+              id="home-hero-heading"
+              className="type-display text-foreground leading-[1.05] tracking-tight"
             >
-              {HOME_HERO.primaryCta.label}
-              <ArrowRight className="ml-1" aria-hidden="true" />
-            </Link>
-            <Link
-              href={HOME_HERO.secondaryCta.href}
-              className={cn(buttonVariants({ variant: "outline", size: "lg" }))}
-            >
-              {HOME_HERO.secondaryCta.label}
-            </Link>
+              {HOME_HERO.headline}
+            </h1>
+
+            <p className="mt-5 max-w-xl text-lg text-muted-foreground leading-relaxed">
+              {HOME_HERO.supporting}
+            </p>
+
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link
+                href={HOME_HERO.primaryCta.href}
+                className={cn(buttonVariants({ variant: "primary", size: "lg" }))}
+              >
+                {HOME_HERO.primaryCta.label}
+                <ArrowRight className="ml-1" aria-hidden="true" />
+              </Link>
+              <Link
+                href={HOME_HERO.secondaryCta.href}
+                className={cn(buttonVariants({ variant: "outline", size: "lg" }))}
+              >
+                {HOME_HERO.secondaryCta.label}
+              </Link>
+            </div>
+
+            {questionCount && (
+              <p className="mt-6 text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">{questionCount}</span> curated questions · {stats.find((s) => s.label === "Languages live today")?.value ?? "Java & Python"} live today
+              </p>
+            )}
+          </div>
+
+          {/* Compact proof element — shows the product's intelligence */}
+          <div className="hidden lg:flex lg:justify-end">
+            <div className="relative w-full max-w-sm rounded-xl border border-border bg-card p-8 shadow-sm">
+              <div className="flex items-center gap-2 mb-6">
+                <span className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface">
+                  <span className="text-xs font-bold text-primary">Q</span>
+                </span>
+                <span className="text-sm font-semibold text-foreground">Sample question</span>
+              </div>
+              <p className="text-sm text-foreground leading-relaxed mb-6">
+                &ldquo;Find the longest substring without repeating characters.&rdquo;
+              </p>
+              <div className="flex flex-col items-center text-center">
+                <ScoreRing
+                  value={82}
+                  size={108}
+                  stroke={8}
+                  label="answer score"
+                  ariaLabel="Sample answer score of 82"
+                />
+              </div>
+              <p className="mt-4 text-xs text-muted-foreground text-center">
+                Pattern: Sliding Window · O(n) optimal
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </PageContainer>
     </section>
   );
 }

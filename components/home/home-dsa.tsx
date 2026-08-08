@@ -36,7 +36,7 @@ export function HomeDSA() {
     <section
       id="dsa"
       aria-labelledby="home-dsa-heading"
-      className="border-b border-border bg-surface"
+      className="border-b border-border bg-background"
     >
       <PageContainer className="py-16 sm:py-20">
         <SectionHeader

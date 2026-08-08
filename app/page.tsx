@@ -1,11 +1,13 @@
 import dynamic from "next/dynamic";
 import {
   HomeHero,
+  HomeUSPPillars,
   HomePathways,
   HomeTechnologies,
   HomeDSA,
   HomeFeaturedQuestions,
-  HomeCapabilities,
+  HomeMockShowcase,
+  HomeResumeShowcase,
   HomeTrust,
   HomeFooterDiscovery,
 } from "@/components/home";
@@ -15,17 +17,19 @@ import {
  *
  * The homepage is an *orientation layer* (P04 §10-18): it helps a visitor
  * understand what Interview Explainer is, who it's for, and what they can do
- * next. It is NOT "everything on one page" — the V1 anti-pattern of a 90vh
- * gradient hero, an animated dashboard visual, feature-card walls, an
- * 8-language grid, a "Built Different" superlative section, a newsletter
- * capture, and a giant final CTA has been removed (P04-T014/T037/T038/T039/
- * T040/T094/T126/T128/T131..134/T144/T180..190/T193/T346..348/T386..T395).
+ * next. It is NOT "everything on one page".
  *
- * Section order (P04-T015) follows the target journey:
- *   LAND (hero) → CHOOSE A PATH (pathways) → DISCOVER (technologies,
- *   featured questions) → UNDERSTAND VALUE (capabilities) → TRUST (trust) →
- *   CONTINUE (footer discovery). Every section leads somewhere meaningful
- *   (P04-T019) with no dead ends (P04-T020).
+ * Section order (P04-T015) follows the psychological arc:
+ *   LAND (hero) → DIFFERENTIATE (USP pillars) → CHOOSE A PATH (pathways) →
+ *   DISCOVER (technologies, DSA, featured questions) → SEE THE PRODUCTS
+ *   (mock showcase, resume showcase) → TRUST (trust) → CONTINUE
+ *   (footer discovery). Every section leads somewhere meaningful (P04-T019)
+ *   with no dead ends (P04-T020).
+ *
+ * Background rhythm: sections alternate bg-background ↔ bg-surface so the eye
+ * moves down the page instead of seeing a flat card wall. Featured-product
+ * bands (mock + resume) use a primary-tinted band to read as products, not
+ * catalog entries.
  *
  * Server component: all discovery sections are server-rendered (P04-T047/
  * T260/T278/T282) so the homepage is indexable without JS and the major hubs
@@ -47,20 +51,21 @@ export default function HomePage() {
       {/* Search is a secondary discovery aid, gated by the search hub. */}
       <HomeSearchEntry />
 
-      {/* P04-T017: mid-page discovery helps users explore preparation paths. */}
+      {/* DIFFERENTIATE: why this, not a generic prep site. */}
+      <HomeUSPPillars />
+
+      {/* CHOOSE A PATH + DISCOVER CONTENT. */}
       <HomePathways />
       <HomeTechnologies />
       <HomeDSA />
       <HomeFeaturedQuestions />
 
-      {/* P04-T125: capabilities explained through user outcomes. */}
-      <HomeCapabilities />
+      {/* SEE THE PRODUCTS: featured bands for the flagship USPs. */}
+      <HomeMockShowcase />
+      <HomeResumeShowcase />
 
-      {/* P04-T018/T135: lower-page trust supports credibility without
-          overwhelming the primary experience. */}
+      {/* TRUST + CONTINUE. */}
       <HomeTrust />
-
-      {/* P04-T019/T268: exit paths + crawl distribution to major hubs. */}
       <HomeFooterDiscovery />
     </main>
   );

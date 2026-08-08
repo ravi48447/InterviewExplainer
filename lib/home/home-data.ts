@@ -43,11 +43,11 @@ export interface HomeHero {
 }
 
 export const HOME_HERO: HomeHero = {
-  headline: "Interview prep that knows your stack",
+  headline: "Crack the interview by learning the pattern, not memorizing problems.",
   supporting:
-    "Domain-specific questions, system design, and DSA — curated for your language, track, and experience level. No generic content.",
-  primaryCta: { label: "Browse interview questions", href: "/domains" },
-  secondaryCta: { label: "Choose a career path", href: "#preparation-paths" },
+    "Pattern-based DSA, AI mock interviews, resume scoring, and domain-specific Q&A — built for the way interviews actually test you.",
+  primaryCta: { label: "Start practicing", href: "/dsa" },
+  secondaryCta: { label: "Browse interview questions", href: "/domains" },
 };
 
 // ─── Preparation pathways (P04-T067..T078) ───────────────────────────────────
@@ -72,7 +72,6 @@ const PATHWAY_ORDER: string[] = [
   "/go-fresher",
   "/java-backend-intermediate",
   "/python-backend-intermediate",
-  "/dsa",
 ];
 
 export function getHomePathways(): HomePathway[] {
@@ -156,24 +155,26 @@ export interface HomeFeaturedQuestion {
 interface QuestionSeed {
   domainSlug: string;
   moduleSlug: string;
-  /** Canonical href template; the first question's slug is appended. */
+  /** Canonical href template; {slug} is replaced with each question's slug
+   *  so every featured question resolves to a unique destination. */
   hrefPrefix: string;
   context: string;
 }
 
 const FEATURED_SEEDS: QuestionSeed[] = [
-  { domainSlug: "java-backend-intermediate", moduleSlug: "core-java", hrefPrefix: "/core-java-interview-questions#all-questions", context: "Java" },
-  { domainSlug: "java-backend-intermediate", moduleSlug: "java-oop", hrefPrefix: "/java-oop-interview-questions#all-questions", context: "Java" },
-  { domainSlug: "java-backend-intermediate", moduleSlug: "spring-boot", hrefPrefix: "/spring-boot-interview-questions#all-questions", context: "Java" },
-  { domainSlug: "python-backend-intermediate", moduleSlug: "core-python", hrefPrefix: "/core-python-interview-questions#all-questions", context: "Python" },
-  { domainSlug: "go-intermediate", moduleSlug: "core-go", hrefPrefix: "/go-intermediate#pillar-P01", context: "Go" },
+  { domainSlug: "java-backend-intermediate", moduleSlug: "core-java", hrefPrefix: "/core-java-interview-questions#{slug}", context: "Java" },
+  { domainSlug: "java-backend-intermediate", moduleSlug: "java-oop", hrefPrefix: "/java-oop-interview-questions#{slug}", context: "Java" },
+  { domainSlug: "java-backend-intermediate", moduleSlug: "spring-boot", hrefPrefix: "/spring-boot-interview-questions#{slug}", context: "Java" },
+  { domainSlug: "python-backend-intermediate", moduleSlug: "core-python", hrefPrefix: "/core-python-interview-questions#{slug}", context: "Python" },
+  { domainSlug: "go-intermediate", moduleSlug: "core-go", hrefPrefix: "/go-intermediate#{slug}", context: "Go" },
 ];
 
 /**
  * Returns up to `limit` featured questions derived from canonical content.
  * Falls back to an empty array if content is unavailable (P04-T305/T306 — one
  * failed section never breaks the homepage). Results are memoized per-process
- * to avoid repeated fs reads (P04-T307).
+ * to avoid repeated fs reads (P04-T307). Each question resolves to a unique
+ * href (no duplicate destinations).
  */
 export function getHomeFeaturedQuestions(limit = 5): HomeFeaturedQuestion[] {
   const cacheKey = `_ie_homeFeaturedQ_${limit}`;
@@ -191,7 +192,7 @@ export function getHomeFeaturedQuestions(limit = 5): HomeFeaturedQuestion[] {
         if (q) {
           out.push({
             title: q.title ?? q.slug,
-            href: seed.hrefPrefix,
+            href: seed.hrefPrefix.replace("{slug}", q.slug),
             context: seed.context,
           });
         }
@@ -243,7 +244,12 @@ export function getHomeContentStats(): HomeContentStat[] {
     if (totalQuestions > 0) {
       stats.push({ label: "Curated interview questions", value: `${totalQuestions}+` });
     }
-    stats.push({ label: "Cost to browse", value: "Free" });
+    if (isHubEnabled("dsa")) {
+      stats.push({ label: "DSA patterns covered", value: "6" });
+    }
+    if (isHubEnabled("mockInterviews")) {
+      stats.push({ label: "Interview formats", value: "Voice + text" });
+    }
   } catch {
     // P04-T305: graceful failure.
   }
@@ -366,20 +372,124 @@ export function getHomeDSAPatterns(): HomeDSAPattern[] {
   return DSA_PATTERNS;
 }
 
+// ─── USP pillars (P04-T120 alt) ─────────────────────────────────────────────
+/**
+ * The four differentiators — why this and not a generic prep site. Each pillar
+ * is an outcome + a concrete proof point (not a feature blurb). Visually
+ * distinct from the card grids: wider tiles on a surface band. Surfaces only
+ * the pillars whose underlying hub is launch-ready.
+ */
+export interface HomeUSPPillar {
+  /** Lucide icon slug resolved in HomeUSPPillars. */
+  icon: string;
+  /** Bold one-line outcome. */
+  title: string;
+  /** One-line proof point — concrete, not a superlative. */
+  proof: string;
+  /** Canonical destination. */
+  href: string;
+  /** CTA label. */
+  cta: string;
+}
+
+const USP_PILLARS: HomeUSPPillar[] = [
+  { icon: "layers", title: "DSA by pattern, not by problem", proof: "6 core patterns cover the techniques behind 80% of interview questions.", href: "/dsa", cta: "Drill DSA" },
+  { icon: "radio", title: "AI mock interviews", proof: "Speak out loud, get scored on content, clarity, and structure — instantly.", href: "/mock-interviews", cta: "Try a mock" },
+  { icon: "file-text", title: "Resume intelligence", proof: "Score your resume against any job description and close every gap before you apply.", href: "/dashboard/resume", cta: "Score your resume" },
+  { icon: "message-square", title: "Domain-specific Q&A", proof: "Questions modeled on real interviews for your stack and level — not generic theory.", href: "/domains", cta: "Browse questions" },
+];
+
+export function getHomeUSPPillars(): HomeUSPPillar[] {
+  return USP_PILLARS.filter((p) => {
+    if (p.href.startsWith("/dsa")) return isHubEnabled("dsa");
+    if (p.href.startsWith("/mock-interviews")) return isHubEnabled("mockInterviews");
+    return true;
+  });
+}
+
+// ─── Mock interview showcase (P04-T120 alt) ─────────────────────────────────
+/**
+ * A dedicated featured-product band for AI mock interviews — a flagship USP
+ * that was previously buried in a text-only capabilities list. Demonstrates
+ * the product with a ScoreRing + voice-waveform visual rather than describing
+ * it. Surfaces only when mockInterviews is enabled.
+ */
+export interface HomeMockShowcase {
+  headline: string;
+  supporting: string;
+  /** Three feature points rendered beside the visual. */
+  points: { title: string; detail: string }[];
+  cta: { label: string; href: string };
+  /** Sample score shown in the ScoreRing proof visual. */
+  sampleScore: number;
+}
+
+export function getHomeMockShowcase(): HomeMockShowcase | null {
+  if (!isHubEnabled("mockInterviews")) return null;
+  return {
+    headline: "Practice the round out loud — before the real one.",
+    supporting:
+      "Talk through your answers with an AI interviewer. Get scored on content, clarity, and structure the moment you stop speaking.",
+    points: [
+      { title: "Voice or text", detail: "Speak naturally with real-time transcription, or type your answers." },
+      { title: "Instant scoring", detail: "Content coverage, clarity, and structure scored across every answer." },
+      { title: "Model answers", detail: "Compare your response to an expert answer after every question." },
+    ],
+    cta: { label: "Start a mock interview", href: "/mock-interviews" },
+    sampleScore: 78,
+  };
+}
+
+// ─── Resume intelligence showcase (P04-T120 alt) ─────────────────────────────
+/**
+ * A dedicated featured-product band for resume intelligence — a flagship USP
+ * that was entirely absent from the homepage. Demonstrates the product with a
+ * ScoreRing + job-match coverage visual. Surfaces only when dashboard is
+ * enabled (the resume tool lives under /dashboard/resume).
+ */
+export interface HomeResumeShowcase {
+  headline: string;
+  supporting: string;
+  points: { title: string; detail: string }[];
+  cta: { label: string; href: string };
+  sampleScore: number;
+  /** Sample coverage % for the job-match proof visual. */
+  sampleCoverage: number;
+}
+
+export function getHomeResumeShowcase(): HomeResumeShowcase | null {
+  if (!isHubEnabled("dashboard")) return null;
+  return {
+    headline: "See how your resume scores against any job description.",
+    supporting:
+      "Upload your resume, paste a job description, and get a match score with every gap highlighted — before a recruiter ever sees it.",
+    points: [
+      { title: "Overall match score", detail: "One number that tells you how aligned your resume is to the role." },
+      { title: "Gap analysis", detail: "Every missing requirement surfaced with severity and a fix." },
+      { title: "Job-fit coverage", detail: "See which requirements you hit, partially meet, or miss." },
+    ],
+    cta: { label: "Score your resume", href: "/dashboard/resume" },
+    sampleScore: 72,
+    sampleCoverage: 68,
+  };
+}
+
 // ─── Section order (P04-T015) ───────────────────────────────────────────────
 /**
  * The single intentional homepage narrative (P04-T015). Each section leads
  * somewhere meaningful (P04-T019) and there are no dead ends (P04-T020).
- * The order follows the target journey: LAND → UNDERSTAND → CHOOSE A PATH →
- * DISCOVER CONTENT → START → CONTINUE.
+ * The order follows the target journey: LAND → DIFFERENTIATE → CHOOSE A PATH →
+ * DISCOVER CONTENT → SEE THE PRODUCTS → TRUST → CONTINUE.
  */
 export const HOME_SECTION_ORDER = [
   "hero",
+  "usp-pillars",
   "preparation-paths",
   "technologies",
   "dsa",
   "featured-questions",
-  "capabilities",
+  "mock-showcase",
+  "resume-showcase",
   "trust",
   "footer-discovery",
 ] as const;

@@ -18,7 +18,7 @@ export function HomeFooterDiscovery() {
   const links = getHomeFooterLinks();
 
   return (
-    <nav aria-label="Explore the platform" className="border-b border-border bg-surface">
+    <nav aria-label="Explore the platform" className="border-b border-border bg-background">
       <PageContainer className="py-12">
         <h2 className="text-sm font-semibold text-muted-foreground">
           Explore the platform
