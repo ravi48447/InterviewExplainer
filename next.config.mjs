@@ -1,8 +1,41 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.join(__dirname, '..');
+
+// The repo ships TWO Next apps that share one `content/` tree at the repo
+// root: a root app (`./package.json`) and a nested app (`./frontend/package.json`).
+// Either may be the build target on a deploy platform. The `content/` directory
+// therefore sits at different relative depths depending on which app is built:
+//   - root app      -> content is at <repoRoot>/content  (== ./content from app)
+//   - frontend app  -> content is at <repoRoot>/content  (== ../content from app)
+// Resolve it robustly by probing candidate locations, so `import "@content/..."`
+// works no matter which app the platform builds (fixes the
+// "Module not found: Can't resolve '../../content/ruby-backend-intermediate/_index.json'"
+// error that occurred when the root app was built and `../../content` escaped
+// the checkout).
+const contentCandidates = [
+  path.join(__dirname, 'content'),        // app at repo root
+  path.join(__dirname, '..', 'content'),  // app nested one level below repo root
+];
+const contentDir = contentCandidates.find((p) => fs.existsSync(p));
+if (!contentDir) {
+  throw new Error(
+    `Could not locate the shared content/ directory. Looked in:\n  ${contentCandidates.join('\n  ')}\n`,
+  );
+}
+// The repo root is the parent of the content dir.
+const repoRoot = path.dirname(contentDir);
+
+// Relative path from THIS app's dir to the shared content dir.
+// - root app      -> "content"      (content is a child of the app/repo root)
+// - frontend app  -> "../content"  (content is the app's sibling at repo root)
+// Used as the Turbopack/webpack alias target so `@content/*` resolves to the
+// shared content tree regardless of which app is built. Kept relative (never
+// absolute) because Turbopack rejects absolute alias targets that resolve
+// outside the build project root.
+const contentRel = path.relative(__dirname, contentDir);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -36,16 +69,34 @@ const nextConfig = {
     ];
   },
 
-  // Let file-tracing walk into the sibling `content/` directory — lib/seo-slugs.ts
-  // imports `../../content/java-backend-intermediate/_index.json` as the single
+  // Let file-tracing walk into the shared `content/` directory — lib/seo-slugs.ts
+  // imports `@content/java-backend-intermediate/_index.json` as the single
   // source of truth for SEO module names.
   outputFileTracingRoot: repoRoot,
 
   // Pin Turbopack's workspace root to the repo root so that sibling imports
-  // from `../../content/...` resolve cleanly while still keeping a predictable
+  // from `@content/...` resolve cleanly while still keeping a predictable
   // root (previously there was a dup root package-lock.json creating ambiguity).
   turbopack: {
     root: repoRoot,
+    // Alias `@content/*` to the shared content dir at the repo root, so imports
+    // resolve identically whether the app is at the repo root or nested under
+    // `frontend/`. Replaces the old relative `../../content/...` imports that
+    // broke when the root app was the build target (the path escaped the repo).
+    // Target is RELATIVE to this app dir (e.g. "../content/*" or "content/*")
+    // because Turbopack rejects absolute alias targets outside the project.
+    resolveAlias: {
+      '@content/*': path.join(contentRel, '/*'),
+    },
+  },
+
+  // Webpack fallback (used when building without Turbopack or for tooling that
+  // reads webpack config). Same `@content/*` -> shared content dir mapping.
+  webpack: (config) => {
+    config.resolve ??= {};
+    config.resolve.alias ??= {};
+    config.resolve.alias['@content'] = contentDir;
+    return config;
   },
 
   // Tree-shake huge barrel imports. Without this, every page that does
