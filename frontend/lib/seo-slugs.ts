@@ -18,15 +18,15 @@
  * The reusing track still has its own App URL, only SEO URLs are deduped.
  */
 
-import jbiIndex from "../../content/java-backend-intermediate/_index.json";
-import jfiIndex from "../../content/java-fullstack-intermediate/_index.json";
-import jbfIndex from "../../content/java-backend-fresher/_index.json";
-import jffIndex from "../../content/java-fullstack-fresher/_index.json";
-import dsaIndex from "../../content/dsa/_index.json";
-import goiIndex from "../../content/go-intermediate/_index.json";
-import gofIndex from "../../content/go-fresher/_index.json";
-import rbiIndex from '../../content/ruby-backend-intermediate/_index.json';
-import rbfIndex from '../../content/ruby-backend-fresher/_index.json';
+import jbiIndex from "@content/java-backend-intermediate/_index.json";
+import jfiIndex from "@content/java-fullstack-intermediate/_index.json";
+import jbfIndex from "@content/java-backend-fresher/_index.json";
+import jffIndex from "@content/java-fullstack-fresher/_index.json";
+import dsaIndex from "@content/dsa/_index.json";
+import goiIndex from "@content/go-intermediate/_index.json";
+import gofIndex from "@content/go-fresher/_index.json";
+import rbiIndex from "@content/ruby-backend-intermediate/_index.json";
+import rbfIndex from "@content/ruby-backend-fresher/_index.json";
 
 export interface SeoModuleEntry {
   /** Canonical SEO slug (e.g. "spring-boot-interview-questions") */
