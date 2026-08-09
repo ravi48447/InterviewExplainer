@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
+import { ErrorState } from "@/components/ui/error-state";
 
 export default function QuestionError({
   error,
@@ -16,24 +17,21 @@ export default function QuestionError({
   }, [error]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[50vh] px-6 text-center">
-      <AlertTriangle className="w-12 h-12 text-destructive mb-4" strokeWidth={1.5} />
-      <h2 className="text-xl font-bold text-foreground mb-2">Failed to load question</h2>
-      <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-        This question could not be loaded. It may have been moved or is temporarily unavailable.
-      </p>
-      <div className="flex gap-3">
-        <button
-          onClick={reset}
-          className="px-5 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:opacity-90 transition-opacity"
-        >
-          Retry
-        </button>
+    <div className="page-container py-12">
+      <ErrorState
+        title="Failed to load question"
+        description="This question could not be loaded. It may have been moved or is temporarily unavailable."
+        retryLabel="Retry"
+        onRetry={reset}
+        icon={AlertTriangle}
+        className="min-h-[50vh]"
+      />
+      <div className="mt-4 text-center">
         <Link
           href="/domains"
-          className="px-5 py-2.5 border border-border text-foreground text-sm font-medium rounded-lg hover:bg-muted transition-colors"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
         >
-          Browse Questions
+          Browse all questions
         </Link>
       </div>
     </div>

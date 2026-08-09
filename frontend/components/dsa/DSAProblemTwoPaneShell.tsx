@@ -1,7 +1,11 @@
-'use client'
+"use client";
 
 import { ReactNode, useState, useEffect } from "react";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
 
 export function DSAProblemTwoPaneShell({
   leftPane,
@@ -41,7 +45,7 @@ export function DSAProblemTwoPaneShell({
             className={[
               // Desktop: fixed-width, scrollable independently
               "lg:w-[42%] lg:max-w-[580px] lg:shrink-0",
-              "lg:overflow-y-auto lg:border-r lg:border-border",
+              "lg:overflow-y-auto lg:border-r lg:border-border/60",
               // Light background to distinguish from the right pane
               "bg-background",
               // Mobile: just a normal block
@@ -53,6 +57,7 @@ export function DSAProblemTwoPaneShell({
 
           {/* RIGHT PANE — solution content */}
           <div
+            data-reading-scroll
             className={[
               "flex-1 min-w-0",
               "lg:overflow-y-auto",
@@ -61,7 +66,10 @@ export function DSAProblemTwoPaneShell({
               "px-5 py-6 lg:px-8 lg:py-7",
             ].join(" ")}
           >
-            {rightPane}
+            {/* Reading-width constraint keeps prose line lengths comfortable
+                even when the pane is wide — a key readability lever for the
+                answer-reading page. */}
+            <div className="mx-auto w-full max-w-[820px]">{rightPane}</div>
           </div>
         </div>
       ) : (
@@ -79,15 +87,15 @@ export function DSAProblemTwoPaneShell({
             </ResizablePanel>
             <ResizableHandle
               withHandle
-              className="w-1 hover:w-2 bg-border hover:bg-blue-500 dark:bg-blue-800/50 transition-all duration-150 ease-out z-10 cursor-col-resize"
+              className="w-1 hover:w-1.5 bg-border hover:bg-primary transition-all duration-150 ease-out z-10 cursor-col-resize"
             />
             <ResizablePanel
               defaultSize={58}
               minSize={30}
               className="bg-surface"
             >
-              <div className="h-full overflow-y-auto custom-scrollbar px-5 py-6 lg:px-8 lg:py-7">
-                {rightPane}
+              <div data-reading-scroll className="h-full overflow-y-auto custom-scrollbar px-5 py-6 lg:px-8 lg:py-7">
+                <div className="mx-auto w-full max-w-[820px]">{rightPane}</div>
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>

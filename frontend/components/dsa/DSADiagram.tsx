@@ -69,7 +69,7 @@ function DiagramShell({
         )}
       </figcaption>
       {caption && (
-        <p className="px-4 pt-3 text-[12.5px] text-secondary leading-relaxed italic">
+        <p className="px-4 pt-3 text-[12.5px] text-muted-foreground leading-relaxed italic">
           {caption}
         </p>
       )}
@@ -121,8 +121,8 @@ function MermaidDiagram({ diagram }: { diagram: DSAMermaidDiagram }) {
     <DiagramShell
       title={diagram.title}
       caption={diagram.caption}
-      toneClass="border-default dark:border-default/20"
-      headerClass="bg-blue-50 dark:bg-blue-500/10 border-default dark:border-default/20 text-primary dark:text-primary"
+      toneClass="border-border/60"
+      headerClass="bg-primary/5 border-border/60 text-primary"
     >
       {error ? (
         <pre className="text-[11px] text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">
@@ -138,7 +138,7 @@ function MermaidDiagram({ diagram }: { diagram: DSAMermaidDiagram }) {
           />
         </div>
       ) : (
-        <div className="h-32 flex items-center justify-center text-[11px] text-slate-500 dark:text-slate-400">
+        <div className="h-32 flex items-center justify-center text-[11px] text-muted-foreground">
           Rendering diagram…
         </div>
       )}
@@ -158,8 +158,8 @@ function HashmapStateDiagram({
       title={diagram.title}
       caption={diagram.caption}
       input={diagram.input}
-      toneClass="border-blue-200 dark:border-blue-500/20"
-      headerClass="bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400"
+      toneClass="border-primary/20"
+      headerClass="bg-primary/5 border-primary/20 text-primary"
     >
       <ol className="space-y-3">
         {diagram.frames.map((f, i) => (
@@ -171,14 +171,14 @@ function HashmapStateDiagram({
               <code className="block mt-0.5 text-[11.5px] font-mono text-foreground">
                 {f.step}
               </code>
-              <p className="text-[11.5px] text-secondary mt-1 leading-relaxed">
+              <p className="text-[11.5px] text-muted-foreground mt-1 leading-relaxed">
                 {f.action}
               </p>
             </div>
 
             <div className="rounded-md border border-border bg-surface/60 p-2">
               {f.entries.length === 0 ? (
-                <div className="px-3 py-2 text-[11.5px] font-mono text-slate-500 dark:text-slate-400 italic">
+                <div className="px-3 py-2 text-[11.5px] font-mono text-muted-foreground italic">
                   map = {`{}`} (empty)
                 </div>
               ) : (
@@ -192,11 +192,11 @@ function HashmapStateDiagram({
                         className={cn(
                           "inline-flex items-stretch rounded-md border-2 overflow-hidden font-mono text-[11.5px] transition-colors",
                           isLookup && f.found
-                            ? "border-default dark:border-default/50 shadow-sm shadow-emerald-200"
+                            ? "border-success shadow-sm shadow-success/20"
                             : isLookup
-                              ? "border-default"
+                              ? "border-amber-500 dark:border-amber-500/50"
                               : isHighlighted
-                                ? "border-blue-500 dark:border-blue-500/50 bg-blue-50 dark:bg-blue-500/10"
+                                ? "border-primary bg-primary/5"
                                 : "border-border bg-background",
                         )}
                       >
@@ -204,11 +204,11 @@ function HashmapStateDiagram({
                           className={cn(
                             "px-2 py-1 font-bold",
                             isLookup && f.found
-                              ? "bg-emerald-500 dark:bg-emerald-800 text-primary-foreground dark:text-foreground"
+                              ? "bg-success text-primary-foreground"
                               : isLookup
-                                ? "bg-amber-500 dark:bg-amber-800 text-primary-foreground dark:text-foreground"
+                                ? "bg-amber-500 text-primary-foreground"
                                 : isHighlighted
-                                  ? "bg-blue-500 dark:bg-blue-800 text-primary-foreground dark:text-foreground"
+                                  ? "bg-primary text-primary-foreground"
                                   : "bg-surface text-foreground",
                           )}
                         >
@@ -226,7 +226,7 @@ function HashmapStateDiagram({
                 <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1.5">
                   <span aria-hidden="true">🔍</span>
                   Looked up{" "}
-                  <code className="font-mono bg-amber-50 dark:bg-amber-500/10 border border-default dark:border-default/20 px-1 rounded">
+                  <code className="font-mono bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-1 rounded">
                     {f.lookupKey}
                   </code>{" "}
                   — not in map.
@@ -242,10 +242,10 @@ function HashmapStateDiagram({
         ))}
       </ol>
 
-      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex flex-wrap gap-3 text-[10.5px] text-muted-foreground">
-        <Legend swatch="bg-blue-500 dark:bg-blue-800" label="Just inserted / updated" />
-        <Legend swatch="bg-amber-500 dark:bg-amber-800" label="Looking up" />
-        <Legend swatch="bg-emerald-500 dark:bg-emerald-800" label="Match" />
+      <div className="mt-4 pt-3 border-t border-border/60 flex flex-wrap gap-3 text-[10.5px] text-muted-foreground">
+        <Legend swatch="bg-primary" label="Just inserted / updated" />
+        <Legend swatch="bg-amber-500" label="Looking up" />
+        <Legend swatch="bg-success" label="Match" />
       </div>
     </DiagramShell>
   );
@@ -259,8 +259,8 @@ function ArrayStateDiagram({ diagram }: { diagram: DSAArrayStateDiagram }) {
       title={diagram.title}
       caption={diagram.caption}
       input={diagram.input}
-      toneClass="border-sky-200 dark:border-sky-500/20"
-      headerClass="bg-sky-50 dark:bg-sky-500/10 border-sky-200 dark:border-sky-500/20 text-sky-700 dark:text-sky-400"
+      toneClass="border-primary/20"
+      headerClass="bg-primary/5 border-primary/20 text-primary"
     >
       <ol className="space-y-3">
         {diagram.frames.map((f, i) => {
@@ -284,7 +284,7 @@ function ArrayStateDiagram({ diagram }: { diagram: DSAArrayStateDiagram }) {
                 <code className="block mt-0.5 text-[11.5px] font-mono text-foreground">
                   {f.step}
                 </code>
-                <p className="text-[11.5px] text-secondary mt-1 leading-relaxed">
+                <p className="text-[11.5px] text-muted-foreground mt-1 leading-relaxed">
                   {f.action}
                 </p>
               </div>
@@ -305,7 +305,7 @@ function ArrayStateDiagram({ diagram }: { diagram: DSAArrayStateDiagram }) {
                           {ptrs.map((p) => (
                             <span
                               key={p}
-                              className="text-[10px] font-bold font-mono text-sky-700 dark:text-sky-400 bg-sky-100 dark:bg-sky-500/20 border border-sky-300 dark:border-sky-500/30 px-1 rounded leading-none py-0.5"
+                              className="text-[10px] font-bold font-mono text-primary bg-primary/10 border border-primary/30 px-1 rounded leading-none py-0.5"
                             >
                               {p}↓
                             </span>
@@ -315,15 +315,15 @@ function ArrayStateDiagram({ diagram }: { diagram: DSAArrayStateDiagram }) {
                           className={cn(
                             "w-full px-2 py-2 rounded-md border-2 text-center font-mono text-[12.5px] transition-colors",
                             isH
-                              ? "border-default dark:border-default/50 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400 font-bold"
+                              ? "border-success bg-success/10 text-success font-bold"
                               : isD
-                                ? "border-border bg-surface text-slate-500 dark:text-slate-400"
+                                ? "border-border bg-surface text-muted-foreground"
                                 : "border-border bg-background text-foreground",
                           )}
                         >
                           {v}
                         </div>
-                        <div className="text-[9.5px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                        <div className="text-[9.5px] text-muted-foreground font-mono mt-0.5">
                           [{idx}]
                         </div>
                       </div>

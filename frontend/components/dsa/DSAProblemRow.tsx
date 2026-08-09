@@ -34,8 +34,16 @@ const COMPANY_DISPLAY: Record<string, string> = {
 };
 
 const FREQ_META: Record<string, { label: string; className: string }> = {
-  "very-high": { label: "Hot", className: "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20" },
-  high: { label: "Freq", className: "text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-default dark:border-default/20" },
+  "very-high": {
+    label: "Hot",
+    className:
+      "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30",
+  },
+  high: {
+    label: "Freq",
+    className:
+      "text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30",
+  },
 };
 
 /**
@@ -56,14 +64,16 @@ export function DSAProblemRow({
   showCategory?: boolean;
 }) {
   const authored = problemHasAuthoredContent(problem);
-  const companies = ((problem as DSAProblemIndex & { company_tags?: string[] }).company_tags ?? []).slice(0, 3);
+  const companies = (
+    (problem as DSAProblemIndex & { company_tags?: string[] }).company_tags ?? []
+  ).slice(0, 3);
   const freq = (problem as DSAProblemIndex & { frequency?: string }).frequency;
   const freqMeta = freq ? FREQ_META[freq] : undefined;
 
   const inner = (
     <div className="flex items-center gap-3 w-full min-w-0">
       {/* Number */}
-      <span className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400 w-7 shrink-0 text-right">
+      <span className="text-[11px] font-mono tabular-nums text-muted-foreground w-7 shrink-0 text-right">
         {String(position).padStart(2, "0")}
       </span>
 
@@ -72,14 +82,14 @@ export function DSAProblemRow({
         <span
           className={`text-[13.5px] font-semibold leading-snug block truncate ${
             authored
-              ? "text-foreground group-hover:text-blue-700 dark:text-blue-400"
-              : "text-slate-500 dark:text-slate-400"
+              ? "text-foreground group-hover:text-primary"
+              : "text-muted-foreground"
           }`}
         >
           {problem.title}
         </span>
         {showCategory && (
-          <span className="text-[11px] text-slate-500 dark:text-slate-400 capitalize">
+          <span className="text-[11px] text-muted-foreground capitalize">
             {problem.category.replace(/-/g, " ")}
           </span>
         )}
@@ -114,37 +124,37 @@ export function DSAProblemRow({
 
       {/* Status */}
       {authored ? (
-        <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-default dark:border-default/20 rounded px-1.5 py-0.5 shrink-0">
+        <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-success bg-success/10 border border-success/30 rounded px-1.5 py-0.5 shrink-0">
           Explained
         </span>
       ) : (
-        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-surface border border-border rounded px-1.5 py-0.5 shrink-0">
+        <span className="text-[10px] font-bold text-muted-foreground bg-surface border border-border rounded px-1.5 py-0.5 shrink-0">
           Queued
         </span>
       )}
 
       {/* Arrow */}
       {authored && (
-        <ArrowRight className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 group-hover:text-blue-500 dark:text-blue-400 shrink-0 transition-colors" />
+        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
       )}
     </div>
   );
 
   const base =
-    "group flex items-center px-3.5 py-2.5 rounded-xl border transition-all";
+    "group flex items-center px-3.5 py-2.5 rounded-lg border transition-colors duration-200 ease-out";
 
   if (authored) {
     return (
       <Link
         href={`/dsa/problem/${problem.slug}`}
-        className={`${base} border-border bg-background hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm hover:bg-blue-50/40 dark:bg-blue-500/10`}
+        className={`${base} border-border/60 bg-card hover:border-primary/30 hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background`}
       >
         {inner}
       </Link>
     );
   }
   return (
-    <div className={`${base} border-slate-100 dark:border-slate-800/60 bg-surface/60 opacity-75`}>
+    <div className={`${base} border-border/60 bg-surface/60 opacity-70`}>
       {inner}
     </div>
   );
@@ -165,7 +175,7 @@ export function DSAProblemList({
 }) {
   if (problems.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-surface p-6 text-sm text-muted-foreground text-center">
+      <div className="rounded-lg border border-dashed border-border/60 bg-surface p-6 text-sm text-muted-foreground text-center">
         No problems indexed here yet.
       </div>
     );

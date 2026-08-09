@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { getCanonicalOrigin } from "@/lib/seo/config";
 
 export const metadata: Metadata = {
   title: "Terms of Service | InterviewExplainer",
   description: "The terms and conditions governing your use of InterviewExplainer.",
+  alternates: { canonical: `${getCanonicalOrigin()}/terms` },
 };
 
 const EFFECTIVE_DATE = "January 1, 2025";

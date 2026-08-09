@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { getCanonicalOrigin } from "@/lib/seo/config";
 
 export const metadata: Metadata = {
   title: "Cookie Policy | InterviewExplainer",
   description: "How InterviewExplainer uses cookies and similar tracking technologies.",
+  alternates: { canonical: `${getCanonicalOrigin()}/cookies` },
 };
 
 const EFFECTIVE_DATE = "January 1, 2025";

@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import { getCanonicalOrigin } from "@/lib/seo/config";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | InterviewExplainer",
   description: "Learn how InterviewExplainer collects, uses, and protects your personal data.",
+  alternates: { canonical: `${getCanonicalOrigin()}/privacy` },
 };
 
 const EFFECTIVE_DATE = "January 1, 2025";

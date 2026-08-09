@@ -10,15 +10,10 @@ import { ReactNode } from "react";
  *     rightRail
  *   - rightRail    →   main + right info rail (no left nav)
  *
- * Container width is intentionally wide. Older revisions of this shell
- * capped sidebar-only pages at 1180px, which left ~25–30% of a 1440p
- * display empty on each side — the main column only covered the middle
- * of the screen. The current problem page has enough structured content
- * (sidebar, hero, revision card, two full approach blocks with embedded
- * code + traces, mistakes) that the extra horizontal real estate is
- * actually used, so we widen to 1520px for sidebar-only and 1640px for
- * double-rail layouts. Containers still cap so extremely wide monitors
- * don't stretch line lengths to unreadable widths.
+ * Light learning-site treatment: the page background is a flat
+ * `bg-background` with no violet wash — the old wash existed only to tie
+ * the page to a dark hero that is no longer used. Containers still cap so
+ * extremely wide monitors don't stretch line lengths to unreadable widths.
  *
  * Sidebars collapse on screens smaller than `lg` (1024px) so mobile
  * gets a single readable column.
@@ -43,18 +38,13 @@ export function DSAPageShell({
     (sidebar && rightRail ? "1640px" : hasSide ? "1520px" : "1200px");
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-surface-subtle to-background dark:from-background dark:to-background font-sans text-foreground">
+    <div className="relative min-h-screen bg-background font-sans text-foreground">
       {jsonLd && (
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       )}
-      {/* Soft violet wash up top to tie the page to the dark hero. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[340px] bg-gradient-to-b from-blue-200/40 dark:from-blue-900/20 via-blue-100/15 dark:via-blue-900/10 to-transparent"
-      />
       <div
         className="relative w-full mx-auto px-3 sm:px-5 lg:px-6 py-5 lg:py-6"
         style={{ maxWidth: computedMaxWidth }}

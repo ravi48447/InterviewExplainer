@@ -18,22 +18,22 @@ interface DSACurriculumNavProps {
 }
 
 const LEVEL_DOT: Record<string, string> = {
-  beginner: "bg-emerald-500 dark:bg-emerald-800",
-  intermediate: "bg-amber-500 dark:bg-amber-800",
-  advanced: "bg-rose-500 dark:bg-rose-800",
+  beginner: "bg-success",
+  intermediate: "bg-amber-500 dark:bg-amber-400",
+  advanced: "bg-rose-500 dark:bg-rose-400",
 };
 
 /**
  * Left-rail curriculum navigator for all 18 DSA modules.
  *
- * Rendered sticky on /dsa/module/<slug> so learners always know
+ * Rendered on /dsa/module/<slug> so learners always know
  *   (a) where they are in the sequence,
  *   (b) which modules have full theory (BookOpen icon) vs practice-only,
  *   (c) the difficulty level at a glance (coloured dot).
  *
- * The nav is keyboard-navigable (plain anchors) and the active module is
- * styled with a left indigo bar + bold title so screen-readers and sighted
- * users both see the current position without extra aria-current clutter.
+ * Token-driven: the active module uses the primary accent, the number
+ * badge uses `bg-primary` / `bg-surface`, and the level dots ride the
+ * success/amber/rose warmth axis consistent with the difficulty pills.
  */
 export function DSACurriculumNav({
   modules,
@@ -43,24 +43,24 @@ export function DSACurriculumNav({
   return (
     <nav
       aria-label="DSA curriculum"
-      className="rounded-xl border border-border bg-background shadow-sm overflow-hidden"
+      className="rounded-lg border border-border/60 bg-card shadow-sm overflow-hidden"
     >
       <Link
         href="/dsa"
-        className="flex items-center gap-2 px-4 py-3 border-b border-border bg-gradient-to-r from-blue-50 dark:from-blue-950/40  hover:from-blue-100/80 dark:from-blue-950/50 hover: hover: transition-colors group  "
+        className="flex items-center gap-2 px-4 py-3 border-b border-border bg-surface hover:bg-hover transition-colors group"
       >
-        <div className="w-7 h-7 rounded-lg bg-blue-600 dark:bg-blue-800 flex items-center justify-center shrink-0">
-          <GraduationCap className="h-4 w-4 text-primary-foreground dark:text-foreground" />
+        <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shrink-0">
+          <GraduationCap className="h-4 w-4 text-primary-foreground" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400">
+          <div className="text-[10px] font-black uppercase tracking-widest text-primary">
             DSA Curriculum
           </div>
           <div className="text-[12px] font-bold text-foreground truncate">
             {modules.length} modules
           </div>
         </div>
-        <ChevronRight className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 group-hover:text-blue-500 dark:text-blue-400 shrink-0" />
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
       </Link>
 
       <ol className="py-1 max-h-[calc(100vh-7rem)] overflow-y-auto">
@@ -76,8 +76,8 @@ export function DSACurriculumNav({
                 className={cn(
                   "group flex items-start gap-2 px-3 py-2 border-l-2 transition-colors",
                   isActive
-                    ? "bg-blue-50 dark:bg-blue-500/10 border-blue-500 dark:border-blue-500/50"
-                    : "border-transparent hover:bg-surface hover:border-border",
+                    ? "bg-primary/5 border-primary"
+                    : "border-transparent hover:bg-hover hover:border-border",
                 )}
                 aria-current={isActive ? "page" : undefined}
               >
@@ -86,8 +86,8 @@ export function DSACurriculumNav({
                     className={cn(
                       "text-[10px] font-black tabular-nums px-1.5 py-0.5 rounded",
                       isActive
-                        ? "bg-blue-600 text-primary-foreground dark:text-foreground"
-                        : "bg-surface text-muted-foreground group-hover:bg-slate-200 dark:hover:bg-slate-800",
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-surface text-muted-foreground group-hover:bg-hover",
                     )}
                   >
                     {m.moduleNumber.replace(/^M/, "")}
@@ -98,7 +98,7 @@ export function DSACurriculumNav({
                     className={cn(
                       "text-[12.5px] leading-snug",
                       isActive
-                        ? "font-black text-blue-900 dark:text-blue-400"
+                        ? "font-black text-primary"
                         : "font-semibold text-foreground group-hover:text-foreground",
                     )}
                   >
@@ -109,12 +109,12 @@ export function DSACurriculumNav({
                       className={cn("h-1.5 w-1.5 rounded-full", levelDot)}
                       aria-hidden="true"
                     />
-                    <span className="text-slate-500 dark:text-slate-400 font-medium capitalize">
+                    <span className="text-muted-foreground font-medium capitalize">
                       {m.level}
                     </span>
                     {hasTheory && (
                       <span
-                        className="ml-auto inline-flex items-center gap-0.5 text-primary dark:text-primary font-bold"
+                        className="ml-auto inline-flex items-center gap-0.5 text-primary font-bold"
                         title="Full theory walk-through authored"
                       >
                         <BookOpen className="h-2.5 w-2.5" />
@@ -130,11 +130,11 @@ export function DSACurriculumNav({
 
       <Link
         href="/dsa"
-        className="flex items-center gap-2 px-4 py-2.5 border-t border-border bg-surface/70 hover:bg-surface transition-colors text-[11px] font-bold text-secondary hover:text-foreground"
+        className="flex items-center gap-2 px-4 py-2.5 border-t border-border bg-surface hover:bg-hover transition-colors text-[11px] font-bold text-muted-foreground hover:text-foreground"
       >
-        <Target className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+        <Target className="h-3.5 w-3.5 text-muted-foreground" />
         <span>All tracks &amp; sheets</span>
-        <Check className="h-3 w-3 text-emerald-500 dark:text-emerald-400 ml-auto" />
+        <Check className="h-3 w-3 text-success ml-auto" />
       </Link>
     </nav>
   );

@@ -51,8 +51,8 @@ type Props = {
 function statusMeta(statusId: number): { color: string; icon: React.ReactNode } {
   if (statusId === 3)
     return {
-      color: "text-emerald-600 dark:text-emerald-300",
-      icon: <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />,
+      color: "text-success",
+      icon: <CheckCircle2 className="h-4 w-4 text-success" />,
     };
   if (statusId === 6)
     return {
@@ -136,11 +136,11 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
   const meta = result?.statusId ? statusMeta(result.statusId) : null;
 
   return (
-    <div className="rounded-xl overflow-hidden shadow-xl ring-1 ring-slate-950/5 border border-border">
+    <div className="rounded-xl overflow-hidden shadow-xl border border-border/60">
       {/* Header bar */}
       <div className="flex items-center justify-between bg-code-surface border-b border-code-border px-4 py-2">
         <div className="flex items-center gap-2">
-          <Terminal className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-300" />
+          <Terminal className="h-3.5 w-3.5 text-success" />
           <span className="text-[11px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
             Try it — {LANG_DISPLAY[activeLang] ?? activeLang}
           </span>
@@ -204,7 +204,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
             value={stdin}
             onChange={(e) => setStdin(e.target.value)}
             rows={3}
-            className="w-full bg-code text-slate-200 dark:text-slate-300 font-mono text-[13px] rounded border border-slate-600 dark:border-slate-700 px-3 py-2 resize-y focus:outline-none focus:border-slate-400 dark:border-slate-700 placeholder:text-secondary"
+            className="w-full bg-code text-slate-200 dark:text-slate-300 font-mono text-[13px] rounded border border-slate-600 dark:border-slate-700 px-3 py-2 resize-y focus:outline-none focus:border-slate-400 placeholder:text-muted-foreground"
             placeholder="Enter input for your program here..."
             spellCheck={false}
           />
@@ -217,7 +217,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
           <button
             onClick={handleRun}
             disabled={running}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-emerald-600 dark:bg-emerald-800 hover:bg-emerald-500 dark:bg-emerald-800 disabled:bg-slate-600 disabled:cursor-not-allowed text-primary-foreground dark:text-foreground font-bold text-[13px] transition-colors"
+            className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-success hover:bg-success/90 disabled:bg-slate-600 disabled:cursor-not-allowed text-primary-foreground font-bold text-[13px] transition-colors"
           >
             {running ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

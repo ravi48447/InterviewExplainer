@@ -1,15 +1,30 @@
 import type { Difficulty, Level } from "@/lib/contentV2-types";
 
+/**
+ * Difficulty / level / generic pill colour maps.
+ *
+ * Token-driven: every fill, text, and border uses a design token. The
+ * difficulty colour stays in the *warmth* axis — easy → success (green),
+ * medium → amber, hard → rose — so the semantic never drifts, but the
+ * borders are now hairline token borders instead of the old broken
+ * `border-default` + dark-mode `border-default/20` that never resolved.
+ */
 export const DIFFICULTY_CLASSES: Record<Difficulty, string> = {
-  easy: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20",
-  medium: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-default dark:border-default/20",
-  hard: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-default dark:border-default/20",
+  easy:
+    "bg-success/10 text-success border-success/30",
+  medium:
+    "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30",
+  hard:
+    "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30",
 };
 
 export const LEVEL_CLASSES: Record<Level, string> = {
-  beginner: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20",
-  intermediate: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-default dark:border-default/20",
-  advanced: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-default dark:border-default/20",
+  beginner:
+    "bg-success/10 text-success border-success/30",
+  intermediate:
+    "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30",
+  advanced:
+    "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30",
 };
 
 /**
@@ -34,12 +49,16 @@ export function DSAPill({
 }) {
   const toneClass: Record<string, string> = {
     slate: "bg-surface text-foreground border-border",
-    violet: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
-    emerald: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-default dark:border-default/20",
-    amber: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-default dark:border-default/20",
-    red: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-default dark:border-default/20",
-    blue: "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary border-default dark:border-default/20",
-    fuchsia: "bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
+    violet:
+      "bg-primary/5 text-primary border-primary/30",
+    emerald:
+      "bg-success/10 text-success border-success/30",
+    amber:
+      "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30",
+    red: "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30",
+    blue: "bg-primary/5 text-primary border-primary/30",
+    fuchsia:
+      "bg-primary/5 text-primary border-primary/30",
   };
   return (
     <span

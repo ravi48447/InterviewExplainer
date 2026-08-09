@@ -215,7 +215,7 @@ export function CodeWalkthrough({
   const fileBase = "solution";
 
   return (
-    <div className="rounded-xl overflow-hidden my-3 shadow-xl ring-1 ring-slate-950/5 border border-border">
+    <div className="rounded-xl overflow-hidden my-3 shadow-xl border border-border/60">
       {/* Tab bar — filename + lang pill + copy */}
       <div className="flex items-stretch justify-between bg-code-surface border-b border-code-border">
         <div className="flex items-stretch">
@@ -224,7 +224,7 @@ export function CodeWalkthrough({
             <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
               {fileBase}.{fileExt}
             </span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider dark:bg-surface text-sky-300 dark:text-sky-300 border border-border">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider bg-code text-sky-300 border border-code-border">
               {LANG_DISPLAY[active] ?? active}
             </span>
           </div>
@@ -235,7 +235,7 @@ export function CodeWalkthrough({
         </div>
         <div className="flex items-center gap-2 px-3">
           {annotationCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider bg-amber-400/10 text-amber-300 border border-default/30">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9.5px] font-black uppercase tracking-wider bg-amber-400/10 text-amber-300 border border-amber-500/30">
               <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
               {annotationCount} teaching {annotationCount === 1 ? "note" : "notes"}
             </span>
@@ -268,9 +268,9 @@ export function CodeWalkthrough({
                     className={cn(
                       "select-none tabular-nums text-right py-[1px] px-3 border-r",
                       isAnnotation
-                        ? "text-amber-300/90 bg-amber-400/10 border-default/40 font-bold"
+                        ? "text-amber-300/90 bg-amber-400/10 border-code-border font-bold"
                         : isExplained
-                          ? "text-amber-200 bg-amber-400/20 border-default/60 font-black"
+                          ? "text-amber-200 bg-amber-400/20 border-code-border font-black"
                           : "text-slate-500 border-slate-700/60 bg-code-surface",
                     )}
                     style={{ minWidth: `${gutterWidth + 2}ch` }}
@@ -327,7 +327,7 @@ export function CodeWalkthrough({
       {annotationCount > 0 && built.source && (
         <div className="px-4 py-1.5 bg-code-surface border-t border-code-border text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-4 bg-amber-400 dark:bg-amber-800/30 border border-default dark:border-default/60 rounded-sm" />
+            <span className="inline-block h-2.5 w-4 bg-amber-400 dark:bg-amber-800/30 border border-amber-500/40 rounded-sm" />
             <span>
               Yellow row = the algorithm's core logic. Amber `{commentPrefix}`
               lines above it = what you'd say out loud.

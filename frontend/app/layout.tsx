@@ -3,12 +3,17 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/theme-provider";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
+import { AppShell } from "@/components/shell/public-shell";
 import { AuthProvider } from "@/context/auth-context";
 import { GlobalLoginPrompt } from "@/components/global-login-prompt";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 import "highlight.js/styles/atom-one-dark.css";
+import {
+  buildHomepageMetadata,
+  getTitleTemplate,
+  buildGlobalStructuredData,
+} from "@/lib/seo";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -20,56 +25,19 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://interviewexplainer.com";
+// P02-T005: Metadata now comes from the centralized SEO factory.
+// No more hardcoded SITE_URL — all URLs flow through lib/seo/config.
+const seoMetadata = buildHomepageMetadata();
+const titleTemplate = getTitleTemplate();
 
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
-  alternates: {
-    canonical: "./",
-  },
+  ...seoMetadata,
   title: {
-    default: "InterviewExplainer — Structured Interview Preparation for Developers",
-    template: "%s | InterviewExplainer",
+    default: titleTemplate.default,
+    template: titleTemplate.template,
   },
-  description:
-    "Browse real interview questions and structured answers for Java, System Design, SQL, and more. Free to read. Sign up to track your progress.",
   keywords: ["interview preparation", "Java interview questions", "system design", "coding interviews", "developer interviews"],
   authors: [{ name: "InterviewExplainer" }],
-  openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: SITE_URL,
-    siteName: "InterviewExplainer",
-    title: "InterviewExplainer — Structured Interview Preparation for Developers",
-    description:
-      "Browse real interview questions and structured answers for Java, System Design, SQL, and more. Free to read. Sign up to track your progress.",
-    images: [
-      {
-        url: "/og-default.png",
-        width: 1200,
-        height: 630,
-        alt: "InterviewExplainer",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "InterviewExplainer — Structured Interview Preparation for Developers",
-    description:
-      "Browse real interview questions and answers for Java, System Design, SQL, and more.",
-    images: ["/og-default.png"],
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
 };
 
 export const viewport: Viewport = {
@@ -89,25 +57,19 @@ export default function RootLayout({
 }>) {
   const plausibleDomain = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
 
+  // P02-T411: Structured data from the centralized system (no inline hardcoded URLs).
+  const globalSchemas = buildGlobalStructuredData();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "WebSite",
-              "name": "InterviewExplainer",
-              "url": SITE_URL,
-              "potentialAction": {
-                "@type": "SearchAction",
-                "target": `${SITE_URL}/search?q={search_term_string}`,
-                "query-input": "required name=search_term_string"
-              }
-            })
-          }}
-        />
+        {globalSchemas.map((schema, i) => (
+          <script
+            key={i}
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+          />
+        ))}
       </head>
       {plausibleDomain && (
         <Script
@@ -118,9 +80,17 @@ export default function RootLayout({
         />
       )}
       <body
-        className={`${inter.variable} ${geistMono.variable} font-sans antialiased min-h-screen flex flex-col`}
+        className={`${inter.variable} ${geistMono.variable} font-sans antialiased min-h-screen`}
         suppressHydrationWarning
       >
+        {/*
+         * P03-T001..T031: Canonical application shell.
+         * Providers → AppShell (resolves variant → header/footer). The shell
+         * owns the skip-link, main landmark, header, and footer so they stay
+         * consistent across every route (T013, T014). AuthProvider wraps the
+         * shell so the header user-actions island can read auth state, but a
+         * failed/unknown auth state never blocks the shell (T051, T118).
+         */}
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -129,18 +99,9 @@ export default function RootLayout({
         >
           <AuthProvider>
             <GlobalLoginPrompt />
-            <a
-              href="#main-content"
-              className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 bg-primary text-primary-foreground px-4 py-2 rounded-md z-50 font-medium transition-all"
-            >
-              Skip to content
-            </a>
-            <SiteHeader />
-            <main id="main-content" className="min-w-0 flex-1">
-              {children}
-            </main>
+            <AppShell>{children}</AppShell>
+            <Toaster />
           </AuthProvider>
-          <SiteFooter />
         </ThemeProvider>
       </body>
     </html>

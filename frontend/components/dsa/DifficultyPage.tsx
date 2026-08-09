@@ -112,23 +112,23 @@ export function DSADifficultyPage({
           const count = allProblems.filter((p) => p.difficulty === d).length;
           const active = d === difficulty;
           const dot: Record<string, string> = {
-            easy: "bg-emerald-500 dark:bg-emerald-800",
-            medium: "bg-amber-500 dark:bg-amber-800",
-            hard: "bg-red-500 dark:bg-red-800",
+            easy: "bg-success",
+            medium: "bg-amber-500",
+            hard: "bg-rose-500",
           };
           const activeClasses: Record<string, string> = {
-            easy: "bg-surface to-white border-default dark:border-default/20 text-emerald-700 dark:text-emerald-400 shadow-sm",
-            medium: "bg-surface to-white border-default dark:border-default/20 text-amber-700 dark:text-amber-400 shadow-sm",
-            hard: "bg-surface to-white border-default dark:border-default/20 text-red-700 dark:text-red-400 shadow-sm",
+            easy: "bg-surface border-success/30 text-success",
+            medium: "bg-surface border-amber-300 dark:border-amber-500/30 text-amber-700 dark:text-amber-400",
+            hard: "bg-surface border-rose-300 dark:border-rose-500/30 text-rose-700 dark:text-rose-400",
           };
           return (
             <Link
               key={d}
               href={`/dsa/${d}`}
-              className={`rounded-2xl border px-4 py-3.5 transition-all ${
+              className={`rounded-2xl border px-4 py-3.5 transition-colors ${
                 active
                   ? activeClasses[d]
-                  : "bg-background border-border hover:border-blue-300 dark:border-blue-500/30 hover:shadow-sm hover:-translate-y-0.5"
+                  : "bg-background border-border/60 text-muted-foreground hover:border-primary/40 hover:bg-hover"
               }`}
             >
               <div className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest ${active ? "opacity-80" : "text-muted-foreground"}`}>
@@ -137,7 +137,7 @@ export function DSADifficultyPage({
               </div>
               <div className={`text-lg font-black mt-1 ${active ? "" : "text-foreground"}`}>
                 {count}
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 ml-1">problems</span>
+                <span className="text-xs font-semibold text-muted-foreground ml-1">problems</span>
               </div>
             </Link>
           );
@@ -146,7 +146,7 @@ export function DSADifficultyPage({
 
       {/* Problems grouped by module */}
       <section className="mb-12">
-        <p className="text-xs font-bold uppercase tracking-widest text-primary dark:text-primary mb-1">
+        <p className="text-xs font-bold uppercase tracking-widest text-primary mb-1">
           Grouped by curriculum module
         </p>
         <h2 className="text-xl font-black text-foreground tracking-tight mb-5">
@@ -165,17 +165,17 @@ export function DSADifficultyPage({
                 return (
                   <div
                     key={m.moduleSlug}
-                    className="rounded-2xl border border-border bg-background shadow-sm overflow-hidden"
+                    className="rounded-2xl border border-border/60 bg-card overflow-hidden"
                   >
                     <Link
                       href={`/dsa/module/${m.moduleSlug}`}
-                      className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/60 bg-surface/70 hover:bg-blue-50/40 dark:bg-blue-500/10 transition-colors"
+                      className="group flex items-center justify-between gap-3 px-5 py-3 border-b border-border/60 bg-surface hover:bg-hover transition-colors"
                     >
-                      <span className="text-sm font-bold text-foreground group-hover:text-blue-700 dark:text-blue-400 inline-flex items-center gap-1.5 transition-colors">
+                      <span className="text-sm font-bold text-foreground group-hover:text-primary inline-flex items-center gap-1.5 transition-colors">
                         {m.title}
-                        <ArrowRight className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 group-hover:text-blue-500 dark:text-blue-400" />
+                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
                       </span>
-                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                      <span className="text-[11px] font-semibold text-muted-foreground">
                         {modProblems.length} problem
                         {modProblems.length === 1 ? "" : "s"}
                       </span>

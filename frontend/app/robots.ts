@@ -1,16 +1,14 @@
-import type { MetadataRoute } from "next";
+/**
+ * app/robots.ts — Rebuilt from lib/seo/robots (P02-T144–T159)
+ *
+ * robots.txt is now generated from the route registry + indexability
+ * engine. No more hardcoded SITE_URL or hardcoded disallow paths.
+ * All logic lives in lib/seo/robots.ts → buildRobotsMetadata().
+ */
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://interviewexplainer.com";
+import type { MetadataRoute } from 'next'
+import { buildRobotsMetadata } from '@/lib/seo/robots'
 
 export default function robots(): MetadataRoute.Robots {
-  return {
-    rules: [
-      {
-        userAgent: "*",
-        allow: "/",
-        disallow: ["/dashboard", "/mock-interviews/start", "/mock-interviews/audio", "/mock-interviews/results", "/mock-interviews/history", "/api/"],
-      },
-    ],
-    sitemap: `${SITE_URL}/sitemap.xml`,
-  };
+  return buildRobotsMetadata() as MetadataRoute.Robots
 }

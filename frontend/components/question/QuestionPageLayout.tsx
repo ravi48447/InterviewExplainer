@@ -361,7 +361,7 @@ function QuestionPageLayoutInner({
             {/* Sticky position header */}
             {totalQuestions > 0 && currentIdx >= 0 && (
               <div
-                className={`sticky top-1 z-30 -mx-2 mb-5 flex items-center gap-2 rounded-lg border px-3 py-2 shadow-lg backdrop-blur ${
+                className={`sticky top-1 z-[var(--z-sticky)] -mx-2 mb-5 flex items-center gap-2 rounded-lg border px-3 py-2 shadow-lg backdrop-blur ${
                   d
                     ? "border-slate-600 dark:border-slate-700/50 bg-surface-elevated/95 shadow-black/40"
                     : "border-border bg-background/95 shadow-slate-200/60"
@@ -369,7 +369,7 @@ function QuestionPageLayoutInner({
               >
                 <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap text-[11px]">
                   <span
-                    className={`font-black tabular-nums ${
+                    className={`font-extrabold tabular-nums ${
                       d ? "text-primary" : "text-primary dark:text-primary"
                     }`}
                   >
@@ -428,9 +428,9 @@ function QuestionPageLayoutInner({
                   {/* Theme toggle */}
                   <button
                     onClick={toggleTheme}
-                    className={`p-1.5 rounded-md transition-colors ${
+                    className={`touch-target p-1.5 rounded-md transition-colors ${
                       d
-                        ? "text-muted-foreground hover:text-amber-300 dark:text-amber-300 hover:bg-slate-700 dark:bg-slate-800/60"
+                        ? "text-muted-foreground hover:text-warning hover:bg-slate-700 dark:bg-slate-800/60"
                         : "text-muted-foreground hover:text-foreground hover:bg-surface"
                     }`}
                     aria-label={
@@ -452,7 +452,7 @@ function QuestionPageLayoutInner({
                         previousQuestion.slug,
                         previousQuestion.stackSlug || stackSlug
                       )}
-                      className={`p-1.5 rounded-md transition-colors ${
+                      className={`touch-target p-1.5 rounded-md transition-colors ${
                         d
                           ? "hover:bg-slate-700 dark:bg-slate-800/60 text-muted-foreground hover:text-muted-foreground"
                           : "hover:bg-surface text-muted-foreground hover:text-muted-foreground"
@@ -470,7 +470,7 @@ function QuestionPageLayoutInner({
                         nextQuestion.slug,
                         nextQuestion.stackSlug || stackSlug
                       )}
-                      className="p-1.5 rounded-md bg-blue-600 dark:bg-blue-800 text-foreground hover:bg-blue-700 dark:bg-blue-800 transition-colors"
+                      className="touch-target p-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                       aria-label={`Next: ${nextQuestion.title}`}
                       title={`Next: ${nextQuestion.title}`}
                     >
@@ -483,7 +483,7 @@ function QuestionPageLayoutInner({
 
             {/* Title */}
             <h1
-              className={`text-[26px] sm:text-[30px] lg:text-[32px] font-black mb-3 leading-[1.15] tracking-[-0.015em] ${
+              className={`type-display text-[26px] sm:text-[30px] lg:text-[32px] font-extrabold mb-3 leading-[1.15] tracking-[-0.015em] ${
                 d ? "text-white" : "text-foreground"
               }`}
             >
@@ -593,7 +593,7 @@ function QuestionPageLayoutInner({
                         }`}
                       >
                         <div
-                          className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
+                          className={`text-[10px] font-extrabold uppercase tracking-widest mb-1 ${
                             d ? "text-primary" : "text-primary dark:text-primary"
                           }`}
                         >
@@ -617,9 +617,7 @@ function QuestionPageLayoutInner({
                         }`}
                       >
                         <div
-                          className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
-                            d ? "text-amber-600" : "text-amber-600 dark:text-amber-400"
-                          }`}
+                          className={`text-[10px] font-extrabold uppercase tracking-widest mb-1 text-warning`}
                         >
                           Common Mistake
                         </div>
@@ -641,9 +639,7 @@ function QuestionPageLayoutInner({
                         }`}
                       >
                         <div
-                          className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
-                            d ? "text-emerald-600" : "text-emerald-600 dark:text-emerald-400"
-                          }`}
+                          className={`text-[10px] font-extrabold uppercase tracking-widest mb-1 text-success`}
                         >
                           To Stand Out
                         </div>
@@ -673,26 +669,20 @@ function QuestionPageLayoutInner({
                   <div
                     className={`flex items-center gap-2 px-5 py-2.5 border-b ${
                       d
-                        ? "border-default dark:border-default/50 bg-emerald-900 dark:bg-emerald-800/30"
+                        ? "border-default dark:border-default/50 bg-success/20"
                         : "border-success/20 bg-success/10"
                     }`}
                   >
                     <MessageSquare
-                      className={`h-3.5 w-3.5 ${
-                        d ? "text-emerald-600" : "text-emerald-600 dark:text-emerald-400"
-                      }`}
+                      className={`h-3.5 w-3.5 text-success`}
                     />
                     <span
-                      className={`text-[11px] font-bold uppercase tracking-widest ${
-                        d ? "text-emerald-700" : "text-emerald-700 dark:text-emerald-400"
-                      }`}
+                      className={`text-[11px] font-bold uppercase tracking-widest text-success`}
                     >
                       Interview Answer
                     </span>
                     <span
-                      className={`ml-auto text-[11px] ${
-                        d ? "text-emerald-500" : "text-emerald-600 dark:text-emerald-400"
-                      }`}
+                      className={`ml-auto text-[11px] text-success`}
                     >
                       {readTime}–{Math.min(readTime + 1, 5)} min
                     </span>
@@ -750,7 +740,7 @@ function QuestionPageLayoutInner({
 
             {/* ── Follow-up questions ── */}
             {followups.length > 0 && (
-              <section className="mb-6">
+              <section className="mb-6" aria-live="polite">
                 <div
                   className={`rounded-xl overflow-hidden ${
                     d
@@ -761,19 +751,15 @@ function QuestionPageLayoutInner({
                   <div
                     className={`flex items-center gap-2 px-5 py-2.5 border-b ${
                       d
-                        ? "border-default dark:border-default/50 bg-blue-900 dark:bg-blue-800/20"
+                        ? "border-default dark:border-default/50 bg-primary/20"
                         : "border-primary/20 bg-primary/10"
                     }`}
                   >
                     <HelpCircle
-                      className={`h-3.5 w-3.5 ${
-                        d ? "text-primary dark:text-primary" : "text-primary dark:text-primary"
-                      }`}
+                      className={`h-3.5 w-3.5 text-primary`}
                     />
                     <span
-                      className={`text-[11px] font-bold uppercase tracking-widest ${
-                        d ? "text-primary" : "text-primary dark:text-primary"
-                      }`}
+                      className={`text-[11px] font-bold uppercase tracking-widest text-primary`}
                     >
                       Follow-up questions
                     </span>
@@ -782,10 +768,10 @@ function QuestionPageLayoutInner({
                     {followups.map((q, i) => (
                       <li key={i} className="flex items-start gap-3">
                         <span
-                          className={`mt-[2px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-black border ${
+                          className={`mt-[2px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-extrabold border ${
                             d
-                              ? "bg-blue-950/60 text-primary dark:text-primary border-default dark:border-default/60"
-                              : "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary border-default dark:border-default/20"
+                              ? "bg-primary/20 text-primary border-default dark:border-default/60"
+                              : "bg-primary/10 text-primary dark:text-primary border-default dark:border-default/20"
                           }`}
                         >
                           {i + 1}
@@ -810,8 +796,8 @@ function QuestionPageLayoutInner({
                 <div
                   className={`mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-widest ${
                     d
-                      ? "bg-amber-900/30 border-default/40 text-amber-400"
-                      : "bg-amber-50 dark:bg-amber-500/10 border-default dark:border-default/20 text-amber-700 dark:text-amber-400"
+                      ? "bg-warning/10 border-default/40 text-warning"
+                      : "bg-warning/10 border-default dark:border-default/20 text-warning"
                   }`}
                 >
                   <Folder className="h-3 w-3" />
@@ -826,7 +812,7 @@ function QuestionPageLayoutInner({
                       previousQuestion.slug,
                       previousQuestion.stackSlug || stackSlug
                     )}
-                    className={`sm:w-auto sm:max-w-[40%] flex items-center gap-2 rounded-xl border px-4 py-3 transition-all ${
+                    className={`sm:w-auto sm:max-w-[40%] flex items-center gap-2 rounded-xl border px-4 py-3 transition-colors ${
                       d
                         ? "border-border/60 bg-surface/60 hover:border-border hover:bg-hover"
                         : "border-border bg-surface hover:border-border hover:bg-surface"
@@ -862,13 +848,13 @@ function QuestionPageLayoutInner({
                       nextQuestion.slug,
                       nextQuestion.stackSlug || stackSlug
                     )}
-                    className="group flex-1 flex items-center justify-between gap-3 rounded-xl bg-blue-600 dark:bg-blue-800 hover:bg-blue-700 dark:bg-blue-800 text-foreground px-5 py-3 shadow-sm transition-all"
+                    className="group flex-1 flex items-center justify-between gap-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-3 shadow-sm transition-colors"
                   >
                     <div className="min-w-0">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-primary dark:text-primary">
+                      <div className="text-[10px] font-extrabold uppercase tracking-widest text-primary-foreground/80">
                         Continue · Next question
                         {totalQuestions > 0 && currentIdx >= 0 && (
-                          <span className="text-primary dark:text-primary font-bold">
+                          <span className="text-primary-foreground/60 font-bold">
                             {" "}
                             · Q {currentIdx + 2}/{totalQuestions}
                           </span>
@@ -878,7 +864,7 @@ function QuestionPageLayoutInner({
                         {nextQuestion.title}
                       </div>
                     </div>
-                    <ArrowRight className="h-5 w-5 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+                    <ArrowRight className="h-5 w-5 shrink-0 transition-colors" />
                   </Link>
                 )}
               </div>
@@ -886,8 +872,8 @@ function QuestionPageLayoutInner({
                 <div
                   className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-[12px] font-bold ${
                     d
-                      ? "bg-emerald-900/30 border-default/40 text-emerald-400"
-                      : "bg-emerald-50 dark:bg-emerald-500/10 border-default dark:border-default/20 text-emerald-700 dark:text-emerald-400"
+                      ? "bg-success/10 border-default/40 text-success"
+                      : "bg-success/10 border-default dark:border-default/20 text-success"
                   }`}
                 >
                   You&apos;ve reached the end of this module — well done.
@@ -899,26 +885,24 @@ function QuestionPageLayoutInner({
             {nextCurriculumModule && (
               <Link
                 href={nextCurriculumModule.href}
-                className={`group mt-8 block rounded-xl border hover:shadow-md transition-all overflow-hidden ${
+                className={`group mt-8 block rounded-xl border hover:shadow-md transition-colors overflow-hidden ${
                   d
                     ? "border-default/40 bg-surface hover:border-default/60 hover:shadow-sm"
                     : "border-default dark:border-default/20 bg-gradient-to-br  via-white to-white dark:via-zinc-900 dark:to-zinc-900 hover:border-default dark:border-default/30 hover:shadow-sm"
                 }`}
               >
                 <div className="px-5 py-4 flex items-center gap-4">
-                  <div className="shrink-0 w-10 h-10 rounded-lg bg-emerald-700 dark:bg-emerald-800 flex items-center justify-center text-white text-xs font-black">
+                  <div className="shrink-0 w-10 h-10 rounded-lg bg-success flex items-center justify-center text-white text-xs font-extrabold">
                     {nextCurriculumModule.moduleNumber || "→"}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div
-                      className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${
-                        d ? "text-emerald-500" : "text-emerald-600 dark:text-emerald-400"
-                      }`}
+                      className={`text-[10px] font-extrabold uppercase tracking-widest mb-0.5 text-success`}
                     >
                       Up next in your roadmap
                     </div>
                     <div
-                      className={`text-[15px] font-black leading-snug truncate group-hover:text-emerald-600 dark:text-emerald-400 transition-colors ${
+                      className={`text-[15px] font-extrabold leading-snug truncate group-hover:text-success transition-colors ${
                         d ? "text-muted-foreground" : "text-foreground"
                       }`}
                     >
@@ -935,9 +919,7 @@ function QuestionPageLayoutInner({
                     )}
                   </div>
                   <ArrowRight
-                    className={`h-5 w-5 shrink-0 group-hover:translate-x-0.5 transition-transform ${
-                      d ? "text-emerald-600 dark:text-emerald-400" : "text-emerald-500 dark:text-emerald-400"
-                    }`}
+                    className={`h-5 w-5 shrink-0 transition-colors text-success`}
                   />
                 </div>
               </Link>
@@ -963,7 +945,7 @@ function QuestionPageLayoutInner({
                   <Compass className="h-4 w-4 text-primary dark:text-primary" />
                   <h2
                     id="related-prep-heading"
-                    className={`text-sm font-black tracking-tight ${
+                    className={`text-sm font-extrabold tracking-tight ${
                       d ? "text-muted-foreground" : "text-foreground"
                     }`}
                   >
@@ -972,8 +954,8 @@ function QuestionPageLayoutInner({
                   <span
                     className={`ml-auto text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${
                       d
-                        ? "bg-blue-900 dark:bg-blue-800/60 text-primary dark:text-primary"
-                        : "bg-blue-100 dark:bg-blue-950/20 text-primary dark:text-primary"
+                        ? "bg-primary/20 text-primary"
+                        : "bg-primary/10 text-primary dark:text-primary"
                     }`}
                   >
                     {relatedPillars.length}
@@ -985,7 +967,7 @@ function QuestionPageLayoutInner({
                       <Link
                         key={p.pillarSlug}
                         href={`/${p.pillarSlug}`}
-                        className={`group flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
+                        className={`group flex items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors ${
                           d
                             ? "border-border/60 dark:bg-surface/60 hover:border-default dark:border-default/50 hover:bg-slate-700 dark:bg-slate-800/60"
                             : "border-border bg-background hover:border-default hover:bg-primary/10"
@@ -993,7 +975,7 @@ function QuestionPageLayoutInner({
                       >
                         <div className="flex-1 min-w-0">
                           <div
-                            className={`text-[13px] font-black leading-snug group-hover:text-primary dark:group-hover:text-primary transition-colors ${
+                            className={`text-[13px] font-extrabold leading-snug group-hover:text-primary dark:group-hover:text-primary transition-colors ${
                               d ? "text-muted-foreground" : "text-foreground"
                             }`}
                           >
@@ -1008,7 +990,7 @@ function QuestionPageLayoutInner({
                           </div>
                         </div>
                         <ChevronRight
-                          className={`h-3.5 w-3.5 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5 ${
+                          className={`h-3.5 w-3.5 shrink-0 mt-0.5 transition-colors ${
                             d
                               ? "text-muted-foreground group-hover:text-primary dark:group-hover:text-primary"
                               : "text-muted-foreground group-hover:text-primary dark:group-hover:text-primary"
@@ -1032,20 +1014,18 @@ function QuestionPageLayoutInner({
                 }`}
               >
                 <div className="p-5 flex items-start gap-4 flex-wrap">
-                  <div className="shrink-0 w-11 h-11 rounded-lg bg-blue-700 dark:bg-blue-800 flex items-center justify-center">
-                    <Compass className="h-5 w-5 text-foreground" />
+                  <div className="shrink-0 w-11 h-11 rounded-lg bg-primary flex items-center justify-center">
+                    <Compass className="h-5 w-5 text-primary-foreground" />
                   </div>
                   <div className="flex-1 min-w-[220px]">
                     <div
-                      className={`text-[10px] font-black uppercase tracking-widest mb-1 ${
-                        d ? "text-primary dark:text-primary" : "text-primary dark:text-primary"
-                      }`}
+                      className={`text-[10px] font-extrabold uppercase tracking-widest mb-1 text-primary`}
                     >
                       Full prep
                     </div>
                     <h2
                       id="roadmap-cta-heading"
-                      className={`text-base font-black mb-1 leading-snug ${
+                      className={`text-base font-extrabold mb-1 leading-snug ${
                         d ? "text-muted-foreground" : "text-foreground"
                       }`}
                     >
@@ -1062,7 +1042,7 @@ function QuestionPageLayoutInner({
                   <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                     <Link
                       href={roadmapCta.href}
-                      className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 dark:bg-blue-800 text-foreground font-bold text-sm hover:bg-blue-700 dark:bg-blue-800 shadow-sm transition-colors"
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-bold text-sm hover:bg-primary/90 shadow-sm transition-colors"
                     >
                       {roadmapCta.ctaLabel}
                       <ArrowRight className="h-4 w-4" />
@@ -1111,9 +1091,9 @@ function QuestionPageLayoutInner({
             </span>
             <button
               onClick={toggleTheme}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+              className={`touch-target flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
                 d
-                  ? "border-slate-600 dark:border-slate-700 dark:bg-surface text-muted-foreground hover:border-default dark:border-default/60 hover:text-amber-300 dark:text-amber-300"
+                  ? "border-slate-600 dark:border-slate-700 dark:bg-surface text-muted-foreground hover:border-default hover:text-warning"
                   : "border-border bg-surface text-muted-foreground hover:border-border hover:text-foreground"
               }`}
               aria-label={d ? "Switch to light mode" : "Switch to dark mode"}
@@ -1161,7 +1141,7 @@ function QuestionPageLayoutInner({
                 }`}
               >
                 <div
-                  className="h-full bg-blue-500 dark:bg-blue-800 rounded-full transition-all"
+                  className="h-full bg-primary rounded-full transition-colors"
                   style={{
                     width: `${((currentIdx + 1) / totalQuestions) * 100}%`,
                   }}
@@ -1249,7 +1229,7 @@ function QuestionPageLayoutInner({
           >
             <Link
               href="/mock-interviews"
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-blue-600 dark:bg-blue-800 text-foreground text-sm font-bold hover:bg-blue-700 dark:bg-blue-800 transition-colors"
+              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 transition-colors"
             >
               <PlayCircle className="h-4 w-4" />
               Mock Interview
@@ -1274,8 +1254,8 @@ function QuestionPageLayoutInner({
                       className={`block text-[13px] py-1.5 px-2 rounded-md transition-colors leading-snug ${
                         q.slug === questionSlug
                           ? d
-                            ? "bg-blue-900/40 text-primary font-semibold"
-                            : "bg-blue-50 dark:bg-blue-500/10 text-primary dark:text-primary font-semibold"
+                            ? "bg-primary/20 text-primary font-semibold"
+                            : "bg-primary/10 text-primary dark:text-primary font-semibold"
                           : d
                           ? "text-muted-foreground hover:text-foreground hover:bg-surface/70"
                           : "text-muted-foreground hover:text-foreground hover:bg-surface"
