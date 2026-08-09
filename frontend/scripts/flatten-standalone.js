@@ -9,13 +9,17 @@
  * build time, `next.config.mjs` sets `outputFileTracingRoot` (and the Turbopack
  * `root`) to the **repo root** (the parent of `frontend/`).
  *
- * Because the trace root is the repo root, `next build` (standalone mode)
- * nests the standalone output under the app's package path:
+ * Because the trace root is the repo root, `next build` (standalone mode) traces
+ * the repo-root siblings of `frontend/` (e.g. `content/`, `scripts/`,
+ * `.data/`) into `.next/standalone/` directly, while everything reachable from
+ * `frontend/` is nested under `.next/standalone/frontend/`:
  *
  *     .next/standalone/frontend/.next/...
  *     .next/standalone/frontend/node_modules/...
  *     .next/standalone/frontend/package.json
+ *     .next/standalone/frontend/scripts/flatten-standalone.js   (app scripts)
  *     .next/standalone/content/...            (traced from the repo root)
+ *     .next/standalone/scripts/audit_speakable.py               (repo scripts)
  *
  * @opennextjs/cloudflare, however, computes the package path as
  * `path.relative(monorepoRoot, appBuildOutputPath)`. Its `findPackagerAndRoot`
@@ -35,11 +39,21 @@
  * -------
  * After `next build` produces the nested standalone tree, move everything
  * from `.next/standalone/frontend/` up one level into `.next/standalone/` so
- * the layout is flat — exactly what open-next expects. `content/` already
- * lives at `.next/standalone/content/` (traced from the repo root) and is not
- * present inside `frontend/`, so there is no collision. We then invoke
- * `opennextjs-cloudflare build --skipNextBuild` so open-next consumes the
- * already-flattened tree instead of rebuilding.
+ * the layout is flat — exactly what open-next expects. When a nested entry
+ * shares a name with a top-level entry (this happens for `scripts/`: the repo
+ * root traces `<repo>/scripts/` to the top level, while the app's
+ * `frontend/scripts/` is nested), the two must be **merged**:
+ *
+ *   - directory ↔ directory  → recurse and merge children
+ *   - file    ↔ file        → the nested (app) copy wins (it is the app's own)
+ *   - file    ↔ directory   → error (a name clash between a file and a dir is
+ *                              unexpected and should not be silently resolved)
+ *   - directory ↔ file      → error (same)
+ *
+ * `content/` only ever exists at the top level (it is traced from the repo
+ * root and is not duplicated inside `frontend/`), so it never collides. We
+ * then invoke `opennextjs-cloudflare build --skipNextBuild` so open-next
+ * consumes the already-flattened tree instead of rebuilding.
  *
  * Run via `npm run build:cf` (which chains: next build → this script →
  * opennextjs-cloudflare build --skipNextBuild).
@@ -49,6 +63,57 @@ const path = require("node:path");
 
 const standaloneDir = path.join(process.cwd(), ".next", "standalone");
 const nestedAppDir = path.join(standaloneDir, "frontend");
+
+/**
+ * Move every entry from `srcDir` into `dstDir`, merging into any entries that
+ * already exist there. `fileWins` controls what happens on a file↔file clash:
+ * the nested (app) file replaces the top-level one.
+ *
+ * @param {string} srcDir   - source directory (the nested `frontend/` subtree)
+ * @param {string} dstDir   - destination directory (the flat standalone root)
+ * @param {number[]} moved  - accumulator: [filesMoved, dirsMoved, merges]
+ */
+function mergeDir(srcDir, dstDir, moved) {
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name === "." || entry.name === "..") continue;
+    const src = path.join(srcDir, entry.name);
+    const dst = path.join(dstDir, entry.name);
+
+    if (fs.existsSync(dst)) {
+      const srcStat = fs.statSync(src);
+      const dstStat = fs.statSync(dst);
+      const srcIsDir = srcStat.isDirectory();
+      const dstIsDir = dstStat.isDirectory();
+
+      if (srcIsDir && dstIsDir) {
+        // directory ↔ directory → recurse and merge children
+        mergeDir(src, dst, moved);
+        // src is now empty (all children moved/merged); remove it
+        fs.rmdirSync(src);
+        moved[2]++;
+      } else if (!srcIsDir && !dstIsDir) {
+        // file ↔ file → nested (app) copy wins
+        fs.renameSync(src, dst);
+        moved[0]++;
+        moved[2]++;
+      } else {
+        // file ↔ directory (or directory ↔ file) — name clash of different
+        // kinds is unexpected; refuse rather than guess.
+        console.error(
+          `flatten-standalone: type clash for "${entry.name}" — ` +
+            `${srcIsDir ? "dir" : "file"} vs existing ${dstIsDir ? "dir" : "file"}. Refusing to guess.`,
+        );
+        process.exit(1);
+      }
+    } else {
+      // No collision: a plain rename is enough.
+      fs.renameSync(src, dst);
+      if (entry.isDirectory()) moved[1]++;
+      else moved[0]++;
+    }
+  }
+}
 
 function main() {
   if (!fs.existsSync(standaloneDir)) {
@@ -70,28 +135,12 @@ function main() {
     process.exit(1);
   }
 
-  // Move every entry (including dotfiles) from .next/standalone/frontend/ up
-  // into .next/standalone/. Skip "." and "..". Refuse to overwrite an existing
-  // top-level entry to avoid silently clobbering the repo-root-traced
-  // `content/` dir (which should never be duplicated inside frontend/, but
-  // we guard anyway).
-  const entries = fs.readdirSync(nestedAppDir, { withFileTypes: true });
-  let moved = 0;
-  for (const entry of entries) {
-    const src = path.join(nestedAppDir, entry.name);
-    const dst = path.join(standaloneDir, entry.name);
-    if (fs.existsSync(dst)) {
-      // `content/` legitimately exists at the top level (traced from the repo
-      // root) and is not duplicated inside frontend/. Any other collision is
-      // unexpected — surface it loudly rather than guess.
-      console.error(
-        `flatten-standalone: refusing to overwrite "${dst}" (already exists). Nested entry "${entry.name}" would collide.`,
-      );
-      process.exit(1);
-    }
-    fs.renameSync(src, dst);
-    moved++;
-  }
+  // Move/merge every entry (including dotfiles) from .next/standalone/frontend/
+  // up into .next/standalone/. Directories that already exist at the top level
+  // (e.g. `scripts/` traced from the repo root) are merged recursively instead
+  // of clobbering each other.
+  const moved = [0, 0, 0]; // [files, dirs, merges]
+  mergeDir(nestedAppDir, standaloneDir, moved);
 
   // Remove the now-empty frontend/ directory.
   fs.rmdirSync(nestedAppDir);
@@ -110,7 +159,9 @@ function main() {
   }
 
   console.log(
-    `flatten-standalone: moved ${moved} entries from frontend/ up to .next/standalone/. Standalone is now flat.`,
+    `flatten-standalone: moved ${moved[0]} file(s) and ${moved[1]} dir(s) from frontend/ up to .next/standalone/` +
+      (moved[2] > 0 ? ` (${moved[2]} merged into existing top-level entries).` : ".") +
+      " Standalone is now flat.",
   );
 }
 
