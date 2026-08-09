@@ -21,6 +21,11 @@ import { readStaticAsset } from '@/lib/static-asset';
  */
 
 export const revalidate = 3600;
+// Pre-render at build time and serve the static snapshot. The handler reads
+// from the ASSETS binding (see readStaticAsset) first; `force-static` freezes
+// the build-time output so the worker never re-runs the fs-walking fallback,
+// which has no filesystem on Cloudflare Workers.
+export const dynamic = 'force-static';
 
 const g = globalThis as typeof globalThis & {
   _ie_moduleRevisionCache?: Map<string, { at: number; body: ModuleRevision | null }>;

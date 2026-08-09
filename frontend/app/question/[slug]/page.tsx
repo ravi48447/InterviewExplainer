@@ -11,7 +11,22 @@ import { parseDomainSlug } from "@/lib/domain-display";
  * Resolution order:
  *   1. Local content tree scan (no backend required)
  *   2. Spring Boot API fallback (for DB-backed questions)
+ *
+ * Fully static (SSG): every slug is enumerated at build time (the build
+ * container has a filesystem). `dynamicParams = false` makes an unknown slug
+ * 404 instead of rendering on-demand, which would call `listAllQuestionParams`
+ * (which walks `fs`) at request time — unavailable on Cloudflare Workers.
  */
+
+// Pre-render every legacy question slug at build time. Unknown slugs 404
+// rather than scanning the filesystem at request time.
+export const dynamicParams = false;
+export const dynamic = "force-static";
+
+export async function generateStaticParams() {
+  return listAllQuestionParams().map(({ questionSlug }) => ({ slug: questionSlug }));
+}
+
 export default async function LegacyQuestionPage({
   params,
 }: {

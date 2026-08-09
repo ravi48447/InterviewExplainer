@@ -10,6 +10,11 @@ import { readStaticAsset } from '@/lib/static-asset';
 // Cache this route's HTTP response. Next.js will serve the cached body for up
 // to `revalidate` seconds without re-running the handler (or the fs walk).
 export const revalidate = 3600;
+// Pre-render at build time and serve the static snapshot. The handler reads
+// from the ASSETS binding (see readStaticAsset) first; `force-static` freezes
+// the build-time output so the worker never re-runs the fs-walking fallback,
+// which has no filesystem on Cloudflare Workers.
+export const dynamic = 'force-static';
 
 // Process-wide cache shared across HMR reloads in dev.
 // A module-local Map gets wiped whenever Next.js invalidates this file's

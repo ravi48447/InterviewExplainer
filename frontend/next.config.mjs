@@ -57,10 +57,6 @@ const nextConfig = {
   // server output into .open-next/worker.js for the Workers runtime.
   output: 'standalone',
 
-  // Required by @opennextjs/cloudflare: the adapter bundles the standalone
-  // server output into .open-next/worker.js for the Workers runtime.
-  output: 'standalone',
-
   async headers() {
     return [
       {

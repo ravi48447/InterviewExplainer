@@ -16,6 +16,11 @@ export type { ContentDomain } from '@/lib/types/content-domain';
 
 // Cache the HTTP response at the framework layer.
 export const revalidate = 3600;
+// Pre-render at build time and serve the static snapshot. The handler reads
+// from the ASSETS binding (see readStaticAsset) first; `force-static` freezes
+// the build-time output so the worker never re-runs the fs-walking fallback,
+// which has no filesystem on Cloudflare Workers.
+export const dynamic = 'force-static';
 
 // Process-wide cache. This route walks the entire content/ tree (63 MB,
 // 1596 complete-qa.json files) and JSON.parses everything — without caching,

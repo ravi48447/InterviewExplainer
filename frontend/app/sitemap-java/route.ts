@@ -4,6 +4,12 @@ import { EXPERIENCE_LEVELS } from "@/lib/levels";
 import { SEO_MODULES, getSeoSlugForModule } from "@/lib/seo-slugs";
 import { PILLAR_HUB_SLUGS } from "@/lib/seo-pillars";
 
+// Pre-render the sitemap at build time. The handlers below walk the content
+// filesystem (listAllQuestionParams / getVisibleStackSlugs), which only
+// exists at build time — not on Cloudflare Workers. `force-static` freezes
+// the build-time output so the worker serves the snapshot without re-running.
+export const dynamic = "force-static";
+
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://interviewexplainer.com";
 const NOW = new Date().toISOString().split("T")[0];
 

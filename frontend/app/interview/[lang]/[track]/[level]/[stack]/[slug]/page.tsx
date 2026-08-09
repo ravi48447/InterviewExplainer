@@ -11,6 +11,11 @@ import V2ContentTreeNav from "@/components/V2ContentTreeNav";
 import type { ExperienceLevelKey } from "@/lib/levels";
 
 export const revalidate = 3600;
+// Fully static: every {lang,track,level,stack,slug} tuple is enumerated by
+// generateStaticParams at build time. Unknown tuples 404 rather than
+// rendering on-demand — on-demand rendering would call `fs`-based content
+// resolvers, which do not exist on Cloudflare Workers.
+export const dynamicParams = false;
 
 export async function generateStaticParams() {
   const { listLanguages, listTracks, listLevels, listStacksForPath, resolveStackContent } = await import("@/lib/contentV2");

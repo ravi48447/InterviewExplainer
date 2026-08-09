@@ -27,6 +27,28 @@ import {
  */
 
 export const revalidate = 3600;
+// Fully static: every {seoSlug, questionSlug} tuple is enumerated by
+// generateStaticParams at build time. Unknown tuples 404 rather than
+// rendering on-demand — on-demand rendering would call `fs`-based content
+// resolvers (getQuestionPagePayload), which do not exist on Cloudflare
+// Workers.
+export const dynamicParams = false;
+
+export async function generateStaticParams() {
+  const { listAllQuestionParams } = await import("@/lib/content-reader");
+  const { getSeoSlugForModule } = await import("@/lib/seo-slugs");
+  const seen = new Set<string>();
+  const params: { seoSlug: string; questionSlug: string }[] = [];
+  for (const { domainSlug, stackSlug, questionSlug } of listAllQuestionParams()) {
+    const seoSlug = getSeoSlugForModule(domainSlug, stackSlug);
+    if (!seoSlug) continue;
+    const key = `${seoSlug}/${questionSlug}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    params.push({ seoSlug, questionSlug });
+  }
+  return params;
+}
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://interviewexplainer.com";
@@ -279,7 +301,3 @@ export default async function SeoQuestionPage({
     </>
   );
 }
-
-// Intentionally no generateStaticParams — the pilot renders on-demand with
-// ISR (revalidate = 3600). Fanout step will add generateStaticParams for
-// prebuilt HTML across all 34 modules.

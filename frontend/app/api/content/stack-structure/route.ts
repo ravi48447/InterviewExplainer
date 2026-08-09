@@ -12,6 +12,11 @@ import type { Level } from '@/lib/contentV2-types';
 import { readStaticAsset } from '@/lib/static-asset';
 
 export const revalidate = 3600;
+// Pre-render at build time and serve the static snapshot. The handler reads
+// from the ASSETS binding (see readStaticAsset) first; `force-static` freezes
+// the build-time output so the worker never re-runs the fs-walking fallback,
+// which has no filesystem on Cloudflare Workers.
+export const dynamic = 'force-static';
 
 // Shared per-(domain,stack) cache so repeated clicks on the same module don't
 // re-scan the filesystem. Survives HMR via globalThis.

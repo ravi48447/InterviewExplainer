@@ -1,5 +1,5 @@
 import { permanentRedirect, notFound } from "next/navigation";
-import { getDSAProblem } from "@/lib/contentV2";
+import { getDSAIndex, getDSAProblem } from "@/lib/contentV2";
 
 /**
  * Legacy route. The canonical URL for every DSA problem is
@@ -11,9 +11,30 @@ import { getDSAProblem } from "@/lib/contentV2";
  * created two self-canonicalising URLs for the same content — a classic
  * duplicate-content trap. We now 301 to the canonical URL whenever the
  * category+slug combination resolves to a real problem, and 404 otherwise.
+ *
+ * Fully static (SSG): all valid {category, slug} pairs are enumerated at
+ * build time (the build container has a filesystem). `dynamicParams = false`
+ * makes any unknown pair 404 instead of rendering on-demand, which would
+ * require `fs` at runtime — unavailable on Cloudflare Workers.
  */
 
 type PageParams = { category: string; slug: string };
+
+// Pre-render every legacy category/slug pair at build time. Unknown pairs
+// 404 rather than hitting the filesystem at request time.
+export const dynamicParams = false;
+export const dynamic = "force-static";
+
+export async function generateStaticParams() {
+  const index = getDSAIndex();
+  const params: PageParams[] = [];
+  for (const problem of index?.problems ?? []) {
+    if (problem.category && problem.slug) {
+      params.push({ category: problem.category, slug: problem.slug });
+    }
+  }
+  return params;
+}
 
 export default async function RedirectToCanonicalProblem({
   params,
