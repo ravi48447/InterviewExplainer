@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getModuleRevision } from '@/lib/content-reader';
 import type { ModuleRevision } from '@/lib/api';
+import { readStaticAsset } from '@/lib/static-asset';
 
 /**
  * GET /api/content/module-revision?domainSlug=...&stackSlug=...
@@ -40,6 +41,14 @@ export async function GET(req: NextRequest) {
   }
 
   const cacheKey = `${domainSlug}::${stackSlug}::v1`;
+
+  // On Cloudflare Workers (and after pre-render on Node), serve the static
+  // snapshot from the ASSETS binding — no filesystem walk at request time.
+  const staticSnapshot = await readStaticAsset<{ revision: ModuleRevision | null }>(
+    `/api/content/module-revision/${domainSlug}/${stackSlug}.json`
+  );
+  if (staticSnapshot) return NextResponse.json(staticSnapshot);
+
   const cached = g._ie_moduleRevisionCache!.get(cacheKey);
   if (cached && Date.now() - cached.at < TTL_MS) {
     return NextResponse.json({ revision: cached.body });

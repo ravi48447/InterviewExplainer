@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSubcategoriesWithQuestions } from '@/lib/content-reader';
 import type { StackSubcategory } from '@/lib/api';
+import { readStaticAsset } from '@/lib/static-asset';
 
 /**
  * GET /api/content/stack-questions?domainSlug=java-backend-3-5&stackSlug=spring-boot
@@ -42,6 +43,18 @@ export async function GET(req: NextRequest) {
   // Bump when StackSubcategory shape changes — avoids stale caches.
   // ::v6 = invalidate stale caches from concurrent enrichment writes.
   const cacheKey = `${domainSlug}::${stackSlug}::v6`;
+
+  // On Cloudflare Workers (and after pre-render on Node), serve the static
+  // snapshot from the ASSETS binding — no filesystem walk at request time.
+  const staticSnapshot = await readStaticAsset<StackSubcategory[]>(
+    `/api/content/stack-questions/${domainSlug}/${stackSlug}.json`
+  );
+  if (staticSnapshot) {
+    return NextResponse.json(staticSnapshot, {
+      headers: { 'Cache-Control': BROWSER_CACHE_CONTROL },
+    });
+  }
+
   const cached = g._ie_stackQuestionsCache!.get(cacheKey);
   if (cached && Date.now() - cached.at < STACK_QUESTIONS_TTL_MS) {
     return NextResponse.json(cached.body, {

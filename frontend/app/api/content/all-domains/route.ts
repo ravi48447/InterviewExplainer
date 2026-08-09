@@ -10,6 +10,7 @@ import { LANG_DISPLAY, TRACK_DISPLAY } from '@/lib/domain-display';
 import { resolveStackContent } from '@/lib/contentV2';
 import type { Level } from '@/lib/contentV2-types';
 import type { ContentDomain } from '@/lib/types/content-domain';
+import { readStaticAsset } from '@/lib/static-asset';
 
 export type { ContentDomain } from '@/lib/types/content-domain';
 
@@ -178,19 +179,8 @@ function findLegacyDir(langSlug: string, trackSlug: string, level: ExperienceLev
 }
 
 // ─── Scan ───────────────────────────────────────────────────────────────────
-//
-// Walks the content tree and builds the full `ContentDomain[]`. Expensive:
-// reads ~65 MB of JSON on a cold cache. Extracted into a standalone function
-// so it can be called from both the GET handler AND a boot-time warm-up.
 
 // ─── Locked-domain registry ──────────────────────────────────────────────────
-//
-// Locked domains live under content/<domainSlug>/ and are NOT auto-discoverable
-// by the Phase 1/2 filesystem scan (which only walks content/interview/ and
-// content/domains/). We inject them statically in Phase 0 so they always show
-// up in the /domains browser regardless of question count.
-//
-// For each entry we read totalModules from the domain's _index.json at runtime.
 
 interface LockedDomainConfig {
   domainSlug: string;
@@ -484,20 +474,16 @@ function getAllDomains(): Promise<ContentDomain[]> {
 
   const started = Date.now();
   const work = new Promise<ContentDomain[]>((resolve) => {
-    // Hop off the request microtask so the first concurrent caller doesn't
-    // block on the synchronous fs scan any more than one caller already has to.
     setImmediate(() => {
       try {
         const body = computeAllDomains();
         g._ie_allDomainsCache = { at: Date.now(), body };
         const ms = Date.now() - started;
         if (ms > 250) {
-          // eslint-disable-next-line no-console
           console.log(`[all-domains] scanned ${body.length} domains in ${ms}ms`);
         }
         resolve(body);
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error('[all-domains] scan failed:', err);
         resolve([]);
       } finally {
@@ -510,15 +496,15 @@ function getAllDomains(): Promise<ContentDomain[]> {
   return work;
 }
 
-// NOTE: We deliberately do NOT kick off a warm-up at module-load time.
-// The first /domains visit triggers `getAllDomains()` on-demand and coalesces
-// concurrent callers via `_ie_allDomainsInflight`, which is good enough.
-// A module-load warm-up would fire a 65 MB fs scan on every Turbopack HMR
-// reload of this route module, causing CPU spikes during development.
-
 // ─── GET handler ────────────────────────────────────────────────────────────
 
 export async function GET() {
+  // On Cloudflare Workers (and after pre-render on Node), serve the static
+  // snapshot from the ASSETS binding — no filesystem walk at request time.
+  const cached = await readStaticAsset<ContentDomain[]>('/api/content/all-domains.json');
+  if (cached) return NextResponse.json(cached);
+
+  // Fallback: build from the filesystem (local dev / build-time).
   const body = await getAllDomains();
   return NextResponse.json(body);
 }

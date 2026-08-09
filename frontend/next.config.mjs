@@ -4,6 +4,16 @@ import fs from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Enable Cloudflare Workers bindings (ASSETS, etc.) in local `next dev`.
+// Dynamically imported so the config still loads in environments that install
+// with `--production` (which skips devDependencies). No-op outside of dev.
+try {
+  const { initOpenNextCloudflareForDev } = await import('@opennextjs/cloudflare');
+  initOpenNextCloudflareForDev();
+} catch {
+  // @opennextjs/cloudflare not installed (e.g. production-only install) — skip.
+}
+
 // The repo ships TWO Next apps that share one `content/` tree at the repo
 // root: a root app (`./package.json`) and a nested app (`./frontend/package.json`).
 // Either may be the build target on a deploy platform. The `content/` directory
@@ -42,6 +52,14 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+
+  // Required by @opennextjs/cloudflare: the adapter bundles the standalone
+  // server output into .open-next/worker.js for the Workers runtime.
+  output: 'standalone',
+
+  // Required by @opennextjs/cloudflare: the adapter bundles the standalone
+  // server output into .open-next/worker.js for the Workers runtime.
+  output: 'standalone',
 
   async headers() {
     return [

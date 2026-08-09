@@ -9,6 +9,7 @@ import {
 import { parseDomainSlug } from '@/lib/domain-display';
 import { resolveStackContent } from '@/lib/contentV2';
 import type { Level } from '@/lib/contentV2-types';
+import { readStaticAsset } from '@/lib/static-asset';
 
 export const revalidate = 3600;
 
@@ -166,6 +167,14 @@ export async function GET(req: NextRequest) {
   }
 
   const cacheKey = `${domainSlug}::${stackSlug}::structureV3`;
+
+  // On Cloudflare Workers (and after pre-render on Node), serve the static
+  // snapshot from the ASSETS binding — no filesystem walk at request time.
+  const staticSnapshot = await readStaticAsset<StackStructure>(
+    `/api/content/stack-structure/${domainSlug}/${stackSlug}.json`
+  );
+  if (staticSnapshot) return NextResponse.json(staticSnapshot);
+
   const cached = g._ie_stackStructureCache!.get(cacheKey);
   if (cached && Date.now() - cached.at < STACK_STRUCT_TTL_MS) {
     return NextResponse.json(cached.body);

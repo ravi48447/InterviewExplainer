@@ -5,6 +5,7 @@ import { domainSlugToContentPath } from '@/lib/content-reader';
 import { parseDomainSlug } from '@/lib/domain-display';
 import { resolveStackContent } from '@/lib/contentV2';
 import type { Level } from '@/lib/contentV2-types';
+import { readStaticAsset } from '@/lib/static-asset';
 
 // Cache this route's HTTP response. Next.js will serve the cached body for up
 // to `revalidate` seconds without re-running the handler (or the fs walk).
@@ -697,6 +698,13 @@ export async function GET(req: NextRequest) {
   const jsonInit = {
     headers: { 'Cache-Control': BROWSER_CACHE_CONTROL },
   };
+
+  // On Cloudflare Workers (and after pre-render on Node), serve the static
+  // snapshot from the ASSETS binding — no filesystem walk at request time.
+  const staticSnapshot = await readStaticAsset(
+    `/api/content/domain-stacks/${domainSlug}.json`
+  );
+  if (staticSnapshot) return NextResponse.json(staticSnapshot, jsonInit);
 
   // In-process cache hit — skip the entire fs walk.
   const cached = responseCache.get(domainSlug);

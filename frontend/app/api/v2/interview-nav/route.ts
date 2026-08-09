@@ -4,6 +4,7 @@ import {
   resolveStackContent,
 } from "@/lib/contentV2";
 import type { Level } from "@/lib/contentV2-types";
+import { readStaticAsset } from "@/lib/static-asset";
 
 function toDisplayName(slug: string): string {
   return slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -17,6 +18,17 @@ export async function GET(request: NextRequest) {
 
   if (!lang || !track) {
     return NextResponse.json([], { status: 400 });
+  }
+
+  // On Cloudflare Workers (and after pre-render on Node), serve the static
+  // snapshot from the ASSETS binding — no filesystem walk at request time.
+  const staticSnapshot = await readStaticAsset(
+    `/api/v2/interview-nav/${lang}/${track}/${level}.json`
+  );
+  if (staticSnapshot) {
+    return NextResponse.json(staticSnapshot, {
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
   const modules = listModulesWithStacks(lang, track, level);
