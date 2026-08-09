@@ -111,6 +111,15 @@ const nextConfig = {
       dynamic: 60,
       static: 300,
     },
+    // Cap the SSG worker pool and let Next size it from available memory. The
+    // repo has 105 static pages; on a beefy dev box Next spawns ~15 concurrent
+    // prerender workers, which peaks ~2.5GB RSS and gets OOM-killed (SIGTERM
+    // 143) in memory-constrained deploy containers (e.g. a 2-4GB Codespace
+    // building via @opennextjs). `memoryBasedWorkersCount` makes the worker
+    // count follow free RAM instead of CPU count, and `cpus` bounds it so even
+    // a 16-core box doesn't spawn a worker herd during `next build`.
+    cpus: 4,
+    memoryBasedWorkersCount: true,
     optimizePackageImports: [
       'lucide-react',
       'date-fns',
