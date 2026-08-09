@@ -37,22 +37,6 @@ async function main() {
   console.log('[pre-render] snapshotting content API responses → public/api/');
   ensureDir(OUT_DIR);
 
-  // ── /api/content/all-domains ────────────────────────────────────────────────
-  // The route computes ContentDomain[] from the full content tree. Rather than
-  // duplicate the (large) scan logic, we shell out to the route's own handler
-  // by importing its computation. The route file doesn't export a pure
-  // function, so we replicate the locked-domain + interview discovery via the
-  // same helpers the route uses.
-  {
-    const { computeAllDomains } = await import('../app/api/content/all-domains/route');
-    // `computeAllDomains` is module-local (not exported) — we can't import it.
-    // Instead, import the route module to trigger its side effects, then call
-    // the exported GET via a Request. But GET isn't easily callable without a
-    // runtime. Simplest: re-implement the discovery here using content-reader
-    // + contentV2, which is exactly what the route does.
-    // (See inline implementation below.)
-  }
-
   // Because the route handlers are tightly coupled to their own module-local
   // fs-walking helpers, the cleanest no-duplication approach is to import each
   // route's GET function and invoke it with a synthetic NextRequest. Next's
