@@ -8,12 +8,20 @@ import {
   isDsaSeoSlug,
 } from "@/lib/seo-slugs";
 import { PILLAR_HUB_SLUGS } from "@/lib/seo-pillars";
+import { getAppConfig, buildSecurityHeaders } from "@/lib/platform";
 
 /**
- * Proxy — URL canonicalisation + personalised level redirect
+ * Middleware — URL canonicalisation + personalised level redirect
  *
- * (Renamed from `middleware.ts` for Next.js 16. See
- *  https://nextjs.org/docs/messages/middleware-to-proxy)
+ * This file is named `middleware.ts` (not `proxy.ts`) and runs on the
+ * `experimental-edge` runtime. In Next.js 16 the recommended file is
+ * `proxy.ts`, but Next 16 forces `proxy.ts` onto the Node.js runtime, which
+ * `@opennextjs/cloudflare` cannot deploy ("Node.js middleware is not
+ * currently supported"). Using the legacy `middleware.ts` name with
+ * `export const runtime = 'experimental-edge'` keeps the same logic on the
+ * edge runtime, so open-next's `useNodeMiddleware` gate sees an edge
+ * middleware at `"/"` and the Cloudflare build succeeds. See
+ * https://nextjs.org/docs/messages/middleware-to-proxy for the rename.
  *
  * Three URL systems live here:
  *
@@ -207,7 +215,31 @@ function canonicalStackSlug(domainSlug: string, stackSlug: string): string {
   return renames[stackSlug] ?? stackSlug;
 }
 
-export function proxy(request: NextRequest) {
+export const runtime = 'experimental-edge';
+
+export function middleware(request: NextRequest) {
+  const response = handleProxy(request);
+  applySecurityHeaders(response);
+  return response;
+}
+
+/**
+ * Applies the platform security headers (CSP, HSTS, cross-origin isolation)
+ * to every response leaving the proxy. next.config.mjs owns the headers this
+ * does not (X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+ * Permissions-Policy); this layers the ones next.config cannot set
+ * dynamically. Mirrors the former middleware.ts behaviour (P14-T101..T108).
+ */
+function applySecurityHeaders(response: NextResponse) {
+  const config = getAppConfig();
+  const headers = buildSecurityHeaders(config);
+  response.headers.set("Content-Security-Policy", headers.contentSecurityPolicy);
+  response.headers.set("Strict-Transport-Security", headers.strictTransportSecurity);
+  response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  response.headers.set("Cross-Origin-Resource-Policy", "same-origin");
+}
+
+function handleProxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === "/") return NextResponse.next();

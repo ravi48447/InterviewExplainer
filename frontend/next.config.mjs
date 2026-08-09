@@ -57,35 +57,19 @@ const nextConfig = {
   // server output into .open-next/worker.js for the Workers runtime.
   output: 'standalone',
 
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
-          },
-        ],
-      },
-    ];
-  },
+  // Security headers (CSP, HSTS, X-Frame-Options, etc.) are applied by
+  // `middleware.ts` via `applySecurityHeaders()` on every response. Next's
+  // `headers()` API is NOT used because in Next 16 the recommended
+  // `proxy.ts` file is forced onto the Node.js runtime, which
+  // `@opennextjs/cloudflare` cannot deploy. We instead use the legacy
+  // `middleware.ts` file name with `runtime = 'experimental-edge'` so the
+  // logic runs on the edge runtime and open-next's nodejs-middleware gate
+  // passes. See `middleware.ts` and the Cloudflare build notes for details.
 
   // Let file-tracing walk into the shared `content/` directory — lib/seo-slugs.ts
   // imports `@content/java-backend-intermediate/_index.json` as the single
-  // source of truth for SEO module names.
+  // source of truth for SEO module names. This must be the repo root (parent
+  // of `frontend/`) so Turbopack can resolve `@content/*` → `../content/*`.
   outputFileTracingRoot: repoRoot,
 
   // Pin Turbopack's workspace root to the repo root so that sibling imports
