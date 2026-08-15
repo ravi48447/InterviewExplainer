@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Loader2, LogIn, LayoutDashboard, LogOut, User as UserIcon, UserPlus } from 'lucide-react'
+import { Loader2, LogIn, LayoutDashboard, LogOut, User as UserIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -53,17 +53,10 @@ export function HeaderUserActions() {
 
   if (!user) {
     return (
-      <div className="flex items-center gap-1.5">
-        <Button asChild variant="ghost" size="sm" className="h-9 px-3 text-sm font-medium">
+      <div className="flex items-center">
+        <Button asChild variant="primary" size="sm" className="h-9 px-4 text-sm font-medium shadow-sm">
           <Link href="/login">
-            <LogIn className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Log in
-          </Link>
-        </Button>
-        <Button asChild variant="outline" size="sm" className="hidden h-9 px-3 text-sm font-medium sm:inline-flex">
-          <Link href="/signup">
-            <UserPlus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Sign up
+            Sign in
           </Link>
         </Button>
       </div>

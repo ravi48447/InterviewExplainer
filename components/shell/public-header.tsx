@@ -4,6 +4,7 @@ import { MobileNav } from '@/components/shell/header/mobile-nav'
 import { HeaderSearch } from '@/components/shell/header/header-search'
 import { HeaderUserActions } from '@/components/shell/header/header-user-actions'
 import { ThemeToggle } from '@/components/shell/header/theme-toggle'
+import { PageContainer } from '@/components/page-container'
 
 /**
  * PublicHeader — canonical public-site header (P03-T032..T056, T031).
@@ -30,10 +31,10 @@ import { ThemeToggle } from '@/components/shell/header/theme-toggle'
 export function PublicHeader({ pathname = '/' }: { pathname?: string }) {
   return (
     <header
-      className="sticky top-0 z-[var(--z-sticky)] w-full border-b border-border/60 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65"
+      className="sticky top-0 z-[var(--z-sticky)] w-full border-b border-border bg-card/95 shadow-[0_1px_10px_hsl(var(--foreground)/0.025)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/90"
       role="banner"
     >
-      <div className="flex h-16 items-center gap-2 px-4 sm:px-6 lg:gap-3">
+      <PageContainer className="flex h-[68px] items-center gap-2 lg:gap-3">
         {/* Mobile drawer (client island) */}
         <div className="lg:hidden">
           <MobileNav />
@@ -58,11 +59,11 @@ export function PublicHeader({ pathname = '/' }: { pathname?: string }) {
           {/* User actions (client island) */}
           <HeaderUserActions />
         </div>
-      </div>
+      </PageContainer>
 
       {/* Mobile search row: on small screens where the inline search doesn't
           fit, render it in a secondary row under the bar (T053, T099). */}
-      <div className="border-t border-border/60 px-4 py-2 md:hidden lg:hidden">
+      <div className="border-t border-border px-4 py-2 md:hidden lg:hidden">
         <HeaderSearch />
       </div>
     </header>

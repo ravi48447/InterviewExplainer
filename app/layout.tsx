@@ -1,6 +1,6 @@
 import React from "react"
 import type { Metadata, Viewport } from "next";
-import { Inter, Geist_Mono } from "next/font/google";
+import { Poppins, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppShell } from "@/components/shell/public-shell";
@@ -15,9 +15,11 @@ import {
   buildGlobalStructuredData,
 } from "@/lib/seo";
 
-const inter = Inter({
+const poppins = Poppins({
   subsets: ["latin"],
-  variable: "--font-inter",
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-poppins",
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -61,7 +63,11 @@ export default function RootLayout({
   const globalSchemas = buildGlobalStructuredData();
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${poppins.variable} ${geistMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         {globalSchemas.map((schema, i) => (
           <script
@@ -80,7 +86,7 @@ export default function RootLayout({
         />
       )}
       <body
-        className={`${inter.variable} ${geistMono.variable} font-sans antialiased min-h-screen`}
+        className="font-sans antialiased min-h-screen"
         suppressHydrationWarning
       >
         {/*

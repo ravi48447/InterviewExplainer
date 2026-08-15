@@ -32,8 +32,9 @@ export function DesktopNav({ pathname }: { pathname: string }) {
       aria-label="Primary"
       className="hidden lg:flex items-center gap-1 ml-2"
     >
+      {showLearn && <DesktopLearnDropdown sections={learnSections} pathname={pathname} />}
+
       {primary.map((link) => {
-        const Icon = getNavIcon(link.icon)
         const active = isNavActive(resolveNavHref(link), pathname)
         return (
           <Link
@@ -41,20 +42,17 @@ export function DesktopNav({ pathname }: { pathname: string }) {
             href={resolveNavHref(link)}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-md h-9 px-3 text-sm font-medium transition-colors',
+              'inline-flex items-center rounded-lg h-9 px-3 text-sm font-medium transition-colors duration-150',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
               active
-                ? 'text-foreground bg-muted/60'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                ? 'text-primary bg-primary/10'
+                : 'text-foreground/75 hover:text-primary hover:bg-primary/5',
             )}
           >
-            {Icon && <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />}
             <span>{link.label}</span>
           </Link>
         )
       })}
-
-      {showLearn && <DesktopLearnDropdown sections={learnSections} pathname={pathname} />}
     </nav>
   )
 }

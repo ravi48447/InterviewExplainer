@@ -43,11 +43,11 @@ export interface HomeHero {
 }
 
 export const HOME_HERO: HomeHero = {
-  headline: "Crack the interview by learning the pattern, not memorizing problems.",
+  headline: "Understand every concept. Crack every interview.",
   supporting:
-    "Pattern-based DSA, AI mock interviews, resume scoring, and domain-specific Q&A — built for the way interviews actually test you.",
-  primaryCta: { label: "Start practicing", href: "/dsa" },
-  secondaryCta: { label: "Browse interview questions", href: "/domains" },
+    "In-depth explanations, real interview questions, guided visual practice, mock interviews, and personalized roadmaps — built for the way interviews actually test you.",
+  primaryCta: { label: "Start learning", href: "/select" },
+  secondaryCta: { label: "Explore DSA", href: "/dsa" },
 };
 
 // ─── Preparation pathways (P04-T067..T078) ───────────────────────────────────
@@ -616,6 +616,75 @@ export const HOME_SECTION_ORDER = [
 ] as const;
 
 export type HomeSectionId = (typeof HOME_SECTION_ORDER)[number];
+
+// ─── Visual-reference homepage data ─────────────────────────────────────────
+
+export type ReferenceHomeIcon =
+  | "server"
+  | "panels"
+  | "braces"
+  | "network"
+  | "cloud"
+  | "chart"
+  | "flag"
+  | "sprout"
+  | "puzzle"
+  | "target"
+  | "trophy";
+
+export interface ReferenceHomeDomain {
+  id: string;
+  title: string;
+  summary: string;
+  href: string;
+  icon: ReferenceHomeIcon;
+  accent: "blue" | "green" | "orange" | "violet" | "teal";
+}
+
+/** Six truthful, launch-ready discovery entries used by the visual homepage. */
+export const REFERENCE_HOME_DOMAINS: ReferenceHomeDomain[] = [
+  { id: "java", title: "Java Backend", summary: "Core Java, Spring Boot, APIs", href: "/domains?language=Java", icon: "server", accent: "blue" },
+  { id: "frontend", title: "Frontend Development", summary: "React, browser, performance", href: "/domains?language=Frontend", icon: "panels", accent: "green" },
+  { id: "dsa", title: "DSA & Algorithms", summary: "Patterns, problems, dry runs", href: "/dsa", icon: "braces", accent: "orange" },
+  { id: "architecture", title: "System Design", summary: "Architecture through real cases", href: "/prep/system-design", icon: "network", accent: "violet" },
+  { id: "python", title: "Python Development", summary: "Python, Django, FastAPI", href: "/domains?language=Python", icon: "cloud", accent: "teal" },
+  { id: "data", title: "Data & Analytics", summary: "SQL, analysis, visualization", href: "/domains?language=Python", icon: "chart", accent: "green" },
+];
+
+export interface ReferenceHomeJourneyStep {
+  step: number;
+  title: string;
+  detail: string;
+  href: string;
+  icon: ReferenceHomeIcon;
+  accent: "blue" | "green" | "orange" | "violet" | "teal";
+}
+
+export const REFERENCE_HOME_JOURNEY: ReferenceHomeJourneyStep[] = [
+  { step: 1, title: "Choose your goal", detail: "Pick a domain and set the outcome you want.", href: "/select", icon: "flag", accent: "blue" },
+  { step: 2, title: "Learn concepts", detail: "Build the idea with clear visual explanations.", href: "/prep", icon: "sprout", accent: "green" },
+  { step: 3, title: "Practice actively", detail: "Solve questions and understand every decision.", href: "/dsa", icon: "puzzle", accent: "violet" },
+  { step: 4, title: "Test and improve", detail: "Use mock interviews to find and close gaps.", href: "/mock-interviews", icon: "target", accent: "teal" },
+  { step: 5, title: "Get interview ready", detail: "Revise confidently and enter the real round prepared.", href: "/dashboard", icon: "trophy", accent: "orange" },
+];
+
+export interface ReferenceHomeProof {
+  label: string;
+  value: string;
+  icon: "user" | "building" | "code" | "video";
+}
+
+export function getReferenceHomeProof(): ReferenceHomeProof[] {
+  const stats = getHomeContentStats();
+  const questions = stats.find((item) => item.label === "Curated interview questions")?.value ?? "Curated";
+  const patterns = stats.find((item) => item.label === "DSA patterns covered")?.value ?? "6";
+  return [
+    { label: "Learning paths", value: `${getHomePathways().length}+`, icon: "user" },
+    { label: "Interview domains", value: `${REFERENCE_HOME_DOMAINS.length}`, icon: "building" },
+    { label: "Curated questions", value: questions, icon: "code" },
+    { label: "DSA patterns", value: patterns, icon: "video" },
+  ];
+}
 
 // Re-export launch-config helpers used by section components.
 export { isHubEnabled, type HubKey };
