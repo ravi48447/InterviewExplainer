@@ -49,6 +49,7 @@ import { DSABreadcrumb } from "@/components/dsa/DSABreadcrumb";
 import { DSAPill, DifficultyPill } from "@/components/dsa/DSAPills";
 import { ProblemSidebar } from "@/components/dsa/ProblemSidebar";
 import { DSAReadingNav, type ReadingSection } from "@/components/dsa/DSAReadingNav";
+import { DSAStudyWorkbench } from "@/components/dsa/DSAStudyWorkbench";
 import { cn } from "@/lib/utils";
 
 const SITE_URL =
@@ -340,6 +341,16 @@ export default async function DSAProblemPage({
         )}
       </div>
 
+      {optimal?.dryRun && (
+        <div className="lg:hidden">
+          <DSAStudyWorkbench
+            problemTitle={problem.title}
+            pattern={problem.remember?.pattern ?? problem.patterns?.[0] ?? "Follow the invariant"}
+            approach={optimal}
+          />
+        </div>
+      )}
+
       {/* Examples */}
       {problem.examples.length > 0 && (
         <div className="mb-5">
@@ -481,6 +492,16 @@ export default async function DSAProblemPage({
           <DSAReadingNav sections={readingSections} slug={slug} />
         )}
         <DSABreadcrumb trail={breadcrumbTrail} />
+
+        {optimal?.dryRun && (
+          <div className="hidden lg:block">
+            <DSAStudyWorkbench
+              problemTitle={problem.title}
+              pattern={problem.remember?.pattern ?? problem.patterns?.[0] ?? "Follow the invariant"}
+              approach={optimal}
+            />
+          </div>
+        )}
 
         {/* ─── ZONE 1 · 30-SECOND ANSWER ─────────────────────────────── */}
         {problem.directAnswer && (
@@ -716,6 +737,9 @@ export default async function DSAProblemPage({
                 total={problem.approaches.length}
                 approach={approach}
                 isOptimal={i === problem.approaches.length - 1}
+                studyVisualMoved={
+                  i === problem.approaches.length - 1 && Boolean(optimal?.dryRun)
+                }
               />
             ))}
           </div>
@@ -1149,11 +1173,13 @@ function ApproachBlock({
   total,
   approach,
   isOptimal,
+  studyVisualMoved = false,
 }: {
   index: number;
   total: number;
   approach: DSAApproach;
   isOptimal: boolean;
+  studyVisualMoved?: boolean;
 }) {
   const hasNotes =
     (approach.edgeCases?.length ?? 0) + (approach.pitfalls?.length ?? 0) > 0;
@@ -1301,7 +1327,7 @@ function ApproachBlock({
 
         {/* Visuals — dry-run + diagrams side by side when both exist
             on wide screens, stacked otherwise. */}
-        {(hasDryRun || hasDiagrams) && (
+        {(hasDryRun || hasDiagrams) && !studyVisualMoved && (
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1.5">
               <Brain className="h-3.5 w-3.5 text-muted-foreground" />
