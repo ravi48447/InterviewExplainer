@@ -3,24 +3,6 @@
 import { useCallback, useRef, useState } from "react";
 import { Play, RotateCcw, Terminal, Clock, Cpu, AlertCircle, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { useDSALang } from "@/components/dsa/DSALangContext";
-import dynamic from "next/dynamic";
-
-// Lazy-load Monaco to keep initial bundle small
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-[360px] bg-code">
-      <Loader2 className="h-5 w-5 text-slate-500 dark:text-slate-400 animate-spin" />
-    </div>
-  ),
-});
-
-const MONACO_LANG: Record<string, string> = {
-  java: "java",
-  python: "python",
-  javascript: "javascript",
-  cpp: "cpp",
-};
 
 const LANG_DISPLAY: Record<string, string> = {
   java: "Java",
@@ -74,6 +56,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
   const [result, setResult] = useState<RunResult | null>(null);
   const [running, setRunning] = useState(false);
   const [showStdin, setShowStdin] = useState(false);
+  const [editorScrollTop, setEditorScrollTop] = useState(0);
   const runningRef = useRef(false);
 
   const currentCode = code[activeLang] ?? starterCode[activeLang] ?? "";
@@ -166,31 +149,25 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
         </div>
       </div>
 
-      {/* Monaco Editor */}
-      <div className="bg-code">
-        <MonacoEditor
-          height="360px"
-          language={MONACO_LANG[activeLang] ?? "plaintext"}
+      {/* Local editor: reliable offline and free of third-party CDN loading. */}
+      <div className="relative bg-code">
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-11 overflow-hidden border-r border-code-border bg-code-surface/60 text-right font-mono text-[11px] leading-[22px] text-slate-600" aria-hidden="true">
+          <div className="py-4" style={{ transform: `translateY(-${editorScrollTop}px)` }}>
+            {currentCode.split("\n").map((_, index) => (
+              <span key={index} className="block pr-3">{index + 1}</span>
+            ))}
+          </div>
+        </div>
+        <textarea
+          aria-label={`Code editor (${LANG_DISPLAY[activeLang] ?? activeLang})`}
           value={currentCode}
-          onChange={handleCodeChange}
-          theme="vs-dark"
-          options={{
-            fontSize: 14,
-            lineHeight: 22,
-            fontFamily:
-              'JetBrains Mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            padding: { top: 16, bottom: 16 },
-            overviewRulerLanes: 0,
-            renderLineHighlight: "line",
-            lineNumbers: "on",
-            glyphMargin: false,
-            folding: true,
-            wordWrap: "off",
-            tabSize: activeLang === "python" ? 4 : 4,
-            automaticLayout: true,
-          }}
+          onChange={(event) => handleCodeChange(event.target.value)}
+          onScroll={(event) => setEditorScrollTop(event.currentTarget.scrollTop)}
+          className="block h-[360px] w-full resize-y overflow-auto bg-transparent py-4 pl-14 pr-4 font-mono text-[14px] leading-[22px] text-slate-200 outline-none caret-white selection:bg-primary/35 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          wrap="off"
         />
       </div>
 

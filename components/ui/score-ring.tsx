@@ -61,6 +61,8 @@ export function ScoreRing({
   const offset = circumference - (clamped / 100) * circumference;
   const color = colorClassName ?? bandClassFor(clamped);
   const desc = ariaLabel ?? `Score ${clamped} out of 100`;
+  const valueFontSize = Math.max(16, Math.round(size * 0.27));
+  const labelFontSize = Math.max(8, Math.min(11, Math.round(size * 0.09)));
 
   return (
     <div
@@ -100,12 +102,20 @@ export function ScoreRing({
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={cn("type-display leading-none tabular-nums", color)}>
+          <span
+            className={cn("font-display font-semibold leading-none tabular-nums", color)}
+            style={{ fontSize: valueFontSize }}
+          >
             {clamped}
             {suffix}
           </span>
           {label && (
-            <span className="type-label mt-1 text-muted-foreground">{label}</span>
+            <span
+              className="mt-1 max-w-[80%] truncate font-medium leading-none text-muted-foreground"
+              style={{ fontSize: labelFontSize }}
+            >
+              {label}
+            </span>
           )}
         </div>
       </div>

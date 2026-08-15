@@ -167,6 +167,8 @@ function buildNoResultsSuggestions(query: SearchQuery, titles: string[]): NoResu
 export interface SearchInputProps {
   /** Placeholder text (P07-T189). */
   placeholder?: string;
+  /** Optional query supplied by the page URL. */
+  initialValue?: string;
   /** autoFocus on mount. */
   autoFocus?: boolean;
   /** Called when a result is selected. */
@@ -180,13 +182,14 @@ export interface SearchInputProps {
 
 export function SearchInput({
   placeholder = "Search questions, topics, technologies…",
+  initialValue = "",
   autoFocus = false,
   onSelectResult,
   onClose,
   variant = "standalone",
   className,
 }: SearchInputProps) {
-  const [rawValue, setRawValue] = useState("");
+  const [rawValue, setRawValue] = useState(initialValue);
   const [state, setState] = useState<SearchState>({
     status: "idle",
     query: null,
@@ -262,6 +265,12 @@ export function SearchInput({
         setActiveIndex(-1);
       });
   }, []);
+
+  useEffect(() => {
+    if (initialValue.trim().length >= DEFAULT_SEARCH_CONFIG.minQueryLength) {
+      executeSearch(initialValue);
+    }
+  }, [executeSearch, initialValue]);
 
   const handleChange = useCallback((value: string) => {
     setRawValue(value);

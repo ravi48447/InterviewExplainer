@@ -50,6 +50,39 @@ export const HOME_HERO: HomeHero = {
   secondaryCta: { label: "Explore DSA", href: "/dsa" },
 };
 
+// ─── Homepage learning proof ────────────────────────────────────────────────
+
+export const HOME_SAMPLE_LESSON = {
+  eyebrow: "See how a concept is taught",
+  title: "From problem statement to interview-ready understanding.",
+  supporting:
+    "Every lesson keeps the explanation, visual state, dry run, code, and interviewer reasoning connected instead of scattering them across unrelated pages.",
+  problem: {
+    title: "Longest Substring Without Repeating Characters",
+    prompt: "Find the longest contiguous window that contains no duplicate characters.",
+    pattern: "Sliding window + last-seen map",
+  },
+  visual: {
+    values: ["a", "b", "c", "a", "b", "c", "b", "b"],
+    left: 1,
+    right: 3,
+    step: "A repeats at index 3, so left moves just past its previous position.",
+    state: "left = 1 · right = 3 · best = 3",
+  },
+  code: [
+    "if (last[c] >= left):",
+    "    left = last[c] + 1",
+    "last[c] = right",
+    "best = max(best, right-left+1)",
+  ],
+  moments: [
+    { label: "Understand", detail: "Plain-English framing and constraints." },
+    { label: "Visualize", detail: "One causal state change at a time." },
+    { label: "Connect", detail: "The exact code decision beside the visual." },
+    { label: "Interview", detail: "Why it works, trade-offs, and common traps." },
+  ],
+} as const;
+
 // ─── Preparation pathways (P04-T067..T078) ───────────────────────────────────
 /**
  * Canonical homepage pathways. We surface a *curated subset* of

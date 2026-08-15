@@ -40,9 +40,13 @@ test("mobile presents the visual before examples", async ({ page }, testInfo) =>
   const examples = page.getByText("Examples", { exact: true });
   await expect(visual).toBeVisible();
   expect(
-    await visual.evaluate((element) =>
-      Boolean(element.compareDocumentPosition(document.querySelector("main")!.querySelector("dl")) & Node.DOCUMENT_POSITION_FOLLOWING),
-    ),
+    await visual.evaluate((element) => {
+      const exampleList = document.querySelector("main dl");
+      return Boolean(
+        exampleList &&
+          (element.compareDocumentPosition(exampleList) & Node.DOCUMENT_POSITION_FOLLOWING),
+      );
+    }),
   ).toBe(true);
   await expect(examples).toBeVisible();
 });

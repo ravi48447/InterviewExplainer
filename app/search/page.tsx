@@ -44,7 +44,14 @@ const QUICK_LINKS = [
   { href: "/tools", icon: TrendingUp, title: "Tools & Technologies", desc: "Docker, Kafka, Redis & more" },
 ] as const;
 
-export default function SearchPage() {
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string | string[] }>;
+}) {
+  const queryParam = (await searchParams).q;
+  const initialQuery = Array.isArray(queryParam) ? (queryParam[0] ?? "") : (queryParam ?? "");
+
   return (
     <div className="min-h-screen bg-surface">
       <main className="page-container py-12">
@@ -67,6 +74,7 @@ export default function SearchPage() {
         <div className="mx-auto max-w-2xl">
           <SearchInput
             placeholder="Search questions... (e.g. HashMap, Spring Boot, Docker)"
+            initialValue={initialQuery}
             autoFocus
           />
         </div>
