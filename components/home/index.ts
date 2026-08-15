@@ -28,3 +28,10 @@ export {
   HomePersonalizedPath,
   HomeTrustStrip,
 } from "./home-reference-sections";
+export {
+  HomeCareerToolkit,
+  HomeDiscoveryFooter,
+  HomeDSAStudio,
+  HomeLearningExperience,
+  HomeRealContent,
+} from "./home-depth-sections";
