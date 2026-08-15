@@ -84,13 +84,20 @@ function SectionIntro({
   );
 }
 
+function ProductPreview({ index }: { index: number }) {
+  if (index === 0) return <div aria-hidden="true" className="relative h-[112px] w-[184px] overflow-hidden rounded-2xl border border-[#A9D3FF] bg-[linear-gradient(145deg,#DCEFFF,#F8FCFF)] p-3 shadow-[0_12px_22px_rgba(30,122,242,.15)]"><span className="text-[9px] font-bold uppercase tracking-[.12em] text-[#1974D2]">Sliding window</span><div className="mt-4 flex gap-1.5">{["a", "b", "c", "a", "b"].map((item, itemIndex) => <span key={`${item}-${itemIndex}`} className={cn("grid h-7 w-7 place-items-center rounded-lg text-[11px] font-bold", itemIndex > 0 && itemIndex < 4 ? "bg-[#1974D2] text-white shadow-[0_4px_0_#0E5DB2]" : "border border-[#A9D3FF] bg-white text-[#52708E]")}>{item}</span>)}</div><span className="absolute bottom-3 left-4 right-4 h-1.5 rounded-full bg-[#1974D2]/20"><span className="block h-full w-3/5 rounded-full bg-[#1974D2]" /></span></div>;
+  if (index === 1) return <div aria-hidden="true" className="relative grid h-[112px] w-[184px] place-items-center overflow-hidden rounded-2xl border border-[#D6C5FF] bg-[radial-gradient(circle_at_50%_40%,#F8F4FF_0%,#E9E0FF_65%,#DCCBFF_100%)] shadow-[0_12px_22px_rgba(120,87,216,.15)]"><span className="grid h-14 w-14 place-items-center rounded-full border-[7px] border-[#7857D8]/15 border-t-[#7857D8] border-r-[#7857D8] bg-white text-[13px] font-bold text-[#6040BD]">84</span><div className="absolute bottom-3 left-4 right-4 flex h-6 items-end justify-center gap-1">{[8, 16, 24, 13, 28, 18, 22, 11, 18].map((height, i) => <span key={i} className="w-1.5 rounded-full bg-[#7857D8]" style={{ height }} />)}</div><span className="absolute left-3 top-3 text-[9px] font-bold uppercase tracking-[.12em] text-[#6748C3]">Mock score</span></div>;
+  if (index === 2) return <div aria-hidden="true" className="relative h-[112px] w-[184px] overflow-hidden rounded-2xl border border-[#F2C991] bg-[linear-gradient(145deg,#FFF1DF,#FFFCF8)] p-3 shadow-[0_12px_22px_rgba(200,106,6,.15)]"><span className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-xl bg-[#C86A06] text-[12px] font-bold text-white shadow-[0_4px_0_#A95400]">78%</span><span className="block h-2 w-16 rounded-full bg-[#C86A06]/75"/><span className="mt-3 block h-1.5 w-28 rounded-full bg-[#E7B36F]"/><span className="mt-2 block h-1.5 w-24 rounded-full bg-[#EFD1A6]"/><span className="mt-2 block h-1.5 w-20 rounded-full bg-[#EFD1A6]"/><div className="absolute bottom-3 left-3 flex gap-1"><span className="rounded bg-[#DFF3E8] px-2 py-1 text-[8px] font-bold text-[#16734D]">9 strong</span><span className="rounded bg-[#FFE5C4] px-2 py-1 text-[8px] font-bold text-[#A65500]">4 gaps</span></div></div>;
+  return <div aria-hidden="true" className="relative h-[112px] w-[184px] overflow-hidden rounded-2xl border border-[#BDE3D8] bg-[linear-gradient(145deg,#E1F8F1,#F9FFFC)] p-3 shadow-[0_12px_22px_rgba(19,122,105,.13)]"><span className="block w-[78%] rounded-2xl rounded-tl-sm bg-[#137A69] px-3 py-2 text-[9px] font-semibold text-white">What is dependency injection?</span><span className="ml-auto mt-2 block w-[88%] rounded-2xl rounded-tr-sm bg-white px-3 py-2 text-[9px] font-semibold leading-3 text-[#276B60] shadow-sm">A dependency is supplied from outside the class.</span><span className="mt-2 inline-flex rounded-full bg-[#CBEFE4] px-2 py-1 text-[8px] font-bold text-[#137A69]">Clear answer · 3 points</span></div>;
+}
+
 export function HomeLearningExperience() {
   const lesson = HOME_SAMPLE_LESSON;
   const pillars = getHomeUSPPillars();
 
   return (
     <section aria-labelledby="home-learning-proof-heading" className="border-y border-border bg-[#fffdfb] py-14 dark:bg-card sm:py-16">
-      <PageContainer>
+      <PageContainer wide className="max-w-[1240px]">
         <FadeInUp>
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <SectionIntro
@@ -201,15 +208,25 @@ export function HomeLearningExperience() {
         </FadeInUp>
 
         {pillars.length > 0 && (
-          <StaggerContainer className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" staggerDelay={0.04}>
+          <StaggerContainer className="mt-6 grid gap-4 sm:grid-cols-2" staggerDelay={0.04}>
             {pillars.map((pillar, index) => {
               const icons = [BrainCircuit, Mic2, FileSearch, MessageSquareText];
               const Icon = icons[index] ?? Sparkles;
+              const surfaces = [
+                { card: "border-[#CFE0F5] bg-[#F5FAFF]", icon: "bg-[#DCEEFF] text-[#1974D2]", glow: "bg-[#B9D9FF]", action: "Explore patterns" },
+                { card: "border-[#DCD1F3] bg-[#FAF8FF]", icon: "bg-[#EDE6FF] text-[#7857D8]", glow: "bg-[#D9CAFF]", action: "Start a mock" },
+                { card: "border-[#F1D9BF] bg-[#FFF9F2]", icon: "bg-[#FFE8CB] text-[#C86A06]", glow: "bg-[#FFD4A5]", action: "Check my resume" },
+                { card: "border-[#CBE8E1] bg-[#F3FBF8]", icon: "bg-[#DDF5EE] text-[#137A69]", glow: "bg-[#BFE8DB]", action: "Browse questions" },
+              ][index] ?? { card: "border-border bg-card", icon: "bg-muted text-foreground", glow: "bg-muted", action: "Explore" };
               return (
                 <StaggerItem key={pillar.href}>
-                  <Link href={pillar.href} className="group flex h-full items-start gap-3 rounded-xl border border-border bg-card p-4 transition-[transform,border-color,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-sm">
-                    <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg", ["bg-[#EAF3FF] text-[#3279C9]", "bg-[#EFF9F6] text-[#126B63]", "bg-[#FFF5EA] text-[#D9603B]", "bg-[#F4EFFC] text-[#7857D8]"][index])}><Icon className="h-4 w-4" /></span>
-                    <span className="min-w-0"><strong className="block text-[11px] font-semibold leading-4 text-foreground group-hover:text-[#6846C7]">{pillar.title}</strong><span className="mt-1 block text-[10px] leading-4 text-muted-foreground">{pillar.metric}</span></span>
+                  <Link href={pillar.href} className={cn("group relative flex min-h-[174px] overflow-hidden rounded-2xl border p-5 transition duration-200 hover:-translate-y-1 hover:shadow-[0_18px_30px_rgba(15,35,70,.11)]", surfaces.card)}>
+                    <span aria-hidden="true" className={cn("absolute -right-7 -top-7 h-28 w-28 rounded-full opacity-55 blur-2xl", surfaces.glow)} />
+                    <span className="relative flex min-w-0 flex-1 flex-col justify-between sm:max-w-[52%]">
+                      <span className="flex items-start justify-between gap-4"><span className={cn("grid h-12 w-12 place-items-center rounded-2xl shadow-[0_6px_0_rgba(255,255,255,.72)]", surfaces.icon)}><Icon className="h-6 w-6" /></span><span className="rounded-full border border-white/80 bg-white/65 px-2.5 py-1 text-[10px] font-semibold text-[#48617E]">{pillar.metric}</span></span>
+                      <span><strong className="block text-[16px] font-semibold tracking-[-.02em] text-[#10264A]">{pillar.title}</strong><span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-[#315B87] transition-transform group-hover:translate-x-1">{surfaces.action} <ArrowRight className="h-3.5 w-3.5" /></span></span>
+                    </span>
+                    <span className="absolute bottom-5 right-5 hidden sm:block"><ProductPreview index={index} /></span>
                   </Link>
                 </StaggerItem>
               );
@@ -227,7 +244,7 @@ export function HomeDSAStudio() {
 
   return (
     <section aria-labelledby="home-dsa-studio-heading" className="bg-background py-14 sm:py-16">
-      <PageContainer>
+      <PageContainer wide className="max-w-[1240px]">
         <FadeInUp>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <SectionIntro id="home-dsa-studio-heading" eyebrow="DSA learning studio" title="Different algorithms deserve different visual worlds." detail="Practice by pattern, then open a problem to see its own explanation, invariant, controlled animation, dry run, code, complexity, edge cases, and interview follow-ups." />
@@ -291,7 +308,7 @@ export function HomeRealContent() {
 
   return (
     <section aria-labelledby="home-real-content-heading" className="border-y border-border bg-[#F7F9FC] py-14 dark:bg-card sm:py-16">
-      <PageContainer>
+      <PageContainer wide>
         <FadeInUp>
           <SectionIntro id="home-real-content-heading" eyebrow="Real repository content" title="Browse the material before you commit to a path." detail="The homepage is not a decorative promise. These links open real technology tracks and curated interview questions already available in the product." centered />
         </FadeInUp>
@@ -359,7 +376,7 @@ export function HomeCareerToolkit() {
 
   return (
     <section aria-labelledby="home-toolkit-heading" className="bg-background py-14 sm:py-16">
-      <PageContainer>
+      <PageContainer wide className="max-w-[1240px]">
         <FadeInUp>
           <SectionIntro id="home-toolkit-heading" eyebrow="Beyond studying" title="Practice the round. Strengthen the application." detail="Learning content is only one part of preparation. Rehearse your answers under interview pressure and check whether your resume matches the role before you apply." centered />
         </FadeInUp>
@@ -427,7 +444,7 @@ export function HomeDiscoveryFooter() {
 
   return (
     <nav aria-label="Explore more InterviewExplainer resources" className="border-t border-border bg-[#F7F9FC] dark:bg-card">
-      <PageContainer className="py-10 sm:py-12">
+      <PageContainer wide className="max-w-[1240px] py-10 sm:py-12">
         <div className="grid gap-8 lg:grid-cols-[0.9fr_2.1fr] lg:items-start">
           <div><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7857D8]">Keep exploring</p><h2 className="mt-2 text-[18px] font-semibold text-foreground">Every major learning tool stays one click away.</h2><p className="mt-2 max-w-md text-[11px] leading-5 text-muted-foreground">Continue by practice type, preparation tool, or technology hub.</p></div>
           <div className="grid gap-5 sm:grid-cols-3">

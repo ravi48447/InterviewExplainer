@@ -4,7 +4,6 @@ import { MobileNav } from '@/components/shell/header/mobile-nav'
 import { HeaderSearch } from '@/components/shell/header/header-search'
 import { HeaderUserActions } from '@/components/shell/header/header-user-actions'
 import { ThemeToggle } from '@/components/shell/header/theme-toggle'
-import { PageContainer } from '@/components/page-container'
 
 /**
  * PublicHeader — canonical public-site header (P03-T032..T056, T031).
@@ -29,12 +28,13 @@ import { PageContainer } from '@/components/page-container'
  * (T032) — variant differences live in the shell variants.
  */
 export function PublicHeader({ pathname = '/' }: { pathname?: string }) {
+  const isHome = pathname === '/'
   return (
     <header
-      className="sticky top-0 z-[var(--z-sticky)] w-full border-b border-border bg-card/95 shadow-[0_1px_10px_hsl(var(--foreground)/0.025)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/90"
+      className={isHome ? "absolute inset-x-0 top-0 z-[var(--z-sticky)] w-full border-b border-white/70 bg-white/[0.58] shadow-[0_1px_16px_rgba(15,35,70,.045)] backdrop-blur-lg" : "sticky top-0 z-[var(--z-sticky)] w-full border-b border-border bg-card/95 shadow-[0_1px_10px_hsl(var(--foreground)/0.025)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/90"}
       role="banner"
     >
-      <PageContainer className="flex h-[68px] items-center gap-2 lg:gap-3">
+      <div className={`mx-auto flex h-[74px] w-full items-center gap-2 px-8 sm:px-10 lg:gap-4 lg:px-8 ${isHome ? "max-w-[1440px]" : "max-w-[1800px] lg:px-12"}`}>
         {/* Mobile drawer (client island) */}
         <div className="lg:hidden">
           <MobileNav />
@@ -49,7 +49,7 @@ export function PublicHeader({ pathname = '/' }: { pathname?: string }) {
         {/* Spacer pushes actions right */}
         <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
           {/* Search (client island, hub-gated) */}
-          <div className="hidden md:block">
+          <div className="block">
             <HeaderSearch />
           </div>
 
@@ -59,13 +59,8 @@ export function PublicHeader({ pathname = '/' }: { pathname?: string }) {
           {/* User actions (client island) */}
           <HeaderUserActions />
         </div>
-      </PageContainer>
-
-      {/* Mobile search row: on small screens where the inline search doesn't
-          fit, render it in a secondary row under the bar (T053, T099). */}
-      <div className="border-t border-border px-4 py-2 md:hidden lg:hidden">
-        <HeaderSearch />
       </div>
+
     </header>
   )
 }

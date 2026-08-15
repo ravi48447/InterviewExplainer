@@ -47,21 +47,21 @@ export const ENABLED_HUBS = {
   prepCategories:  true,   // /prep — Quick-Links index of all pillar hubs + module SEO URLs
 
   // Secondary hubs — landing pages exist but content is not launch-ready.
-  systemDesign:    false,  // /system-design
+  systemDesign:    true,   // /system-design
   dsa:             true,   // /dsa
   behavioral:      false,  // /behavioral
   topics:          false,  // /topics
   tools:           false,  // /tools
   compare:         false,  // /compare
-  companies:       false,  // /companies
+  companies:       true,   // /companies
   career:          false,  // /career
-  roadmaps:        false,  // /roadmaps
+  roadmaps:        true,   // /roadmaps
   cheatsheets:     false,  // /cheatsheets
 
   // Product surfaces.
   dashboard:       true,   // /dashboard — works for logged-in users
   mockInterviews:  true,  // /mock-interviews — requires a backend that's not wired for MVP
-  search:          false,  // /search — indexer not populated for launch scope yet
+  search:          true,   // /search — local content search across published learning material
   interviewByLang: false,  // /interview — legacy "browse by language" tree; superseded by /domains
 } as const;
 

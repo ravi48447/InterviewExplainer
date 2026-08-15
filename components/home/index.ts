@@ -21,6 +21,7 @@ export { HomeTrust } from "./home-trust";
 export { HomeFinalCTA } from "./home-final-cta";
 export { HomeFooterDiscovery } from "./home-footer-discovery";
 export { HomeSearchEntry } from "./home-search-entry";
+export { HomePlatformDepth } from "./home-platform-depth";
 export {
   HomeCoverageProof,
   HomeDomainSection,

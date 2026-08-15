@@ -6,13 +6,8 @@ import {
   CheckCircle2,
   Clock3,
   Code2,
-  Flag,
   LockKeyhole,
-  Puzzle,
-  Sprout,
   Star,
-  Target,
-  Trophy,
   UserRound,
   Video,
 } from "lucide-react";
@@ -24,17 +19,9 @@ import {
   getReferenceHomeProof,
   REFERENCE_HOME_DOMAINS,
   REFERENCE_HOME_JOURNEY,
-  type ReferenceHomeIcon,
 } from "@/lib/home/home-data";
 import { HomeDomainDiscovery } from "./home-domain-discovery";
-
-const JOURNEY_ICONS: Partial<Record<ReferenceHomeIcon, typeof Flag>> = {
-  flag: Flag,
-  sprout: Sprout,
-  puzzle: Puzzle,
-  target: Target,
-  trophy: Trophy,
-};
+import { HomeVisualIcon } from "./home-visual-icon";
 
 const PROOF_ICONS = {
   user: UserRound,
@@ -67,7 +54,7 @@ const TRUST_ACCENTS = [
 
 function SectionHeading({ id, eyebrow, title, supporting }: { id?: string; eyebrow?: string; title: string; supporting: string }) {
   return (
-    <div className="mb-8 flex flex-col gap-2 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
       <div>
         {eyebrow && <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-primary">{eyebrow}</p>}
         <h2 id={id} className="font-display text-[1.4rem] font-semibold tracking-[-0.02em] text-foreground sm:text-[1.7rem]">{title}</h2>
@@ -79,8 +66,8 @@ function SectionHeading({ id, eyebrow, title, supporting }: { id?: string; eyebr
 
 export function HomeDomainSection() {
   return (
-    <section aria-labelledby="home-domains-heading" className="bg-background py-12 sm:py-14">
-      <PageContainer>
+    <section aria-labelledby="home-domains-heading" className="bg-[#fbfdff] py-10 sm:py-11">
+      <PageContainer wide className="max-w-[1240px]">
         <FadeInUp>
           <SectionHeading id="home-domains-heading" title="Choose your domain" supporting="Start from the role, language, or problem-solving skill your next interview will test." />
           <HomeDomainDiscovery domains={REFERENCE_HOME_DOMAINS} />
@@ -92,32 +79,31 @@ export function HomeDomainSection() {
 
 export function HomeLearningJourney() {
   return (
-    <section aria-labelledby="home-journey-heading" className="border-y border-border bg-[#fffdfb] py-12 dark:bg-card sm:py-14">
-      <PageContainer>
+    <section aria-labelledby="home-journey-heading" className="border-y border-border bg-white py-10 dark:bg-card sm:py-12">
+      <PageContainer wide className="max-w-[1240px]">
         <FadeInUp>
-          <div className="mb-10 text-center">
+          <div className="mb-7 text-center">
             <h2 id="home-journey-heading" className="font-display text-[1.4rem] font-semibold tracking-[-0.02em] text-foreground sm:text-[1.7rem]">Your journey to success</h2>
             <p className="mt-2 text-sm text-muted-foreground">A focused sequence from choosing a goal to performing confidently in the interview.</p>
           </div>
         </FadeInUp>
 
-        <StaggerContainer className="relative grid gap-5 md:grid-cols-5" staggerDelay={0.05}>
-          <div className="absolute left-[9%] right-[9%] top-[43px] hidden h-px bg-gradient-to-r from-primary/30 via-[#7857D8]/30 to-accent/30 md:block" aria-hidden="true" />
+        <StaggerContainer className="relative grid gap-3 md:grid-cols-5" staggerDelay={0.04}>
+          <div className="absolute left-[10%] right-[10%] top-[45px] hidden h-[2px] bg-gradient-to-r from-primary/30 via-[#7857D8]/30 to-accent/30 md:block" aria-hidden="true" />
           {REFERENCE_HOME_JOURNEY.map((item) => {
-            const Icon = JOURNEY_ICONS[item.icon] ?? Target;
             const accent = JOURNEY_ACCENTS[item.accent];
             return (
               <StaggerItem key={item.step} className="relative">
-                <Link href={item.href} className="group flex h-full gap-4 rounded-xl border border-transparent p-3 transition-[transform,background-color,border-color] duration-150 ease-out hover:-translate-y-0.5 hover:border-border hover:bg-background md:flex-col md:items-center md:text-center">
-                  <div className={cn("relative z-10 grid h-[82px] w-[82px] shrink-0 place-items-center rounded-full border bg-card shadow-sm", accent.ring)}>
-                    <span className={cn("grid h-11 w-11 place-items-center rounded-full", accent.icon)}>
-                      <Icon className="h-6 w-6" aria-hidden="true" />
+                <Link href={item.href} className="group flex h-full gap-4 rounded-2xl border border-transparent p-3 transition-[transform,background-color,border-color,box-shadow] duration-200 ease-out hover:-translate-y-1 hover:border-border hover:bg-background hover:shadow-[0_12px_28px_rgba(15,35,70,.07)] md:flex-col md:items-center md:text-center">
+                  <div className={cn("relative z-10 grid h-[86px] w-[86px] shrink-0 place-items-center rounded-[28px] border bg-card shadow-[0_8px_0_rgba(215,225,238,.65),0_14px_22px_rgba(15,35,70,.07)]", accent.ring)}>
+                    <span className={cn("grid h-12 w-12 place-items-center rounded-2xl", accent.icon)}>
+                      <HomeVisualIcon kind={item.icon} className="h-7 w-7" />
                     </span>
                     <span className={cn("absolute -top-1 left-1 grid h-6 w-6 place-items-center rounded-full text-[10px] font-semibold text-white", accent.step)}>{item.step}</span>
                   </div>
                   <div>
                     <h3 className="text-sm font-semibold text-foreground group-hover:text-primary">{item.title}</h3>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.detail}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{item.detail}</p>
                   </div>
                 </Link>
               </StaggerItem>
@@ -132,19 +118,19 @@ export function HomeLearningJourney() {
 export function HomeCoverageProof() {
   const proof = getReferenceHomeProof();
   return (
-    <section aria-labelledby="home-proof-heading" className="bg-background py-10 sm:py-12">
-      <PageContainer>
-        <FadeInUp className="overflow-hidden rounded-2xl border border-[#e5deed] bg-card shadow-sm dark:border-border">
+    <section aria-labelledby="home-proof-heading" className="bg-[#fbfdff] py-8 sm:py-9">
+      <PageContainer wide className="max-w-[1240px]">
+        <FadeInUp className="overflow-hidden rounded-[15px] border border-[#d7e1ee] bg-white shadow-sm dark:border-border dark:bg-card">
           <div className="grid lg:grid-cols-[1.25fr_2.75fr]">
-            <div className="border-b border-border p-6 lg:border-b-0 lg:border-r lg:p-8">
-              <h2 id="home-proof-heading" className="font-display text-lg font-semibold leading-7 text-foreground sm:text-xl">Everything you need to succeed, <span className="text-[#7857D8] dark:text-[#bcaaff]">in one place.</span></h2>
+            <div className="border-b border-border p-5 lg:border-b-0 lg:border-r lg:p-6">
+              <h2 id="home-proof-heading" className="font-display text-lg font-semibold leading-7 text-foreground sm:text-xl">Everything you need to succeed, <span className="text-[#1E7AF2]">in one place.</span></h2>
               <span className="mt-3 block h-1 w-16 rounded-full bg-accent" aria-hidden="true" />
             </div>
             <dl className="grid grid-cols-2 md:grid-cols-4">
               {proof.map((item, index) => {
                 const Icon = PROOF_ICONS[item.icon];
                 return (
-                  <div key={item.label} className={cn("p-5 text-center sm:p-6", index % 2 === 1 && "border-l border-border", index > 1 && "border-t border-border md:border-t-0", index > 0 && "md:border-l md:border-border")}>
+                  <div key={item.label} className={cn("p-4 text-center sm:p-5", index % 2 === 1 && "border-l border-border", index > 1 && "border-t border-border md:border-t-0", index > 0 && "md:border-l md:border-border")}>
                     <span className={cn("mx-auto grid h-10 w-10 place-items-center rounded-xl", PROOF_ACCENTS[index])}><Icon className="h-5 w-5" aria-hidden="true" /></span>
                     <dd className="mt-3 text-lg font-semibold tabular-nums text-foreground">{item.value}</dd>
                     <dt className="mt-1 text-[11px] text-muted-foreground">{item.label}</dt>
@@ -161,12 +147,12 @@ export function HomeCoverageProof() {
 
 export function HomePersonalizedPath() {
   return (
-    <section aria-labelledby="home-path-heading" className="bg-background pb-12 sm:pb-16">
-      <PageContainer>
-        <FadeInUp className="relative min-h-[330px] overflow-hidden rounded-2xl border border-border bg-card shadow-sm sm:min-h-[360px]">
+    <section aria-labelledby="home-path-heading" className="bg-[#fbfdff] pb-10 sm:pb-12">
+      <PageContainer wide className="max-w-[1240px]">
+        <FadeInUp className="relative min-h-[250px] overflow-hidden rounded-[15px] border border-border bg-card shadow-sm sm:min-h-[280px]">
           <Image src="/images/home/path-mountain-v2.webp" alt="A guided learning road with milestones leading to an interview-ready goal" fill sizes="(max-width: 1200px) 100vw, 1200px" className="object-cover object-center" />
           <div className="absolute inset-0 bg-gradient-to-r from-[#fff9f3] via-[#fff9f3]/95 to-[#fff9f3]/5 dark:from-card dark:via-card/95 dark:to-card/5" aria-hidden="true" />
-          <div className="relative z-10 flex min-h-[330px] max-w-xl flex-col justify-center p-7 sm:min-h-[360px] sm:p-10 lg:p-12">
+          <div className="relative z-10 flex min-h-[250px] max-w-xl flex-col justify-center p-7 sm:min-h-[280px] sm:p-9 lg:p-10">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">Not sure where to start?</p>
             <h2 id="home-path-heading" className="mt-3 font-display text-[1.45rem] font-semibold tracking-[-0.02em] text-foreground sm:text-[1.8rem]">Build a path around your goal and experience.</h2>
             <p className="mt-4 max-w-lg text-sm leading-6 text-muted-foreground">Choose your role, technology, experience level, and target domain. We’ll turn them into a focused learning sequence.</p>
@@ -191,7 +177,7 @@ export function HomeTrustStrip() {
   ];
   return (
     <section aria-label="Learning commitments" className="border-y border-border bg-card">
-      <PageContainer className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+      <PageContainer wide className="max-w-[1240px] grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
         {items.map(({ icon: Icon, title, text }, index) => (
           <div key={title} className={cn("flex gap-3 py-5 sm:px-5", index === 0 && "sm:pl-0")}>
             <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", TRUST_ACCENTS[index])}><Icon className="h-4 w-4" aria-hidden="true" /></span>

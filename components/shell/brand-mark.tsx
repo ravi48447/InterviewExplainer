@@ -16,9 +16,9 @@ import { cn } from '@/lib/utils'
  */
 
 const SIZES = {
-  sm: { box: 'h-8 w-8', word: 'text-sm' },
-  md: { box: 'h-10 w-10', word: 'text-[15px]' },
-  lg: { box: 'h-11 w-11', word: 'text-base' },
+  sm: { box: 'h-8 w-8', word: 'text-[13px]' },
+  md: { box: 'h-11 w-11', word: 'text-[16px]' },
+  lg: { box: 'h-11 w-11', word: 'text-[17px]' },
 } as const
 
 export type BrandMarkSize = keyof typeof SIZES
@@ -44,24 +44,23 @@ export function BrandMark({
     <span className="flex items-center gap-2.5 group">
       <span
         className={cn(
-          'relative flex shrink-0 items-center justify-center rounded-xl border-2 border-primary',
-          'bg-card text-primary shadow-sm',
+          'relative flex shrink-0 items-center justify-center rounded-[11px] border border-[#9FC5F8]',
+          'bg-white text-primary shadow-[0_3px_10px_rgba(30,122,242,.08)] dark:bg-surface',
           s.box,
         )}
         aria-hidden="true"
       >
-        <span className="font-display text-[15px] font-bold tracking-[-0.04em]">IE</span>
+        <span className="text-[14px] font-bold tracking-[-0.08em]">IE</span>
       </span>
       {withWordmark && (
         <span
           className={cn(
-            'flex flex-col font-semibold leading-[1.05] tracking-tight text-foreground',
+            'inline-flex whitespace-nowrap font-semibold leading-none tracking-[-0.035em] text-foreground',
             'group-hover:text-primary transition-colors',
             s.word,
           )}
         >
-          <span>Interview</span>
-          <span className="text-primary">Explainer</span>
+          <span>Interview</span><span className="text-primary">Explainer</span>
         </span>
       )}
     </span>

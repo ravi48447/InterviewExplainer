@@ -2,23 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowRight, BarChart3, Braces, Cloud, Network, PanelsTopLeft, Server } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ReferenceHomeDomain, ReferenceHomeIcon } from "@/lib/home/home-data";
-
-const ICONS: Record<ReferenceHomeIcon, typeof Server> = {
-  server: Server,
-  panels: PanelsTopLeft,
-  braces: Braces,
-  network: Network,
-  cloud: Cloud,
-  chart: BarChart3,
-  flag: Server,
-  sprout: Server,
-  puzzle: Server,
-  target: Server,
-  trophy: Server,
-};
+import type { ReferenceHomeDomain } from "@/lib/home/home-data";
+import { HomeVisualIcon } from "./home-visual-icon";
 
 const ACCENTS = {
   blue: "text-primary bg-primary/10",
@@ -52,7 +39,6 @@ export function HomeDomainDiscovery({ domains }: { domains: ReferenceHomeDomain[
     <div>
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:grid lg:grid-cols-6 lg:overflow-visible lg:pb-0">
         {domains.map((domain) => {
-          const Icon = ICONS[domain.icon];
           const active = domain.id === selected?.id;
           return (
             <button
@@ -65,8 +51,8 @@ export function HomeDomainDiscovery({ domains }: { domains: ReferenceHomeDomain[
                 active ? cn("shadow-md ring-1", ACTIVE_ACCENTS[domain.accent]) : "border-border hover:border-foreground/20",
               )}
             >
-              <span className={cn("grid h-11 w-11 place-items-center rounded-xl", ACCENTS[domain.accent])}>
-                <Icon className="h-5 w-5" aria-hidden="true" />
+              <span className={cn("grid h-12 w-12 place-items-center rounded-xl border border-current/10", ACCENTS[domain.accent])}>
+                <HomeVisualIcon kind={domain.icon} className="h-7 w-7" />
               </span>
               <span className="mt-5 block text-sm font-semibold leading-5 text-foreground">{domain.title}</span>
               <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{domain.summary}</span>
@@ -77,11 +63,11 @@ export function HomeDomainDiscovery({ domains }: { domains: ReferenceHomeDomain[
       </div>
 
       {selected && (
-        <div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#e5deed] bg-[#faf8fc] px-4 py-3 dark:border-border dark:bg-surface-subtle/50 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-5 flex flex-col gap-3 rounded-xl border border-[#D7E1EE] bg-[#F6FAFF] px-4 py-3 dark:border-border dark:bg-surface-subtle/50 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[13px] text-muted-foreground">
             Start with <span className="font-semibold text-foreground">{selected.title}</span> — {selected.summary.toLowerCase()}.
           </p>
-          <Link href={selected.href} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#6846C7] transition-colors hover:text-[#5235a6] dark:text-[#bcaaff]">
+          <Link href={selected.href} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary transition-colors hover:text-[#1268D5]">
             Explore this domain <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
         </div>

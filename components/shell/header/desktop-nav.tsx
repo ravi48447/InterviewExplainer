@@ -30,7 +30,7 @@ export function DesktopNav({ pathname }: { pathname: string }) {
   return (
     <nav
       aria-label="Primary"
-      className="hidden lg:flex items-center gap-1 ml-2"
+      className="ml-3 hidden items-center gap-1 lg:flex"
     >
       {showLearn && <DesktopLearnDropdown sections={learnSections} pathname={pathname} />}
 
@@ -42,7 +42,7 @@ export function DesktopNav({ pathname }: { pathname: string }) {
             href={resolveNavHref(link)}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'inline-flex items-center rounded-lg h-9 px-3 text-sm font-medium transition-colors duration-150',
+              'inline-flex h-10 items-center whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold transition-colors duration-150 xl:px-3.5 xl:text-[14px]',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
               active
                 ? 'text-primary bg-primary/10'
