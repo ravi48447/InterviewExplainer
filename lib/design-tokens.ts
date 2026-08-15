@@ -50,11 +50,11 @@ export const SPACING = {
 
 export const RADIUS = {
   none: "rounded-none",
-  sm: "rounded-sm", // 2px
-  md: "rounded-md", // 4px
+  sm: "rounded-lg", // 8px
+  md: "rounded-lg", // 8px
   lg: "rounded-lg", // 8px (default button / input)
   xl: "rounded-xl", // 12px (cards)
-  xxl: "rounded-2xl", // 16px (large dialogs / sections)
+  xxl: "rounded-2xl", // 15px (large dialogs / sections)
   full: "rounded-full",
 } as const;
 
@@ -70,8 +70,8 @@ export const SHADOWS = {
 export const ANIMATIONS = {
   duration: {
     fast: "duration-150",
-    normal: "duration-300",
-    slow: "duration-500",
+    normal: "duration-[250ms]",
+    slow: "duration-[350ms]",
   },
   easing: {
     easeInOut: "ease-in-out",

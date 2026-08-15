@@ -16,9 +16,9 @@ import { cn } from '@/lib/utils'
  */
 
 const SIZES = {
-  sm: { box: 'h-8 w-8', glyph: 'w-4 h-4', word: 'text-base' },
-  md: { box: 'h-9 w-9', glyph: 'w-5 h-5', word: 'text-lg' },
-  lg: { box: 'h-10 w-10', glyph: 'w-5 h-5', word: 'text-xl' },
+  sm: { box: 'h-8 w-8', word: 'text-sm' },
+  md: { box: 'h-10 w-10', word: 'text-[15px]' },
+  lg: { box: 'h-11 w-11', word: 'text-base' },
 } as const
 
 export type BrandMarkSize = keyof typeof SIZES
@@ -44,43 +44,24 @@ export function BrandMark({
     <span className="flex items-center gap-2.5 group">
       <span
         className={cn(
-          'relative flex shrink-0 items-center justify-center rounded-xl',
-          'bg-primary text-primary-foreground',
-          'shadow-sm',
+          'relative flex shrink-0 items-center justify-center rounded-xl border-2 border-primary',
+          'bg-card text-primary shadow-sm',
           s.box,
         )}
         aria-hidden="true"
       >
-        <svg viewBox="0 0 100 100" className={cn('h-full w-full p-1.5', s.glyph)}>
-          <polygon
-            points="50,8 86,30 86,70 50,92 14,70 14,30"
-            fill="currentColor"
-            className="opacity-90"
-          />
-        </svg>
-        <svg
-          viewBox="0 0 24 24"
-          className="absolute inset-0 m-auto h-1/2 w-1/2 text-primary-foreground"
-          fill="none"
-        >
-          <path
-            d="M8 4L2 12L8 20M16 4L22 12L16 20M14 2L10 22"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <span className="font-display text-[15px] font-bold tracking-[-0.04em]">IE</span>
       </span>
       {withWordmark && (
         <span
           className={cn(
-            'font-bold tracking-tight text-foreground',
+            'flex flex-col font-semibold leading-[1.05] tracking-tight text-foreground',
             'group-hover:text-primary transition-colors',
             s.word,
           )}
         >
-          InterviewExplainer
+          <span>Interview</span>
+          <span className="text-primary">Explainer</span>
         </span>
       )}
     </span>

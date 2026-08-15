@@ -17,8 +17,35 @@ import { Github, Twitter, Linkedin, Mail } from 'lucide-react'
  * elsewhere (T202). No decorative excess (T212) — one brand block, three
  * tight groups, one copyright row.
  */
-export function PublicFooter() {
+export function PublicFooter({ compact = false }: { compact?: boolean }) {
   const groups = buildFooterGroups()
+
+  if (compact) {
+    return (
+      <footer className="mt-auto border-t border-border bg-background" role="contentinfo">
+        <div className="mx-auto flex w-full max-w-[75rem] flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex items-center gap-3">
+            <BrandMark size="sm" withWordmark={false} />
+            <p className="text-xs leading-5 text-muted-foreground">
+              &copy; {new Date().getFullYear()} InterviewExplainer. Clear learning for real interviews.
+            </p>
+          </div>
+          <nav aria-label="Footer" className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            {[
+              { href: '/about', label: 'About' },
+              { href: '/support', label: 'Support' },
+              { href: '/privacy', label: 'Privacy' },
+              { href: '/terms', label: 'Terms' },
+            ].map((link) => (
+              <Link key={link.href} href={link.href} className="text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+      </footer>
+    )
+  }
 
   return (
     <footer

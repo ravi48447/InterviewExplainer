@@ -54,7 +54,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {showFooter && (variant === 'public' || variant === 'app') && <PublicFooter />}
+      {showFooter && (variant === 'public' || variant === 'app') && (
+        <PublicFooter compact={pathname === '/'} />
+      )}
       {variant === 'dashboard' && <DashboardShellFooter />}
       {/* auth shell: no footer (AE). */}
     </div>
