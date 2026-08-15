@@ -46,11 +46,11 @@ import type {
   Basic100Catalog,
 } from './contentV2-types';
 import { isRefFile } from './contentV2-types';
+import { resolveContentRoot } from './content-paths';
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
-const PROJECT_ROOT = path.join(process.cwd(), '..');
-const CONTENT_ROOT = path.join(PROJECT_ROOT, 'content');
+const CONTENT_ROOT = resolveContentRoot();
 const INTERVIEW_ROOT = path.join(CONTENT_ROOT, 'interview');
 const SHARED_ROOT = path.join(CONTENT_ROOT, 'shared');
 const DSA_ROOT = path.join(CONTENT_ROOT, 'dsa');

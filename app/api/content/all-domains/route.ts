@@ -10,6 +10,7 @@ import { LANG_DISPLAY, TRACK_DISPLAY } from '@/lib/domain-display';
 import { resolveStackContent } from '@/lib/contentV2';
 import type { Level } from '@/lib/contentV2-types';
 import type { ContentDomain } from '@/lib/types/content-domain';
+import { resolveContentRoot } from '@/lib/content-paths';
 
 export type { ContentDomain } from '@/lib/types/content-domain';
 
@@ -26,8 +27,9 @@ const g = globalThis as typeof globalThis & {
 };
 const ALL_DOMAINS_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-const CONTENT_ROOT = path.join(process.cwd(), '..', 'content', 'domains');
-const CONTENT_INTERVIEW_ROOT = path.join(process.cwd(), '..', 'content', 'interview');
+const REPOSITORY_CONTENT_ROOT = resolveContentRoot();
+const CONTENT_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'domains');
+const CONTENT_INTERVIEW_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'interview');
 
 const VALID_LEVELS: ExperienceLevelKey[] = ['beginner', 'intermediate'];
 
@@ -206,21 +208,21 @@ interface LockedDomainConfig {
 const LOCKED_DOMAIN_REGISTRY: LockedDomainConfig[] = [
   {
     domainSlug:   'java-backend-intermediate',
-    rootDir:      path.join(process.cwd(), '..', 'content', 'java-backend-intermediate'),
+    rootDir:      path.join(REPOSITORY_CONTENT_ROOT, 'java-backend-intermediate'),
     languageSlug: 'java',
     trackSlug:    'backend',
     level:        'intermediate',
   },
   {
     domainSlug:   'java-fullstack-intermediate',
-    rootDir:      path.join(process.cwd(), '..', 'content', 'java-fullstack-intermediate'),
+    rootDir:      path.join(REPOSITORY_CONTENT_ROOT, 'java-fullstack-intermediate'),
     languageSlug: 'java',
     trackSlug:    'fullstack',
     level:        'intermediate',
   },
   {
     domainSlug:        'java-backend-fresher',
-    rootDir:           path.join(process.cwd(), '..', 'content', 'java-backend-fresher'),
+    rootDir:           path.join(REPOSITORY_CONTENT_ROOT, 'java-backend-fresher'),
     languageSlug:      'java',
     trackSlug:         'backend',
     level:             'beginner',
@@ -228,14 +230,14 @@ const LOCKED_DOMAIN_REGISTRY: LockedDomainConfig[] = [
   },
   {
     domainSlug:   'go-intermediate',
-    rootDir:      path.join(process.cwd(), '..', 'content', 'go-intermediate'),
+    rootDir:      path.join(REPOSITORY_CONTENT_ROOT, 'go-intermediate'),
     languageSlug: 'go',
     trackSlug:    'backend',
     level:        'intermediate',
   },
   {
     domainSlug:        'go-fresher',
-    rootDir:           path.join(process.cwd(), '..', 'content', 'go-fresher'),
+    rootDir:           path.join(REPOSITORY_CONTENT_ROOT, 'go-fresher'),
     languageSlug:      'go',
     trackSlug:         'backend',
     level:             'beginner',
@@ -243,7 +245,7 @@ const LOCKED_DOMAIN_REGISTRY: LockedDomainConfig[] = [
   },
   {
     domainSlug:        'java-fullstack-fresher',
-    rootDir:           path.join(process.cwd(), '..', 'content', 'java-fullstack-fresher'),
+    rootDir:           path.join(REPOSITORY_CONTENT_ROOT, 'java-fullstack-fresher'),
     languageSlug:      'java',
     trackSlug:         'fullstack',
     level:             'beginner',
@@ -251,14 +253,14 @@ const LOCKED_DOMAIN_REGISTRY: LockedDomainConfig[] = [
   },
   {
     domainSlug:        'python-backend-intermediate',
-    rootDir:           path.join(process.cwd(), '..', 'content', 'python-backend-intermediate'),
+    rootDir:           path.join(REPOSITORY_CONTENT_ROOT, 'python-backend-intermediate'),
     languageSlug:      'python',
     trackSlug:         'backend',
     level:             'intermediate',
   },
   {
     domainSlug:        'python-backend-fresher',
-    rootDir:           path.join(process.cwd(), '..', 'content', 'python-backend-fresher'),
+    rootDir:           path.join(REPOSITORY_CONTENT_ROOT, 'python-backend-fresher'),
     languageSlug:      'python',
     trackSlug:         'backend',
     level:             'beginner',
@@ -266,14 +268,14 @@ const LOCKED_DOMAIN_REGISTRY: LockedDomainConfig[] = [
   },
   {
     domainSlug:        'ruby-backend-intermediate',
-    rootDir:           path.join(process.cwd(), '..', 'content', 'ruby-backend-intermediate'),
+    rootDir:           path.join(REPOSITORY_CONTENT_ROOT, 'ruby-backend-intermediate'),
     languageSlug:      'ruby',
     trackSlug:         'backend',
     level:             'intermediate',
   },
   {
     domainSlug:        'ruby-backend-fresher',
-    rootDir:           path.join(process.cwd(), '..', 'content', 'ruby-backend-fresher'),
+    rootDir:           path.join(REPOSITORY_CONTENT_ROOT, 'ruby-backend-fresher'),
     languageSlug:      'ruby',
     trackSlug:         'backend',
     level:             'beginner',
@@ -281,14 +283,14 @@ const LOCKED_DOMAIN_REGISTRY: LockedDomainConfig[] = [
   },
   {
     domainSlug:   'frontend-intermediate',
-    rootDir:      path.join(process.cwd(), '..', 'content', 'frontend-intermediate'),
+    rootDir:      path.join(REPOSITORY_CONTENT_ROOT, 'frontend-intermediate'),
     languageSlug: 'frontend',
     trackSlug:    'frontend',
     level:        'intermediate',
   },
   {
     domainSlug:        'frontend-fresher',
-    rootDir:           path.join(process.cwd(), '..', 'content', 'frontend-fresher'),
+    rootDir:           path.join(REPOSITORY_CONTENT_ROOT, 'frontend-fresher'),
     languageSlug:      'frontend',
     trackSlug:         'frontend',
     level:             'beginner',
@@ -308,16 +310,28 @@ function computeAllDomains(): ContentDomain[] {
     // don't emit a redundant entry for the same lang+track+level combination.
     seen.add(`${cfg.languageSlug}-${cfg.trackSlug}-${cfg.level}`);
 
-    // Read module count from _index.json (fast: one file per domain).
+    // Read the curriculum modules and count their resolved question files.
+    // Locked domains may reuse a module from another domain through
+    // contentSource, so follow that pointer before counting.
     let stackCount = 0;
+    let questionCount = 0;
     const indexPath = path.join(cfg.rootDir, '_index.json');
     if (fs.existsSync(indexPath)) {
       try {
         const idx = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as {
           totalModules?: number;
-          modules?: unknown[];
+          modules?: Array<{
+            moduleSlug?: string;
+            contentSource?: { domain?: string; moduleSlug?: string };
+          }>;
         };
         stackCount = idx.totalModules ?? (Array.isArray(idx.modules) ? idx.modules.length : 0);
+        for (const module of idx.modules ?? []) {
+          if (!module.moduleSlug) continue;
+          const sourceDomain = module.contentSource?.domain ?? cfg.domainSlug;
+          const sourceModule = module.contentSource?.moduleSlug ?? module.moduleSlug;
+          questionCount += countQuestionsInStack(path.join(REPOSITORY_CONTENT_ROOT, sourceDomain, sourceModule));
+        }
       } catch {}
     }
 
@@ -340,9 +354,9 @@ function computeAllDomains(): ContentDomain[] {
       levelColor:     meta.color,
       levelColorClass: meta.colorClass,
       stackCount,
-      questionCount:  stackCount,
+      questionCount,
       contentPath:    cfg.domainSlug,
-      hasContent:     stackCount > 0,
+      hasContent:     stackCount > 0 && questionCount > 0,
     });
   }
 

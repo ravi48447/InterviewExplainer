@@ -11,6 +11,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { resolveContentRoot } from './content-paths';
 import type {
   QuestionPagePayload,
   AnswerSection,
@@ -70,9 +71,10 @@ function _cachePutBounded<V>(map: Map<string, V>, key: string, value: V, max: nu
 
 // ─── Path helpers ────────────────────────────────────────────────────────────
 
-const CONTENT_ROOT = path.join(process.cwd(), '..', 'content', 'domains');
+const REPOSITORY_CONTENT_ROOT = resolveContentRoot();
+const CONTENT_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'domains');
 // New canonical location per MASTER_PLAN.md: content/interview/{lang}/{track}/{level}/{stack}
-const CONTENT_INTERVIEW_ROOT = path.join(process.cwd(), '..', 'content', 'interview');
+const CONTENT_INTERVIEW_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'interview');
 
 // ─── Locked-domain registry ──────────────────────────────────────────────────
 //
@@ -90,14 +92,14 @@ const CONTENT_INTERVIEW_ROOT = path.join(process.cwd(), '..', 'content', 'interv
 // sibling that reuses all 35 backend modules and adds 21 frontend/fullstack
 // modules of its own.
 
-const CONTENT_JBI_ROOT = path.join(process.cwd(), '..', 'content', 'java-backend-intermediate');
-const CONTENT_JFI_ROOT = path.join(process.cwd(), '..', 'content', 'java-fullstack-intermediate');
-const CONTENT_JBF_ROOT = path.join(process.cwd(), '..', 'content', 'java-backend-fresher');
-const CONTENT_JFF_ROOT = path.join(process.cwd(), '..', 'content', 'java-fullstack-fresher');
-const CONTENT_GOI_ROOT = path.join(process.cwd(), '..', 'content', 'go-intermediate');
-const CONTENT_GOF_ROOT = path.join(process.cwd(), '..', 'content', 'go-fresher');
-const CONTENT_FEI_ROOT = path.join(process.cwd(), '..', 'content', 'frontend-intermediate');
-const CONTENT_FEF_ROOT = path.join(process.cwd(), '..', 'content', 'frontend-fresher');
+const CONTENT_JBI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'java-backend-intermediate');
+const CONTENT_JFI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'java-fullstack-intermediate');
+const CONTENT_JBF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'java-backend-fresher');
+const CONTENT_JFF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'java-fullstack-fresher');
+const CONTENT_GOI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'go-intermediate');
+const CONTENT_GOF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'go-fresher');
+const CONTENT_FEI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'frontend-intermediate');
+const CONTENT_FEF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'frontend-fresher');
 export const CONTENT_RBI_ROOT = 'content/ruby-backend-intermediate';
 export const CONTENT_RBF_ROOT = 'content/ruby-backend-fresher';
 

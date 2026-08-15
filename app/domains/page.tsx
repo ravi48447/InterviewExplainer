@@ -1,620 +1,387 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
-import { type ContentDomain } from "@/lib/types/content-domain";
-import { EXPERIENCE_LEVELS, LEVEL_KEYS, type ExperienceLevelKey } from "@/lib/levels";
-import { ENABLED_LANGUAGES } from "@/lib/launch-config";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
-  Compass, ArrowRight, Filter, ChevronDown, ChevronRight,
-  Search, X, BookOpen, Layers, Clock,
-  Globe, Server, Code2, Database, Cpu, Briefcase, Home, TrendingUp, Target, Award, Lightbulb,
+  ArrowRight,
+  BookOpen,
+  CheckCircle2,
+  Clock3,
+  Code2,
+  Compass,
+  Filter,
+  Layers3,
+  RotateCcw,
+  Search,
+  Sparkles,
+  Target,
+  X,
 } from "lucide-react";
+import { DomainExplorerVisual, type DomainVisualGroup } from "@/components/domains/domain-explorer-visual";
+import { FadeInUp } from "@/components/motion-wrapper";
+import { PageContainer } from "@/components/page-container";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 import { TechIcon } from "@/components/tech-icon";
+import { ENABLED_LANGUAGES } from "@/lib/launch-config";
+import { EXPERIENCE_LEVELS, LEVEL_KEYS, type ExperienceLevelKey } from "@/lib/levels";
+import type { ContentDomain } from "@/lib/types/content-domain";
+import { cn } from "@/lib/utils";
 
-const trackIcon: Record<string, React.ReactNode> = {
-  frontend:           <Globe     className="h-4 w-4" />,
-  backend:            <Server    className="h-4 w-4" />,
-  fullstack:          <Code2     className="h-4 w-4" />,
-  'data-engineering': <Database  className="h-4 w-4" />,
-  'ml-ai':            <Cpu       className="h-4 w-4" />,
-  cicd:               <Cpu       className="h-4 w-4" />,
-  cloud:              <Cpu       className="h-4 w-4" />,
-  infrastructure:     <Cpu       className="h-4 w-4" />,
-  sre:                <Cpu       className="h-4 w-4" />,
-  'sql-analytics':    <Database  className="h-4 w-4" />,
-  'python-analysis':  <Database  className="h-4 w-4" />,
-  visualization:      <Database  className="h-4 w-4" />,
-  'case-studies':     <Database  className="h-4 w-4" />,
-  analysis:           <Briefcase className="h-4 w-4" />,
+type Filters = {
+  search: string;
+  track: string;
+  level: "" | ExperienceLevelKey;
+  language: string;
 };
 
-// Domain track accent colors — categorical identifiers (not UI chrome).
-// Mapped to the restrained --chart-* semantic palette (P01-T021): one
-// accent family, perceptually distinct, theme-aware. Tracks that shared a
-// hue in V1 now share a chart token so the categorical set stays compact.
-// We keep the resolved hsl() strings for inline-style accents (the color bar
-// + tag tint), since Tailwind can't generate arbitrary chart-token tints
-// from a CSS variable at the opacity we need without a util class.
-const trackColor: Record<string, string> = {
-  frontend:           "hsl(var(--chart-1))",  // indigo
-  backend:            "hsl(var(--chart-1))",  // indigo (same family, FE/BE share)
-  fullstack:          "hsl(var(--chart-4))",  // violet
-  'data-engineering': "hsl(var(--chart-3))",  // amber
-  'ml-ai':            "hsl(var(--chart-5))",  // rose
-  cicd:               "hsl(var(--chart-2))",  // green
-  cloud:              "hsl(var(--chart-1))",  // indigo
-  infrastructure:     "hsl(var(--chart-2))",  // green
-  sre:                "hsl(var(--chart-2))",  // green
-  'sql-analytics':    "hsl(var(--chart-3))",  // amber
-  'python-analysis':  "hsl(var(--chart-3))",  // amber
-  visualization:      "hsl(var(--chart-4))",  // violet
-  'case-studies':     "hsl(var(--chart-3))",  // amber
-  analysis:           "hsl(var(--chart-5))",  // rose
+const EMPTY_FILTERS: Filters = { search: "", track: "", level: "", language: "" };
+
+const TRACK_ACCENTS: Record<string, { color: string; tint: string }> = {
+  backend: { color: "#3279C9", tint: "#F2F7FD" },
+  frontend: { color: "#126B63", tint: "#EFF9F6" },
+  fullstack: { color: "#7857D8", tint: "#F6F2FD" },
+  "data-engineering": { color: "#D9603B", tint: "#FFF5F0" },
+  "ml-ai": { color: "#9B5A8B", tint: "#FBF3F9" },
+  "sql-analytics": { color: "#B56A0A", tint: "#FFF8EB" },
+  "python-analysis": { color: "#B56A0A", tint: "#FFF8EB" },
+  visualization: { color: "#7857D8", tint: "#F6F2FD" },
+  cloud: { color: "#3279C9", tint: "#F2F7FD" },
+  infrastructure: { color: "#126B63", tint: "#EFF9F6" },
+  cicd: { color: "#126B63", tint: "#EFF9F6" },
+  sre: { color: "#126B63", tint: "#EFF9F6" },
 };
 
-const LANG_ORDER = [
-  "Java", "Python", "JavaScript", "TypeScript", "Go", "Kotlin",
-  "C#", "Ruby", "DevOps", "Data Analyst", "Business Analyst",
-];
+const FALLBACK_ACCENT = { color: "#60738F", tint: "#F5F8FC" };
 
 export default function DomainsPage() {
   const searchParams = useSearchParams();
-  const langParam = searchParams?.get('language')?.toLowerCase() ?? '';
-
-  const [domains, setDomains]         = useState<ContentDomain[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [filters, setFilters]         = useState({ search: "", track: "", level: "", language: langParam });
-  const [expandedLang, setExpandedLang] = useState<Record<string, boolean>>({});
-
-  // Sync language filter if URL param changes
-  useEffect(() => {
-    if (langParam) setFilters(f => ({ ...f, language: langParam }));
-  }, [langParam]);
+  const requestedLanguage = searchParams?.get("language")?.toLowerCase() ?? "";
+  const [domains, setDomains] = useState<ContentDomain[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [requestKey, setRequestKey] = useState(0);
+  const [filters, setFilters] = useState<Filters>({ ...EMPTY_FILTERS, language: requestedLanguage });
 
   useEffect(() => {
-    fetch("/api/content/all-domains")
-      .then(r => r.ok ? r.json() : [])
-      .then((data: ContentDomain[]) => {
-        // Launch gate: only expose languages listed in launch-config.ts.
-        // See ROADMAP.md for the plan to unlock the others.
-        const enabled = new Set(
-          (ENABLED_LANGUAGES as readonly string[]).map(s => s.toLowerCase())
-        );
-        const visible = data.filter(d => enabled.has(d.language.toLowerCase()));
-        setDomains(visible);
-        // Auto-expand matching language or first group
-        const firstLang =
-          visible.find(d => d.language.toLowerCase() === langParam)?.language
-          ?? visible[0]?.language
-          ?? '';
-        if (firstLang) setExpandedLang({ [firstLang]: true });
+    setFilters((current) => ({ ...current, language: requestedLanguage }));
+  }, [requestedLanguage]);
+
+  const loadDomains = useCallback(() => {
+    setLoading(true);
+    setError("");
+    const controller = new AbortController();
+
+    fetch("/api/content/all-domains", { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("Unable to load interview paths.");
+        return response.json() as Promise<ContentDomain[]>;
       })
-      .catch(console.error)
+      .then((data) => {
+        const enabled = new Set((ENABLED_LANGUAGES as readonly string[]).map((item) => item.toLowerCase()));
+        setDomains(data.filter((domain) => enabled.has(domain.language.toLowerCase())));
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === "AbortError") return;
+        setError(reason instanceof Error ? reason.message : "Unable to load interview paths.");
+      })
       .finally(() => setLoading(false));
-  }, [langParam]);
 
-  // Derive unique tracks from content
-  const uniqueTracks = useMemo(() => {
-    const seen = new Set<string>();
-    return domains
-      .filter(d => { const k = d.trackSlug; if (seen.has(k)) return false; seen.add(k); return true; })
-      .map(d => ({ slug: d.trackSlug, name: d.track }));
-  }, [domains]);
+    return () => controller.abort();
+  }, []);
 
-  const filtered = useMemo(() => domains.filter(d => {
-    const s = filters.search.toLowerCase();
-    return (
-      (!s || d.name.toLowerCase().includes(s) || d.language.toLowerCase().includes(s) || d.track.toLowerCase().includes(s)) &&
-      (!filters.track    || d.trackSlug === filters.track) &&
-      (!filters.level    || d.level === filters.level) &&
-      (!filters.language || d.language.toLowerCase() === filters.language.toLowerCase())
-    );
-  }), [domains, filters]);
+  useEffect(() => loadDomains(), [loadDomains, requestKey]);
 
-  const grouped = useMemo(() =>
-    filtered.reduce((acc, d) => {
-      if (!acc[d.language]) acc[d.language] = [];
-      acc[d.language].push(d);
-      return acc;
-    }, {} as Record<string, ContentDomain[]>),
-  [filtered]);
-
-  const langKeys = useMemo(() => {
-    const keys = Object.keys(grouped);
-    return keys.sort((a, b) => {
-      const ai = LANG_ORDER.indexOf(a);
-      const bi = LANG_ORDER.indexOf(b);
-      if (ai === -1 && bi === -1) return a.localeCompare(b);
-      if (ai === -1) return 1;
-      if (bi === -1) return -1;
-      return ai - bi;
-    });
-  }, [grouped]);
-
-  const totalQuestions = useMemo(() => domains.filter(d => d.hasContent).reduce((s, d) => s + d.questionCount, 0), [domains]);
-  const liveCount     = useMemo(() => domains.filter(d => d.hasContent).length, [domains]);
-  const hasFilter = !!(filters.track || filters.level || filters.search || filters.language);
-  const toggle    = (lang: string) => setExpandedLang(p => ({ ...p, [lang]: !p[lang] }));
-  const resetAll  = () => setFilters({ search: "", track: "", level: "", language: "" });
-
-  if (loading) return (
-    <div className="min-h-screen bg-background">
-      <div className="page-container py-16 space-y-6">
-        <Skeleton className="h-8 w-40 rounded-lg" />
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-5">
-          <Skeleton className="h-96 rounded-lg" />
-          <div className="space-y-4">
-            {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-lg" />)}
-          </div>
-          <Skeleton className="hidden lg:block h-96 rounded-lg" />
-        </div>
-      </div>
-    </div>
+  const languages = useMemo(
+    () => Array.from(new Set(domains.map((domain) => domain.language))).sort((a, b) => a.localeCompare(b)),
+    [domains],
   );
 
+  const tracks = useMemo(() => {
+    const unique = new Map<string, string>();
+    domains.forEach((domain) => unique.set(domain.trackSlug, domain.track));
+    return Array.from(unique, ([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [domains]);
+
+  const filteredDomains = useMemo(() => {
+    const search = filters.search.trim().toLowerCase();
+    return domains.filter((domain) => {
+      const matchesSearch = !search || [domain.name, domain.language, domain.track, domain.levelLabel]
+        .some((value) => value.toLowerCase().includes(search));
+      return matchesSearch
+        && (!filters.language || domain.language.toLowerCase() === filters.language.toLowerCase())
+        && (!filters.track || domain.trackSlug === filters.track)
+        && (!filters.level || domain.level === filters.level);
+    });
+  }, [domains, filters]);
+
+  const liveCount = useMemo(() => domains.filter((domain) => domain.hasContent).length, [domains]);
+  const totalQuestions = useMemo(
+    () => domains.reduce((total, domain) => total + (domain.hasContent ? domain.questionCount : 0), 0),
+    [domains],
+  );
+
+  const visualGroups = useMemo<DomainVisualGroup[]>(() => {
+    const accents: DomainVisualGroup["accent"][] = ["violet", "blue", "teal", "orange"];
+    return languages.slice(0, 4).map((language, index) => ({
+      label: language,
+      count: domains.filter((domain) => domain.language === language).length,
+      accent: accents[index],
+    }));
+  }, [domains, languages]);
+
+  const hasFilters = Boolean(filters.search || filters.track || filters.level || filters.language);
+  const clearFilters = () => setFilters(EMPTY_FILTERS);
+  const selectLanguage = (language: string) => {
+    setFilters((current) => ({ ...current, language: current.language === language.toLowerCase() ? "" : language.toLowerCase() }));
+  };
+
   return (
-    <div className="min-h-screen bg-background font-sans text-foreground">
-      <div className="page-container py-14 sm:py-16">
+    <main id="main" className="min-h-screen bg-background">
+      <section aria-labelledby="domain-explorer-heading" className="border-b border-border bg-[#fffdfb] dark:bg-card">
+        <PageContainer className="py-12 sm:py-16">
+          <div className="grid items-center gap-10 xl:grid-cols-[0.88fr_1.12fr] xl:gap-12">
+            <FadeInUp className="max-w-[590px]">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[#7857D8]/20 bg-[#7857D8]/[0.06] px-3 py-1.5 text-[11px] font-medium text-[#6846C7] dark:text-[#bcaaff]">
+                <Sparkles className="h-3.5 w-3.5 text-[#E87500]" aria-hidden="true" />
+                Step 1 · Find your preparation focus
+              </span>
+              <h1 id="domain-explorer-heading" className="mt-5 font-display text-[clamp(2.2rem,4vw,3.35rem)] font-semibold leading-[1.08] tracking-[-0.038em] text-foreground">
+                Explore interview paths built around <span className="text-[#7857D8] dark:text-[#bcaaff]">your stack.</span>
+              </h1>
+              <p className="mt-5 max-w-[550px] text-[14px] leading-6 text-muted-foreground sm:text-[15px] sm:leading-7">
+                Choose a language, role, and experience level. Every live path leads to structured concepts, real questions, and focused interview preparation.
+              </p>
 
-        {/* Breadcrumb */}
-        <nav className="mb-6 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Link href="/" className="flex items-center gap-1 transition-colors hover:text-foreground">
-            <Home className="h-3 w-3" /> Home
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <span className="font-semibold text-foreground">Learning Paths</span>
-        </nav>
-
-        {/* Hero */}
-        <header className="mb-10">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary">
-            <Compass className="h-3.5 w-3.5" />
-            Interview Preparation Hub
-          </span>
-          <h1 className="type-display text-foreground mt-4">
-            Choose Your Learning Path
-          </h1>
-          <p className="reading-container type-body mt-5 text-muted-foreground">
-            Master technical interviews with <span className="font-semibold text-foreground">domain-specific questions</span> tailored
-            to your <span className="font-semibold text-foreground">tech stack</span> and <span className="font-semibold text-foreground">experience level</span>.
-          </p>
-
-          {/* Stat band — hairline grid, like the homepage trust band */}
-          <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border/60 bg-border/60 sm:grid-cols-4">
-            <div className="bg-card px-5 py-4">
-              <dd className="font-display text-2xl font-bold tabular-nums text-primary">{liveCount}</dd>
-              <dt className="type-label mt-1 text-muted-foreground">Live Paths</dt>
-            </div>
-            <div className="bg-card px-5 py-4">
-              <dd className="font-display text-2xl font-bold tabular-nums text-primary">
-                {totalQuestions > 1000 ? `${(totalQuestions / 1000).toFixed(1)}k+` : totalQuestions}
-              </dd>
-              <dt className="type-label mt-1 text-muted-foreground">Questions</dt>
-            </div>
-            <div className="bg-card px-5 py-4">
-              <dd className="font-display text-2xl font-bold tabular-nums text-primary">{domains.length}</dd>
-              <dt className="type-label mt-1 text-muted-foreground">Total Paths</dt>
-            </div>
-            <div className="bg-card px-5 py-4">
-              <dd className="font-display text-2xl font-bold tabular-nums text-primary">{langKeys.length}</dd>
-              <dt className="type-label mt-1 text-muted-foreground">Languages</dt>
-            </div>
-          </dl>
-        </header>
-
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_280px] gap-6">
-
-          {/* ── Left Filter Sidebar ── */}
-          <aside className="space-y-5">
-            <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
-              <div className="flex items-center gap-2 border-b border-border/60 bg-surface px-4 py-3">
-                <Filter className="h-3.5 w-3.5 text-primary" />
-                <h3 className="type-label text-foreground">Filter Your Path</h3>
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <a href="#domain-library" className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#D9603B] px-5 text-[13px] font-semibold text-white shadow-md transition-[transform,background-color] duration-150 ease-out hover:-translate-y-0.5 hover:bg-[#bd4f30] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D9603B] focus-visible:ring-offset-2">
+                  Browse live paths <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </a>
+                <span className="inline-flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <CheckCircle2 className="h-4 w-4 text-[#126B63]" aria-hidden="true" />
+                  Real repository content only
+                </span>
               </div>
 
-              <div className="space-y-5 p-4">
-                {/* Language */}
-                <div>
-                  <label className="mb-2 flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-                    <Code2 className="h-3 w-3 text-primary" /> Programming Language
-                  </label>
-                  <select
-                    value={filters.language}
-                    onChange={e => setFilters(f => ({ ...f, language: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10"
-                  >
-                    <option value="">All Languages ({langKeys.length})</option>
-                    {langKeys.map(lang => <option key={lang} value={lang}>{lang}</option>)}
-                  </select>
-                </div>
+              <dl className="mt-8 grid max-w-lg grid-cols-3 gap-2.5">
+                <HeroStat value={loading ? "–" : String(liveCount)} label="Live paths" accent="teal" />
+                <HeroStat value={loading ? "–" : String(languages.length)} label="Languages" accent="violet" />
+                <HeroStat value={loading ? "–" : formatCount(totalQuestions)} label="Questions" accent="blue" />
+              </dl>
+            </FadeInUp>
 
-                {/* Search */}
-                <div>
-                  <label className="mb-2 flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-                    <Search className="h-3 w-3 text-primary" /> Search Paths
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                      type="text"
-                      placeholder="Find a path..."
-                      value={filters.search}
-                      onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-                      className="h-10 w-full rounded-lg border border-border bg-background pl-10 pr-3 text-sm font-medium text-foreground transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10"
-                    />
-                  </div>
-                </div>
+            <FadeInUp delay={0.08}>
+              <DomainExplorerVisual groups={visualGroups} />
+            </FadeInUp>
+          </div>
+        </PageContainer>
+      </section>
 
-                {/* Track */}
-                <div>
-                  <label className="mb-2 flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-                    <Layers className="h-3 w-3 text-primary" /> Career Track
-                  </label>
-                  <div className="space-y-1.5">
-                    <button
-                      onClick={() => setFilters(f => ({ ...f, track: "" }))}
-                      className={cn("w-full rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors",
-                        filters.track === "" ? "bg-primary text-primary-foreground" : "border border-border/60 text-muted-foreground hover:bg-surface"
-                      )}>All Tracks</button>
-                    {uniqueTracks.map(t => {
-                      const color  = trackColor[t.slug] ?? "hsl(var(--muted-foreground))";
-                      const icon   = trackIcon[t.slug] ?? <Layers className="h-4 w-4" />;
-                      const active = filters.track === t.slug;
-                      return (
-                        <button key={t.slug}
-                          onClick={() => setFilters(f => ({ ...f, track: active ? "" : t.slug }))}
-                          className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-bold transition-colors",
-                            active ? "bg-primary text-primary-foreground" : "border border-border/60 text-muted-foreground hover:bg-surface"
-                          )}
-                        >
-                          <span style={{ color: active ? "inherit" : color }}>{icon}</span>
-                          {t.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Experience Level — 2-level model */}
-                <div>
-                  <label className="mb-2 flex items-center gap-1.5 text-xs font-bold text-muted-foreground">
-                    <TrendingUp className="h-3 w-3 text-primary" /> Experience Level
-                  </label>
-                  <div className="space-y-1.5">
-                    {LEVEL_KEYS.map(key => {
-                      const meta   = EXPERIENCE_LEVELS[key];
-                      const active = filters.level === key;
-                      return (
-                        <button key={key}
-                          onClick={() => setFilters(f => ({ ...f, level: active ? "" : key }))}
-                          className={cn("flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-xs font-bold transition-colors",
-                            active ? "border-transparent bg-primary text-primary-foreground" : "border-border/60 bg-card text-muted-foreground hover:bg-surface"
-                          )}
-                        >
-                          <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: meta.color }} />
-                          <span>{meta.label}</span>
-                          <span className={cn("ml-auto text-[11px] font-normal", active ? "text-primary-foreground/80" : "text-muted-foreground")}>
-                            {meta.range}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+      <section id="domain-library" aria-labelledby="domain-library-heading" className="scroll-mt-20 py-12 sm:py-14">
+        <PageContainer>
+          <FadeInUp>
+            <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#D9603B]">Path library</p>
+                <h2 id="domain-library-heading" className="mt-2 font-display text-[1.45rem] font-semibold tracking-[-0.02em] text-foreground sm:text-[1.8rem]">Choose where you want to begin</h2>
+                <p className="mt-2 max-w-2xl text-[13px] leading-6 text-muted-foreground">Filter the real paths available in the repository. Live cards open the complete learning domain.</p>
               </div>
-
-              {hasFilter && (
-                <div className="border-t border-border/60 bg-surface px-4 py-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-muted-foreground">
-                      Showing <span className="font-extrabold text-foreground">{filtered.length}</span> of {domains.length}
-                    </span>
-                    <button onClick={resetAll} className="font-bold text-primary hover:text-primary/80">Clear All</button>
-                  </div>
-                </div>
+              {!loading && !error && (
+                <p className="text-[11px] text-muted-foreground" aria-live="polite">
+                  Showing <strong className="font-semibold text-foreground">{filteredDomains.length}</strong> of {domains.length} paths
+                </p>
               )}
             </div>
 
-            {/* Study Roadmap */}
-            <div className="rounded-lg border border-border/60 bg-surface p-4">
-              <h4 className="type-label mb-3 flex items-center gap-2 text-foreground">
-                <BookOpen className="h-4 w-4 text-primary" /> Study Roadmap
-              </h4>
-              <div className="space-y-2.5">
-                {["Select your language", "Match experience level", "Complete one path fully"].map((step, i) => (
-                  <div key={step} className="flex items-start gap-2 rounded-lg border border-border/60 bg-card p-2">
-                    <div className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-bold",
-                      i < 2 ? "border border-primary/30 bg-primary/10 text-primary" : "border border-success/30 bg-success/10 text-success"
-                    )}>{i + 1}</div>
-                    <p className="text-xs font-medium text-muted-foreground">{step}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </aside>
-
-          {/* ── Main Content ── */}
-          <div className="space-y-5">
-            {/* Active Filter Pills */}
-            {hasFilter && (
-              <div className="flex flex-wrap gap-2">
-                {filters.language && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground">
-                    <TechIcon name={filters.language.toLowerCase()} className="h-3 w-3" />
-                    {filters.language}
-                    <button onClick={() => setFilters(f => ({ ...f, language: "" }))}><X className="h-3 w-3" /></button>
-                  </span>
-                )}
-                {filters.search && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground">
-                    &ldquo;{filters.search}&rdquo;
-                    <button onClick={() => setFilters(f => ({ ...f, search: "" }))}><X className="h-3 w-3" /></button>
-                  </span>
-                )}
-                {filters.track && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground">
-                    {uniqueTracks.find(t => t.slug === filters.track)?.name ?? filters.track}
-                    <button onClick={() => setFilters(f => ({ ...f, track: "" }))}><X className="h-3 w-3" /></button>
-                  </span>
-                )}
-                {filters.level && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-xs font-medium text-foreground">
-                    {EXPERIENCE_LEVELS[filters.level as ExperienceLevelKey]?.label}
-                    <button onClick={() => setFilters(f => ({ ...f, level: "" }))}><X className="h-3 w-3" /></button>
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Quick Jump */}
-            {!hasFilter && langKeys.length > 0 && (
-              <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
-                <div className="flex items-center gap-2 border-b border-border/60 bg-surface px-4 py-3">
-                  <Code2 className="h-4 w-4 text-primary" />
-                  <h3 className="type-label text-foreground">Quick Jump by Language</h3>
-                </div>
-                <div className="flex flex-wrap gap-2 p-4">
-                  {langKeys.map(lang => {
-                    const liveInLang = (grouped[lang] ?? []).filter(d => d.hasContent).length;
-                    const totalInLang = grouped[lang]?.length ?? 0;
-                    return (
-                      <button key={lang}
-                        onClick={() => {
-                          setExpandedLang(p => ({ ...p, [lang]: !p[lang] }));
-                          setTimeout(() => document.getElementById(`lang-${lang}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
-                        }}
-                        className={cn("inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold transition-colors",
-                          expandedLang[lang] ? "border-primary bg-primary text-primary-foreground" : "border-border/60 bg-card text-muted-foreground hover:bg-surface"
-                        )}
-                      >
-                        <TechIcon name={lang.toLowerCase()} className="h-4 w-4" />
-                        {lang}
-                        <span className={cn("rounded-full px-2 py-0.5 text-xs font-bold", expandedLang[lang] ? "bg-primary-foreground/20" : "bg-surface text-muted-foreground")}>
-                          {liveInLang > 0 ? `${liveInLang}/${totalInLang}` : "Soon"}
-                        </span>
+            {!error && (
+              <div className="mb-7 rounded-2xl border border-[#e2dceb] bg-card p-4 shadow-sm sm:p-5">
+                <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+                  <label className="relative block">
+                    <span className="sr-only">Search interview paths</span>
+                    <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                    <input
+                      value={filters.search}
+                      onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
+                      placeholder="Search language, role, or path..."
+                      className="h-11 w-full rounded-lg border border-border bg-background pl-10 pr-10 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-[#7857D8] focus:ring-2 focus:ring-[#7857D8]/10"
+                    />
+                    {filters.search && (
+                      <button type="button" onClick={() => setFilters((current) => ({ ...current, search: "" }))} className="absolute right-3 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Clear search">
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
-                    );
-                  })}
+                    )}
+                  </label>
+
+                  <label className="relative">
+                    <span className="sr-only">Filter by career track</span>
+                    <Layers3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                    <select value={filters.track} onChange={(event) => setFilters((current) => ({ ...current, track: event.target.value }))} className="h-11 min-w-[190px] appearance-none rounded-lg border border-border bg-background pl-9 pr-9 text-[12px] font-medium text-foreground outline-none focus:border-[#7857D8] focus:ring-2 focus:ring-[#7857D8]/10">
+                      <option value="">All career tracks</option>
+                      {tracks.map((track) => <option key={track.slug} value={track.slug}>{track.name}</option>)}
+                    </select>
+                  </label>
+
+                  <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1" aria-label="Experience level filter">
+                    <FilterButton active={!filters.level} onClick={() => setFilters((current) => ({ ...current, level: "" }))}>All levels</FilterButton>
+                    {LEVEL_KEYS.map((level) => (
+                      <FilterButton key={level} active={filters.level === level} onClick={() => setFilters((current) => ({ ...current, level }))}>
+                        {EXPERIENCE_LEVELS[level].label}
+                      </FilterButton>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
 
-            {/* Language Sections */}
-            <div className="space-y-4">
-              {langKeys.map(lang => (
-                <div key={lang} id={`lang-${lang}`} className="overflow-hidden rounded-lg border border-border/60 bg-card">
-                  <button onClick={() => toggle(lang)}
-                    className="flex w-full items-center justify-between border-none px-5 py-4 transition-colors hover:bg-surface/50">
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-border/60 bg-surface">
-                        <TechIcon name={lang.toLowerCase()} className="h-6 w-6" />
-                      </div>
-                      <div className="text-left">
-                        <h2 className="text-lg font-semibold text-foreground">{lang}</h2>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          {grouped[lang].filter(d => d.hasContent).length} live · {grouped[lang].filter(d => !d.hasContent).length} coming soon
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="rounded-lg border border-border/60 bg-surface px-3 py-1.5 text-xs font-bold text-muted-foreground">
-                        {grouped[lang].length} paths
-                      </span>
-                      <ChevronDown className={cn("h-5 w-5 text-muted-foreground transition-transform duration-200", expandedLang[lang] && "rotate-180 text-primary")} />
-                    </div>
-                  </button>
-
-                  {expandedLang[lang] && (
-                    <div className="animate-fade-in-up overflow-hidden" style={{ animationDuration: '0.25s' }}>
-                      <div className="grid grid-cols-1 gap-4 border-t border-border/60 bg-surface/30 px-4 pb-4 pt-4 sm:grid-cols-2">
-                        {grouped[lang].map((domain, idx) => (
-                          <DomainCard key={domain.slug} domain={domain} index={idx} />
-                        ))}
-                      </div>
-                    </div>
+                <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <span className="flex shrink-0 items-center gap-1.5 pr-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                    <Code2 className="h-3.5 w-3.5" aria-hidden="true" /> Language
+                  </span>
+                  <button type="button" onClick={() => setFilters((current) => ({ ...current, language: "" }))} className={languageChipClass(!filters.language)}>All</button>
+                  {languages.map((language) => (
+                    <button key={language} type="button" onClick={() => selectLanguage(language)} className={languageChipClass(filters.language === language.toLowerCase())}>
+                      <TechIcon name={language.toLowerCase()} className="h-3.5 w-3.5" /> {language}
+                    </button>
+                  ))}
+                  {hasFilters && (
+                    <button type="button" onClick={clearFilters} className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">
+                      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Clear
+                    </button>
                   )}
                 </div>
-              ))}
-            </div>
-
-            {filtered.length === 0 && !loading && (
-              <div className="rounded-lg border border-border/60 bg-card py-16 text-center">
-                <Compass className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-                <h3 className="text-sm font-semibold text-foreground">No paths found</h3>
-                <p className="mt-1 text-sm text-muted-foreground">Try adjusting your filters</p>
-                <button onClick={resetAll} className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
-                  Clear Filters
-                </button>
               </div>
             )}
-          </div>
+          </FadeInUp>
 
-          {/* ── Right Sidebar ── */}
-          <aside className="hidden space-y-5 lg:block">
-            {/* Experience Level Guide */}
-            <div className="overflow-hidden rounded-lg border border-border/60 bg-card">
-              <div className="flex items-center gap-2 border-b border-border/60 bg-surface px-4 py-3">
-                <TrendingUp className="h-3.5 w-3.5 text-primary" />
-                <h3 className="type-label text-foreground">Experience Levels</h3>
-              </div>
-              <div className="space-y-2 p-3">
-                {LEVEL_KEYS.map(key => {
-                  const meta = EXPERIENCE_LEVELS[key];
-                  const descs: Record<ExperienceLevelKey, string> = {
-                    beginner:     "Core fundamentals & basics",
-                    intermediate: "Architecture & real-world patterns",
-                  };
-                  return (
-                    <button key={key}
-                      onClick={() => setFilters(f => ({ ...f, level: f.level === key ? "" : key }))}
-                      className={cn("flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
-                        filters.level === key ? "border-primary bg-surface" : "border-transparent hover:bg-surface"
-                      )}
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold text-primary-foreground"
-                        style={{ backgroundColor: meta.color }}>
-                        {meta.range}
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-xs font-bold text-foreground">{meta.label}</div>
-                        <div className="text-[11px] text-muted-foreground">{descs[key]}</div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+          {loading ? (
+            <DomainGridSkeleton />
+          ) : error ? (
+            <DomainError message={error} onRetry={() => setRequestKey((value) => value + 1)} />
+          ) : filteredDomains.length === 0 ? (
+            <DomainEmpty onClear={clearFilters} />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredDomains.map((domain) => <DomainPathCard key={domain.slug} domain={domain} />)}
             </div>
+          )}
 
-            {/* Interview Focus */}
-            <div className="rounded-lg border border-border/60 bg-surface p-4">
-              <h4 className="type-label mb-3 flex items-center gap-2 text-foreground">
-                <Target className="h-4 w-4 text-primary" /> Interview Focus Areas
-              </h4>
-              <div className="space-y-2">
-                {["Core Concepts", "System Design", "Trade-offs", "Real-world"].map(label => (
-                  <div key={label} className="rounded-lg border border-border/60 bg-card px-3 py-2 text-xs font-semibold text-foreground">
-                    {label}
-                  </div>
-                ))}
-              </div>
-            </div>
+          {!loading && !error && domains.length > 0 && (
+            <FadeInUp className="mt-10 grid gap-3 rounded-2xl border border-[#d9e6e2] bg-[#f4faf8] p-5 dark:border-border dark:bg-card sm:grid-cols-3 sm:p-6">
+              {[
+                { icon: Compass, title: "Choose one focus", detail: "Start with the role closest to your next interview." },
+                { icon: BookOpen, title: "Learn in sequence", detail: "Move from concepts to examples and real questions." },
+                { icon: Target, title: "Practice for the round", detail: "Use the path to expose gaps before the interview." },
+              ].map(({ icon: Icon, title, detail }, index) => (
+                <div key={title} className="flex gap-3 rounded-xl bg-white/70 p-3 dark:bg-background/50">
+                  <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg", index === 0 ? "bg-[#7857D8]/10 text-[#7857D8]" : index === 1 ? "bg-[#126B63]/10 text-[#126B63]" : "bg-[#D9603B]/10 text-[#D9603B]")}><Icon className="h-4 w-4" aria-hidden="true" /></span>
+                  <span><strong className="block text-[12px] font-semibold text-foreground">{title}</strong><span className="mt-1 block text-[10px] leading-4 text-muted-foreground">{detail}</span></span>
+                </div>
+              ))}
+            </FadeInUp>
+          )}
+        </PageContainer>
+      </section>
+    </main>
+  );
+}
 
-            {/* Pro Tip */}
-            <div className="rounded-lg border border-border/60 bg-surface p-4">
-              <div className="type-label mb-2 flex items-center gap-2 text-foreground">
-                <Lightbulb className="h-4 w-4 text-primary" />
-                Pro Study Tip
-              </div>
-              <p className="rounded-lg border border-border/60 bg-card p-3 text-xs leading-relaxed text-muted-foreground">
-                Focus on completing one path thoroughly before moving to another.{" "}
-                <span className="font-bold text-foreground">Depth beats breadth</span> in technical interviews.
-              </p>
-            </div>
-
-            {/* Platform Stats */}
-            <div className="rounded-lg border border-border/60 bg-surface p-4">
-              <h4 className="type-label mb-3 flex items-center gap-2 text-foreground">
-                <Award className="h-4 w-4 text-primary" /> Platform Stats
-              </h4>
-              <div className="space-y-2">
-                {[
-                  { label: "Live Paths",       value: liveCount },
-                  { label: "Coming Soon",      value: domains.length - liveCount },
-                  { label: "Questions",        value: totalQuestions > 1000 ? `${(totalQuestions / 1000).toFixed(1)}k+` : totalQuestions },
-                  { label: "Exp. Levels",      value: 2 },
-                ].map(s => (
-                  <div key={s.label} className="flex items-center justify-between rounded-lg border border-border/60 bg-card p-2 text-xs">
-                    <span className="font-medium text-muted-foreground">{s.label}</span>
-                    <span className="font-semibold text-primary">{s.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </aside>
-        </div>
-      </div>
+function HeroStat({ value, label, accent }: { value: string; label: string; accent: "blue" | "teal" | "violet" }) {
+  const accents = { blue: "text-[#3279C9]", teal: "text-[#126B63]", violet: "text-[#7857D8]" } as const;
+  return (
+    <div className="rounded-xl border border-[#e3ddea] bg-white/80 px-3 py-3 shadow-xs dark:border-border dark:bg-card">
+      <dd className={cn("font-display text-lg font-semibold tabular-nums sm:text-xl", accents[accent])}>{value}</dd>
+      <dt className="mt-0.5 text-[9px] font-medium text-muted-foreground sm:text-[10px]">{label}</dt>
     </div>
   );
 }
 
-function DomainCard({ domain, index = 0 }: { domain: ContentDomain; index?: number }) {
-  const color  = trackColor[domain.trackSlug] ?? "hsl(var(--muted-foreground))";
-  const meta   = EXPERIENCE_LEVELS[domain.level];
+function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" aria-pressed={active} onClick={onClick} className={cn("h-8 whitespace-nowrap rounded-md px-3 text-[10px] font-semibold transition-colors", active ? "bg-[#E87500] text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
+      {children}
+    </button>
+  );
+}
 
-  const brief: Record<ExperienceLevelKey, string> = {
-    beginner:     `Fundamentals & core concepts for ${domain.language} ${domain.track} developers.`,
-    intermediate: `Architecture, patterns & real-world scenarios for ${domain.language} ${domain.track}.`,
-  };
+function languageChipClass(active: boolean) {
+  return cn(
+    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-medium transition-colors",
+    active ? "border-[#E87500] bg-[#fff5eb] text-[#a95500] dark:bg-[#E87500]/10 dark:text-[#ffad5d]" : "border-border bg-background text-muted-foreground hover:border-foreground/20 hover:text-foreground",
+  );
+}
 
-  const cardInner = (
-    <div className={cn(
-      "h-full rounded-lg border p-5 transition-colors",
-      domain.hasContent
-        ? "border-border/60 bg-card hover:border-primary/30 group"
-        : "border-dashed border-border/60 bg-surface opacity-60 cursor-default"
-    )}>
-      <div className="mb-3 flex items-start justify-between">
-        <div className="mt-1 h-1 w-8 rounded-full" style={{ backgroundColor: domain.hasContent ? color : "hsl(var(--muted-foreground))" }} />
-        {!domain.hasContent && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-surface px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
-            <Clock className="h-2.5 w-2.5" /> Coming Soon
+function DomainPathCard({ domain }: { domain: ContentDomain }) {
+  const accent = TRACK_ACCENTS[domain.trackSlug] ?? FALLBACK_ACCENT;
+  const description = domain.level === "beginner"
+    ? `Build the ${domain.language} ${domain.track.toLowerCase()} fundamentals interviewers expect.`
+    : `Study architecture, patterns, and real-world ${domain.language} ${domain.track.toLowerCase()} decisions.`;
+
+  const content = (
+    <article className={cn("group relative flex h-full min-h-[238px] flex-col overflow-hidden rounded-2xl border bg-card p-5 shadow-xs transition-[transform,border-color,box-shadow] duration-150 ease-out", domain.hasContent ? "border-border hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-md" : "border-dashed border-border opacity-70")}>
+      <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: accent.color }} aria-hidden="true" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: accent.tint, color: accent.color }}>
+            <TechIcon name={domain.language.toLowerCase()} className="h-5 w-5" />
           </span>
+          <div className="min-w-0">
+            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.09em]" style={{ color: accent.color }}>{domain.track}</p>
+            <h3 className="mt-1 truncate text-[15px] font-semibold text-foreground">{domain.name}</h3>
+          </div>
+        </div>
+        {domain.hasContent ? (
+          <span className="rounded-full border border-[#cfe3dc] bg-[#f1faf7] px-2 py-1 text-[9px] font-semibold text-[#126B63]">Live</span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-1 text-[9px] font-semibold text-muted-foreground"><Clock3 className="h-3 w-3" /> Soon</span>
         )}
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="rounded px-2 py-0.5 text-xs font-semibold"
-          style={{ color: domain.hasContent ? color : "hsl(var(--muted-foreground))", backgroundColor: (domain.hasContent ? color : "currentColor") + "15" }}>
-          {domain.track}
-        </span>
-        <span className={cn("rounded border px-2 py-0.5 text-xs font-semibold",
-          domain.hasContent ? "border-border/60 bg-surface text-foreground" : "border-border/60 bg-surface text-muted-foreground"
-        )}>
-          {meta.label} · {meta.range}
-        </span>
+      <p className="mt-4 text-[12px] leading-5 text-muted-foreground">{description}</p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+        <span className="rounded-md border border-border bg-background px-2 py-1 font-medium text-foreground">{domain.levelLabel} · {domain.levelRange}</span>
+        {domain.hasContent && <><span>{domain.stackCount} stacks</span><span aria-hidden="true">·</span><span>{domain.questionCount.toLocaleString()} questions</span></>}
       </div>
 
-      <h3 className={cn("mb-1 text-sm font-semibold",
-        domain.hasContent ? "text-foreground group-hover:text-primary" : "text-muted-foreground"
-      )}>
-        {domain.name}
-      </h3>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        {brief[domain.level]}
-      </p>
-
-      {domain.hasContent ? (
-        <>
-          <div className="mb-4 flex items-center gap-3 text-[11px] font-medium text-muted-foreground">
-            <span>{domain.stackCount} stacks</span>
-            <span>·</span>
-            <span>{domain.questionCount.toLocaleString()} questions</span>
-          </div>
-          <div className="flex items-center justify-between border-t border-border/60 pt-3">
-            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <BookOpen className="h-3.5 w-3.5" /> View Stacks
-            </span>
-            <ArrowRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
-          </div>
-        </>
-      ) : (
-        <div className="border-t border-border/60 pt-3">
-          <p className="text-[11px] text-muted-foreground">Content in preparation — check back soon.</p>
-        </div>
-      )}
-    </div>
+      <div className="mt-auto flex items-center justify-between border-t border-border pt-4">
+        <span className="text-[11px] font-semibold text-foreground">{domain.hasContent ? "Explore learning path" : "Content in preparation"}</span>
+        {domain.hasContent && <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />}
+      </div>
+    </article>
   );
 
+  return domain.hasContent ? <Link href={`/${domain.slug}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7857D8] focus-visible:ring-offset-2 rounded-2xl">{content}</Link> : content;
+}
+
+function DomainGridSkeleton() {
   return (
-    <div className="h-full">
-      {domain.hasContent
-        ? <Link href={`/${domain.slug}`} className="block h-full">{cardInner}</Link>
-        : <div className="h-full">{cardInner}</div>
-      }
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Loading interview paths">
+      {Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-[238px] rounded-2xl" />)}
     </div>
   );
+}
+
+function DomainError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="rounded-2xl border border-[#f0d2c5] bg-[#fff8f4] px-6 py-14 text-center">
+      <Compass className="mx-auto h-9 w-9 text-[#D9603B]" aria-hidden="true" />
+      <h3 className="mt-3 text-sm font-semibold text-foreground">We couldn’t load the path library</h3>
+      <p className="mx-auto mt-2 max-w-md text-[12px] leading-5 text-muted-foreground">{message}</p>
+      <button type="button" onClick={onRetry} className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-[#126B63] px-4 text-[12px] font-semibold text-white hover:bg-[#0e5b54]"><RotateCcw className="h-4 w-4" /> Try again</button>
+    </div>
+  );
+}
+
+function DomainEmpty({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card px-6 py-14 text-center">
+      <Search className="mx-auto h-9 w-9 text-muted-foreground" aria-hidden="true" />
+      <h3 className="mt-3 text-sm font-semibold text-foreground">No paths match these filters</h3>
+      <p className="mt-2 text-[12px] text-muted-foreground">Try another language, track, experience level, or search term.</p>
+      <button type="button" onClick={onClear} className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-background px-4 text-[12px] font-semibold text-foreground hover:bg-muted"><X className="h-4 w-4" /> Clear filters</button>
+    </div>
+  );
+}
+
+function formatCount(value: number) {
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}k+`;
+  return String(value);
 }
