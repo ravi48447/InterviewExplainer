@@ -138,8 +138,8 @@ export default function DomainsPage() {
 
   return (
     <main id="main" className="min-h-screen bg-background">
-      <section aria-labelledby="domain-explorer-heading" className="border-b border-border bg-[#fffdfb] dark:bg-card">
-        <PageContainer className="py-12 sm:py-16">
+      <section aria-labelledby="domain-explorer-heading" className="border-b border-[#D7E1EE] bg-[linear-gradient(145deg,#FCFEFF_0%,#F7FBFF_55%,#FFFDF9_100%)] dark:bg-card">
+        <PageContainer wide className="max-w-[1440px] py-12 sm:py-16">
           <div className="grid items-center gap-10 xl:grid-cols-[0.88fr_1.12fr] xl:gap-12">
             <FadeInUp className="max-w-[590px]">
               <span className="inline-flex items-center gap-2 rounded-full border border-[#7857D8]/20 bg-[#7857D8]/[0.06] px-3 py-1.5 text-[11px] font-medium text-[#6846C7] dark:text-[#bcaaff]">
@@ -174,11 +174,18 @@ export default function DomainsPage() {
               <DomainExplorerVisual groups={visualGroups} />
             </FadeInUp>
           </div>
+          <FadeInUp delay={0.12} className="mt-8 grid overflow-hidden rounded-2xl border border-[#D7E1EE] bg-white/80 shadow-[0_10px_28px_rgba(15,35,70,.055)] sm:grid-cols-3">
+            {[
+              { step: "01", icon: Code2, title: "Select your stack", detail: "Pick the language or domain your role uses.", color: "text-[#1974D2] bg-[#EAF3FF]" },
+              { step: "02", icon: Layers3, title: "Match your level", detail: "Start at the experience level you are interviewing for.", color: "text-[#7857D8] bg-[#F0ECFF]" },
+              { step: "03", icon: Target, title: "Open the path", detail: "Learn concepts, practise questions, then test yourself.", color: "text-[#137A69] bg-[#E6F7F1]" },
+            ].map(({ step, icon: Icon, title, detail, color }, index) => <div key={step} className={cn("relative flex gap-4 px-5 py-5 sm:px-6", index > 0 && "border-t border-[#E3EAF2] sm:border-l sm:border-t-0")}><span className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-2xl", color)}><Icon className="h-5 w-5" /></span><span><span className="text-[10px] font-bold tracking-[.12em] text-[#8090A5]">STEP {step}</span><strong className="mt-0.5 block text-[13px] text-[#10264A]">{title}</strong><span className="mt-1 block text-[11px] leading-4 text-[#5B718D]">{detail}</span></span></div>)}
+          </FadeInUp>
         </PageContainer>
       </section>
 
-      <section id="domain-library" aria-labelledby="domain-library-heading" className="scroll-mt-20 py-12 sm:py-14">
-        <PageContainer>
+      <section id="domain-library" aria-labelledby="domain-library-heading" className="scroll-mt-20 bg-white py-12 sm:py-14">
+        <PageContainer wide className="max-w-[1240px]">
           <FadeInUp>
             <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
@@ -194,7 +201,7 @@ export default function DomainsPage() {
             </div>
 
             {!error && (
-              <div className="mb-7 rounded-2xl border border-[#e2dceb] bg-card p-4 shadow-sm sm:p-5">
+              <div className="mb-7 rounded-2xl border border-[#D7E1EE] bg-[#FBFDFF] p-4 shadow-[0_10px_28px_rgba(15,35,70,.055)] sm:p-5">
                 <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
                   <label className="relative block">
                     <span className="sr-only">Search interview paths</span>
@@ -277,6 +284,13 @@ export default function DomainsPage() {
               ))}
             </FadeInUp>
           )}
+
+          {!loading && !error && domains.length > 0 && (
+            <FadeInUp className="mt-6 overflow-hidden rounded-2xl border border-[#D7E1EE] bg-[linear-gradient(105deg,#F2F8FF_0%,#FCFEFF_54%,#F1FBF7_100%)] p-6 shadow-sm sm:flex sm:items-center sm:justify-between sm:p-8">
+              <div><p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#1974D2]">Still unsure?</p><h2 className="mt-2 text-[22px] font-semibold tracking-[-.03em] text-[#10264A]">Tell us your role. We’ll shape the first week.</h2><p className="mt-2 max-w-xl text-[12px] leading-5 text-[#58708F]">A short selection flow turns your stack and experience into a focused starting sequence.</p></div>
+              <Link href="/select" className="mt-5 inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1974D2] px-5 text-[12px] font-semibold text-white shadow-[0_8px_18px_rgba(25,116,210,.22)] transition hover:-translate-y-0.5 hover:bg-[#1268D5] sm:mt-0">Build my path <ArrowRight className="h-4 w-4" /></Link>
+            </FadeInUp>
+          )}
         </PageContainer>
       </section>
     </main>
@@ -315,8 +329,9 @@ function DomainPathCard({ domain }: { domain: ContentDomain }) {
     : `Study architecture, patterns, and real-world ${domain.language} ${domain.track.toLowerCase()} decisions.`;
 
   const content = (
-    <article className={cn("group relative flex h-full min-h-[238px] flex-col overflow-hidden rounded-2xl border bg-card p-5 shadow-xs transition-[transform,border-color,box-shadow] duration-150 ease-out", domain.hasContent ? "border-border hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-md" : "border-dashed border-border opacity-70")}>
-      <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: accent.color }} aria-hidden="true" />
+    <article className={cn("group relative flex h-full min-h-[270px] flex-col overflow-hidden rounded-2xl border bg-card p-5 shadow-[0_8px_20px_rgba(15,35,70,.045)] transition-[transform,border-color,box-shadow] duration-200 ease-out", domain.hasContent ? "border-[#D7E1EE] hover:-translate-y-1 hover:shadow-[0_18px_30px_rgba(15,35,70,.11)]" : "border-dashed border-border opacity-70")}>
+      <span className="absolute inset-x-0 top-0 h-1.5" style={{ backgroundColor: accent.color }} aria-hidden="true" />
+      <span className="absolute -right-7 top-8 h-28 w-28 rounded-full opacity-35 blur-2xl" style={{ backgroundColor: accent.color }} aria-hidden="true" />
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: accent.tint, color: accent.color }}>
@@ -334,12 +349,14 @@ function DomainPathCard({ domain }: { domain: ContentDomain }) {
         )}
       </div>
 
-      <p className="mt-4 text-[12px] leading-5 text-muted-foreground">{description}</p>
+      <p className="mt-4 max-w-[88%] text-[12px] leading-5 text-muted-foreground">{description}</p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
         <span className="rounded-md border border-border bg-background px-2 py-1 font-medium text-foreground">{domain.levelLabel} · {domain.levelRange}</span>
         {domain.hasContent && <><span>{domain.stackCount} stacks</span><span aria-hidden="true">·</span><span>{domain.questionCount.toLocaleString()} questions</span></>}
       </div>
+
+      {domain.hasContent && <div className="mt-5 grid grid-cols-3 gap-1.5" aria-label="Learning path preview"><PathStep label="Learn" color={accent.color}/><PathStep label="Practise" color={accent.color}/><PathStep label="Interview" color={accent.color}/></div>}
 
       <div className="mt-auto flex items-center justify-between border-t border-border pt-4">
         <span className="text-[11px] font-semibold text-foreground">{domain.hasContent ? "Explore learning path" : "Content in preparation"}</span>
@@ -349,6 +366,10 @@ function DomainPathCard({ domain }: { domain: ContentDomain }) {
   );
 
   return domain.hasContent ? <Link href={`/${domain.slug}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7857D8] focus-visible:ring-offset-2 rounded-2xl">{content}</Link> : content;
+}
+
+function PathStep({ label, color }: { label: string; color: string }) {
+  return <span className="rounded-lg border border-[#E0E8F1] bg-[#FAFCFE] px-2 py-2 text-center text-[9px] font-semibold text-[#536B8C]"><i className="mx-auto mb-1 block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />{label}</span>;
 }
 
 function DomainGridSkeleton() {

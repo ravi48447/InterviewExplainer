@@ -2,13 +2,11 @@ import {
   HomeCareerToolkit,
   HomeCoverageProof,
   HomeDiscoveryFooter,
-  HomeDomainSection,
-  HomeDSAStudio,
   HomeHero,
   HomeLearningExperience,
   HomeLearningJourney,
+  HomePlatformDepth,
   HomePersonalizedPath,
-  HomeRealContent,
   HomeTrustStrip,
 } from "@/components/home";
 
@@ -22,11 +20,9 @@ export default function HomePage() {
   return (
     <div id="main" className="min-h-screen overflow-x-clip bg-background">
       <HomeHero />
-      <HomeDomainSection />
-      <HomeLearningExperience />
       <HomeLearningJourney />
-      <HomeDSAStudio />
-      <HomeRealContent />
+      <HomeLearningExperience />
+      <HomePlatformDepth />
       <HomeCareerToolkit />
       <HomeCoverageProof />
       <HomePersonalizedPath />
