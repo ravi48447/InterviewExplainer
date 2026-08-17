@@ -92,7 +92,10 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
           stdin,
         }),
       });
-      const data: RunResult = await res.json();
+      const data = (await res.json()) as RunResult;
+      if (!res.ok && !data.error) {
+        data.error = `The runner returned HTTP ${res.status}.`;
+      }
       setResult(data);
     } catch (err) {
       setResult({
@@ -128,7 +131,7 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
             Try it — {LANG_DISPLAY[activeLang] ?? activeLang}
           </span>
           <span className="text-[10px] text-muted-foreground italic hidden sm:inline">
-            · your code, your experiment
+            · run a complete program; method snippets need a driver
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -240,7 +243,12 @@ export function CodePlayground({ starterCode, defaultStdin = "" }: Props) {
                 Executing…
               </div>
             ) : (
-              <pre className="text-[13px] font-mono text-slate-200 dark:text-slate-300 whitespace-pre-wrap break-words leading-[1.6] max-h-48 overflow-y-auto">
+              <pre
+                aria-live="polite"
+                className={`text-[13px] font-mono whitespace-pre-wrap break-words leading-[1.6] max-h-48 overflow-y-auto ${
+                  result?.error ? "text-orange-300" : "text-slate-200 dark:text-slate-300"
+                }`}
+              >
                 {outputText || (
                   <span className="text-muted-foreground italic">No output.</span>
                 )}
