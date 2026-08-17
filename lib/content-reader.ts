@@ -100,8 +100,10 @@ const CONTENT_GOI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'go-intermediate');
 const CONTENT_GOF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'go-fresher');
 const CONTENT_FEI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'frontend-intermediate');
 const CONTENT_FEF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'frontend-fresher');
-export const CONTENT_RBI_ROOT = 'content/ruby-backend-intermediate';
-export const CONTENT_RBF_ROOT = 'content/ruby-backend-fresher';
+const CONTENT_PBI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'python-backend-intermediate');
+const CONTENT_PBF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'python-backend-fresher');
+export const CONTENT_RBI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'ruby-backend-intermediate');
+export const CONTENT_RBF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'ruby-backend-fresher');
 
 /**
  * Stack-slug aliases for the Java-Backend-Intermediate migration.
@@ -177,12 +179,12 @@ const LOCKED_DOMAINS: Record<string, LockedDomainInfo> = {
   },
   'ruby-backend-intermediate': {
     domainSlug: 'ruby-backend-intermediate',
-    rootDir: path.join(process.cwd(), '..', CONTENT_RBI_ROOT),
+    rootDir: CONTENT_RBI_ROOT,
     stackAliases: {},
   },
   'ruby-backend-fresher': {
     domainSlug: 'ruby-backend-fresher',
-    rootDir: path.join(process.cwd(), '..', CONTENT_RBF_ROOT),
+    rootDir: CONTENT_RBF_ROOT,
     stackAliases: {},
   },
   'frontend-intermediate': {
@@ -193,6 +195,16 @@ const LOCKED_DOMAINS: Record<string, LockedDomainInfo> = {
   'frontend-fresher': {
     domainSlug: 'frontend-fresher',
     rootDir: CONTENT_FEF_ROOT,
+    stackAliases: {},
+  },
+  'python-backend-intermediate': {
+    domainSlug: 'python-backend-intermediate',
+    rootDir: CONTENT_PBI_ROOT,
+    stackAliases: {},
+  },
+  'python-backend-fresher': {
+    domainSlug: 'python-backend-fresher',
+    rootDir: CONTENT_PBF_ROOT,
     stackAliases: {},
   },
 };

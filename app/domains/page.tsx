@@ -1,408 +1,324 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import {
-  ArrowRight,
-  BookOpen,
-  CheckCircle2,
-  Clock3,
-  Code2,
-  Compass,
-  Filter,
-  Layers3,
-  RotateCcw,
-  Search,
-  Sparkles,
-  Target,
-  X,
+  ArrowRight, BarChart3, BookOpen, Boxes, BriefcaseBusiness, Check,
+  CircleHelp, Cloud, Code2, Compass, Database, GitCompareArrows,
+  Layers3, MonitorPlay, Network, RefreshCw, Search, Server, Sparkles, Target,
+  TimerReset, UserRound, Workflow,
 } from "lucide-react";
-import { DomainExplorerVisual, type DomainVisualGroup } from "@/components/domains/domain-explorer-visual";
-import { FadeInUp } from "@/components/motion-wrapper";
-import { PageContainer } from "@/components/page-container";
-import { Skeleton } from "@/components/ui/skeleton";
 import { TechIcon } from "@/components/tech-icon";
-import { ENABLED_LANGUAGES } from "@/lib/launch-config";
-import { EXPERIENCE_LEVELS, LEVEL_KEYS, type ExperienceLevelKey } from "@/lib/levels";
 import type { ContentDomain } from "@/lib/types/content-domain";
 import { cn } from "@/lib/utils";
 
-type Filters = {
-  search: string;
-  track: string;
-  level: "" | ExperienceLevelKey;
-  language: string;
+const INK = "#0f2346";
+const BLUE = "#1e7af2";
+const TEAL = "#159a8c";
+const ORANGE = "#e87500";
+
+const TRACK_ICONS: Record<string, ComponentType<{ className?: string }>> = {
+  backend: Server,
+  fullstack: Boxes,
+  frontend: MonitorPlay,
+  cicd: Workflow,
+  cloud: Cloud,
+  infrastructure: Network,
+  sre: Target,
+  "data-engineering": Database,
+  "ml-ai": Sparkles,
+  "sql-analytics": BarChart3,
+  analysis: BarChart3,
 };
 
-const EMPTY_FILTERS: Filters = { search: "", track: "", level: "", language: "" };
-
-const TRACK_ACCENTS: Record<string, { color: string; tint: string }> = {
-  backend: { color: "#3279C9", tint: "#F2F7FD" },
-  frontend: { color: "#126B63", tint: "#EFF9F6" },
-  fullstack: { color: "#7857D8", tint: "#F6F2FD" },
-  "data-engineering": { color: "#D9603B", tint: "#FFF5F0" },
-  "ml-ai": { color: "#9B5A8B", tint: "#FBF3F9" },
-  "sql-analytics": { color: "#B56A0A", tint: "#FFF8EB" },
-  "python-analysis": { color: "#B56A0A", tint: "#FFF8EB" },
-  visualization: { color: "#7857D8", tint: "#F6F2FD" },
-  cloud: { color: "#3279C9", tint: "#F2F7FD" },
-  infrastructure: { color: "#126B63", tint: "#EFF9F6" },
-  cicd: { color: "#126B63", tint: "#EFF9F6" },
-  sre: { color: "#126B63", tint: "#EFF9F6" },
+const TRACK_COPY: Record<string, string> = {
+  backend: "Build APIs, services and server-side systems.",
+  fullstack: "Build complete products across front and back.",
+  frontend: "Build accessible, performant user interfaces.",
+  cicd: "Automate delivery, testing and deployments.",
+  cloud: "Design and operate resilient cloud systems.",
+  infrastructure: "Build reliable platforms and foundations.",
+  sre: "Run production systems with confidence.",
+  "data-engineering": "Build dependable data pipelines and platforms.",
+  "ml-ai": "Prepare models, systems and applied AI workflows.",
+  "sql-analytics": "Turn data into decisions with SQL and analysis.",
 };
 
-const FALLBACK_ACCENT = { color: "#60738F", tint: "#F5F8FC" };
+type Experience = "beginner" | "intermediate";
 
 export default function DomainsPage() {
-  const searchParams = useSearchParams();
-  const requestedLanguage = searchParams?.get("language")?.toLowerCase() ?? "";
   const [domains, setDomains] = useState<ContentDomain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [requestKey, setRequestKey] = useState(0);
-  const [filters, setFilters] = useState<Filters>({ ...EMPTY_FILTERS, language: requestedLanguage });
+  const [language, setLanguage] = useState("java");
+  const [track, setTrack] = useState("backend");
+  const [level, setLevel] = useState<Experience>("intermediate");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
-    setFilters((current) => ({ ...current, language: requestedLanguage }));
-  }, [requestedLanguage]);
-
-  const loadDomains = useCallback(() => {
-    setLoading(true);
-    setError("");
     const controller = new AbortController();
-
+    setLoading(true);
     fetch("/api/content/all-domains", { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error("Unable to load interview paths.");
         return response.json() as Promise<ContentDomain[]>;
       })
-      .then((data) => {
-        const enabled = new Set((ENABLED_LANGUAGES as readonly string[]).map((item) => item.toLowerCase()));
-        setDomains(data.filter((domain) => enabled.has(domain.language.toLowerCase())));
+      .then((items) => {
+        setDomains(items.filter((item) => item.hasContent));
+        const preferred = items.find((item) => item.slug === "java-backend-intermediate" && item.hasContent)
+          ?? items.find((item) => item.hasContent);
+        if (preferred) {
+          setLanguage(preferred.languageSlug);
+          setTrack(preferred.trackSlug);
+          setLevel(preferred.level);
+        }
       })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "AbortError") return;
         setError(reason instanceof Error ? reason.message : "Unable to load interview paths.");
       })
       .finally(() => setLoading(false));
-
     return () => controller.abort();
   }, []);
 
-  useEffect(() => loadDomains(), [loadDomains, requestKey]);
-
-  const languages = useMemo(
-    () => Array.from(new Set(domains.map((domain) => domain.language))).sort((a, b) => a.localeCompare(b)),
-    [domains],
-  );
-
-  const tracks = useMemo(() => {
-    const unique = new Map<string, string>();
-    domains.forEach((domain) => unique.set(domain.trackSlug, domain.track));
-    return Array.from(unique, ([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name));
+  const technologies = useMemo(() => {
+    const bySlug = new Map<string, ContentDomain>();
+    domains.forEach((item) => {
+      const current = bySlug.get(item.languageSlug);
+      if (!current || item.questionCount > current.questionCount) bySlug.set(item.languageSlug, item);
+    });
+    return [...bySlug.values()].sort((a, b) => a.language.localeCompare(b.language));
   }, [domains]);
 
-  const filteredDomains = useMemo(() => {
-    const search = filters.search.trim().toLowerCase();
-    return domains.filter((domain) => {
-      const matchesSearch = !search || [domain.name, domain.language, domain.track, domain.levelLabel]
-        .some((value) => value.toLowerCase().includes(search));
-      return matchesSearch
-        && (!filters.language || domain.language.toLowerCase() === filters.language.toLowerCase())
-        && (!filters.track || domain.trackSlug === filters.track)
-        && (!filters.level || domain.level === filters.level);
+  const visibleTechnologies = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return technologies;
+    return technologies.filter((item) => item.language.toLowerCase().includes(term));
+  }, [technologies, query]);
+
+  const roles = useMemo(() => {
+    const bySlug = new Map<string, ContentDomain>();
+    domains.filter((item) => item.languageSlug === language).forEach((item) => {
+      const current = bySlug.get(item.trackSlug);
+      if (!current || item.questionCount > current.questionCount) bySlug.set(item.trackSlug, item);
     });
-  }, [domains, filters]);
+    return [...bySlug.values()].sort((a, b) => b.questionCount - a.questionCount);
+  }, [domains, language]);
 
-  const liveCount = useMemo(() => domains.filter((domain) => domain.hasContent).length, [domains]);
-  const totalQuestions = useMemo(
-    () => domains.reduce((total, domain) => total + (domain.hasContent ? domain.questionCount : 0), 0),
-    [domains],
-  );
+  useEffect(() => {
+    if (roles.length && !roles.some((item) => item.trackSlug === track)) setTrack(roles[0].trackSlug);
+  }, [roles, track]);
 
-  const visualGroups = useMemo<DomainVisualGroup[]>(() => {
-    const accents: DomainVisualGroup["accent"][] = ["violet", "blue", "teal", "orange"];
-    return languages.slice(0, 4).map((language, index) => ({
-      label: language,
-      count: domains.filter((domain) => domain.language === language).length,
-      accent: accents[index],
-    }));
-  }, [domains, languages]);
+  const availableLevels = useMemo(() => domains
+    .filter((item) => item.languageSlug === language && item.trackSlug === track)
+    .map((item) => item.level), [domains, language, track]);
 
-  const hasFilters = Boolean(filters.search || filters.track || filters.level || filters.language);
-  const clearFilters = () => setFilters(EMPTY_FILTERS);
-  const selectLanguage = (language: string) => {
-    setFilters((current) => ({ ...current, language: current.language === language.toLowerCase() ? "" : language.toLowerCase() }));
-  };
+  useEffect(() => {
+    if (availableLevels.length && !availableLevels.includes(level)) setLevel(availableLevels[0]);
+  }, [availableLevels, level]);
+
+  const selected = useMemo(() => domains.find((item) =>
+    item.languageSlug === language && item.trackSlug === track && item.level === level,
+  ) ?? roles.find((item) => item.trackSlug === track) ?? domains[0], [domains, language, track, level, roles]);
+
+  const configurationCount = domains.length;
+  const chosenTechnology = technologies.find((item) => item.languageSlug === language);
 
   return (
-    <main id="main" className="min-h-screen bg-background">
-      <section aria-labelledby="domain-explorer-heading" className="border-b border-[#D7E1EE] bg-[linear-gradient(145deg,#FCFEFF_0%,#F7FBFF_55%,#FFFDF9_100%)] dark:bg-card">
-        <PageContainer wide className="max-w-[1440px] py-12 sm:py-16">
-          <div className="grid items-center gap-10 xl:grid-cols-[0.88fr_1.12fr] xl:gap-12">
-            <FadeInUp className="max-w-[590px]">
-              <span className="inline-flex items-center gap-2 rounded-full border border-[#7857D8]/20 bg-[#7857D8]/[0.06] px-3 py-1.5 text-[11px] font-medium text-[#6846C7] dark:text-[#bcaaff]">
-                <Sparkles className="h-3.5 w-3.5 text-[#E87500]" aria-hidden="true" />
-                Step 1 · Find your preparation focus
-              </span>
-              <h1 id="domain-explorer-heading" className="mt-5 font-display text-[clamp(2.2rem,4vw,3.35rem)] font-semibold leading-[1.08] tracking-[-0.038em] text-foreground">
-                Explore interview paths built around <span className="text-[#7857D8] dark:text-[#bcaaff]">your stack.</span>
-              </h1>
-              <p className="mt-5 max-w-[550px] text-[14px] leading-6 text-muted-foreground sm:text-[15px] sm:leading-7">
-                Choose a language, role, and experience level. Every live path leads to structured concepts, real questions, and focused interview preparation.
-              </p>
+    <main className="domains-configurator min-h-screen overflow-x-clip bg-[#f7f9fc] text-[#0f2346]">
+      <style>{`
+        .domains-configurator .text-\\[5px\\] { font-size: 7px; }
+        .domains-configurator .text-\\[6px\\] { font-size: 8px; }
+        .domains-configurator .text-\\[7px\\] { font-size: 9px; }
+        .domains-configurator .text-\\[8px\\] { font-size: 10px; }
+        .domains-configurator .text-\\[9px\\] { font-size: 11px; }
+      `}</style>
+      <Hero configurationCount={configurationCount} />
 
-              <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <a href="#domain-library" className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#D9603B] px-5 text-[13px] font-semibold text-white shadow-md transition-[transform,background-color] duration-150 ease-out hover:-translate-y-0.5 hover:bg-[#bd4f30] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D9603B] focus-visible:ring-offset-2">
-                  Browse live paths <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </a>
-                <span className="inline-flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <CheckCircle2 className="h-4 w-4 text-[#126B63]" aria-hidden="true" />
-                  Real repository content only
-                </span>
-              </div>
-
-              <dl className="mt-8 grid max-w-lg grid-cols-3 gap-2.5">
-                <HeroStat value={loading ? "–" : String(liveCount)} label="Live paths" accent="teal" />
-                <HeroStat value={loading ? "–" : String(languages.length)} label="Languages" accent="violet" />
-                <HeroStat value={loading ? "–" : formatCount(totalQuestions)} label="Questions" accent="blue" />
-              </dl>
-            </FadeInUp>
-
-            <FadeInUp delay={0.08}>
-              <DomainExplorerVisual groups={visualGroups} />
-            </FadeInUp>
+      <section className="mx-auto max-w-[1536px] px-3 pb-3 sm:px-5">
+        {error ? (
+          <div className="rounded-[15px] border border-red-200 bg-red-50 p-8 text-center text-sm text-red-700">{error}</div>
+        ) : (
+          <div className="grid items-stretch gap-3 xl:grid-cols-[minmax(0,1.22fr)_minmax(540px,.95fr)]">
+            <Configurator
+              loading={loading}
+              technologies={visibleTechnologies}
+              totalTechnologies={technologies.length}
+              roles={roles}
+              language={language}
+              track={track}
+              level={level}
+              query={query}
+              availableLevels={availableLevels}
+              onLanguage={setLanguage}
+              onTrack={setTrack}
+              onLevel={setLevel}
+              onQuery={setQuery}
+              selected={selected}
+              chosenTechnology={chosenTechnology}
+            />
+            <PlanPreview selected={selected} loading={loading} />
           </div>
-          <FadeInUp delay={0.12} className="mt-8 grid overflow-hidden rounded-2xl border border-[#D7E1EE] bg-white/80 shadow-[0_10px_28px_rgba(15,35,70,.055)] sm:grid-cols-3">
-            {[
-              { step: "01", icon: Code2, title: "Select your stack", detail: "Pick the language or domain your role uses.", color: "text-[#1974D2] bg-[#EAF3FF]" },
-              { step: "02", icon: Layers3, title: "Match your level", detail: "Start at the experience level you are interviewing for.", color: "text-[#7857D8] bg-[#F0ECFF]" },
-              { step: "03", icon: Target, title: "Open the path", detail: "Learn concepts, practise questions, then test yourself.", color: "text-[#137A69] bg-[#E6F7F1]" },
-            ].map(({ step, icon: Icon, title, detail, color }, index) => <div key={step} className={cn("relative flex gap-4 px-5 py-5 sm:px-6", index > 0 && "border-t border-[#E3EAF2] sm:border-l sm:border-t-0")}><span className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-2xl", color)}><Icon className="h-5 w-5" /></span><span><span className="text-[10px] font-bold tracking-[.12em] text-[#8090A5]">STEP {step}</span><strong className="mt-0.5 block text-[13px] text-[#10264A]">{title}</strong><span className="mt-1 block text-[11px] leading-4 text-[#5B718D]">{detail}</span></span></div>)}
-          </FadeInUp>
-        </PageContainer>
+        )}
       </section>
 
-      <section id="domain-library" aria-labelledby="domain-library-heading" className="scroll-mt-20 bg-white py-12 sm:py-14">
-        <PageContainer wide className="max-w-[1240px]">
-          <FadeInUp>
-            <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#D9603B]">Path library</p>
-                <h2 id="domain-library-heading" className="mt-2 font-display text-[1.45rem] font-semibold tracking-[-0.02em] text-foreground sm:text-[1.8rem]">Choose where you want to begin</h2>
-                <p className="mt-2 max-w-2xl text-[13px] leading-6 text-muted-foreground">Filter the real paths available in the repository. Live cards open the complete learning domain.</p>
-              </div>
-              {!loading && !error && (
-                <p className="text-[11px] text-muted-foreground" aria-live="polite">
-                  Showing <strong className="font-semibold text-foreground">{filteredDomains.length}</strong> of {domains.length} paths
-                </p>
-              )}
-            </div>
-
-            {!error && (
-              <div className="mb-7 rounded-2xl border border-[#D7E1EE] bg-[#FBFDFF] p-4 shadow-[0_10px_28px_rgba(15,35,70,.055)] sm:p-5">
-                <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
-                  <label className="relative block">
-                    <span className="sr-only">Search interview paths</span>
-                    <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                    <input
-                      value={filters.search}
-                      onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
-                      placeholder="Search language, role, or path..."
-                      className="h-11 w-full rounded-lg border border-border bg-background pl-10 pr-10 text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-[#7857D8] focus:ring-2 focus:ring-[#7857D8]/10"
-                    />
-                    {filters.search && (
-                      <button type="button" onClick={() => setFilters((current) => ({ ...current, search: "" }))} className="absolute right-3 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Clear search">
-                        <X className="h-3.5 w-3.5" aria-hidden="true" />
-                      </button>
-                    )}
-                  </label>
-
-                  <label className="relative">
-                    <span className="sr-only">Filter by career track</span>
-                    <Layers3 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                    <select value={filters.track} onChange={(event) => setFilters((current) => ({ ...current, track: event.target.value }))} className="h-11 min-w-[190px] appearance-none rounded-lg border border-border bg-background pl-9 pr-9 text-[12px] font-medium text-foreground outline-none focus:border-[#7857D8] focus:ring-2 focus:ring-[#7857D8]/10">
-                      <option value="">All career tracks</option>
-                      {tracks.map((track) => <option key={track.slug} value={track.slug}>{track.name}</option>)}
-                    </select>
-                  </label>
-
-                  <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1" aria-label="Experience level filter">
-                    <FilterButton active={!filters.level} onClick={() => setFilters((current) => ({ ...current, level: "" }))}>All levels</FilterButton>
-                    {LEVEL_KEYS.map((level) => (
-                      <FilterButton key={level} active={filters.level === level} onClick={() => setFilters((current) => ({ ...current, level }))}>
-                        {EXPERIENCE_LEVELS[level].label}
-                      </FilterButton>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  <span className="flex shrink-0 items-center gap-1.5 pr-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                    <Code2 className="h-3.5 w-3.5" aria-hidden="true" /> Language
-                  </span>
-                  <button type="button" onClick={() => setFilters((current) => ({ ...current, language: "" }))} className={languageChipClass(!filters.language)}>All</button>
-                  {languages.map((language) => (
-                    <button key={language} type="button" onClick={() => selectLanguage(language)} className={languageChipClass(filters.language === language.toLowerCase())}>
-                      <TechIcon name={language.toLowerCase()} className="h-3.5 w-3.5" /> {language}
-                    </button>
-                  ))}
-                  {hasFilters && (
-                    <button type="button" onClick={clearFilters} className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground">
-                      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </FadeInUp>
-
-          {loading ? (
-            <DomainGridSkeleton />
-          ) : error ? (
-            <DomainError message={error} onRetry={() => setRequestKey((value) => value + 1)} />
-          ) : filteredDomains.length === 0 ? (
-            <DomainEmpty onClear={clearFilters} />
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {filteredDomains.map((domain) => <DomainPathCard key={domain.slug} domain={domain} />)}
-            </div>
-          )}
-
-          {!loading && !error && domains.length > 0 && (
-            <FadeInUp className="mt-10 grid gap-3 rounded-2xl border border-[#d9e6e2] bg-[#f4faf8] p-5 dark:border-border dark:bg-card sm:grid-cols-3 sm:p-6">
-              {[
-                { icon: Compass, title: "Choose one focus", detail: "Start with the role closest to your next interview." },
-                { icon: BookOpen, title: "Learn in sequence", detail: "Move from concepts to examples and real questions." },
-                { icon: Target, title: "Practice for the round", detail: "Use the path to expose gaps before the interview." },
-              ].map(({ icon: Icon, title, detail }, index) => (
-                <div key={title} className="flex gap-3 rounded-xl bg-white/70 p-3 dark:bg-background/50">
-                  <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg", index === 0 ? "bg-[#7857D8]/10 text-[#7857D8]" : index === 1 ? "bg-[#126B63]/10 text-[#126B63]" : "bg-[#D9603B]/10 text-[#D9603B]")}><Icon className="h-4 w-4" aria-hidden="true" /></span>
-                  <span><strong className="block text-[12px] font-semibold text-foreground">{title}</strong><span className="mt-1 block text-[10px] leading-4 text-muted-foreground">{detail}</span></span>
-                </div>
-              ))}
-            </FadeInUp>
-          )}
-
-          {!loading && !error && domains.length > 0 && (
-            <FadeInUp className="mt-6 overflow-hidden rounded-2xl border border-[#D7E1EE] bg-[linear-gradient(105deg,#F2F8FF_0%,#FCFEFF_54%,#F1FBF7_100%)] p-6 shadow-sm sm:flex sm:items-center sm:justify-between sm:p-8">
-              <div><p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#1974D2]">Still unsure?</p><h2 className="mt-2 text-[22px] font-semibold tracking-[-.03em] text-[#10264A]">Tell us your role. We’ll shape the first week.</h2><p className="mt-2 max-w-xl text-[12px] leading-5 text-[#58708F]">A short selection flow turns your stack and experience into a focused starting sequence.</p></div>
-              <Link href="/select" className="mt-5 inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#1974D2] px-5 text-[12px] font-semibold text-white shadow-[0_8px_18px_rgba(25,116,210,.22)] transition hover:-translate-y-0.5 hover:bg-[#1268D5] sm:mt-0">Build my path <ArrowRight className="h-4 w-4" /></Link>
-            </FadeInUp>
-          )}
-        </PageContainer>
-      </section>
+      <LearningLoop />
     </main>
   );
 }
 
-function HeroStat({ value, label, accent }: { value: string; label: string; accent: "blue" | "teal" | "violet" }) {
-  const accents = { blue: "text-[#3279C9]", teal: "text-[#126B63]", violet: "text-[#7857D8]" } as const;
+function Hero({ configurationCount }: { configurationCount: number }) {
   return (
-    <div className="rounded-xl border border-[#e3ddea] bg-white/80 px-3 py-3 shadow-xs dark:border-border dark:bg-card">
-      <dd className={cn("font-display text-lg font-semibold tabular-nums sm:text-xl", accents[accent])}>{value}</dd>
-      <dt className="mt-0.5 text-[9px] font-medium text-muted-foreground sm:text-[10px]">{label}</dt>
-    </div>
-  );
-}
-
-function FilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button type="button" aria-pressed={active} onClick={onClick} className={cn("h-8 whitespace-nowrap rounded-md px-3 text-[10px] font-semibold transition-colors", active ? "bg-[#E87500] text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
-      {children}
-    </button>
-  );
-}
-
-function languageChipClass(active: boolean) {
-  return cn(
-    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-medium transition-colors",
-    active ? "border-[#E87500] bg-[#fff5eb] text-[#a95500] dark:bg-[#E87500]/10 dark:text-[#ffad5d]" : "border-border bg-background text-muted-foreground hover:border-foreground/20 hover:text-foreground",
-  );
-}
-
-function DomainPathCard({ domain }: { domain: ContentDomain }) {
-  const accent = TRACK_ACCENTS[domain.trackSlug] ?? FALLBACK_ACCENT;
-  const description = domain.level === "beginner"
-    ? `Build the ${domain.language} ${domain.track.toLowerCase()} fundamentals interviewers expect.`
-    : `Study architecture, patterns, and real-world ${domain.language} ${domain.track.toLowerCase()} decisions.`;
-
-  const content = (
-    <article className={cn("group relative flex h-full min-h-[270px] flex-col overflow-hidden rounded-2xl border bg-card p-5 shadow-[0_8px_20px_rgba(15,35,70,.045)] transition-[transform,border-color,box-shadow] duration-200 ease-out", domain.hasContent ? "border-[#D7E1EE] hover:-translate-y-1 hover:shadow-[0_18px_30px_rgba(15,35,70,.11)]" : "border-dashed border-border opacity-70")}>
-      <span className="absolute inset-x-0 top-0 h-1.5" style={{ backgroundColor: accent.color }} aria-hidden="true" />
-      <span className="absolute -right-7 top-8 h-28 w-28 rounded-full opacity-35 blur-2xl" style={{ backgroundColor: accent.color }} aria-hidden="true" />
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: accent.tint, color: accent.color }}>
-            <TechIcon name={domain.language.toLowerCase()} className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-[10px] font-semibold uppercase tracking-[0.09em]" style={{ color: accent.color }}>{domain.track}</p>
-            <h3 className="mt-1 truncate text-[15px] font-semibold text-foreground">{domain.name}</h3>
+    <section className="relative border-b border-[#d7e1ee] bg-white">
+      <BlueprintBackdrop />
+      <div className="relative mx-auto grid max-w-[1536px] gap-5 px-5 py-5 lg:grid-cols-[1fr_1.05fr] lg:items-center lg:py-6">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-[.15em] text-[#1268db]">
+            {configurationCount || "Real"} path configurations · one focused plan
           </div>
+          <h1 className="mt-2 text-[clamp(1.75rem,2.7vw,2.55rem)] font-semibold leading-[1.12] tracking-[-.035em]">
+            Build the path your interview actually requires.
+          </h1>
+          <p className="mt-2 max-w-[650px] text-[12px] leading-5 text-[#526b8a] sm:text-[13px]">
+            Choose your stack, role and experience. We’ll assemble the concepts, practice and interview rounds in the right order.
+          </p>
         </div>
-        {domain.hasContent ? (
-          <span className="rounded-full border border-[#cfe3dc] bg-[#f1faf7] px-2 py-1 text-[9px] font-semibold text-[#126B63]">Live</span>
-        ) : (
-          <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-1 text-[9px] font-semibold text-muted-foreground"><Clock3 className="h-3 w-3" /> Soon</span>
-        )}
+        <PlanCompilerVisual />
       </div>
+    </section>
+  );
+}
 
-      <p className="mt-4 max-w-[88%] text-[12px] leading-5 text-muted-foreground">{description}</p>
+function BlueprintBackdrop() {
+  return <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+    <div className="absolute inset-0 opacity-50 [background-image:linear-gradient(#e9eff7_1px,transparent_1px),linear-gradient(90deg,#e9eff7_1px,transparent_1px)] [background-size:38px_38px] [mask-image:linear-gradient(90deg,transparent,black_45%,black)]" />
+    <div className="absolute right-[3%] top-4 font-mono text-[9px] leading-4 text-[#c5d3e5]">public class Service &#123;<br />&nbsp;&nbsp;start(interviewPlan);<br />&#125;</div>
+  </div>;
+}
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-        <span className="rounded-md border border-border bg-background px-2 py-1 font-medium text-foreground">{domain.levelLabel} · {domain.levelRange}</span>
-        {domain.hasContent && <><span>{domain.stackCount} stacks</span><span aria-hidden="true">·</span><span>{domain.questionCount.toLocaleString()} questions</span></>}
+function PlanCompilerVisual() {
+  const rows = [
+    [Code2, "Technology", BLUE, "top-[4px]"],
+    [UserRound, "Role", TEAL, "top-[51px]"],
+    [BarChart3, "Experience", ORANGE, "top-[98px]"],
+  ] as const;
+  return <div className="relative mx-auto hidden h-[150px] w-full max-w-[650px] md:block" aria-hidden>
+    {rows.map(([Icon, label, color, top], index) => <div key={label} className={cn("absolute left-[7%] flex h-10 w-[170px] items-center gap-3 rounded-[9px] border bg-white px-3 shadow-[0_10px_24px_-18px_rgba(15,35,70,.7)]", top)} style={{borderColor:color}}><span className="flex h-7 w-7 items-center justify-center rounded-[7px] text-white" style={{backgroundColor:color}}><Icon className="h-4 w-4" /></span><span className="text-[10px] font-semibold">{label}</span><span className="ml-auto h-2 w-2 rounded-full" style={{backgroundColor:color}} /></div>)}
+    <svg viewBox="0 0 650 150" className="absolute inset-0 h-full w-full"><path d="M215 24 H285 Q305 24 305 48 V74" fill="none" stroke={BLUE} strokeWidth="2" strokeDasharray="5 5"/><path d="M215 71 H305" fill="none" stroke={TEAL} strokeWidth="2" strokeDasharray="5 5"/><path d="M215 118 H285 Q305 118 305 94 V74" fill="none" stroke={ORANGE} strokeWidth="2" strokeDasharray="5 5"/><path d="M326 74 H372" fill="none" stroke={BLUE} strokeWidth="2"/><circle cx="315" cy="74" r="17" fill="white" stroke="#b8d5ff"/><circle cx="315" cy="74" r="10" fill={BLUE}/><path d="m311 74 3 3 6-7" fill="none" stroke="white" strokeWidth="2"/></svg>
+    <div className="absolute right-[6%] top-[15px] h-[118px] w-[220px] rounded-[13px] border border-[#a9ccff] bg-white p-4 shadow-[0_18px_38px_-25px_rgba(30,122,242,.75)]"><div className="flex items-center gap-2 text-[10px] font-semibold"><Target className="h-4 w-4 text-[#1e7af2]" /> Your study plan</div><div className="mt-2 text-[9px] text-[#60738f]">Roadmap preview</div><div className="relative mt-5 h-5"><div className="absolute left-1 right-1 top-2 h-px bg-[#a8c9f5]" />{[BLUE,BLUE,TEAL,ORANGE,TEAL,"#24a45d"].map((color,index)=><span key={index} className="absolute top-[4px] h-2.5 w-2.5 rounded-full border-2 border-white" style={{left:`${index*18+3}%`,backgroundColor:color}} />)}</div></div>
+  </div>;
+}
+
+function Configurator(props: {
+  loading: boolean;
+  technologies: ContentDomain[];
+  totalTechnologies: number;
+  roles: ContentDomain[];
+  language: string;
+  track: string;
+  level: Experience;
+  query: string;
+  availableLevels: Experience[];
+  onLanguage: (value: string) => void;
+  onTrack: (value: string) => void;
+  onLevel: (value: Experience) => void;
+  onQuery: (value: string) => void;
+  selected?: ContentDomain;
+  chosenTechnology?: ContentDomain;
+}) {
+  const { loading, technologies, totalTechnologies, roles, language, track, level, query, availableLevels, onLanguage, onTrack, onLevel, onQuery, selected, chosenTechnology } = props;
+  return <div className="overflow-hidden rounded-[15px] border border-[#cddced] bg-white shadow-[0_18px_45px_-38px_rgba(15,35,70,.7)]">
+    <div className="grid min-h-[515px] md:grid-cols-[1.08fr_.78fr_.88fr]">
+      <SelectionLane number="1" title="Technology" subtitle="Choose the stack you want to master." tone="blue">
+        <label className="relative block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#71839b]"/><input value={query} onChange={(event)=>onQuery(event.target.value)} placeholder="Find technology" className="h-9 w-full rounded-[9px] border border-[#cad8e8] bg-white pl-9 pr-3 text-[10px] outline-none focus:border-[#1e7af2] focus:ring-4 focus:ring-blue-100" /></label>
+        {chosenTechnology && <TechnologyChoice domain={chosenTechnology} selected large onClick={()=>onLanguage(chosenTechnology.languageSlug)} />}
+        <div className="grid grid-cols-3 gap-2">
+          {loading ? Array.from({length:9}).map((_,i)=><div key={i} className="h-[66px] animate-pulse rounded-[9px] bg-blue-100/70" />) : technologies.filter((item)=>item.languageSlug!==language).slice(0,11).map((item)=><TechnologyChoice key={item.languageSlug} domain={item} selected={false} onClick={()=>onLanguage(item.languageSlug)} />)}
+        </div>
+        {!loading && technologies.length===0 && <div className="rounded-[9px] border border-dashed p-5 text-center text-[10px] text-[#60738f]">No technology matches “{query}”.</div>}
+      </SelectionLane>
+
+      <SelectionLane number="2" title="Role" subtitle={`Compatible roles for ${chosenTechnology?.language ?? "your technology"}.`} tone="teal">
+        <div className="space-y-2.5">
+          {roles.map((item)=><RoleChoice key={item.trackSlug} domain={item} selected={track===item.trackSlug} onClick={()=>onTrack(item.trackSlug)} />)}
+        </div>
+      </SelectionLane>
+
+      <SelectionLane number="3" title="Experience" subtitle="Tell us your current experience level." tone="orange">
+        <ExperienceChoice title="Fresher / Beginner" range="0–2 yrs" detail="Stronger focus on fundamentals, examples and interview basics." selected={level==="beginner"} disabled={!availableLevels.includes("beginner")} onClick={()=>onLevel("beginner")} />
+        <ExperienceChoice title="Intermediate" range="2–5 yrs" detail="Balanced concept depth with production and system-design focus." selected={level==="intermediate"} disabled={!availableLevels.includes("intermediate")} onClick={()=>onLevel("intermediate")} />
+      </SelectionLane>
+    </div>
+
+    <AssemblyRail selected={selected} />
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[#dbe5f0] bg-[#fbfdff] px-4 py-3 text-[8px] text-[#5f7390]">
+      <span className="flex items-center gap-2"><Database className="h-3.5 w-3.5 text-[#1e7af2]" /> Available combinations update automatically from real curriculum content.</span>
+      <span className="ml-auto flex items-center gap-2"><Boxes className="h-3.5 w-3.5" /> Browse all configurations</span>
+      <span className="flex items-center gap-2"><GitCompareArrows className="h-3.5 w-3.5" /> Compare two plans</span>
+      <span className="flex items-center gap-2"><TimerReset className="h-3.5 w-3.5" /> Take 2-minute diagnostic</span>
+      <span className="font-semibold text-[#1e7af2]">{totalTechnologies} technologies</span>
+    </div>
+  </div>;
+}
+
+function SelectionLane({ number, title, subtitle, tone, children }: { number:string; title:string; subtitle:string; tone:"blue"|"teal"|"orange"; children:React.ReactNode }) {
+  const color = tone === "blue" ? BLUE : tone === "teal" ? TEAL : ORANGE;
+  const background = tone === "blue" ? "bg-[linear-gradient(145deg,#f7fbff,#edf5ff88)]" : tone === "teal" ? "bg-[linear-gradient(145deg,#fbffff,#effaf888)]" : "bg-[linear-gradient(145deg,#fffdfb,#fff5e988)]";
+  return <div className={cn("relative border-b border-[#dbe5f0] p-4 md:border-b-0 md:border-r last:border-r-0", background)}><div className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-white shadow-sm" style={{backgroundColor:color}}>{number}</span><h2 className="text-[11px] font-semibold uppercase tracking-[.04em]">{title}</h2><CircleHelp className="h-3.5 w-3.5 text-[#557baa]" /></div><p className="mb-3 mt-2 text-[9px] leading-4 text-[#58708e]">{subtitle}</p><div className="space-y-2.5">{children}</div></div>;
+}
+
+function TechnologyChoice({domain, selected, large=false, onClick}:{domain:ContentDomain;selected:boolean;large?:boolean;onClick:()=>void}) {
+  return <button onClick={onClick} className={cn("group relative flex w-full items-center rounded-[9px] border bg-white text-left transition duration-200 hover:-translate-y-0.5 hover:shadow-md",large?"h-[76px] gap-3 px-4":"h-[66px] flex-col justify-center gap-1 p-2 text-center",selected?"border-[#1e7af2] shadow-[0_12px_26px_-20px_rgba(30,122,242,.9)]":"border-[#d4dfec]")}><TechIcon name={domain.languageSlug} className={large?"h-10 w-10":"h-7 w-7"}/><span className={large?"min-w-0":"min-w-0 max-w-full"}><strong className={cn("block truncate",large?"text-[13px]":"text-[8px]")}>{domain.language}</strong>{large&&<span className="mt-1 block text-[8px] text-[#60738f]">Interview-ready ecosystem</span>}</span>{selected&&<span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#1e7af2] text-white"><Check className="h-3 w-3"/></span>}</button>;
+}
+
+function RoleChoice({domain,selected,onClick}:{domain:ContentDomain;selected:boolean;onClick:()=>void}) { const Icon=TRACK_ICONS[domain.trackSlug]??BriefcaseBusiness; return <button onClick={onClick} className={cn("relative flex min-h-[96px] w-full items-center gap-3 rounded-[10px] border bg-white p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md",selected?"border-[#159a8c] shadow-[0_14px_28px_-24px_rgba(21,154,140,.9)]":"border-[#d4dfec]")}><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[9px] bg-[linear-gradient(145deg,#eefbfa,#d9f3ef)] text-[#159a8c]"><Icon className="h-6 w-6"/></span><span className="min-w-0"><strong className={cn("block text-[11px]",selected&&"text-[#0d8277]")}>{domain.track}</strong><span className="mt-1 block text-[8px] leading-4 text-[#60738f]">{TRACK_COPY[domain.trackSlug]??"Follow a role-specific interview curriculum."}</span></span><span className={cn("absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full border",selected?"border-[#159a8c] bg-[#159a8c] text-white":"border-[#b8c8d9]")}>{selected&&<Check className="h-3 w-3"/>}</span></button> }
+
+function ExperienceChoice({title,range,detail,selected,disabled,onClick}:{title:string;range:string;detail:string;selected:boolean;disabled:boolean;onClick:()=>void}) { return <button disabled={disabled} onClick={onClick} className={cn("relative min-h-[142px] w-full rounded-[11px] border bg-white p-4 text-left transition",selected?"border-[#e87500] shadow-[0_14px_28px_-24px_rgba(232,117,0,.9)]":"border-[#efd4b9]",disabled&&"cursor-not-allowed opacity-40")}><span className={cn("absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full border",selected?"border-[#e87500] bg-[#e87500] text-white":"border-[#b8c8d9]")}>{selected&&<Check className="h-3 w-3"/>}</span><span className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#fff3e8] text-[#e87500]"><BarChart3 className="h-5 w-5"/></span><span><strong className={cn("block text-[11px]",selected&&"text-[#d86200]")}>{title}</strong><span className="text-[9px] text-[#496889]">{range}</span></span></span><span className="mt-3 block text-[9px] leading-4 text-[#526b8a]">{detail}</span></button> }
+
+function AssemblyRail({selected}:{selected?:ContentDomain}) { return <div className="relative flex flex-wrap items-center justify-center gap-2 border-t border-[#dbe5f0] bg-white px-4 py-3 sm:gap-3"><AssemblyToken icon={<TechIcon name={selected?.languageSlug??"java"} className="h-6 w-6"/>} title={selected?.language??"Technology"} detail="Technology" color={BLUE}/><span className="text-lg text-[#56708d]">+</span><AssemblyToken icon={<Server className="h-5 w-5"/>} title={selected?.track??"Role"} detail="Role" color={TEAL}/><span className="text-lg text-[#56708d]">+</span><AssemblyToken icon={<BarChart3 className="h-5 w-5"/>} title={selected?.levelLabel??"Experience"} detail={selected?.levelRange??"Level"} color={ORANGE}/><ArrowRight className="h-5 w-5 text-[#1e7af2]"/><span className="flex h-10 items-center gap-2 rounded-full bg-[linear-gradient(90deg,#1e7af2,#1465df)] px-6 text-[11px] font-semibold text-white shadow-[0_12px_25px_-12px_rgba(30,122,242,.8)]"><Target className="h-4 w-4"/> Plan ready</span><div className="hidden h-px flex-1 bg-[#1e7af2] sm:block"/><ArrowRight className="hidden h-5 w-5 text-[#1e7af2] sm:block"/></div> }
+
+function AssemblyToken({icon,title,detail,color}:{icon:React.ReactNode;title:string;detail:string;color:string}) { return <span className="flex h-11 min-w-[116px] items-center gap-2 rounded-[12px] border bg-white px-3 shadow-sm" style={{borderColor:color}}><span style={{color}}>{icon}</span><span><strong className="block max-w-[82px] truncate text-[9px]">{title}</strong><span className="block text-[7px] text-[#71839b]">{detail}</span></span></span> }
+
+function PlanPreview({selected,loading}:{selected?:ContentDomain;loading:boolean}) {
+  if (loading || !selected) return <div className="min-h-[690px] animate-pulse rounded-[15px] border border-blue-200 bg-blue-50/60"/>;
+  const roadmap = roadmapFor(selected);
+  return <article className="overflow-hidden rounded-[15px] border border-[#86b9ff] bg-white shadow-[0_22px_48px_-34px_rgba(30,122,242,.75)]">
+    <div className="h-1 bg-[linear-gradient(90deg,#1e7af2,#159a8c,#e87500)]"/>
+    <div className="p-4 pb-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[11px] border border-[#d6e1ee] bg-white"><TechIcon name={selected.languageSlug} className="h-10 w-10"/></span>
+        <div className="min-w-0 flex-1"><h2 className="text-[21px] font-semibold tracking-[-.025em]">{selected.name}</h2><div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]"><span className="font-semibold text-[#e87500]">{selected.levelLabel}</span><span>·</span><span>{selected.levelRange}</span></div><p className="mt-1 text-[11px] text-[#496889]">Production-focused interview mastery.</p></div>
+        <div className="grid shrink-0 gap-2"><Link href={`/${selected.slug}`} className="flex h-9 min-w-[155px] items-center justify-center gap-2 rounded-[7px] bg-[#1e7af2] px-4 text-[11px] font-semibold text-white shadow-[0_8px_18px_-10px_rgba(30,122,242,.8)]">Start this plan <ArrowRight className="h-3.5 w-3.5"/></Link><Link href={`/${selected.slug}#interview-road`} className="flex h-9 items-center justify-center rounded-[7px] border border-[#b9cce3] text-[11px] font-medium">Explore roadmap</Link></div>
       </div>
-
-      {domain.hasContent && <div className="mt-5 grid grid-cols-3 gap-1.5" aria-label="Learning path preview"><PathStep label="Learn" color={accent.color}/><PathStep label="Practise" color={accent.color}/><PathStep label="Interview" color={accent.color}/></div>}
-
-      <div className="mt-auto flex items-center justify-between border-t border-border pt-4">
-        <span className="text-[11px] font-semibold text-foreground">{domain.hasContent ? "Explore learning path" : "Content in preparation"}</span>
-        {domain.hasContent && <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />}
-      </div>
-    </article>
-  );
-
-  return domain.hasContent ? <Link href={`/${domain.slug}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7857D8] focus-visible:ring-offset-2 rounded-2xl">{content}</Link> : content;
-}
-
-function PathStep({ label, color }: { label: string; color: string }) {
-  return <span className="rounded-lg border border-[#E0E8F1] bg-[#FAFCFE] px-2 py-2 text-center text-[9px] font-semibold text-[#536B8C]"><i className="mx-auto mb-1 block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />{label}</span>;
-}
-
-function DomainGridSkeleton() {
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Loading interview paths">
-      {Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-[238px] rounded-2xl" />)}
+      <div className="mt-3 grid grid-cols-2 divide-x divide-[#dbe5f0] rounded-[9px] border border-[#cad9ea] sm:grid-cols-4"><Metric icon={Layers3} value={selected.stackCount.toLocaleString()} label="modules" color={BLUE}/><Metric icon={Code2} value={selected.questionCount.toLocaleString()} label="questions" color="#7656d8"/><Metric icon={UserRound} value={selected.levelLabel} label={selected.levelRange} color={ORANGE}/><Metric icon={Check} value="Ready" label="curriculum" color={TEAL}/></div>
     </div>
-  );
+    <PlanSection title="A. Your ordered roadmap"><Roadmap labels={roadmap}/></PlanSection>
+    <PlanSection title="B. What your plan includes"><Inclusions selected={selected}/></PlanSection>
+    <PlanSection title="C. What this prepares you to do"><div className="grid gap-3 sm:grid-cols-3">{outcomesFor(selected).map((outcome)=><div key={outcome} className="flex gap-2 text-[11px] leading-[1.55]"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#35a766] text-white"><Check className="h-3 w-3"/></span>{outcome}</div>)}</div></PlanSection>
+  </article>;
 }
 
-function DomainError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div role="alert" className="rounded-2xl border border-[#f0d2c5] bg-[#fff8f4] px-6 py-14 text-center">
-      <Compass className="mx-auto h-9 w-9 text-[#D9603B]" aria-hidden="true" />
-      <h3 className="mt-3 text-sm font-semibold text-foreground">We couldn’t load the path library</h3>
-      <p className="mx-auto mt-2 max-w-md text-[12px] leading-5 text-muted-foreground">{message}</p>
-      <button type="button" onClick={onRetry} className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-[#126B63] px-4 text-[12px] font-semibold text-white hover:bg-[#0e5b54]"><RotateCcw className="h-4 w-4" /> Try again</button>
-    </div>
-  );
-}
+function Metric({icon:Icon,value,label,color}:{icon:ComponentType<{className?:string}>;value:string;label:string;color:string}) { return <div className="flex min-h-[58px] items-center justify-center gap-2 p-2"><span style={{color}}><Icon className="h-5 w-5" /></span><span><strong className="block max-w-[110px] truncate text-[15px]">{value}</strong><span className="block text-[10px] text-[#60738f]">{label}</span></span></div> }
+function PlanSection({title,children}:{title:string;children:React.ReactNode}) { return <section className="border-t border-[#d7e1ee] px-4 py-4"><h3 className="mb-3 text-[11px] font-semibold text-[#075fc8]">{title}</h3>{children}</section> }
 
-function DomainEmpty({ onClear }: { onClear: () => void }) {
-  return (
-    <div className="rounded-2xl border border-border bg-card px-6 py-14 text-center">
-      <Search className="mx-auto h-9 w-9 text-muted-foreground" aria-hidden="true" />
-      <h3 className="mt-3 text-sm font-semibold text-foreground">No paths match these filters</h3>
-      <p className="mt-2 text-[12px] text-muted-foreground">Try another language, track, experience level, or search term.</p>
-      <button type="button" onClick={onClear} className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-background px-4 text-[12px] font-semibold text-foreground hover:bg-muted"><X className="h-4 w-4" /> Clear filters</button>
-    </div>
-  );
-}
+function Roadmap({labels}:{labels:string[]}) { return <div className="relative grid grid-cols-4 gap-y-3 sm:grid-cols-7"><div className="absolute left-[5%] right-[5%] top-[15px] hidden border-t border-dashed border-[#7eaee9] sm:block"/>{labels.map((label,index)=>{const color=index<2?BLUE:index<4?TEAL:index<6?ORANGE:"#239653";return <div key={label} className="relative z-10 text-center"><span className="mx-auto flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-[11px] font-semibold text-white shadow-sm" style={{backgroundColor:color}}>{index+1}</span><span className="mt-2 block text-[10px] font-medium leading-4">{label}</span></div>})}</div> }
 
-function formatCount(value: number) {
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}k+`;
-  return String(value);
-}
+function Inclusions({selected}:{selected:ContentDomain}) { const items=[
+  [MonitorPlay,"Visual explanations","Diagrams, flows and animations."],
+  [BookOpen,"Guided curriculum",`${selected.stackCount} ordered modules.`],
+  [Code2,"Coding & dry runs",`${selected.questionCount.toLocaleString()} real questions.`],
+  [Compass,"Speakable answers","Follow-ups and clear trade-offs."],
+  [Network,"System design cases","Architecture and production decisions."],
+  [UserRound,"Mock interviews","Practice rounds and feedback."],
+] as const;return <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">{items.map(([Icon,title,copy])=><div key={title} className="flex min-h-[72px] items-center gap-3 rounded-[9px] border border-[#dbe5f0] bg-[#fbfdff] p-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#edf5ff] text-[#1e7af2]"><Icon className="h-[18px] w-[18px]"/></span><span><strong className="block text-[11px]">{title}</strong><span className="mt-1 block text-[10px] leading-4 text-[#60738f]">{copy}</span></span></div>)}</div> }
+
+function LearningLoop(){const items=[
+  [Sparkles,"Understand","Grasp the core concepts with clarity.",BLUE],
+  [MonitorPlay,"See it work","Visualize how real systems behave.",TEAL],
+  [Code2,"Practice decisions","Solve problems and make trade-offs.",ORANGE],
+  [Compass,"Explain aloud","Build speakable answers with confidence.","#7656d8"],
+  [BriefcaseBusiness,"Test in a mock","Simulate interviews and get feedback.","#249c55"],
+] as const;return <section className="mx-auto max-w-[1536px] px-3 pb-8 sm:px-5"><div className="rounded-[15px] border border-[#cfdded] bg-white p-4 shadow-[0_16px_42px_-36px_rgba(15,35,70,.7)]"><h2 className="text-[12px] font-semibold">One selection unlocks the complete learning loop</h2><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{items.map(([Icon,title,copy,color],index)=><div key={title} className="relative flex items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border bg-white shadow-sm" style={{borderColor:`${color}55`,color}}><Icon className="h-5 w-5"/></span><span><strong className="block text-[8px]">{index+1}. {title}</strong><span className="mt-1 block text-[7px] leading-3 text-[#60738f]">{copy}</span></span>{index<4&&<ArrowRight className="absolute -right-2 hidden h-4 w-4 text-[#b3c4d7] lg:block"/>}</div>)}</div><div className="mt-4 flex items-center justify-end gap-2 border-t border-[#edf1f6] pt-3 text-[8px] text-[#526b8a]"><RefreshCw className="h-4 w-4 text-[#1e7af2]"/> Change your plan anytime. Progress remains saved.</div></div></section> }
+
+function roadmapFor(domain:ContentDomain){const value=`${domain.languageSlug} ${domain.trackSlug}`;if(value.includes("frontend"))return["Web core","JavaScript","Framework","State","Performance","Architecture","Interview ready"];if(value.includes("data")||value.includes("analytics"))return["Foundations","SQL","Analysis","Visualization","Cases","Practice","Interview ready"];if(value.includes("devops")||value.includes("cloud")||value.includes("sre"))return["Linux","Delivery","Containers","Cloud","Reliability","Production","Interview ready"];if(value.includes("fullstack"))return[domain.language,"Frontend","Backend","Data","APIs","Design","Interview ready"];return[`${domain.language} core`,"Framework","Data","APIs","Architecture","Production","Interview ready"]}
+function outcomesFor(domain:ContentDomain){return[`Build and explain production-grade ${domain.name} systems.`,`Solve and communicate ${domain.track.toLowerCase()} interview problems.`,`Make engineering decisions and justify the trade-offs.`]}

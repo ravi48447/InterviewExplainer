@@ -51,17 +51,17 @@ export interface NavSection {
 export function buildPrimaryNavLinks(): ShellNavLink[] {
   const links: ShellNavLink[] = []
 
+  if (isHubEnabled('dashboard')) {
+    links.push({ href: '/dashboard', label: 'Dashboard', icon: 'LayoutDashboard' })
+  }
+  if (isHubEnabled('interviewQA')) {
+    links.push({ href: '/domains', label: 'Interview Q&A', icon: 'BookOpen' })
+  }
   if (isHubEnabled('dsa')) {
-    links.push({ href: '/dsa', label: 'Practice', icon: 'Code2' })
+    links.push({ href: '/dsa', label: 'DSA Problems', icon: 'Code2' })
   }
   if (isHubEnabled('mockInterviews')) {
-    links.push({ href: '/mock-interviews', label: 'Interview', icon: 'Mic' })
-  }
-  if (isHubEnabled('roadmaps')) {
-    links.push({ href: '/roadmaps', label: 'Roadmaps', icon: 'Map' })
-  }
-  if (isHubEnabled('companies')) {
-    links.push({ href: '/companies', label: 'Company Prep', icon: 'Building2' })
+    links.push({ href: '/mock-interviews', label: 'Mock Interview', icon: 'Mic' })
   }
   links.push({ href: '/pricing', label: 'Pricing', icon: 'Crown' })
   return links

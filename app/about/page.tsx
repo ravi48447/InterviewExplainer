@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Target, BookOpen, Users, Zap, ArrowRight } from "lucide-react";
-import { getCanonicalOrigin } from "@/lib/seo/config";
 
 export const metadata: Metadata = {
   title: "About | InterviewExplainer",
   description:
     "Learn about the mission, story, and team behind InterviewExplainer — structured interview preparation for software developers.",
-  alternates: { canonical: `${getCanonicalOrigin()}/about` },
 };
 
 const VALUES = [

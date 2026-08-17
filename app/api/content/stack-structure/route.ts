@@ -9,6 +9,7 @@ import {
 import { parseDomainSlug } from '@/lib/domain-display';
 import { resolveStackContent } from '@/lib/contentV2';
 import type { Level } from '@/lib/contentV2-types';
+import { resolveContentRoot } from '@/lib/content-paths';
 
 export const revalidate = 3600;
 
@@ -50,15 +51,16 @@ function countQuestionsInFile(filePath: string): number {
   }
 }
 
-const CONTENT_ROOT = path.join(process.cwd(), '..', 'content', 'domains');
-const CONTENT_INTERVIEW_ROOT = path.join(process.cwd(), '..', 'content', 'interview');
+const REPOSITORY_CONTENT_ROOT = resolveContentRoot();
+const CONTENT_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'domains');
+const CONTENT_INTERVIEW_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'interview');
 
 // ─── Locked-domain registry (mirrors lib/content-reader.ts) ──────────────────
-const CONTENT_JBI_ROOT = path.join(process.cwd(), '..', 'content', 'java-backend-intermediate');
-const CONTENT_JFI_ROOT = path.join(process.cwd(), '..', 'content', 'java-fullstack-intermediate');
-const CONTENT_JBF_ROOT = path.join(process.cwd(), '..', 'content', 'java-backend-fresher');
-const CONTENT_RBI_ROOT = path.join(process.cwd(), '..', 'content', 'ruby-backend-intermediate');
-const CONTENT_RBF_ROOT = path.join(process.cwd(), '..', 'content', 'ruby-backend-fresher');
+const CONTENT_JBI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'java-backend-intermediate');
+const CONTENT_JFI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'java-fullstack-intermediate');
+const CONTENT_JBF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'java-backend-fresher');
+const CONTENT_RBI_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'ruby-backend-intermediate');
+const CONTENT_RBF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'ruby-backend-fresher');
 
 /** Stack-slug aliases for the JBI migration (old URL slug → new module slug). */
 const JBI_STACK_ALIAS: Record<string, string> = {
