@@ -15,6 +15,7 @@ export const revalidate = 3600;
 // module, which forces an 8 s rescan on every navigation. Storing the cache
 // on globalThis keeps it alive for the lifetime of the dev server.
 const RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const RESPONSE_CACHE_VERSION = 'locked-v2';
 const g = globalThis as typeof globalThis & {
   _ie_domainStacksCache?: Map<string, { at: number; body: unknown }>;
 };
@@ -135,20 +136,31 @@ function countVisibleQuestionsForStack(stackDir: string): number {
   return total;
 }
 
-const CONTENT_ROOT = path.join(process.cwd(), '..', 'content', 'domains');
-const CONTENT_INTERVIEW_ROOT = path.join(process.cwd(), '..', 'content', 'interview');
+// The upstream repository runs Next.js from frontend/, while this worktree is
+// flattened and runs from the repository root. Resolve both layouts so the
+// main-branch curriculum road always reads the real content tree.
+const REPOSITORY_ROOT = fs.existsSync(path.join(process.cwd(), 'content'))
+  ? process.cwd()
+  : path.resolve(process.cwd(), '..');
+const CONTENT_ROOT = path.join(REPOSITORY_ROOT, 'content', 'domains');
+const CONTENT_INTERVIEW_ROOT = path.join(REPOSITORY_ROOT, 'content', 'interview');
 
 // ─── Locked-domain registry (mirrors lib/content-reader.ts) ──────────────────
 // Each locked domain has a flat tree content/<domainSlug>/<moduleSlug>/<topic>
 // and a _index.json that declares the curriculum + optional content-reuse
 // across locked domains (e.g. JFI's reused modules point back to JBI).
-const CONTENT_JBI_ROOT = path.join(process.cwd(), '..', 'content', 'java-backend-intermediate');
-const CONTENT_JFI_ROOT = path.join(process.cwd(), '..', 'content', 'java-fullstack-intermediate');
-const CONTENT_JBF_ROOT = path.join(process.cwd(), '..', 'content', 'java-backend-fresher');
-const CONTENT_RBI_ROOT = path.join(process.cwd(), '..', 'content', 'ruby-backend-intermediate');
-const CONTENT_RBF_ROOT = path.join(process.cwd(), '..', 'content', 'ruby-backend-fresher');
-const CONTENT_GOI_ROOT = path.join(process.cwd(), '..', 'content', 'go-intermediate');
-const CONTENT_GOF_ROOT = path.join(process.cwd(), '..', 'content', 'go-fresher');
+const CONTENT_JBI_ROOT = path.join(REPOSITORY_ROOT, 'content', 'java-backend-intermediate');
+const CONTENT_JFI_ROOT = path.join(REPOSITORY_ROOT, 'content', 'java-fullstack-intermediate');
+const CONTENT_JBF_ROOT = path.join(REPOSITORY_ROOT, 'content', 'java-backend-fresher');
+const CONTENT_RBI_ROOT = path.join(REPOSITORY_ROOT, 'content', 'ruby-backend-intermediate');
+const CONTENT_RBF_ROOT = path.join(REPOSITORY_ROOT, 'content', 'ruby-backend-fresher');
+const CONTENT_GOI_ROOT = path.join(REPOSITORY_ROOT, 'content', 'go-intermediate');
+const CONTENT_GOF_ROOT = path.join(REPOSITORY_ROOT, 'content', 'go-fresher');
+const CONTENT_JFF_ROOT = path.join(REPOSITORY_ROOT, 'content', 'java-fullstack-fresher');
+const CONTENT_FEI_ROOT = path.join(REPOSITORY_ROOT, 'content', 'frontend-intermediate');
+const CONTENT_FEF_ROOT = path.join(REPOSITORY_ROOT, 'content', 'frontend-fresher');
+const CONTENT_PBI_ROOT = path.join(REPOSITORY_ROOT, 'content', 'python-backend-intermediate');
+const CONTENT_PBF_ROOT = path.join(REPOSITORY_ROOT, 'content', 'python-backend-fresher');
 
 const LOCKED_DOMAIN_ROOTS: Record<string, string> = {
   'java-backend-intermediate':   CONTENT_JBI_ROOT,
@@ -158,6 +170,11 @@ const LOCKED_DOMAIN_ROOTS: Record<string, string> = {
   'ruby-backend-fresher':        CONTENT_RBF_ROOT,
   'go-intermediate':             CONTENT_GOI_ROOT,
   'go-fresher':                  CONTENT_GOF_ROOT,
+  'java-fullstack-fresher':      CONTENT_JFF_ROOT,
+  'frontend-intermediate':       CONTENT_FEI_ROOT,
+  'frontend-fresher':            CONTENT_FEF_ROOT,
+  'python-backend-intermediate': CONTENT_PBI_ROOT,
+  'python-backend-fresher':      CONTENT_PBF_ROOT,
 };
 
 const DISPLAY_NAME_OVERRIDES: Record<string, string> = {
@@ -697,9 +714,10 @@ export async function GET(req: NextRequest) {
   const jsonInit = {
     headers: { 'Cache-Control': BROWSER_CACHE_CONTROL },
   };
+  const responseCacheKey = `${domainSlug}::${RESPONSE_CACHE_VERSION}`;
 
   // In-process cache hit — skip the entire fs walk.
-  const cached = responseCache.get(domainSlug);
+  const cached = responseCache.get(responseCacheKey);
   if (cached && Date.now() - cached.at < RESPONSE_CACHE_TTL_MS) {
     return NextResponse.json(cached.body, jsonInit);
   }
@@ -708,7 +726,7 @@ export async function GET(req: NextRequest) {
   if (domainSlug in LOCKED_DOMAIN_ROOTS) {
     const locked = buildLockedDomainCategories(domainSlug);
     if (locked) {
-      responseCache.set(domainSlug, { at: Date.now(), body: locked });
+      responseCache.set(responseCacheKey, { at: Date.now(), body: locked });
       return NextResponse.json(locked, jsonInit);
     }
     // If the locked tree has no populated modules yet, fall through to legacy
@@ -727,7 +745,7 @@ export async function GET(req: NextRequest) {
   if (fs.existsSync(interviewDir)) {
     const curriculumResult = buildCurriculumCategories(interviewDir, parsed);
     if (curriculumResult) {
-      responseCache.set(domainSlug, { at: Date.now(), body: curriculumResult });
+      responseCache.set(responseCacheKey, { at: Date.now(), body: curriculumResult });
       return NextResponse.json(curriculumResult, jsonInit);
     }
   }
@@ -843,6 +861,6 @@ export async function GET(req: NextRequest) {
   }));
 
   const body = { stacks, categories };
-  responseCache.set(domainSlug, { at: Date.now(), body });
+  responseCache.set(responseCacheKey, { at: Date.now(), body });
   return NextResponse.json(body, jsonInit);
 }

@@ -34,7 +34,7 @@ export function PublicHeader({ pathname = '/' }: { pathname?: string }) {
       className={isHome ? "absolute inset-x-0 top-0 z-[var(--z-sticky)] w-full border-b border-white/70 bg-white/[0.58] shadow-[0_1px_16px_rgba(15,35,70,.045)] backdrop-blur-lg" : "sticky top-0 z-[var(--z-sticky)] w-full border-b border-border bg-card/95 shadow-[0_1px_10px_hsl(var(--foreground)/0.025)] backdrop-blur-xl supports-[backdrop-filter]:bg-card/90"}
       role="banner"
     >
-      <div className={`mx-auto flex h-[74px] w-full items-center gap-2 px-8 sm:px-10 lg:gap-4 lg:px-8 ${isHome ? "max-w-[1440px]" : "max-w-[1800px] lg:px-12"}`}>
+      <div className={`mx-auto flex h-[74px] w-full items-center gap-2 px-4 sm:px-6 lg:gap-4 lg:px-8 ${isHome ? "max-w-[1440px]" : "max-w-[1800px] lg:px-12"}`}>
         {/* Mobile drawer (client island) */}
         <div className="lg:hidden">
           <MobileNav />
@@ -54,10 +54,14 @@ export function PublicHeader({ pathname = '/' }: { pathname?: string }) {
           </div>
 
           {/* Theme (client island) */}
-          <ThemeToggle />
+          <div className="hidden sm:block">
+            <ThemeToggle />
+          </div>
 
           {/* User actions (client island) */}
-          <HeaderUserActions />
+          <div className="hidden sm:block">
+            <HeaderUserActions />
+          </div>
         </div>
       </div>
 

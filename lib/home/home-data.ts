@@ -46,7 +46,7 @@ export const HOME_HERO: HomeHero = {
   headline: "Understand every concept. Crack every interview.",
   supporting:
     "In-depth explanations, real interview questions, guided visual practice, mock interviews, and personalized roadmaps — built for the way interviews actually test you.",
-  primaryCta: { label: "Start learning", href: "/select" },
+  primaryCta: { label: "Start learning", href: "/domains" },
   secondaryCta: { label: "Explore DSA", href: "/dsa" },
 };
 
@@ -102,7 +102,7 @@ export interface HomePathway {
 const PATHWAY_ORDER: string[] = [
   "/java-backend-fresher",
   "/python-backend-fresher",
-  "/go-fresher",
+  "/go-intermediate",
   "/java-backend-intermediate",
   "/python-backend-intermediate",
   "/java-fullstack-intermediate",
@@ -694,7 +694,7 @@ export interface ReferenceHomeJourneyStep {
 }
 
 export const REFERENCE_HOME_JOURNEY: ReferenceHomeJourneyStep[] = [
-  { step: 1, title: "Choose your goal", detail: "Pick a domain and set the outcome you want.", href: "/select", icon: "flag", accent: "blue" },
+  { step: 1, title: "Choose your goal", detail: "Pick a domain and set the outcome you want.", href: "/domains", icon: "flag", accent: "blue" },
   { step: 2, title: "Learn concepts", detail: "Build the idea with clear visual explanations.", href: "/prep", icon: "sprout", accent: "green" },
   { step: 3, title: "Practice actively", detail: "Solve questions and understand every decision.", href: "/dsa", icon: "puzzle", accent: "violet" },
   { step: 4, title: "Test and improve", detail: "Use mock interviews to find and close gaps.", href: "/mock-interviews", icon: "target", accent: "teal" },

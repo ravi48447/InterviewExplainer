@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { resolveContentRoot } from "@/lib/content-paths";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://interviewexplainer.com";
 const NOW = new Date().toISOString().split("T")[0];
-const DSA_ROOT = path.join(process.cwd(), "..", "content", "dsa");
+const DSA_ROOT = path.join(resolveContentRoot(), "dsa");
 
 const PATTERNS = [
   "two-pointers","sliding-window","hash-map","binary-search","fast-slow-pointers",

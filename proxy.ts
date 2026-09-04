@@ -28,8 +28,9 @@ import { getAppConfig, buildSecurityHeaders } from "@/lib/platform";
  *    routes don't collide with [domainSlug]. Alt-slugs 301 → canonical seoSlug.
  *
  * 3. /interview/{lang}/{track}/{level}/{stack}/{questionSlug}
- *    Legacy URL shape. For fully-migrated domains (currently only
- *    java-backend-intermediate) we 301 redirect it to the canonical App URL.
+ *    Legacy URL shape. Published curriculum domains redirect to their
+ *    canonical App URL so every landing page reaches the shared full-content
+ *    module and question layouts.
  *
  * Philosophy (MASTER_PLAN.md):
  *   - Unauthenticated / no preference → always serve intermediate (SEO default)
@@ -69,8 +70,24 @@ const KNOWN_TRACKS = new Set([
  *   - Canonical App URL is rendered directly, no redirect to /interview/
  */
 const MIGRATED_DOMAINS = new Set([
+  "frontend-fresher",
+  "frontend-intermediate",
+  "go-fresher",
+  "go-intermediate",
+  "java-backend-fresher",
   "java-backend-intermediate",
+  "java-fullstack-fresher",
   "java-fullstack-intermediate",
+  "javascript-frontend-beginner",
+  "javascript-frontend-intermediate",
+  "python-backend-fresher",
+  "python-backend-intermediate",
+  "python-fullstack-beginner",
+  "python-fullstack-intermediate",
+  "ruby-backend-fresher",
+  "ruby-backend-intermediate",
+  "ruby-fullstack-beginner",
+  "ruby-fullstack-intermediate",
 ]);
 
 /**

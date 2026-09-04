@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { AnswerSection, QuestionPagePayload } from "@/lib/api";
 import type { SpeakableV2 } from "@/lib/speakable/schema";
@@ -16,6 +17,7 @@ import {
   MessageSquare,
   Moon,
   PlayCircle,
+  PanelLeftOpen,
   Sun,
   Target,
 } from "lucide-react";
@@ -177,6 +179,21 @@ function QuestionPageLayoutInner({
       : `${questionUrlPrefix}/${qStack ?? stackSlug}/${qSlug}`;
   const { theme, toggleTheme } = useContentTheme();
   const d = theme === "dark";
+  const [curriculumOpen, setCurriculumOpen] = useState(false);
+
+  useEffect(() => {
+    if (!curriculumOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCurriculumOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [curriculumOpen]);
 
   const sections = (data.answerSections || []).filter(
     (s) => s.content != null && s.content.length > 0
@@ -253,6 +270,16 @@ function QuestionPageLayoutInner({
     ? topicQuestions.findIndex((q) => q.slug === questionSlug)
     : -1;
 
+  const previewQuestionCount = Math.min(6, topicQuestions.length);
+  const previewStart = Math.max(
+    0,
+    Math.min(topicIdx - 2, topicQuestions.length - previewQuestionCount)
+  );
+  const previewQuestions = topicQuestions.slice(
+    previewStart,
+    previewStart + previewQuestionCount
+  );
+
   return (
     <div
       className={`min-h-screen font-sans transition-colors duration-200 ${
@@ -275,17 +302,87 @@ function QuestionPageLayoutInner({
       <CodeHighlighter />
 
       <div className="flex w-full min-h-screen">
-        {/* ── Left sidebar ── */}
-        {sidebar && (
-          <div
-            className={`hidden lg:block shrink-0 self-start sticky top-0 border-r overflow-y-auto h-screen transition-colors duration-200 ${
-              d
-                ? "border-border/50 bg-surface"
-                : "border-border/80 bg-background"
+        {sidebar && currentTopicName && (
+          <aside
+            className={`hidden lg:flex w-[244px] shrink-0 self-start sticky top-0 h-screen flex-col border-r px-3 py-4 transition-colors ${
+              d ? "border-border/60 bg-surface" : "border-primary/10 bg-surface/70"
             }`}
+            aria-label={`${currentTopicName} question preview`}
           >
-            {sidebar}
-          </div>
+            <button
+              type="button"
+              onClick={() => setCurriculumOpen(true)}
+              className="group flex items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-primary/5"
+              aria-label={`Show all ${topicQuestions.length} ${currentTopicName} questions`}
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <BookOpen className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
+                  Current topic
+                </span>
+                <span className="block truncate text-xs font-extrabold text-foreground">
+                  {currentTopicName}
+                </span>
+              </span>
+              <PanelLeftOpen className="h-4 w-4 shrink-0 text-primary" />
+            </button>
+
+            <div className="mt-3 flex items-center justify-between border-y border-border/70 px-2 py-2">
+              <span className="text-[10px] font-bold text-muted-foreground">
+                Questions in this topic
+              </span>
+              <span className="rounded-md bg-primary/10 px-2 py-1 text-[10px] font-extrabold tabular-nums text-primary">
+                Q {Math.max(topicIdx + 1, 1)} of {topicQuestions.length}
+              </span>
+            </div>
+
+            <ol className="mt-2 min-h-0 flex-1 space-y-0.5 overflow-hidden">
+              {previewQuestions.map((question, previewIndex) => {
+                const questionIndex = previewStart + previewIndex;
+                const active = question.slug === questionSlug;
+                return (
+                  <li key={question.slug}>
+                    <Link
+                      href={buildQuestionUrl(
+                        question.slug,
+                        question.stackSlug || stackSlug
+                      )}
+                      className={`flex items-start gap-2 rounded-lg px-2 py-2 text-[11.5px] leading-snug transition-colors ${
+                        active
+                          ? "bg-primary/10 font-bold text-primary ring-1 ring-primary/15"
+                          : "text-muted-foreground hover:bg-background hover:text-foreground"
+                      }`}
+                    >
+                      <span
+                        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[8px] ${
+                          active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background"
+                        }`}
+                      >
+                        {active ? "✓" : ""}
+                      </span>
+                      <span className="w-5 shrink-0 text-[9px] font-bold tabular-nums text-muted-foreground">
+                        {String(questionIndex + 1).padStart(2, "0")}
+                      </span>
+                      <span className="line-clamp-2 flex-1">{question.title}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ol>
+
+            <button
+              type="button"
+              onClick={() => setCurriculumOpen(true)}
+              className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-primary/20 bg-background px-3 py-2.5 text-xs font-bold text-foreground shadow-sm transition-colors hover:border-primary/35 hover:text-primary"
+            >
+              Show all {topicQuestions.length} questions
+              <PanelLeftOpen className="h-4 w-4 text-primary" />
+            </button>
+          </aside>
         )}
 
         {/* ── Main content ── */}
@@ -295,15 +392,104 @@ function QuestionPageLayoutInner({
           }`}
         >
           <article
-            className={
+            className={`mx-auto w-full max-w-[1280px] ${
               sidebar
                 ? "px-5 lg:px-7 xl:px-8 py-6 pb-24 lg:pb-16"
                 : "px-5 lg:px-7 xl:px-8 py-6 pb-16"
-            }
+            }`}
           >
+            {/* Compact route context — curriculum opens without consuming width. */}
+            <div
+              className={`sticky top-0 z-[var(--z-sticky)] -mx-2 mb-6 flex flex-col gap-3 rounded-xl border px-3 py-2.5 shadow-sm backdrop-blur sm:flex-row sm:items-center ${
+                d
+                  ? "border-border/60 bg-surface/95"
+                  : "border-primary/10 bg-background/95 shadow-slate-200/50"
+              }`}
+            >
+              <nav
+                aria-label="Question route"
+                className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto whitespace-nowrap text-[12px] sm:text-[13px]"
+              >
+                {breadcrumbs.map((bc, index) => (
+                  <span key={bc.href} className="contents">
+                    {index > 0 && (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                    )}
+                    <Link
+                      href={bc.href}
+                      className="font-semibold text-muted-foreground transition-colors hover:text-primary"
+                    >
+                      {bc.label}
+                    </Link>
+                  </span>
+                ))}
+                {currentTopicName && currentTopicSlug && (
+                  <>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                    <Link
+                      href={`${breadcrumbs[breadcrumbs.length - 1]?.href}#${currentTopicSlug}`}
+                      className="font-bold text-foreground transition-colors hover:text-primary"
+                    >
+                      {currentTopicName}
+                    </Link>
+                  </>
+                )}
+                {topicIdx >= 0 && topicQuestions.length > 0 && (
+                  <>
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                    <span className="rounded-md bg-primary/10 px-2 py-1 font-extrabold tabular-nums text-primary">
+                      Q {topicIdx + 1} of {topicQuestions.length}
+                    </span>
+                  </>
+                )}
+              </nav>
+
+              <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-auto">
+                {previousQuestion && (
+                  <Link
+                    href={buildQuestionUrl(
+                      previousQuestion.slug,
+                      previousQuestion.stackSlug || stackSlug
+                    )}
+                    className="touch-target inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+                    aria-label={`Previous: ${previousQuestion.title}`}
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    <span className="hidden md:inline">Previous</span>
+                  </Link>
+                )}
+                {nextQuestion && (
+                  <Link
+                    href={buildQuestionUrl(
+                      nextQuestion.slug,
+                      nextQuestion.stackSlug || stackSlug
+                    )}
+                    className="touch-target inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+                    aria-label={`Next: ${nextQuestion.title}`}
+                  >
+                    <span className="hidden md:inline">Next</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                )}
+                {sidebar && (
+                  <button
+                    type="button"
+                    onClick={() => setCurriculumOpen(true)}
+                    className="touch-target inline-flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs font-extrabold text-primary transition-colors hover:border-primary/40 hover:bg-primary/10"
+                    aria-haspopup="dialog"
+                    aria-expanded={curriculumOpen}
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    All {topicQuestions.length} questions
+                  </button>
+                )}
+              </div>
+              <span className="absolute inset-x-3 bottom-0 h-px bg-primary/20" />
+            </div>
+
             {/* Breadcrumb */}
             <nav
-              className={`flex items-center gap-1 text-xs mb-4 flex-wrap ${
+              className={`hidden items-center gap-1 text-xs mb-4 flex-wrap ${
                 d ? "text-muted-foreground" : "text-muted-foreground"
               }`}
             >
@@ -361,7 +547,7 @@ function QuestionPageLayoutInner({
             {/* Sticky position header */}
             {totalQuestions > 0 && currentIdx >= 0 && (
               <div
-                className={`sticky top-1 z-[var(--z-sticky)] -mx-2 mb-5 flex items-center gap-2 rounded-lg border px-3 py-2 shadow-lg backdrop-blur ${
+                className={`hidden sticky top-1 z-[var(--z-sticky)] -mx-2 mb-5 items-center gap-2 rounded-lg border px-3 py-2 shadow-lg backdrop-blur ${
                   d
                     ? "border-slate-600 dark:border-slate-700/50 bg-surface-elevated/95 shadow-black/40"
                     : "border-border bg-background/95 shadow-slate-200/60"
@@ -489,29 +675,6 @@ function QuestionPageLayoutInner({
             >
               {data.questionText || data.title}
             </h1>
-            {totalQuestions > 0 && breadcrumbs.length > 0 && (
-              <p className="mb-5 text-sm">
-                <Link
-                  href={`${breadcrumbs[breadcrumbs.length - 1].href}#all-questions`}
-                  className={`font-semibold underline underline-offset-[3px] transition-colors ${
-                    d
-                      ? "text-primary decoration-blue-700 hover:text-primary hover:decoration-blue-500"
-                      : "text-primary decoration-blue-300 hover:text-primary dark:text-primary hover:decoration-blue-500"
-                  }`}
-                >
-                  Full question list in order
-                </Link>
-                <span
-                  className={`font-normal ${
-                    d ? "text-muted-foreground" : "text-muted-foreground"
-                  }`}
-                >
-                  {" "}
-                  · Q1–Q{totalQuestions} on this module
-                </span>
-              </p>
-            )}
-
             {/* Meta row */}
             <div
               className={`flex flex-wrap items-center gap-2 text-[12px] mb-8 ${
@@ -1070,7 +1233,7 @@ function QuestionPageLayoutInner({
 
         {/* ── Right sidebar ── */}
         <aside
-          className={`hidden xl:flex w-[280px] shrink-0 flex-col self-start sticky top-0 border-l overflow-y-auto h-screen transition-colors duration-200 ${
+          className={`hidden w-[280px] shrink-0 flex-col self-start sticky top-0 border-l overflow-y-auto h-screen transition-colors duration-200 ${
             d
               ? "border-border/50 bg-surface"
               : "border-border/80 bg-background"
@@ -1277,6 +1440,139 @@ function QuestionPageLayoutInner({
           )}
         </aside>
       </div>
+
+      {sidebar && curriculumOpen && (
+        <div
+          className="fixed inset-0 z-[var(--z-drawer)]"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${currentTopicName || "Topic"} questions`}
+        >
+          <button
+            type="button"
+            aria-label="Close question list"
+            onClick={() => setCurriculumOpen(false)}
+            className="absolute inset-0 bg-slate-950/20 backdrop-blur-[1px]"
+          />
+          <aside
+            className={`absolute inset-y-0 left-0 flex w-[488px] max-w-[94vw] flex-col border-r shadow-2xl ${
+              d ? "border-border bg-surface" : "border-primary/10 bg-background"
+            }`}
+          >
+            <div className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <BookOpen className="h-4.5 w-4.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-extrabold text-foreground">
+                  {currentTopicName} questions
+                </div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {breadcrumbs[1]?.label} · {topicQuestions.length} questions
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCurriculumOpen(false)}
+                className="touch-target rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+                aria-label="Close question list"
+              >
+                <span aria-hidden="true" className="text-lg leading-none">×</span>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+              <div className="mb-4 rounded-xl border border-primary/15 bg-primary/[0.035] px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-primary">
+                      Your position
+                    </div>
+                    <div className="mt-1 truncate text-sm font-extrabold text-foreground">
+                      Question {Math.max(topicIdx + 1, 1)} of {topicQuestions.length}
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-background px-2 py-1 text-[11px] font-extrabold tabular-nums text-primary shadow-sm">
+                    {topicQuestions.length > 0
+                      ? Math.round(((topicIdx + 1) / topicQuestions.length) * 100)
+                      : 0}%
+                  </span>
+                </div>
+                {topicQuestions.length > 0 && (
+                  <div className="mt-3 h-1 overflow-hidden rounded-full bg-primary/10">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{
+                        width: `${((topicIdx + 1) / topicQuestions.length) * 100}%`,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-2 px-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
+                All questions in this topic
+              </div>
+              <ol className="space-y-1">
+                {topicQuestions.map((question, questionIndex) => {
+                  const active = question.slug === questionSlug;
+                  return (
+                    <li key={question.slug}>
+                      <Link
+                        href={buildQuestionUrl(
+                          question.slug,
+                          question.stackSlug || stackSlug
+                        )}
+                        onClick={() => setCurriculumOpen(false)}
+                        aria-current={active ? "page" : undefined}
+                        className={`group flex items-start gap-3 rounded-xl border px-3 py-3 text-sm leading-snug transition-colors ${
+                          active
+                            ? "border-primary/25 bg-primary/[0.07] font-bold text-primary shadow-sm"
+                            : "border-transparent text-foreground hover:border-border hover:bg-surface"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-7 w-8 shrink-0 items-center justify-center rounded-md text-[10px] font-extrabold tabular-nums ${
+                            active
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-surface text-muted-foreground group-hover:text-foreground"
+                          }`}
+                        >
+                          {String(questionIndex + 1).padStart(2, "0")}
+                        </span>
+                        <span className="min-w-0 flex-1 pt-1">
+                          {question.title}
+                        </span>
+                        {active && (
+                          <span className="mt-1 shrink-0 rounded-full bg-primary px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-primary-foreground">
+                            Current
+                          </span>
+                        )}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 border-t border-border p-3">
+              <Link
+                href={breadcrumbs[1]?.href || `${questionUrlPrefix}/${stackSlug}`}
+                className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg border border-border px-3 py-2.5 text-xs font-bold text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Topic overview
+              </Link>
+              <button
+                type="button"
+                onClick={() => setCurriculumOpen(false)}
+                className="inline-flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Collapse preview
+                <ArrowLeft className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

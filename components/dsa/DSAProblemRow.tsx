@@ -3,9 +3,10 @@ import fs from "fs";
 import path from "path";
 import { ArrowRight, Flame } from "lucide-react";
 import type { DSAProblemIndex } from "@/lib/contentV2-types";
+import { resolveContentRoot } from "@/lib/content-paths";
 import { DifficultyPill } from "./DSAPills";
 
-const DSA_ROOT = path.join(process.cwd(), "..", "content", "dsa");
+const DSA_ROOT = path.join(resolveContentRoot(), "dsa");
 
 /**
  * Checks on-disk whether the rich problem JSON has been authored.

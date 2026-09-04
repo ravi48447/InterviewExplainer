@@ -157,7 +157,7 @@ export function HomePersonalizedPath() {
             <h2 id="home-path-heading" className="mt-3 font-display text-[1.45rem] font-semibold tracking-[-0.02em] text-foreground sm:text-[1.8rem]">Build a path around your goal and experience.</h2>
             <p className="mt-4 max-w-lg text-sm leading-6 text-muted-foreground">Choose your role, technology, experience level, and target domain. We’ll turn them into a focused learning sequence.</p>
             <div className="mt-7">
-              <Link href="/select" className={cn(buttonVariants({ variant: "primary", size: "lg" }), "h-11 rounded-lg bg-[#D9603B] px-5 text-[13px] shadow-md hover:bg-[#bd4f30] transition-transform duration-150 ease-out hover:-translate-y-0.5")}>
+              <Link href="/domains" className={cn(buttonVariants({ variant: "primary", size: "lg" }), "h-11 rounded-lg bg-[#D9603B] px-5 text-[13px] shadow-md hover:bg-[#bd4f30] transition-transform duration-150 ease-out hover:-translate-y-0.5")}>
                 Find my path <ArrowRight aria-hidden="true" />
               </Link>
             </div>

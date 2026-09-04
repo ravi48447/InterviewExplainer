@@ -16,10 +16,20 @@ import type {
  * the page never has to know which underlying tech (mermaid vs custom
  * SVG vs HTML/CSS) is in play for a given diagram.
  */
-export function DSADiagram({ diagram }: { diagram: DSADiagramType }) {
+export function DSADiagram({
+  diagram,
+  showCaption = true,
+  mode = "default",
+  guidePanel,
+}: {
+  diagram: DSADiagramType;
+  showCaption?: boolean;
+  mode?: "default" | "guide";
+  guidePanel?: React.ReactNode;
+}) {
   switch (diagram.type) {
     case "mermaid":
-      return <MermaidDiagram diagram={diagram} />;
+      return <MermaidDiagram diagram={diagram} showCaption={showCaption} mode={mode} guidePanel={guidePanel} />;
     case "hashmap-state":
       return <HashmapStateDiagram diagram={diagram} />;
     case "array-state":
@@ -37,6 +47,7 @@ function DiagramShell({
   input,
   toneClass = "border-border",
   headerClass = "bg-surface border-border text-foreground",
+  sidePanel,
   children,
 }: {
   title: string;
@@ -44,6 +55,7 @@ function DiagramShell({
   input?: string;
   toneClass?: string;
   headerClass?: string;
+  sidePanel?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -69,18 +81,35 @@ function DiagramShell({
         )}
       </figcaption>
       {caption && (
-        <p className="px-4 pt-3 text-[12.5px] text-secondary leading-relaxed italic">
-          {caption}
-        </p>
+        <div className="mx-4 mt-3 flex gap-2.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <span className="mt-0.5 h-4 w-1 shrink-0 rounded-full bg-indigo-400" aria-hidden="true" />
+          <p className="text-[12px] leading-relaxed text-slate-700">
+            <span className="mr-1.5 font-black text-slate-900">How to read it:</span>
+            {caption}
+          </p>
+        </div>
       )}
-      <div className="px-4 py-4">{children}</div>
+      <div className={cn("px-4 py-4", sidePanel && "grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-center")}>
+        <div className="min-w-0">{children}</div>
+        {sidePanel}
+      </div>
     </figure>
   );
 }
 
 // ─── 1. Mermaid (lazy-loaded) ───────────────────────────────────────────
 
-function MermaidDiagram({ diagram }: { diagram: DSAMermaidDiagram }) {
+function MermaidDiagram({
+  diagram,
+  showCaption,
+  mode,
+  guidePanel,
+}: {
+  diagram: DSAMermaidDiagram;
+  showCaption: boolean;
+  mode: "default" | "guide";
+  guidePanel?: React.ReactNode;
+}) {
   const reactId = useId();
   // Mermaid requires a DOM-id-friendly identifier; React's useId returns
   // colon-separated strings that mermaid v10's CSS selectors choke on.
@@ -96,14 +125,33 @@ function MermaidDiagram({ diagram }: { diagram: DSAMermaidDiagram }) {
         const mermaid = (await import("mermaid")).default;
         mermaid.initialize({
           startOnLoad: false,
-          theme: "neutral",
+          theme: mode === "guide" ? "base" : "neutral",
           securityLevel: "strict",
           fontFamily:
             'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
           themeVariables: {
-            fontSize: "24px",
+            fontSize: mode === "guide" ? "17px" : "14px",
+            ...(mode === "guide"
+              ? {
+                  background: "#ffffff",
+                  primaryColor: "#eef2ff",
+                  primaryTextColor: "#1e293b",
+                  primaryBorderColor: "#6366f1",
+                  secondaryColor: "#ecfeff",
+                  tertiaryColor: "#f8fafc",
+                  lineColor: "#64748b",
+                  edgeLabelBackground: "#ffffff",
+                }
+              : {}),
           },
-          flowchart: { htmlLabels: true, curve: "basis", padding: 24 },
+          flowchart: {
+            htmlLabels: true,
+            curve: "linear",
+            padding: mode === "guide" ? 14 : 8,
+            nodeSpacing: mode === "guide" ? 38 : 26,
+            rankSpacing: mode === "guide" ? 48 : 34,
+            useMaxWidth: true,
+          },
         });
         const { svg: rendered } = await mermaid.render(id, diagram.source);
         if (!cancelled) setSvg(rendered);
@@ -115,26 +163,36 @@ function MermaidDiagram({ diagram }: { diagram: DSAMermaidDiagram }) {
     return () => {
       cancelled = true;
     };
-  }, [diagram.source, id]);
+  }, [diagram.source, id, mode]);
 
   return (
     <DiagramShell
       title={diagram.title}
-      caption={diagram.caption}
-      toneClass="border-default dark:border-default/20"
-      headerClass="bg-blue-50 dark:bg-blue-500/10 border-default dark:border-default/20 text-primary dark:text-primary"
+      caption={showCaption ? diagram.caption : undefined}
+      toneClass={mode === "guide" ? "border-slate-300 shadow-sm" : "border-default dark:border-default/20"}
+      headerClass={mode === "guide" ? "bg-indigo-50 border-indigo-200 text-indigo-800" : "bg-blue-50 dark:bg-blue-500/10 border-default dark:border-default/20 text-primary dark:text-primary"}
+      sidePanel={guidePanel}
     >
       {error ? (
         <pre className="text-[11px] text-red-600 dark:text-red-400 whitespace-pre-wrap break-words">
           Could not render diagram: {error}
         </pre>
       ) : svg ? (
-        <div ref={containerRef} className="overflow-x-auto py-4 flex justify-center">
-          {/* Using CSS zoom scales the diagram, preserving aspect ratio without breaking layout or causing empty space. */}
-          <div 
-            dangerouslySetInnerHTML={{ __html: svg }} 
-            className="inline-block"
-            style={{ zoom: 2.1 } as React.CSSProperties}
+        <div
+          ref={containerRef}
+          className={cn(
+            "flex justify-center overflow-auto py-1",
+            mode === "guide" ? "max-h-[560px]" : "max-h-[290px]",
+          )}
+        >
+          <div
+            dangerouslySetInnerHTML={{ __html: svg }}
+            className={cn(
+              "inline-block max-w-full [&_svg]:h-auto [&_svg]:max-w-full",
+              mode === "guide"
+                ? "[&_svg]:w-full [&_svg]:max-h-[540px] [&_.node_rect]:drop-shadow-sm [&_.node_polygon]:drop-shadow-sm [&_.edgeLabel]:font-bold"
+                : "[&_svg]:max-h-[270px]",
+            )}
           />
         </div>
       ) : (
