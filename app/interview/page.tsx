@@ -40,7 +40,7 @@ export default function InterviewIndexPage() {
         let totalQ = 0;
         for (const stack of stacks) {
           const content = resolveStackContent(lang, track, level, stack);
-          totalQ += content?.questions.length ?? 0;
+          totalQ += content?.questions?.length ?? 0;
         }
         return { level, stackCount: stacks.length, questionCount: totalQ };
       });

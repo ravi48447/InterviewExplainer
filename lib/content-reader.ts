@@ -30,7 +30,7 @@ import type { Level } from './contentV2-types';
 // Using globalThis ensures caches are NOT wiped on Next.js hot reloads in dev.
 
 const g = globalThis as typeof globalThis & {
-  _ie_jsonCache?:   Map<string, unknown>;
+  _ie_jsonCache?:   Map<string, { mtimeMs: number; value: unknown }>;
   _ie_stackQCache?: Map<string, QuestionSummary[]>;
   _ie_subcatCache?: Map<string, StackSubcategory[]>;
 };
@@ -708,6 +708,26 @@ interface RawSection {
   mistakes?: RawMistake[];
   questions?: RawFollowup[];
   timeToSpeak?: string;
+  beats?: Array<{
+    cue: string;
+    stage?: string;
+    leadIn?: string;
+    spokenText: string;
+    recallRule?: string;
+    support?: {
+      type: 'code' | 'trace' | 'checklist' | 'comparison';
+      title?: string;
+      code?: string;
+      language?: string;
+      caption?: string;
+      items?: Array<{
+        label: string;
+        value?: string;
+        detail?: string;
+        tone?: 'neutral' | 'blue' | 'green' | 'orange';
+      }>;
+    };
+  }>;
 }
 
 interface RawQAEntry {
@@ -812,15 +832,28 @@ function estimateReadTime(text: string): number {
 
 function readJson<T>(filePath: string): T | null {
   if (_jsonCache.has(filePath)) {
-    const hit = _jsonCache.get(filePath);
-    // Touch for LRU — keep hot entries at the young end.
-    _jsonCache.delete(filePath);
-    _jsonCache.set(filePath, hit);
-    return hit as T | null;
+    const hit = _jsonCache.get(filePath)!;
+    // Content is edited frequently in dev. Do not let the global HMR cache
+    // keep serving yesterday's answer after a JSON file changes.
+    try {
+      const mtimeMs = fs.statSync(filePath).mtimeMs;
+      if (hit && typeof hit === 'object' && hit.mtimeMs === mtimeMs) {
+        // Touch for LRU — keep hot entries at the young end.
+        _jsonCache.delete(filePath);
+        _jsonCache.set(filePath, hit);
+        return hit.value as T | null;
+      }
+      _jsonCache.delete(filePath);
+    } catch {
+      _jsonCache.delete(filePath);
+    }
   }
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T;
-    _cachePutBounded(_jsonCache, filePath, parsed, _JSON_CACHE_MAX);
+    _cachePutBounded(_jsonCache, filePath, {
+      mtimeMs: fs.statSync(filePath).mtimeMs,
+      value: parsed,
+    }, _JSON_CACHE_MAX);
     return parsed;
   } catch (err: unknown) {
     // Only cache negative results when the file genuinely does not exist on
@@ -830,7 +863,10 @@ function readJson<T>(filePath: string): T | null {
     // live content pages into 404s until the dev server is restarted.
     const code = (err as NodeJS.ErrnoException)?.code;
     if (code === 'ENOENT' || code === 'EISDIR' || code === 'ENOTDIR') {
-      _cachePutBounded(_jsonCache, filePath, null, _JSON_CACHE_MAX);
+      _cachePutBounded(_jsonCache, filePath, {
+        mtimeMs: -1,
+        value: null,
+      }, _JSON_CACHE_MAX);
     }
     return null;
   }
@@ -1125,6 +1161,10 @@ export function getAllQuestionsForStack(
   stackSlug: string
 ): QuestionSummary[] {
   const cacheKey = `${domainSlug}::${stackSlug}::qOrdV3`;
+  // Content is edited while the local learning UI is open. Rebuild the
+  // navigation summaries in development so renamed questions appear after a
+  // normal refresh instead of requiring a full server restart.
+  if (process.env.NODE_ENV !== 'production') _stackQCache.delete(cacheKey);
   if (_stackQCache.has(cacheKey)) return _stackQCache.get(cacheKey)!;
 
   const dir = stackDir(domainSlug, stackSlug);
@@ -1533,6 +1573,15 @@ export function getQuestionPagePayload(
       sectionOrder: i,
       content: sectionToContent(s),
       sectionTitle: s.title ?? '',
+      speakingCues: Array.isArray(s.beats)
+        ? s.beats.filter(
+            beat =>
+              typeof beat?.cue === 'string' &&
+              beat.cue.trim().length > 0 &&
+              typeof beat?.spokenText === 'string' &&
+              beat.spokenText.trim().length > 0,
+          )
+        : undefined,
     }))
     .filter(s => s.content.length > 0);
 

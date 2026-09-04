@@ -31,19 +31,20 @@
           {
             "type": "key_points",
             "title": "Key Points",
-            "content": "- **`Depends()` resolves a function tree** \u2014 FastAPI calls your dependency, injects the result, and resolves nested dependencies automatically\n- **`yield` for setup/teardown** \u2014 code before `yield` runs on request, code after runs on response; cleanup executes even if the handler raises\n- **Dependencies are cached per request** \u2014 `get_db` referenced in two places gives the same session instance, avoiding duplicate connections\n- **`dependency_overrides` for testing** \u2014 swap any dependency with a mock at the app level, no monkey-patching or global state needed\n- **Class-based dependencies** \u2014 implement `__call__` for configurable, reusable dependencies with constructor parameters"
+            "content": "- **`Depends()` resolves a function tree** — FastAPI calls your dependency, injects the result, and resolves nested dependencies automatically\n- **`yield` for setup/teardown** — code before `yield` runs on request, code after runs on response; cleanup executes even if the handler raises\n- **Dependencies are cached per request** — `get_db` referenced in two places gives the same session instance, avoiding duplicate connections\n- **`dependency_overrides` for testing** — swap any dependency with a mock at the app level, no monkey-patching or global state needed\n- **Class-based dependencies** — implement `__call__` for configurable, reusable dependencies with constructor parameters"
           },
           {
             "type": "speakable_answer",
-            "content": "FastAPI's dependency injection uses Python's type hints and the `Depends()` function to automatically resolve and inject values into route handlers. When you declare a parameter with `Depends(some_function)`, FastAPI calls `some_function` before your handler, injects the result, and handles teardown via `yield` dependencies.\n\nThe power is composability. A `get_current_user` dependency can depend on `get_db` (which provides a database session), which itself depends on `get_settings` (which reads environment variables). FastAPI resolves this tree automatically, caches repeated dependencies within a request, and handles cleanup when the response is sent.\n\nThis makes testing trivial \u2014 override any dependency in tests with `app.dependency_overrides[real_dep] = mock_dep`. No monkey-patching, no global state."
-          },
-          {
-            "type": "deep_explanation",
-            "content": "## Database Session Dependency (SQLAlchemy)\n\n```python\nfrom sqlalchemy.orm import Session\nfrom database import SessionLocal\n\ndef get_db():\n    db = SessionLocal()\n    try:\n        yield db          # Provide the session\n    finally:\n        db.close()        # Cleanup \u2014 runs after response is sent\n\n# Usage in route\n@app.get('/users/{user_id}')\ndef get_user(user_id: int, db: Session = Depends(get_db)):\n    return db.query(User).filter(User.id == user_id).first()\n```\n\n## Auth Dependency Chain\n\n```python\nfrom fastapi import Depends, HTTPException, status\nfrom fastapi.security import OAuth2PasswordBearer\nimport jwt\n\noauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/login')\n\ndef get_current_user(\n    token: str = Depends(oauth2_scheme),\n    db: Session = Depends(get_db)\n) -> User:\n    try:\n        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])\n        user_id = payload.get('sub')\n    except jwt.InvalidTokenError:\n        raise HTTPException(\n            status_code=status.HTTP_401_UNAUTHORIZED,\n            detail='Invalid token',\n            headers={'WWW-Authenticate': 'Bearer'},\n        )\n    user = db.query(User).filter(User.id == user_id).first()\n    if not user:\n        raise HTTPException(status_code=401, detail='User not found')\n    return user\n\ndef get_admin_user(current_user: User = Depends(get_current_user)) -> User:\n    if not current_user.is_admin:\n        raise HTTPException(status_code=403, detail='Admin access required')\n    return current_user\n\n# Route using both\n@app.delete('/users/{user_id}')\ndef delete_user(\n    user_id: int,\n    admin: User = Depends(get_admin_user),\n    db: Session = Depends(get_db)\n):\n    db.query(User).filter(User.id == user_id).delete()\n    db.commit()\n    return {'deleted': user_id}\n```\n\n## Testing with Dependency Override\n\n```python\nfrom fastapi.testclient import TestClient\n\ndef override_get_db():\n    db = TestSessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\ndef override_current_user():\n    return User(id=1, email='test@test.com', is_admin=True)\n\napp.dependency_overrides[get_db] = override_get_db\napp.dependency_overrides[get_current_user] = override_current_user\n\nclient = TestClient(app)\n# All routes now use test DB and fake auth\n```"
+            "content": "FastAPI's dependency injection uses Python's type hints and the `Depends()` function to automatically resolve and inject values into route handlers. When you declare a parameter with `Depends(some_function)`, FastAPI calls `some_function` before your handler, injects the result, and handles teardown via `yield` dependencies.\n\nThe power is composability. A `get_current_user` dependency can depend on `get_db` (which provides a database session), which itself depends on `get_settings` (which reads environment variables). FastAPI resolves this tree automatically, caches repeated dependencies within a request, and handles cleanup when the response is sent.\n\nThis makes testing trivial — override any dependency in tests with `app.dependency_overrides[real_dep] = mock_dep`. No monkey-patching, no global state."
           },
           {
             "type": "important_points",
-            "content": "- **`yield` dependencies** \u2014 everything before `yield` is setup, after is teardown. Runs even if handler raises.\n- **Dependencies are cached per request** \u2014 `get_db` called in two dependencies gives the same session\n- **`use_cache=False`** \u2014 to get a fresh dependency instance each time\n- **Class-based dependencies** \u2014 use `__call__` for configurable, stateful dependencies\n- **Dependency overrides in tests** \u2014 the single best feature for testability"
+            "content": "- **`yield` dependencies** — everything before `yield` is setup, after is teardown. Runs even if handler raises.\n- **Dependencies are cached per request** — `get_db` called in two dependencies gives the same session\n- **`use_cache=False`** — to get a fresh dependency instance each time\n- **Class-based dependencies** — use `__call__` for configurable, stateful dependencies\n- **Dependency overrides in tests** — the single best feature for testability"
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Build the mental model",
+            "content": "The rule: use `async def` only when all I/O operations inside it are awaited using async libraries.\n\nUse `def` for CPU-bound work or when using synchronous libraries like `psycopg2` or `requests`.\n\nFastAPI runs async routes on the main event loop — if you block the event loop with a synchronous call (like `requests.get()` or a synchronous DB query), you block all other concurrent requests. FastAPI runs sync `def` routes in a thread pool automatically, which is actually safer for blocking code. The correct async stack: `httpx.AsyncClient` instead of `requests`, `asyncpg` or SQLAlchemy with async session instead of psycopg2, `aioredis` instead of redis-py. If your DB library is synchronous, use sync `def` routes — FastAPI handles the threading."
           },
           {
             "type": "practice_prompt",
@@ -72,7 +73,7 @@
             "kind": "edge_cases",
             "layout": "bullets",
             "items": [
-              "Depends() resolves a function tree \u2014 FastAPI calls your dependency, injects the result, and resolves nested dependencies automatically yield for setup/teardown \u2014 code before yield runs on request, code after runs on response; cleanup executes even if the handler raises Dependencies are cached per request \u2014 get_db referenced in two places gives the same session instance, avoiding duplicate connections dependency_overrides for testing \u2014 swap any dependency with a mock at the app level, no monkey-patching or global state needed Class-based dependencies \u2014 implement __call__ for configurable, reusable dependencies with constructor parameters"
+              "Depends() resolves a function tree — FastAPI calls your dependency, injects the result, and resolves nested dependencies automatically yield for setup/teardown — code before yield runs on request, code after runs on response; cleanup executes even if the handler raises Dependencies are cached per request — get_db referenced in two places gives the same session instance, avoiding duplicate connections dependency_overrides for testing — swap any dependency with a mock at the app level, no monkey-patching or global state needed Class-based dependencies — implement __call__ for configurable, reusable dependencies with constructor parameters"
             ]
           },
           {
@@ -86,7 +87,11 @@
         "tts_overrides": {},
         "speakable_status": "pending_review",
         "followup_handoff": []
-      }
+      },
+      "followup_questions": [
+        "How does Pydantic work in FastAPI, and how do you handle complex validation, custom validators, and nested models?",
+        "When should you use `async def` vs `def` in FastAPI routes, and what are the performance implications?"
+      ]
     },
     {
       "id": "fastapi-async-performance",
@@ -111,19 +116,20 @@
           {
             "type": "key_points",
             "title": "Key Points",
-            "content": "- **`async def` + sync I/O = blocked event loop** \u2014 synchronous calls like `requests.get()` freeze all concurrent requests\n- **`def` routes run in a thread pool** \u2014 FastAPI automatically handles threading, making sync code safe without manual executor calls\n- **Full async stack required** \u2014 `httpx.AsyncClient`, `asyncpg`, and `aioredis` replace their sync counterparts for true concurrency\n- **`run_in_threadpool` for mixed code** \u2014 offload CPU-heavy or unavoidably sync operations without blocking the event loop\n- **Profile before assuming async is faster** \u2014 measure with `locust` or `k6`; thread-pool sync often matches async for DB-bound workloads"
+            "content": "- **`async def` + sync I/O = blocked event loop** — synchronous calls like `requests.get()` freeze all concurrent requests\n- **`def` routes run in a thread pool** — FastAPI automatically handles threading, making sync code safe without manual executor calls\n- **Full async stack required** — `httpx.AsyncClient`, `asyncpg`, and `aioredis` replace their sync counterparts for true concurrency\n- **`run_in_threadpool` for mixed code** — offload CPU-heavy or unavoidably sync operations without blocking the event loop\n- **Profile before assuming async is faster** — measure with `locust` or `k6`; thread-pool sync often matches async for DB-bound workloads"
           },
           {
             "type": "speakable_answer",
-            "content": "The rule: use `async def` only when all I/O operations inside it are awaited using async libraries. Use `def` for CPU-bound work or when using synchronous libraries like `psycopg2` or `requests`.\n\nFastAPI runs async routes on the main event loop \u2014 if you block the event loop with a synchronous call (like `requests.get()` or a synchronous DB query), you block all other concurrent requests. FastAPI runs sync `def` routes in a thread pool automatically, which is actually safer for blocking code.\n\nThe correct async stack: `httpx.AsyncClient` instead of `requests`, `asyncpg` or SQLAlchemy with async session instead of psycopg2, `aioredis` instead of redis-py. If your DB library is synchronous, use sync `def` routes \u2014 FastAPI handles the threading."
-          },
-          {
-            "type": "deep_explanation",
-            "content": "## The Wrong Way (Blocking Event Loop)\n\n```python\nimport requests  # Synchronous HTTP library\n\n@app.get('/weather')  \nasync def get_weather(city: str):  # async def with blocking call = WRONG\n    # This BLOCKS the entire event loop!\n    response = requests.get(f'https://api.weather.com/{city}')\n    return response.json()\n```\n\nEvery request waits for this HTTP call. During that wait, FastAPI cannot serve other requests.\n\n## The Right Way \u2014 Async I/O\n\n```python\nimport httpx\n\nhttp_client = httpx.AsyncClient()\n\n@app.get('/weather')\nasync def get_weather(city: str):  # async def + async library = CORRECT\n    response = await http_client.get(f'https://api.weather.com/{city}')\n    return response.json()\n\n@app.on_event('shutdown')\nasync def shutdown():\n    await http_client.aclose()\n```\n\nDuring the `await`, the event loop can process other requests. True concurrency.\n\n## Using Sync Libraries Safely\n\n```python\n# If you must use synchronous libraries \u2014 use sync def\n@app.get('/users')\ndef get_users(db: Session = Depends(get_db)):  # sync def \u2014 FastAPI runs in threadpool\n    return db.query(User).all()\n\n# Or run blocking code in executor\nfrom fastapi.concurrency import run_in_threadpool\n\n@app.get('/report')\nasync def generate_report():\n    # CPU-heavy or sync operation \u2014 run in thread pool\n    result = await run_in_threadpool(generate_pdf_sync, data)\n    return {'url': result}\n```\n\n## Async Database with SQLAlchemy 2.0\n\n```python\nfrom sqlalchemy.ext.asyncio import AsyncSession, create_async_engine\n\nengine = create_async_engine('postgresql+asyncpg://...')\n\nasync def get_db():\n    async with AsyncSession(engine) as session:\n        yield session\n\n@app.get('/users')\nasync def get_users(db: AsyncSession = Depends(get_db)):\n    result = await db.execute(select(User))\n    return result.scalars().all()\n```"
+            "content": "The rule: use `async def` only when all I/O operations inside it are awaited using async libraries. Use `def` for CPU-bound work or when using synchronous libraries like `psycopg2` or `requests`.\n\nFastAPI runs async routes on the main event loop — if you block the event loop with a synchronous call (like `requests.get()` or a synchronous DB query), you block all other concurrent requests. FastAPI runs sync `def` routes in a thread pool automatically, which is actually safer for blocking code.\n\nThe correct async stack: `httpx.AsyncClient` instead of `requests`, `asyncpg` or SQLAlchemy with async session instead of psycopg2, `aioredis` instead of redis-py. If your DB library is synchronous, use sync `def` routes — FastAPI handles the threading."
           },
           {
             "type": "important_points",
-            "content": "- **`async def` with sync library = worse than sync `def`** \u2014 you get the overhead of async with none of the benefits\n- **FastAPI runs `def` routes in a thread pool** \u2014 safe for synchronous, blocking code\n- **Use `httpx` not `requests`** for outbound HTTP in async routes\n- **`asyncpg` or SQLAlchemy async** for PostgreSQL in async routes\n- **Profile with `locust` or `k6`** \u2014 measure actual throughput, don't assume async is faster"
+            "content": "- **`async def` with sync library = worse than sync `def`** — you get the overhead of async with none of the benefits\n- **FastAPI runs `def` routes in a thread pool** — safe for synchronous, blocking code\n- **Use `httpx` not `requests`** for outbound HTTP in async routes\n- **`asyncpg` or SQLAlchemy async** for PostgreSQL in async routes\n- **Profile with `locust` or `k6`** — measure actual throughput, don't assume async is faster"
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Understand the decision",
+            "content": "The rule: use `async def` only when all I/O operations inside it are awaited using async libraries.\n\nUse `def` for CPU-bound work or when using synchronous libraries like `psycopg2` or `requests`.\n\nFastAPI runs async routes on the main event loop — if you block the event loop with a synchronous call (like `requests.get()` or a synchronous DB query), you block all other concurrent requests. FastAPI runs sync `def` routes in a thread pool automatically, which is actually safer for blocking code. The correct async stack: `httpx.AsyncClient` instead of `requests`, `asyncpg` or SQLAlchemy with async session instead of psycopg2, `aioredis` instead of redis-py. If your DB library is synchronous, use sync `def` routes — FastAPI handles the threading."
           }
         ]
       },
@@ -141,9 +147,9 @@
             "kind": "differences",
             "layout": "bullets",
             "items": [
-              "async def + sync I/O = blocked event loop \u2014 synchronous calls like requests",
-              "get() freeze all concurrent requests def routes run in a thread pool \u2014 FastAPI automatically handles threading, making sync code safe without manual executor calls Full async stack required \u2014 httpx",
-              "AsyncClient, asyncpg, and aioredis replace their sync counterparts for true concurrency run_in_threadpool for mixed code \u2014 offload CPU-heavy or unavoidably sync operations without blocking the event loop Profile before assuming async is faster \u2014 measure with locust or k6; thread-pool sync often matches async for DB-bound workloads"
+              "async def + sync I/O = blocked event loop — synchronous calls like requests",
+              "get() freeze all concurrent requests def routes run in a thread pool — FastAPI automatically handles threading, making sync code safe without manual executor calls Full async stack required — httpx",
+              "AsyncClient, asyncpg, and aioredis replace their sync counterparts for true concurrency run_in_threadpool for mixed code — offload CPU-heavy or unavoidably sync operations without blocking the event loop Profile before assuming async is faster — measure with locust or k6; thread-pool sync often matches async for DB-bound workloads"
             ]
           },
           {
@@ -157,12 +163,16 @@
             "text": ""
           }
         ],
-        "cap": "If your DB library is synchronous, use sync def routes \u2014 FastAPI handles the threading.",
+        "cap": "If your DB library is synchronous, use sync def routes — FastAPI handles the threading.",
         "familiarity_anchors": [],
         "tts_overrides": {},
         "speakable_status": "pending_review",
         "followup_handoff": []
-      }
+      },
+      "followup_questions": [
+        "How does FastAPI's dependency injection system work, and what makes it powerful for building APIs?",
+        "How does Pydantic work in FastAPI, and how do you handle complex validation, custom validators, and nested models?"
+      ]
     },
     {
       "id": "fastapi-pydantic-validation",
@@ -187,19 +197,20 @@
           {
             "type": "key_points",
             "title": "Key Points",
-            "content": "- **Separate input, output, and DB models** \u2014 never return ORM objects directly; `response_model` controls exactly what the client sees\n- **`@field_validator` for business rules** \u2014 password strength, phone format, and email validation run before the handler executes\n- **`@model_validator(mode='after')` for cross-field checks** \u2014 compare password and confirm_password after individual field validation passes\n- **`from_attributes = True`** \u2014 Pydantic v2 setting that lets models read directly from SQLAlchemy object attributes\n- **`exclude_unset=True` for PATCH** \u2014 `.model_dump(exclude_unset=True)` returns only fields the client sent, enabling partial updates"
+            "content": "- **Separate input, output, and DB models** — never return ORM objects directly; `response_model` controls exactly what the client sees\n- **`@field_validator` for business rules** — password strength, phone format, and email validation run before the handler executes\n- **`@model_validator(mode='after')` for cross-field checks** — compare password and confirm_password after individual field validation passes\n- **`from_attributes = True`** — Pydantic v2 setting that lets models read directly from SQLAlchemy object attributes\n- **`exclude_unset=True` for PATCH** — `.model_dump(exclude_unset=True)` returns only fields the client sent, enabling partial updates"
           },
           {
             "type": "speakable_answer",
-            "content": "Pydantic is FastAPI's data validation backbone. Every request body, query parameter, and response body is a Pydantic model. FastAPI uses the model's type hints to validate incoming data, generate OpenAPI docs, and serialize responses \u2014 automatically.\n\nFor production APIs: separate input models from output models from database models. Never return your SQLAlchemy model directly \u2014 create a Pydantic response model that explicitly lists what's exposed. Use `@field_validator` for business rule validation like phone number format or password strength. Use `model_validator` for cross-field validation like confirming password matches confirm_password."
-          },
-          {
-            "type": "deep_explanation",
-            "content": "## Three Model Pattern (Input / Output / DB)\n\n```python\nfrom pydantic import BaseModel, field_validator, model_validator, EmailStr\nfrom typing import Optional\nimport re\n\n# Input: what we accept from the client\nclass UserCreate(BaseModel):\n    email: EmailStr\n    password: str\n    confirm_password: str\n    phone: Optional[str] = None\n\n    @field_validator('password')\n    @classmethod\n    def password_strength(cls, v: str) -> str:\n        if len(v) < 8:\n            raise ValueError('Password must be at least 8 characters')\n        if not re.search(r'[A-Z]', v):\n            raise ValueError('Password must contain an uppercase letter')\n        if not re.search(r'\\d', v):\n            raise ValueError('Password must contain a digit')\n        return v\n\n    @field_validator('phone')\n    @classmethod\n    def phone_format(cls, v: Optional[str]) -> Optional[str]:\n        if v is not None:\n            cleaned = re.sub(r'\\D', '', v)\n            if len(cleaned) not in (10, 11):\n                raise ValueError('Phone must be 10 or 11 digits')\n            return cleaned\n        return v\n\n    @model_validator(mode='after')\n    def passwords_match(self) -> 'UserCreate':\n        if self.password != self.confirm_password:\n            raise ValueError('Passwords do not match')\n        return self\n\n# Output: what we expose to the client (never expose password_hash)\nclass UserOut(BaseModel):\n    id: int\n    email: str\n    phone: Optional[str]\n    is_active: bool\n\n    class Config:\n        from_attributes = True  # Pydantic v2: read from ORM object attributes\n\n# Route\n@app.post('/users', response_model=UserOut, status_code=201)\nasync def create_user(user_in: UserCreate, db: AsyncSession = Depends(get_db)):\n    user = User(\n        email=user_in.email,\n        password_hash=hash_password(user_in.password),\n        phone=user_in.phone,\n    )\n    db.add(user)\n    await db.commit()\n    await db.refresh(user)\n    return user  # Pydantic serializes using UserOut model\n```\n\n## Custom Error Handling\n\n```python\nfrom fastapi import Request\nfrom fastapi.responses import JSONResponse\nfrom pydantic import ValidationError\n\n@app.exception_handler(RequestValidationError)\nasync def validation_exception_handler(request: Request, exc):\n    return JSONResponse(\n        status_code=422,\n        content={\n            'detail': 'Validation failed',\n            'errors': [\n                {\n                    'field': '.'.join(str(loc) for loc in err['loc']),\n                    'message': err['msg'],\n                    'type': err['type'],\n                }\n                for err in exc.errors()\n            ],\n        },\n    )\n```"
+            "content": "Pydantic is FastAPI's data validation backbone. Every request body, query parameter, and response body is a Pydantic model. FastAPI uses the model's type hints to validate incoming data, generate OpenAPI docs, and serialize responses — automatically.\n\nFor production APIs: separate input models from output models from database models. Never return your SQLAlchemy model directly — create a Pydantic response model that explicitly lists what's exposed. Use `@field_validator` for business rule validation like phone number format or password strength. Use `model_validator` for cross-field validation like confirming password matches confirm_password."
           },
           {
             "type": "important_points",
-            "content": "- **Always use `response_model`** \u2014 prevents accidentally exposing internal fields like password hashes\n- **`from_attributes = True`** (Pydantic v2) \u2014 needed to create Pydantic models from ORM objects\n- **`model_validator(mode='after')`** \u2014 cross-field validation after individual fields are validated\n- **`Optional[X] = None` vs `X | None`** \u2014 both work in Pydantic v2; the latter is more Pythonic\n- **`exclude_unset=True`** in `.model_dump()` \u2014 for PATCH endpoints, only update fields the client sent"
+            "content": "- **Always use `response_model`** — prevents accidentally exposing internal fields like password hashes\n- **`from_attributes = True`** (Pydantic v2) — needed to create Pydantic models from ORM objects\n- **`model_validator(mode='after')`** — cross-field validation after individual fields are validated\n- **`Optional[X] = None` vs `X | None`** — both work in Pydantic v2; the latter is more Pythonic\n- **`exclude_unset=True`** in `.model_dump()` — for PATCH endpoints, only update fields the client sent"
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Build the mental model",
+            "content": "The rule: use `async def` only when all I/O operations inside it are awaited using async libraries.\n\nUse `def` for CPU-bound work or when using synchronous libraries like `psycopg2` or `requests`.\n\nFastAPI runs async routes on the main event loop — if you block the event loop with a synchronous call (like `requests.get()` or a synchronous DB query), you block all other concurrent requests. FastAPI runs sync `def` routes in a thread pool automatically, which is actually safer for blocking code. The correct async stack: `httpx.AsyncClient` instead of `requests`, `asyncpg` or SQLAlchemy with async session instead of psycopg2, `aioredis` instead of redis-py. If your DB library is synchronous, use sync `def` routes — FastAPI handles the threading."
           }
         ]
       },
@@ -224,7 +235,7 @@
             "kind": "edge_cases",
             "layout": "bullets",
             "items": [
-              "Separate input, output, and DB models \u2014 never return ORM objects directly; response_model controls exactly what the client sees @field_validator for business rules \u2014 password strength, phone format, and email validation run before the handler executes @model_validator(mode='after') for cross-field checks \u2014 compare password and confirm_password after individual field validation passes from_attributes = True \u2014 Pydantic v2 setting that lets models read directly from SQLAlchemy object attributes exclude_unset=True for PATCH \u2014",
+              "Separate input, output, and DB models — never return ORM objects directly; response_model controls exactly what the client sees @field_validator for business rules — password strength, phone format, and email validation run before the handler executes @model_validator(mode='after') for cross-field checks — compare password and confirm_password after individual field validation passes from_attributes = True — Pydantic v2 setting that lets models read directly from SQLAlchemy object attributes exclude_unset=True for PATCH —",
               "model_dump(exclude_unset=True) returns only fields the client sent, enabling partial updates"
             ]
           },
@@ -239,7 +250,11 @@
         "tts_overrides": {},
         "speakable_status": "pending_review",
         "followup_handoff": []
-      }
+      },
+      "followup_questions": [
+        "How does FastAPI's dependency injection system work, and what makes it powerful for building APIs?",
+        "When should you use `async def` vs `def` in FastAPI routes, and what are the performance implications?"
+      ]
     }
   ]
 }

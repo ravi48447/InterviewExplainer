@@ -159,6 +159,32 @@ export interface AnswerSection {
   sectionOrder: number;
   content: string;
   sectionTitle?: string;
+  speakingCues?: SpeakingCue[];
+}
+
+export interface SpeakingCueSupportItem {
+  label: string;
+  value?: string;
+  detail?: string;
+  tone?: 'neutral' | 'blue' | 'green' | 'orange';
+}
+
+export interface SpeakingCueSupport {
+  type: 'code' | 'trace' | 'checklist' | 'comparison';
+  title?: string;
+  code?: string;
+  language?: string;
+  caption?: string;
+  items?: SpeakingCueSupportItem[];
+}
+
+export interface SpeakingCue {
+  cue: string;
+  stage?: string;
+  leadIn?: string;
+  spokenText: string;
+  recallRule?: string;
+  support?: SpeakingCueSupport;
 }
 
 export interface ConceptLink {

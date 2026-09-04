@@ -32,7 +32,7 @@ function NutshellCard({ children }: { children: React.ReactNode }) {
   const d = theme === "dark";
 
   return (
-    <section className="mb-6">
+    <section className="mb-6" data-testid="quick-revision">
       <div
         className={`rounded-xl overflow-hidden shadow-md ${
           d

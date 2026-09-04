@@ -82,7 +82,7 @@ export default async function V2StackPage({ params }: { params: Promise<PagePara
   const validLevel = level as Level;
 
   const content = resolveStackContent(lang, track, validLevel, stack);
-  if (!content || content.questions.length === 0) notFound();
+  if (!content?.questions?.length) notFound();
 
   const questions = getV2QuestionsForStack(lang, track, validLevel, stack);
   const stackName = content.meta?.stack ? toDisplayName(content.meta.stack) : toDisplayName(stack);

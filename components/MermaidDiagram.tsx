@@ -28,13 +28,15 @@ function loadMermaid(): Promise<MermaidApi> {
         useMaxWidth: true,
       },
       themeVariables: {
-        // Semantic tokens via CSS variables so diagrams follow the active theme.
-        primaryColor: "hsl(var(--surface))",
-        primaryTextColor: "hsl(var(--text-primary))",
-        primaryBorderColor: "hsl(var(--primary))",
-        lineColor: "hsl(var(--muted-foreground))",
-        secondaryColor: "hsl(var(--surface-subtle))",
-        tertiaryColor: "hsl(var(--muted))",
+        // Mermaid parses these values before the SVG reaches the page, so CSS
+        // variable expressions are not supported by every renderer version.
+        // Stable, accessible colours keep diagrams reliable in both themes.
+        primaryColor: "#eff6ff",
+        primaryTextColor: "#0f172a",
+        primaryBorderColor: "#2563eb",
+        lineColor: "#64748b",
+        secondaryColor: "#f0fdf4",
+        tertiaryColor: "#fff7ed",
         fontSize: "14px",
       },
     });

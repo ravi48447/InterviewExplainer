@@ -5,6 +5,7 @@ import {
   BookOpen,
   CheckCircle,
   ClipboardList,
+  ChevronDown,
   Layers,
   Lightbulb,
   List,
@@ -32,6 +33,24 @@ interface SectionGroup {
 }
 
 const CODE_BLOCK_TYPES = new Set(["before_code", "after_code"]);
+
+function learningParagraphs(content: string): string[] {
+  if (/```|^\s*[-*+]\s|^\s*\d+[.)]\s|^\s*#{1,6}\s|^\s*\|/m.test(content)) {
+    return [];
+  }
+
+  return content
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
+const LEARNING_LABELS = [
+  "Definition",
+  "How it works",
+  "Key details",
+  "Boundary to remember",
+];
 
 function groupSections(sections: AnswerSection[]): SectionGroup[] {
   const groups: SectionGroup[] = [];
@@ -329,7 +348,7 @@ export function DetailedExplanation({
   );
 }
 
-function SectionRenderer({
+export function SectionRenderer({
   section,
   phaseIndex,
   theme,
@@ -357,6 +376,59 @@ function SectionRenderer({
     type === "deep_explanation" ||
     type === "detailed_explanation"
   ) {
+    const paragraphs = learningParagraphs(content);
+    const canBuildLearningModel =
+      (type === "deep_explanation" || type === "detailed_explanation") &&
+      paragraphs.length >= 3 &&
+      paragraphs.length <= 4;
+
+    if (canBuildLearningModel) {
+      return (
+        <div>
+          {title && <h3 className={`${headingText} mb-4 leading-snug`}>{title}</h3>}
+          <div className={`overflow-hidden rounded-xl border ${d ? "border-border/55 bg-surface/40" : "border-stone-200 bg-white"}`}>
+            <div className={`border-b px-4 py-4 sm:px-5 ${d ? "border-border/55 bg-primary/[0.06]" : "border-primary/15 bg-primary/[0.035]"}`}>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-primary" />
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-primary">
+                  {LEARNING_LABELS[0]}
+                </span>
+              </div>
+              <div className="text-[15.5px] font-medium leading-7 text-foreground [&_code]:border-slate-300 [&_code]:bg-slate-100 [&_code]:text-slate-700 dark:[&_code]:border-slate-600 dark:[&_code]:bg-slate-800 dark:[&_code]:text-slate-100">
+                <MarkdownContent content={paragraphs[0]} inline />
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-3 sm:divide-x sm:divide-border/60">
+              {paragraphs.slice(1).map((paragraph, index) => {
+                const itemIndex = index + 1;
+                const isBoundary = itemIndex === paragraphs.length - 1;
+                const itemLabel = isBoundary
+                  ? "Boundary to remember"
+                  : LEARNING_LABELS[itemIndex];
+                return (
+                  <div
+                    key={`${itemLabel}-${index}`}
+                    className={`px-4 py-4 sm:px-5 ${index > 0 ? "border-t border-border/60 sm:border-t-0" : ""}`}
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className={`h-1.5 w-1.5 rounded-full ${isBoundary ? "bg-warning" : itemIndex === 2 ? "bg-success" : "bg-primary"}`} />
+                      <span className={`text-[10px] font-extrabold uppercase tracking-[0.11em] ${isBoundary ? "text-amber-700 dark:text-amber-300" : itemIndex === 2 ? "text-success" : "text-primary"}`}>
+                        {itemLabel}
+                      </span>
+                    </div>
+                    <div className="text-[12.5px] leading-[1.7] text-foreground/85 [&_code]:border-slate-300 [&_code]:bg-slate-100 [&_code]:text-slate-700 dark:[&_code]:border-slate-600 dark:[&_code]:bg-slate-800 dark:[&_code]:text-slate-100">
+                      <MarkdownContent content={paragraph} inline />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div>
         {title && <h3 className={`${headingText} mb-3 leading-snug`}>{title}</h3>}
@@ -421,22 +493,25 @@ function SectionRenderer({
     type === "flow_diagram" ||
     type === "sequence_diagram"
   ) {
+    const opensAsCompactVisual = type === "flow_diagram" && content.length < 700;
     return (
-      <div>
-        {title && (
-          <div className="flex items-center gap-2 mb-3">
-            <Layers className="h-3.5 w-3.5 text-primary dark:text-primary" />
-            <h3
-              className={`text-[13px] font-bold ${
-                d ? "text-muted-foreground" : "text-foreground"
-              }`}
-            >
-              {title}
-            </h3>
+      <details open={opensAsCompactVisual} className={`group rounded-lg border ${d ? "border-border/60 bg-surface/40" : "border-border bg-stone-50/55"}`}>
+        <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
+          <Layers className="h-4 w-4 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[13px] font-bold text-foreground">{title || "Concept visual"}</h3>
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+              {opensAsCompactVisual ? "Follow the model from left to right" : "Optional visual · open when you want to trace the flow"}
+            </p>
           </div>
-        )}
-        <MarkdownContent content={content} />
-      </div>
+          <span className="text-[11px] font-semibold text-primary group-open:hidden">Open visual</span>
+          <span className="hidden text-[11px] font-semibold text-muted-foreground group-open:inline">Close</span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className={`border-t px-3 py-4 sm:px-4 ${d ? "border-border/60" : "border-border"}`}>
+          <MarkdownContent content={content} />
+        </div>
+      </details>
     );
   }
 

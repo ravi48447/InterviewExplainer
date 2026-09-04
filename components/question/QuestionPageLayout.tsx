@@ -30,7 +30,9 @@ import { MarkCompleteButton } from "@/components/mark-complete-button";
 import ReadingProgressBar from "@/components/ReadingProgressBar";
 import ViewTracker from "@/components/ViewTracker";
 import { CompanyTagsBadges } from "./CompanyTagsBadges";
+import { InterviewSpeakingStudio } from "./InterviewSpeakingStudio";
 import { QuickAnswer } from "./QuickAnswer";
+import { SectionRenderer } from "./DetailedExplanation";
 import { ContentThemeProvider, useContentTheme } from "./ThemeContext";
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -98,6 +100,70 @@ function deepDiveToMarkdown(sections: AnswerSection[]): string {
   }
   return parts.join("\n\n");
 }
+
+type DeepDiveTone = "blue" | "green" | "amber";
+
+function deepDivePresentation(section: AnswerSection, index: number): {
+  label: string;
+  tone: DeepDiveTone;
+} {
+  const type = section.sectionType;
+
+  if (type === "code_example" || type === "before_code" || type === "after_code") {
+    return { label: "See it in code", tone: "green" };
+  }
+  if (type.includes("diagram") || type === "concept_map") {
+    return { label: "Visualise it", tone: "blue" };
+  }
+  if (type === "comparison_table" || type === "tradeoffs") {
+    return { label: "Compare", tone: "amber" };
+  }
+  if (
+    type.includes("mistake") ||
+    type.includes("warning") ||
+    type.includes("pitfall") ||
+    type === "problem_statement" ||
+    type === "diagnosis"
+  ) {
+    return { label: "Watch the boundary", tone: "amber" };
+  }
+  if (
+    type === "when_to_use" ||
+    type === "real_world_example" ||
+    type === "scenario_based" ||
+    type === "best_practices"
+  ) {
+    return { label: "Apply it", tone: "green" };
+  }
+
+  return { label: index === 0 ? "Understand" : "Build the model", tone: "blue" };
+}
+
+const deepDiveToneClasses: Record<DeepDiveTone, {
+  dot: string;
+  label: string;
+  number: string;
+  edge: string;
+}> = {
+  blue: {
+    dot: "bg-primary",
+    label: "text-primary",
+    number: "border-primary/20 bg-primary/[0.055] text-primary",
+    edge: "border-t-primary/45",
+  },
+  green: {
+    dot: "bg-success",
+    label: "text-success",
+    number: "border-success/20 bg-success/[0.055] text-success",
+    edge: "border-t-success/45",
+  },
+  amber: {
+    dot: "bg-warning",
+    label: "text-amber-700 dark:text-amber-300",
+    number: "border-warning/25 bg-warning/[0.065] text-amber-700 dark:text-amber-300",
+    edge: "border-t-warning/50",
+  },
+};
 
 export interface V2ExtendedFields {
   directAnswer?: string;
@@ -177,6 +243,11 @@ function QuestionPageLayoutInner({
     questionUrlSkipStack
       ? `${questionUrlPrefix}/${qSlug}`
       : `${questionUrlPrefix}/${qStack ?? stackSlug}/${qSlug}`;
+  const logoSource = questionUrlPrefix.toLowerCase();
+  const technologySlug = logoSource.includes("frontend")
+    ? "javascript"
+    : ["java", "go", "python", "ruby", "javascript", "typescript", "kotlin", "cplusplus", "csharp"]
+        .find((slug) => logoSource.includes(`/${slug}-`) || logoSource.includes(`/${slug}/`));
   const { theme, toggleTheme } = useContentTheme();
   const d = theme === "dark";
   const [curriculumOpen, setCurriculumOpen] = useState(false);
@@ -248,7 +319,6 @@ function QuestionPageLayoutInner({
 
   // Zone 2 + Zone 3 both render through the single <MarkdownContent> framework.
   const answerMarkdown = speakableText || v2?.directAnswer || "";
-  const deepDiveMarkdown = deepDiveToMarkdown(deepDiveSections);
   const followups = v2?.followupQuestions ?? [];
 
   const currentQuickQ =
@@ -720,7 +790,7 @@ function QuestionPageLayoutInner({
                 v2.interviewerIntent.common_mistake ||
                 v2.interviewerIntent.to_stand_out) && (
                 <div
-                  className={`mb-6 rounded-xl border overflow-hidden ${
+                  className={`hidden mb-6 rounded-xl border overflow-hidden ${
                     d
                       ? "border-border/60 bg-code"
                       : "border-border bg-surface"
@@ -821,7 +891,7 @@ function QuestionPageLayoutInner({
 
             {/* ── Zone 2: Interview Answer ── */}
             {answerMarkdown && (
-              <section className="mb-6">
+              <section className="hidden mb-6" aria-hidden="true">
                 <div
                   className={`rounded-xl overflow-hidden shadow-lg ${
                     d
@@ -864,38 +934,103 @@ function QuestionPageLayoutInner({
               </section>
             )}
 
+            {/* ── Zone 2: practise one complete, detailed interview answer ── */}
+            {answerMarkdown && (
+              <InterviewSpeakingStudio
+                content={answerMarkdown}
+                questionId={Number(data.id)}
+                technologySlug={technologySlug}
+                cues={speakableAnswerSection?.speakingCues}
+                speakableV2={v2?.speakableV2}
+              />
+            )}
+
             {/* ── Zone 3: Deep Dive ── */}
-            {deepDiveMarkdown && (
-              <section className="mb-6">
+            {deepDiveSections.length > 0 && (
+              <section className="mb-6" data-testid="deep-dive">
                 <div
-                  className={`rounded-xl overflow-hidden shadow-md ${
+                  className={`overflow-hidden rounded-2xl border shadow-sm ${
                     d
-                      ? "border border-border/60 bg-surface shadow-black/40"
-                      : "border border-border bg-background shadow-slate-100/60"
+                      ? "border-border/60 bg-surface shadow-black/30"
+                      : "border-slate-200 bg-[#fffdf9] shadow-slate-200/50"
                   }`}
                 >
                   <div
-                    className={`flex items-center gap-2 px-5 py-2.5 border-b ${
+                    className={`flex flex-wrap items-center gap-3 border-b px-5 py-4 sm:px-6 ${
                       d
-                        ? "border-border/60 dark:bg-surface/60"
-                        : "border-border bg-surface"
+                        ? "border-border/60 bg-slate-950"
+                        : "border-slate-800 bg-[#172033]"
                     }`}
                   >
-                    <BookOpen
-                      className={`h-3.5 w-3.5 ${
-                        d ? "text-primary" : "text-primary dark:text-primary"
-                      }`}
-                    />
-                    <span
-                      className={`text-[11px] font-bold uppercase tracking-widest ${
-                        d ? "text-muted-foreground" : "text-muted-foreground"
-                      }`}
-                    >
-                      Deep dive
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/[0.06] text-[11px] font-extrabold tabular-nums text-blue-200">
+                      03
                     </span>
+                    <BookOpen className="h-4 w-4 shrink-0 text-blue-300" />
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-[14px] font-extrabold text-white">Deep dive</h2>
+                      <p className="mt-0.5 text-[11.5px] text-slate-300">
+                        Build the mental model, see it work, then test your understanding.
+                      </p>
+                    </div>
+                    <div className="ml-auto flex items-center gap-2 text-[10.5px] font-semibold text-slate-300">
+                      <span className="rounded-full border border-white/10 bg-white/[0.055] px-2.5 py-1">
+                        {deepDiveSections.length} focused {deepDiveSections.length === 1 ? "part" : "parts"}
+                      </span>
+                      {deepDiveSections.some((section) => section.sectionType.includes("code")) && (
+                        <span className="hidden items-center gap-1.5 rounded-full border border-emerald-300/15 bg-emerald-300/[0.06] px-2.5 py-1 text-emerald-200 sm:inline-flex">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                          Code included
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="px-6 py-5 sm:px-7 sm:py-6">
-                    <MarkdownContent content={deepDiveMarkdown} />
+                  <div className={`px-4 py-5 sm:px-6 sm:py-6 ${d ? "bg-surface" : "bg-stone-50/55"}`}>
+                    <div className="relative space-y-4">
+                      <span className={`absolute bottom-7 left-[17px] top-7 w-px ${d ? "bg-border/70" : "bg-slate-200"}`} aria-hidden="true" />
+                      {deepDiveSections.map((section, index) => {
+                        const presentation = deepDivePresentation(section, index);
+                        const tone = deepDiveToneClasses[presentation.tone];
+                        return (
+                          <article
+                            key={`${section.sectionType}-${index}`}
+                            className="relative pl-11 sm:pl-12"
+                          >
+                            <span className={`absolute left-0 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-xl border text-[10px] font-extrabold tabular-nums shadow-sm ${tone.number}`}>
+                              {String(index + 1).padStart(2, "0")}
+                            </span>
+                            <div className={`overflow-hidden rounded-xl border border-t-2 px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.035)] transition-colors sm:px-5 sm:py-5 ${tone.edge} ${d ? "border-x-border/55 border-b-border/55 bg-surface-elevated/20" : "border-x-stone-200 border-b-stone-200 bg-white hover:border-x-slate-300 hover:border-b-slate-300"}`}>
+                              <div className="mb-3 flex items-center gap-2">
+                                <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+                                <span className={`text-[10px] font-extrabold uppercase tracking-[0.14em] ${tone.label}`}>
+                                  {presentation.label}
+                                </span>
+                              </div>
+                              <SectionRenderer section={section} theme={theme} />
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+
+                    {followups.length > 0 && (
+                      <div className={`ml-11 mt-5 overflow-hidden rounded-xl border sm:ml-12 ${d ? "border-border/55 bg-surface-elevated/20" : "border-amber-200/70 bg-white"}`}>
+                        <div className={`flex items-center gap-2 border-b px-4 py-3 sm:px-5 ${d ? "border-border/55 bg-warning/[0.05]" : "border-amber-100 bg-amber-50/65"}`}>
+                          <HelpCircle className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+                          <div>
+                            <h3 className="text-[12px] font-extrabold text-foreground">Check your understanding</h3>
+                            <p className="mt-0.5 text-[10.5px] text-muted-foreground">Answer these without looking back.</p>
+                          </div>
+                        </div>
+                        <ol className="grid gap-px bg-border/55 sm:grid-cols-2">
+                          {followups.map((question, index) => (
+                            <li key={question} className={`flex gap-3 px-4 py-3.5 text-[12.5px] leading-relaxed text-foreground sm:px-5 ${d ? "bg-surface" : "bg-white"}`}>
+                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-amber-200 bg-amber-50 text-[9px] font-extrabold text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">{index + 1}</span>
+                              <span>{question}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
                   </div>
                 </div>
               </section>
@@ -903,7 +1038,7 @@ function QuestionPageLayoutInner({
 
             {/* ── Follow-up questions ── */}
             {followups.length > 0 && (
-              <section className="mb-6" aria-live="polite">
+              <section className="hidden mb-6" aria-live="polite">
                 <div
                   className={`rounded-xl overflow-hidden ${
                     d
