@@ -22,12 +22,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "Deliberately — the runtime randomizes the start so no code can rely on order. Sort the keys when order matters."
+            "content": "Deliberately — the runtime randomizes the start so no code can rely on order."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "It's random on purpose. The runtime picks a random starting bucket for each iteration, so the same map prints in different orders on different runs. Early Go had a deterministic order; people wrote code that depended on it; the Go team made it explicitly randomized so that dependency could never form silently. Now the spec says order is unspecified — treat every iteration order as an accident.\n\nWhen order matters, the pattern is fixed and small:\n\n```go\nkeys := make([]string, 0, len(m))\nfor k := range m {\n    keys = append(keys, k)\n}\nsort.Strings(keys)\nfor _, k := range keys {\n    fmt.Println(k, m[k])\n}\n```\n\nThe reason this matters in interviews and code review: code that 'worked' in testing with 3 keys can break in production with 300, because iteration order differences expose hidden assumptions — first-key-wins logic, dedup-by-iteration, pretty-printing diffs. If two runs of a test on the same map can disagree, the test is testing an accident."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart TD\n    RANGE[range m] --> RND[random start bucket]\n    RND --> VISIT[each key once — order unspecified]\n    VISIT --> SORT[sort keys for determinism]\n```"
           },
           {
             "type": "deep_explanation",
@@ -67,12 +72,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "v, ok := m[key] — ok is true only when the key exists. It distinguishes a stored zero value from a missing key."
+            "content": "v, ok := m[key] — ok is true only when the key exists."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "The two-value lookup answers presence and value separately:\n\n```go\nv, ok := m[key]\n```\n\nok is a bool: true means the key exists (and v holds its value — even if that value is the zero value), false means it doesn't (and v is the type's zero).\n\nThe reason it exists: the one-value lookup collapses 'missing' and 'stored zero' into the same result. m[\"admin\"] is false whether the key is absent or present-with-false — and those are usually very different situations. The comma-ok form splits them back apart.\n\n```go\n// ambiguous — rejects absent AND opted-out identically\nif !settings[\"notifications\"] { ... }\n\n// precise\nif enabled, ok := settings[\"notifications\"]; ok {\n    use(enabled)\n} else {\n    applyDefault()  // key never set\n}\n```\n\nUse it whenever a stored zero value is legitimate data — optional flags, counters at zero, empty strings that mean something. For accumulate patterns (m[w]++) the one-value form is correct because 'default to zero' is exactly what you want."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    LK[m key] --> Q{key present?}\n    Q -->|yes| V1[v + ok=true]\n    Q -->|no| V2[zero value + ok=false — not an error]\n```"
           },
           {
             "type": "deep_explanation",
@@ -112,12 +122,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "delete(m, key) — safe on any key, including missing ones, and on nil maps. No error, no return value."
+            "content": "delete(m, key) — safe on any key, including missing ones, and on nil maps."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "Deletion is a one-way, no-feedback operation:\n\n```go\ndelete(m, \"stale-key\")\n```\n\nThere's no return value, no error, and no effect if the key doesn't exist. Deleting a missing key is a no-op, not a failure — the runtime probes for the entry and, finding none, does nothing. The same call works on a nil map without panic: probe nothing, do nothing.\n\nThat silence is the design question. Deletion being total (works on any input) means you never guard it — no 'if _, ok := m[k]; ok { delete(m, k) }' dance; just delete. But the flip side is you can't tell from the call whether anything happened. If you need 'was it there?', capture that with a lookup first:\n\n```go\nif _, ok := m[k]; ok {\n    delete(m, k)\n    metrics.Evictions++\n}\n```\n\nThe practical notes: deleting doesn't shrink the map's allocated capacity (memory isn't returned until the map is garbage), and deleting during range over the map is safe — the iteration contract allows deletion of not-yet-visited keys."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    MK[make map K V] --> W{write to nil map?}\n    W -->|yes| PANIC[panic: assignment to entry in nil map]\n    W -->|no| OK[keys hash into buckets]\n    LIT[map literal] --> READY[write-ready from birth]\n```"
           },
           {
             "type": "deep_explanation",
@@ -157,12 +172,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "Reads (len, lookup → zero value), range (zero iterations), delete (no-op). Only writes panic."
+            "content": "Remember: Reads (len, lookup → zero value), range (zero iterations), delete (no-op). Only writes panic."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "The full inventory, nil map on the left of each:\n\n```go\nvar m map[string]int\n\nlen(m)              // 0 — safe\ncap-ish size        // 0 — safe\nm[\"key\"]            // 0, false — the zero value, safe\nfor k := range m    // zero iterations — safe\ndelete(m, \"k\")      // no-op — safe\nm[\"k\"] = 1          // PANIC: assignment to entry in nil map\n```\n\nOne operation panics; everything else answers as if the map were empty. The rule mirrors nil-map semantics generally: the map value is a pointer to the hash structure; nil points at nothing; reads and deletes can honestly report 'nothing there,' but a write needs somewhere to put the entry.\n\nThe bug pattern this creates is partial: functions that only read tolerate a nil map fine, so the defect hides until some later change adds a write. The defensive styles, in order of preference:\n\n```go\nm := map[string]int{}    // literal empty — write-ready from birth\nm := make(map[string]int) // explicit\n```\n\nThe empty literal is one type-safe expression that kills the whole bug class — there is no state of a map you can't write to after `m := map[string]int{}`."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart TD\n    NILVAR[nil channel] --> SENDS[send: parks forever]\n    NILVAR --> RECV[receive: parks forever]\n    NILVAR --> SELECT[select: case disabled — the one legal use]\n```"
           },
           {
             "type": "deep_explanation",
@@ -202,12 +222,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "Collect keys into a slice, sort it, range over the sorted keys — the standard pattern, since map order is deliberately random."
+            "content": "Remember: Collect keys into a slice, sort it, range over the sorted keys — the standard pattern, since map."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "Since the language forbids relying on iteration order, deterministic iteration is a three-move pattern:\n\n```go\nkeys := make([]string, 0, len(m))  // pre-sized: no growth\nfor k := range m {\n    keys = append(keys, k)\n}\nsort.Strings(keys)\nfor _, k := range keys {\n    fmt.Println(k, m[k])\n}\n```\n\nExtract, sort, then walk the keys and index the map. The pre-size on the key slice matters at scale — len(m) is known, so the append loop never reallocates.\n\nThree variations you'll meet:\n\nsort.Strings for string keys, sort.Ints for ints; anything else gets sort.Slice(keys, func(i, j int) bool { ... }) with your comparison.\n\nIf you need value-ordered (top-N by count, say), sort the keys with a custom comparator that reads the map: sort.Slice(keys, func(i, j int) bool { return m[keys[i]] > m[keys[j]] }).\n\nIf you only need the first N sorted keys, sort a copy or use a partial approach — but profile before adding complexity; full sort of a key slice is fine at most real sizes."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart TD\n    RANGE[range m] --> RND[random start bucket]\n    RND --> VISIT[each key once — order unspecified]\n    VISIT --> SORT[sort keys for determinism]\n```"
           },
           {
             "type": "deep_explanation",

@@ -22,12 +22,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "ch <- v sends v; v := <-ch receives. On an unbuffered channel both operations block until the other side is present — the send/receive meet is the synchronization."
+            "content": "ch <- v sends v; v := <-ch receives."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "The two operators are the whole channel interface:\n\n```go\nch <- 42       // send 42 into ch\nv := <-ch      // receive from ch into v\n<-ch           // receive and discard (fire-and-forget drain)\n```\n\nArrow points in the direction of data flow: ch <- v pushes into the channel, <-ch pulls out of it. The mnemonic: the arrow shows where the value goes.\n\nOn an unbuffered channel, each operation is half of a rendezvous. The send blocks until a receiver is ready; the receive blocks until a sender is. Whichever happens first waits; when the second arrives, the value transfers and both continue. That blocking IS the feature — it's why an unbuffered send returning is proof that someone received.\n\nOn a buffered channel: the send only blocks when the buffer is full; the receive only blocks when the buffer is empty. Values queue in between — the buffer absorbs the timing gap.\n\nThe operators also compose into other syntax: `v, ok := <-ch` (comma-ok — ok is false if the channel is closed and drained), and `for v := range ch` (receive until close). Those forms cover the three questions a receiver has: give me a value, is this channel still alive, and give me everything until it's done."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -67,12 +72,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "ok is false only when the channel is closed AND the buffer is drained. It distinguishes 'a real zero value' from 'channel finished'."
+            "content": "ok is false only when the channel is closed AND the buffer is drained."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "The comma-ok form answers the receiver's real question — is this channel still live?\n\n```go\nv, ok := <-ch\n```\n\nok is true: a value was received (v holds it — even if v is the zero value of the type, because someone SENT a zero). ok is false: the channel is closed and there are no more values — v is the zero value as a placeholder, not data.\n\nThe case it exists for: a channel of ints where 0 is legitimate data. Without ok, a closed-drained channel and a channel that sent 0 are indistinguishable — both give v == 0. With ok, the two cases split.\n\nThe mechanics of 'closed and drained': after close, buffered values are STILL received normally (ok true for each buffered value). Only when the buffer is empty do receives start returning (zero, false). Executed: send 10 into a buffered channel, close it, receive twice — first gives (10, true), second gives (0, false).\n\nSo ok false means exactly: no more values will ever arrive. That makes it the loop-until-done primitive when range doesn't fit (you need per-receive logic, or you're in a select):\n\n```go\nfor {\n    v, ok := <-ch\n    if !ok {\n        break // channel closed and drained\n    }\n    process(v)\n}\n```\n— which is exactly what range-over-channel does for you, which is why range is the idiom and comma-ok is the explicit form."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    IN[start state] --> STEP[operation]\n    STEP --> OUT[observable result]\n    OUT --> EDGE[the boundary case]\n```"
           },
           {
             "type": "deep_explanation",
@@ -112,12 +122,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "Panics immediately: send on closed channel. Close is a one-way, sender-owned signal — the channel must never be sent to after close."
+            "content": "Remember: Panics immediately: send on closed channel. Close is a one-way, sender-owned signal — the channel must never be."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "It panics — immediately, on the send:\n\n```go\nch := make(chan int, 1)\nclose(ch)\nch <- 1     // panic: send on closed channel\n```\n\nExecuted and transcribed: the panic text is literally `send on closed channel`. Not a block, not a silent drop — a hard failure designed to be loud.\n\nWhy so harsh: close broadcasts 'no more values coming' to every receiver. A send after close would make that broadcast a lie — receivers that already observed the close and exited would have missed the late value, and the channel's FIFO-then-tombstone contract would be incoherent. Go enforces the invariant with the only mechanism that can't be ignored: the panic.\n\nThe design consequence, and the rule to take into code: exactly one owner closes, and that owner is on the SEND side. Multiple senders can't safely close (who knows no one else will send?), which is why multi-sender topologies either use a dedicated closer channel, a sync.WaitGroup before the closer, or a single fan-in goroutine that owns the close. Receivers never close: closing from the receive side races every other receiver's comma-ok — the same one-way-signal logic, mirrored.\n\nThe panic-vs-block contrast is the interview-grade point: every other invalid channel state blocks (nil) or degrades gracefully (closed reads). Only the send-after-close panics, because it's the only state that would corrupt the channel's semantic contract rather than just stall it."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -157,12 +172,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "No — close is a send-side operation, and the type system forbids it: compile error on a <-chan. Closing is the sender announcing 'no more values', which a receiver has no authority to do."
+            "content": "No — close is a send-side operation, and the type system forbids it: compile error on a <-chan."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "The type system answers directly:\n\n```go\nfunc consume(in <-chan int) {\n    close(in)   // compile error: cannot close receive-only channel\n}\n```\n\nThe error is at compile time — the direction narrowing isn't just documentation, it's enforcement of the close ownership rule.\n\nWhy receivers can't close: close is a broadcast to all receivers that no more values are coming. A receiver closing the channel races every OTHER receiver — one consumer deciding 'we're done' while another is still waiting for a value it was promised would arrive. And it races the senders: the legitimate producer would then send-after-close — a panic — through no fault of its own logic. Close is a production-side fact ('I will never send again'), and only the producer knows it.\n\nThe pattern this forces (correctly): a consumer that's finished early doesn't close the input — it just stops reading and lets GC collect the channel when all references drop, or it signals via a SEPARATE cancellation channel (the context.Context pattern — Done() is a <-chan that the producer side closes). Cancellation and completion flow through their own channels, each closed by its owner. That separation — data channels closed by producers, cancellation channels closed by whoever owns the cancellation — is the idiom that keeps pipelines composable."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -202,12 +222,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "Go channels never drop messages — a send either blocks until delivered (or buffered) or panics on a closed channel. Dropping requires building it yourself: select with default, or a time-bounded select."
+            "content": "Go channels never drop messages — a send either blocks until delivered (or buffered) or panics on a closed channel."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "Channels have no drop mode. The three possible outcomes of a send, exhaustively:\n\n1. The value is delivered (unbuffered: a receiver took it; buffered: a slot holds it) — possibly after blocking.\n2. The send blocks because the channel is full or nil — the sender waits.\n3. The channel is closed — panic.\n\nThere is no fourth outcome where the value vanishes. That guarantee is what makes channels correct-by-construction for handoffs: a completed send is a delivered value, full stop.\n\nBut real systems need dropping — a metrics sink that shouldn't block the app when the collector is slow, a UI event queue that discards stale clicks. Go's answer is you build the drop with select:\n\n```go\nselect {\ncase ch <- v:\n    // delivered\n default:\n    // channel full — drop, log, count, never block the caller\n}\n```\n\nThe default case makes the select non-blocking: if no case is ready immediately, default runs. This is the idiom for bounded-queue-with-drop semantics on top of a buffered channel.\n\nThe time-bounded variant — a send that waits up to a deadline then gives up:\n\n```go\nselect {\ncase ch <- v:\n    // delivered in time\ncase <-time.After(100 * time.Millisecond):\n    // give up — timeout path\n}\n```\n\nThe interview point: the primitive is strict (block or panic), and the policy (drop, timeout, retry) is yours, built from select. Go keeps the channel honest — it will never silently lose data — and puts the lossy decisions where they belong: in explicit, visible application code."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",

@@ -22,12 +22,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "close(ch) — one-time, sender-side. It wakes all receivers with the 'no more values' signal: buffered values drain first, then receives return zero+false. Range loops terminate. Send after close panics."
+            "content": "close(ch) — one-time, sender-side. It wakes all receivers with the 'no more values' signal: buffered values drain first, then receives return zero+false. Send after close panics."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "close(ch) is a broadcast with exactly one meaning: no more values will ever be sent on this channel.\n\nWhat it does, in order:\n\n- Buffered values remain receivable. The close is a tombstone placed BEHIND the queue — receivers drain the real values first.\n- After the buffer empties, every receive returns immediately with (zero value, ok=false) — forever. A closed channel is permanently 'readable and empty'.\n- All goroutines blocked receiving on the channel wake up — with buffered values if available, otherwise with the zero/false result. No receiver waits forever on a closed channel.\n- A range loop over the channel terminates when the buffered values are exhausted and close is seen.\n- Sends after close panic: `send on closed channel`.\n\nExecuted demo of the drain-then-end behavior:\n\n```go\nch := make(chan int, 1)\nch <- 10\nclose(ch)\nv, ok := <-ch   // (10, true) — buffered value delivered\nv2, ok2 := <-ch // (0, false) — channel closed and drained\n```\n\nWhat close does NOT do: it doesn't free the channel (GC does that when no references remain), doesn't interrupt in-flight sends (there are none — close means you promise not to send), and doesn't notify senders of anything (senders are the ones who called it).\n\nThe one-sentence ownership law that prevents every close bug: the goroutine that owns sending closes — after its last send, once, with defer — and nobody else."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -67,12 +72,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "The sender — always. Close is the producer's statement 'I will never send again'. A receiver closing races other receivers and causes send-after-close panics for innocent senders."
+            "content": "The sender — always. Close is the producer's statement 'I will never send again'."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "Close belongs to the send side, and the reasoning is about who KNOWS what:\n\nA receiver knows only its own consumption — it finished reading. It cannot know whether other receivers are still waiting, or whether a sender has more to produce. Its 'we're done' is a guess about everyone.\n\nThe sender knows the production-side truth: whether more values will ever exist. close() is exactly that truth, published. Only the side with the fact can broadcast the fact.\n\nThe failure modes when a receiver closes:\n\n- Another receiver, blocked on the channel, gets the end signal and exits — but it was promised a value that was still being produced. Its logic sees 'channel closed' and reports completion that never happened.\n- The actual sender, still producing, sends after the receiver's close — panic. The producer's code is correct; the receiver's close created the crash.\n\nThe multi-sender problem is the same principle harder: with several producers, no single one knows when ALL are done — so nobody closes. The standard solutions: a fan-in goroutine that receives from all producers and owns the single output channel's close; or a sync.WaitGroup tracking senders, with one closer waiting on the group before closing. In both, close is still exercised by the side with the send authority — delegated to the one place that can see all senders.\n\nThe mirror rule: receivers never close, senders never assume receivers got everything. Buffered values after close WILL drain to whoever receives. close is not a flush — it's an end marker, and the data before it flows by the normal rules."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -112,12 +122,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "No — the second close panics: close of closed channel. Close is one-way and one-shot by design."
+            "content": "No — the second close panics: close of closed channel."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "close on an already-closed channel panics, immediately:\n\n```go\nch := make(chan int)\nclose(ch)\nclose(ch)   // panic: close of closed channel\n```\n\nThe panic text is verbatim `close of closed channel`. Same loud-failure philosophy as send-after-close: a double close means two owners each believed they held the lifecycle — an ownership bug that would otherwise silently confuse receivers (the second close's intent is unknowable: 'even MORE done'?). The panic is the stack trace pointing at the second closer.\n\nThe common real-world trigger: two goroutines both 'cleaning up' the same channel — a shutdown path that closes, then a defer that closes again (double-defer, or a defer plus an explicit close in an error branch). The fix is the single-owner discipline made mechanical: exactly ONE defer close(ch) in exactly one function — the producer — and no other close anywhere. When multiple senders exist, the fan-in or WaitGroup patterns centralize the close into one place precisely so this panic class cannot happen.\n\nThe state model makes all three close-related panics/blocks one family: closed channel + close → panic (double close); closed channel + send → panic (send after close); closed channel + receive → graceful drain then zero/false (the only gentle one, because receiving is the passive side — it can only observe). Every panic in the channel API is a lifecycle-contract violation; the design chose to make them loud rather than let lifecycle bugs become silent data-flow bugs."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -157,12 +172,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "Centralize: one owner closes. Either a fan-in goroutine that merges all senders and owns the output's close, or a WaitGroup over senders with a closer that waits. No sender ever closes 'its own' shared channel."
+            "content": "Centralize: one owner closes. Either a fan-in goroutine that merges all senders and owns the output's close, or a WaitGroup over senders with a closer that waits."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "A shared channel with multiple senders has a coordination problem: close means 'no one will ever send again', but each sender knows only its own intent. The two canonical solutions:\n\nFan-in pattern — a dedicated merger owns the output:\n\n```go\nfunc merge(outputs ...<-chan int) <-chan int {\n    out := make(chan int)\n    var wg sync.WaitGroup\n    wg.Add(len(outputs))\n    for _, ch := range outputs {\n        go func(c <-chan int) {\n            defer wg.Done()\n            for v := range c {   // each input closes normally\n                out <- v\n            }\n        }(ch)\n    }\n    go func() {\n        wg.Wait()      // ALL forwarding goroutines done\n        close(out)    // now, and only now: nobody will send\n    }()\n    return out\n}\n```\n\nEach upstream producer closes its own channel (its prerogative — it's the sole sender there). The merge goroutines drain those inputs; the closer waits for every one to finish, then closes the single output once. Exactly one close of the shared channel, executed by the one goroutine that has observed every sender finish.\n\nWaitGroup-at-source pattern — when the senders write directly into a shared channel:\n\n```go\nvar wg sync.WaitGroup\nfor i := 0; i < 3; i++ {\n    wg.Add(1)\n    go func(id int) {\n        defer wg.Done()\n        for _, v := range work(id) {\n            results <- v\n        }\n    }(i)\n}\ngo func() {\n    wg.Wait()\n    close(results)\n}()\n```\n\nSame law, different placement: the closer waits on the count of all senders. What both patterns share — and what the interview answer should name — is that 'who closes' is answered by 'who can PROVE production ended', and with multiple producers, proof is a synchronization primitive (WaitGroup) or an architecture (fan-in), never a per-sender close."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -202,12 +222,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "They remain receivable — close drains first, ends second. Receivers get every buffered value with ok=true, then zero+false after the buffer empties."
+            "content": "They remain receivable — close drains first, ends second."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "Close places the end marker behind the queue, not in place of it:\n\n```go\nch := make(chan int, 3)\nch <- 1\nch <- 2\nclose(ch)\n\nfmt.Println(<-ch) // 1 — buffered value, normal receive\nfmt.Println(<-ch) // 2 — buffered value, normal receive\nv, ok := <-ch     // 0, false — queue drained, now the end signal\n```\n\nExecuted order: the two real values arrive first; only after the buffer empties does the (zero, false) end-signal appear. A range loop over that channel receives 1, 2, then terminates — close guarantees the range sees every value sent before it, then stops.\n\nThis is the semantics that make pipelines reliable: a producer's defer close(out) never loses data. Whatever was already in flight (buffered) reaches consumers; the close just adds the ending. The composition 'send everything, then close' and 'range until close' forms a lossless handoff with an explicit termination — the reason channel pipelines can be built without any acknowledgment protocol.\n\nOne asymmetry to close the loop: unbuffered channels have nothing to drain — close is immediately visible to every receiver as the end signal (verified: an unbuffered channel closed then received gives (zero-value, false) on the first receive, no buffered phase). The drain-then-end behavior belongs to buffered channels; the end-immediately behavior to unbuffered ones. Both are 'no value is ever lost' — the difference is just whether there was a queue in front of the tombstone."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",

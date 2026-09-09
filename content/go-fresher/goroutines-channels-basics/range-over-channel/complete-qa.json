@@ -22,12 +22,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "for v := range ch receives until the channel is closed AND drained, then terminates. Without a close, an empty channel blocks the range forever — range has no other exit."
+            "content": "for v := range ch receives until the channel is closed AND drained, then terminates."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "range over a channel is a receive loop the compiler writes for you:\n\n```go\nfor v := range ch {\n    process(v)\n}\n```\n\nEach iteration is a receive; the loop ends when the channel delivers the end-signal — closed and drained. There is NO other exit: no condition clause, no break-on-error, nothing to configure. The loop either runs until close or blocks forever on an empty open channel.\n\nThat's why range over channels requires the close discipline: the producer MUST close (typically defer close at the top of the producing function), or every downstream range leaks into a permanent block. The pairing is the idiom:\n\n```go\nfunc produce(out chan<- int) {\n    defer close(out)  // the range's termination signal\n    for _, v := range data {\n        out <- v\n    }\n}\n\n// consumer\nfor v := range out {   // terminates exactly when produce returns\n    use(v)\n}\n```\n\nThe mechanics under the loop: range is the comma-ok receive — each iteration does v, ok := <-ch; ok true → body; ok false → exit. Buffered values drain normally (ok true for each); the close is seen only when the buffer empties. So range gets the lossless-drain-then-terminate guarantee the close semantics provide.\n\nWhere range DOESN'T fit: when the consumer has multiple channels, needs timeouts, or wants to stop early — those are select's jobs, with the comma-ok form explicitly written. range is the single-channel, run-to-completion loop — the simplest correct consumer, provided the producer owns the close."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -67,12 +72,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "Yes — break exits the range like any loop. The channel stays open, values keep buffering (up to capacity), and the goroutine that would send into it can block later. Early exit needs a cancellation signal if you want senders to stop too."
+            "content": "Yes — break exits the range like any loop. The channel stays open, values keep buffering (up to capacity), and the goroutine that would send into it can block later."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "break works exactly as you'd hope:\n\n```go\nfor v := range ch {\n    if v == stopValue {\n        break   // leaves the range; ch is still open\n    }\n    process(v)\n}\n```\n\nThe range ends, but the channel's life continues. The consequences differ by what's upstream:\n\nUnbuffered channel with a sender blocked trying to deliver: your break leaves that sender parked on its send — a goroutine leak. The sender needs to see a cancellation (a done channel, a context) to give up.\n\nBuffered channel: subsequent sends fill the buffer (up to capacity), then senders block. Values you didn't consume are discarded when the channel is garbage-collected — but a sender blocked on a full channel leaks exactly as the unbuffered case.\n\nSo break answers YOUR side ('stop consuming') but not THEIRS ('stop producing'). The complete early-exit pattern pairs the break with a cancellation the producer selects on:\n\n```go\ndone := make(chan struct{})\n// producer: for { select { case out <- v: case <-done: return } }\n\nfor v := range out {\n    if !keepGoing(v) {\n        close(done)  // tell the producer\n        break        // and leave\n    }\n}\n```\n\nThat's the two-sided exit: consumer breaks, producer observes the done close, unwinds. context.Context is this same pattern, standardized — Done() is the done channel, and the idiom above is why ctx appears in every pipeline signature."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -112,12 +122,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "range is the run-to-completion form: receive until closed, nothing else. A for loop with explicit receives can do anything per-receive — conditions, comma-ok, multiple channels — at the cost of writing the termination yourself."
+            "content": "range is the run-to-completion form: receive until closed, nothing else."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "The two forms, side by side, doing the same job:\n\n```go\n// range — the specialist\nfor v := range ch {\n    process(v)\n}\n\n// for + receive — the general form\nfor {\n    v, ok := <-ch\n    if !ok {\n        break\n    }\n    process(v)\n}\n```\n\nThe range is the second loop, compiled: receive, check ok, run body, exit on end-signal. Every behavior difference falls out of that:\n\nrange has no per-iteration condition — you can't 'stop when v satisfies X' inside the range declaration itself (break in the body does it, but then the loop's exit is two mechanisms: close OR break). The for form has one explicit exit you fully own.\n\nrange can't select — one channel only. The for form composes with anything: select across multiple channels, timeouts, comma-ok — the full consumer toolkit.\n\nThe practical divide: range for the standard pipeline consumer — single upstream channel, run until the producer closes, the 90% case; it's less code and reads as 'drain this source.' The explicit loop when the consumer is a coordinator: multiple sources, deadlines, early exits, per-receive branching beyond processing. Code review often flags the reverse: an explicit comma-ok loop with no special logic is noise — range says it cleaner — and a range with three breaks and a condition hidden in the body is a loop that wants to be explicit."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -157,12 +172,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "Yes — range drains every buffered value first (each yielded normally), then sees the close and terminates. No value sent before close is ever skipped."
+            "content": "Yes — range drains every buffered value first (each yielded normally), then sees the close and terminates."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "The order is queue-then-tombstone, and range follows it exactly:\n\n```go\nch := make(chan int, 3)\nch <- 1\nch <- 2\nch <- 3\nclose(ch)\n\nfor v := range ch {\n    fmt.Println(v)   // 1, 2, 3 — all three, then the loop ends\n}\n```\n\nExecuted: three values print, then the range terminates. The close never truncates the queue — it marks the end AFTER everything already sent. This losslessness is the property that makes defer close(out) safe in every producer: the values in flight at close time reach the consumer; the close only adds the ending.\n\nIt composes into the pipeline shutdown cascade: stage A finishes and closes its output; stage B's range receives A's remaining buffered values, processes them all, exits its own loop, and its defer closes B's output — the termination flows downstream WITH the data draining ahead of it. Every stage sees: all the data, then the end, then it passes both along. No dropped tail, no race between 'last value' and 'close' — the channel's own ordering guarantees the sequence."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
@@ -202,12 +222,17 @@
           {
             "type": "interviewer_expectation",
             "title": "Quick Revision",
-            "content": "A nil channel in a range blocks forever on the first receive — same as any nil receive. range never sees values or termination; the goroutine parks permanently."
+            "content": "Remember: A nil channel in a range blocks forever on the first receive — same as any nil receive."
           },
           {
             "type": "speakable_answer",
             "title": "Interview Answer",
             "content": "range over a nil channel is the nil-receive behavior on loop:\n\n```go\nvar ch chan int          // nil\nfor v := range ch {      // first receive: block forever\n    process(v)           // never runs\n}\n```\n\nThe goroutine parks on the first iteration's receive and never wakes — a leak with a stack trace showing the park. If every other goroutine also blocks, the runtime's deadlock detector fires; if anything else runs, the leak is silent.\n\nThe classic cause: a channel field or variable declared but never make'd, passed into a range-driven consumer. The compiler can't catch it (the nil channel is a runtime state), so it surfaces as 'this worker never processes anything' — and the diagnostic is the goroutine dump: the parked receive shows the nil channel in its frame.\n\nOne legitimate use, inherited from the nil-receive rules: a range over a channel variable that BECOMES nil mid-loop (set to nil elsewhere, race aside) would block at the next receive — the loop can't be disabled that way cleanly. The select-based nil trick (nil disables a select CASE) doesn't transfer to range; range is single-channel and total. If you need 'stop consuming this source temporarily', you're outside range's design — select with the channel plus a control channel is the shape."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    S[send ch <- v] --> F{buffer free?}\n    F -->|yes| B[write to ring buffer]\n    F -->|no / cap 0| W[park goroutine in send queue]\n    R[receive <-ch] --> F2{buffer has value?}\n    F2 -->|yes| D[deliver + wake sender]\n    F2 -->|no| W2[park in recv queue]\n    W -->|receiver arrives| C[copy sender stack → receiver stack]\n```"
           },
           {
             "type": "deep_explanation",
