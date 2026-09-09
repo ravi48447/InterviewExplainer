@@ -1,196 +1,251 @@
 {
-  "topic": "HTTP Middleware",
+  "topic": "Middleware Basics",
   "topicSlug": "middleware-basics",
   "questions": [
     {
       "id": "http-server-basics-go-middleware-basics-q001",
       "slug": "http-server-basics-go-middleware-basics-interview-basics",
-      "question": "What is HTTP middleware in Go, and how do you write it?",
-      "title": "Wrapping handlers with Go HTTP middleware",
-      "direct_answer": "HTTP middleware wraps an `http.Handler` and returns another handler. The wrapper can run common work before the next handler, call `next.ServeHTTP`, and optionally run work afterward. Use it for cross-cutting request behavior such as logging, authentication, recovery, or headers—not for endpoint-specific business rules.",
+      "question": "How do you write HTTP middleware in Go?",
+      "title": "Middleware Basics",
+      "direct_answer": "A function that takes an http.HandlerFunc and returns one — wrapping the call with pre/post logic: func(next http.HandlerFunc) http.HandlerFunc. Chain them for logging, auth, headers, recovery.",
       "layout_type": "concept-explanation",
       "difficulty": "easy",
       "importance": "high",
-      "reading_time_minutes": 5,
+      "reading_time_minutes": 6,
+      "interviewer_intent": {
+        "testing": "Whether you understand Middleware Basics beyond memorized syntax.",
+        "common_mistake": "Giving a definition without explaining a practical trade-off.",
+        "to_stand_out": "Connect the concept to a small production example and state its complexity or failure mode."
+      },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "The common shape is `func(next http.Handler) http.Handler`.",
-              "The wrapper is itself an `http.Handler`.",
-              "Code before `next.ServeHTTP` runs on the way in.",
-              "Code after it returns runs on the way out.",
-              "A middleware may stop the chain by writing a response and returning."
-            ]
+            "type": "interviewer_expectation",
+            "title": "Quick Revision",
+            "content": "A function that takes an http.HandlerFunc and returns one — wrapping the call with pre/post logic: func(next http.HandlerFunc) http.HandlerFunc. Chain them for logging, auth, headers, recovery."
           },
           {
             "type": "speakable_answer",
-            "title": "Interview answer",
-            "answerSize": "standard",
-            "content": "- Middleware is a handler wrapper for behavior shared by many routes. It accepts the next `http.Handler` and returns a new handler. Because the result still satisfies the same interface, several wrappers can be composed and the server does not need to know which layers exist.\n\n- Work placed before `next.ServeHTTP(w, r)` runs before the selected endpoint. Work after that call runs after the endpoint returns. A request logger can record the start time, call next, then record elapsed time. An authentication middleware can reject a request, write 401, and return without calling next.\n\n- A minimal wrapper looks like this:\n\n```go\nfunc addHeader(next http.Handler) http.Handler {\n    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n        w.Header().Set(\"X-App\", \"catalog\")\n        next.ServeHTTP(w, r)\n    })\n}\n```\n\nThe header is set before the endpoint can commit the response.\n\n- Middleware is best for request-wide concerns: authentication, request IDs, tracing, panic recovery, compression, and logging. A rule such as “an order may be cancelled only before shipment” belongs in the application use case, even when many endpoints call that use case. Mixing domain policy into transport wrappers makes non-HTTP callers behave differently.\n\n- I keep wrappers small, state whether they may stop the chain, and test both accepted and rejected paths. If a middleware wraps `ResponseWriter` to observe status or bytes, it must preserve optional interfaces needed by streaming or connection upgrades. The simple contract is powerful because each layer remains an ordinary handler with one visible responsibility. It also lets the same endpoint run with or without that layer in a focused test."
-          },
-          {
-            "type": "overview",
-            "title": "One handler surrounds another handler",
-            "content": "Middleware works because routers, endpoints, and wrappers all use `http.Handler`. A layer may enrich the request, prepare response headers, stop a rejected request, or delegate to the next layer."
-          },
-          {
-            "type": "deep_explanation",
-            "title": "The middleware contract",
-            "content": "**Wrapper shape.** A middleware function usually receives one handler and returns `http.HandlerFunc`. The returned closure captures `next`. Construction happens while the application builds its handler graph; the closure runs later for every matching request.\n\n**Request-side middleware.** Authentication checks, request-context enrichment, and response-header setup happen before delegation. If a check fails, the middleware writes one response and returns. Calling next after rejection would allow protected work and could append another body.\n\n**Handler delegation.** `next.ServeHTTP(w, r)` is an ordinary synchronous call. The next handler may be another middleware, a mux, or the final endpoint. It normally receives the same writer and either the same request or a copy created with a new context.\n\n**Response-side middleware.** Duration logging and cleanup can run when next returns. At this point the response is often committed, so after-work cannot safely change its status. A deferred function is useful for cleanup or panic observation when its behavior is understood.\n\n**Boundaries.** Wrapping `ResponseWriter` is more advanced than wrapping a handler. The concrete writer may also implement `http.Flusher`, `http.Hijacker`, or other optional interfaces. A wrapper that hides them can break streaming or upgrades, so observation code should preserve the capabilities it promises."
+            "title": "Interview Answer",
+            "content": "The pattern, executed:\n\n```go\nfunc withHeader(next http.HandlerFunc) http.HandlerFunc {\n    return func(w http.ResponseWriter, r *http.Request) {\n        w.Header().Set(\"X-Custom\", \"yes\")   // BEFORE — pre-processing\n        next(w, r)                            // the actual handler\n        // AFTER — post-processing (rare — response already sent)\n    }\n}\n\n// wrap the handler\nmux.HandleFunc(\"/mw\", withHeader(myHandler))\n// GET /mw → handler sees X-Custom: yes — verified\n```\n\nThe shape: a function that RETURNS a function (the wrapper). The wrapper runs before the handler (pre: logging, auth, headers, request ID) and optionally after (post: response metrics — the response is already sent, so post is mostly cleanup).\n\nThe standard middleware chain — composable:\n\n```go\nfunc chain(h http.HandlerFunc, mw ...func(http.HandlerFunc) http.HandlerFunc) http.HandlerFunc {\n    for i := len(mw) - 1; i >= 0; i-- {  // wrap in reverse\n        h = mw[i](h)\n    }\n    return h\n}\nh := chain(handler, logging, auth, headers)\n```\n\nThe common middlewares every service has: logging (method, path, status, duration), auth (check token, reject or attach to context), panic recovery (defer recover → 500), request ID (generate + set in context and response header).\n\nThe http.Handler interface variant: middleware can also be func(http.Handler) http.Handler — the more general form (works on muxes, not just handlers). The two forms compose; pick one per codebase."
           },
           {
             "type": "flow_diagram",
-            "title": "Before, next, and after",
-            "content": "```mermaid\nflowchart LR\n  A[Request] --> B[Middleware: before work]\n  B --> C{Continue?}\n  C -->|No| D[Write rejection and return]\n  C -->|Yes| E[next.ServeHTTP]\n  E --> F[Endpoint response]\n  F --> G[Middleware: after work]\n  G --> H[Client]\n```"
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    REQ[request] --> MW1[mw1: logging] --> MW2[mw2: auth] --> H[handler]\n    MW2 -->|401 reject| R[return without next]\n    H --> RES[response]\n```"
           },
           {
-            "type": "code_example",
-            "title": "Response header middleware example",
-            "content": "**go.mod**\n\n```text\nmodule example.test/http\n\ngo 1.23.0\n```\n\n**middleware.go**\n\n```go\npackage lesson\n\nimport \"net/http\"\n\nfunc AddHeader(next http.Handler) http.Handler {\n\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n\t\tw.Header().Set(\"X-App\", \"catalog\")\n\t\tnext.ServeHTTP(w, r)\n\t})\n}\n```\n\n**middleware_test.go**\n\n```go\npackage lesson\n\nimport (\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"testing\"\n)\n\nfunc TestAddHeader(t *testing.T) {\n\tendpoint := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })\n\trecorder := httptest.NewRecorder()\n\tAddHeader(endpoint).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, \"/\", nil))\n\tif recorder.Code != 204 || recorder.Header().Get(\"X-App\") != \"catalog\" {\n\t\tt.Fatalf(\"status=%d headers=%v\", recorder.Code, recorder.Header())\n\t}\n}\n```\n\n**Run it**\n\n```bash\ngo test -race ./...\ngo vet ./...\n```\n\nThe wrapper sets the header before delegation; the endpoint can then commit the response normally."
+            "type": "deep_explanation",
+            "title": "Deep Dive",
+            "content": "The execution order, precisely: middleware[0] wraps middleware[1] wraps ... wraps the handler. Request flows OUT-IN (0→1→...→handler), response flows IN-OUT. The wrap-in-reverse in a chain function exists because each mw takes the NEXT thing to call — building from the innermost outward means iterating the slice backward.\n\nThe pre/post asymmetry: BEFORE next(), you own the request — modify it (add context values, change r), write headers (w.Header().Set before any Write), even short-circuit (return without calling next — auth reject, rate-limit). AFTER next(), the response is committed — you can't change headers/status (already sent); you CAN observe (log duration, count status from a recording wrapper) and clean up.\n\nThe short-circuit pattern, which is middleware's most important behavior: auth middleware checks the token; invalid → WriteHeader(401) and RETURN (no next call). The handler never runs. This is how middleware does enforcement — the wrapping makes it apply to every handler in the chain, consistently.\n\nThe panic-recovery middleware — the one every service needs: the deferred func inside the wrapper catches the panic, writes a 500, logs the stack — the goroutine-per-request model means an unhandled panic would crash the whole server without the middleware boundary (net/http actually recerves handler panics per-connection since 1.6, but a middleware recovery gives you logging and clean 500s)."
           }
         ]
       },
       "followup_questions": [
-        "What happens when middleware writes an error but still calls next?",
-        "Why does code after `next.ServeHTTP` run in reverse wrapper order?",
-        "Which optional ResponseWriter capabilities can a custom wrapper hide?"
+        "When would you use Middleware Basics in a real project?",
+        "How would you compare Middleware Basics with an alternative?",
+        "What is a common mistake when using Middleware Basics?"
       ],
       "order": 1,
       "seo": {
-        "metaTitle": "Wrapping handlers with Go HTTP middleware | Go interview",
-        "metaDescription": "HTTP middleware wraps an http.Handler and returns another handler. The wrapper can run common work before the next handler, call next.ServeHTTP, and optionally run work afterward. Use it for cross-cutting re..."
-      },
-      "last_updated": "2026-09-07"
+        "metaTitle": "Middleware Basics — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for What is Middleware Basics, and when would you use it? with a clear explanation, practical example, common mistakes, and follow-up questions."
+      }
     },
     {
       "id": "http-server-basics-go-middleware-basics-q002",
       "slug": "http-server-basics-go-middleware-basics-when-to-use",
-      "question": "In what order does nested Go HTTP middleware run?",
-      "title": "Understanding middleware's onion order",
-      "direct_answer": "For `A(B(handler))`, request-side code runs A then B then the handler. When the handler returns, response-side code runs B then A. The outer middleware sees the request first and finishes last. Order is part of behavior: recovery must surround code it catches, authentication must run before protected work, and logging placement changes what it observes.",
-      "layout_type": "concept-explanation",
+      "question": "When would you use Middleware Basics in a real project?",
+      "title": "When would you use Middleware Basics in a real project",
+      "direct_answer": "Middleware Basics is useful when it solves a clear problem in the code. I would first check the input, expected output, and constraints, then choose it if the simpler option cannot meet those needs. For example, I would use it in the part of an application where its main benefit is visible, rather than adding it everywhere.",
+      "layout_type": "interview-practice",
       "difficulty": "easy",
-      "importance": "high",
-      "reading_time_minutes": 5,
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "interviewer_intent": {
+        "testing": "Practical understanding of Middleware Basics.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
+      },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "`A(B(handler))` enters A, then B, then the handler.",
-              "After the handler, control returns through B, then A.",
-              "The first wrapper applied is not always the first wrapper entered.",
-              "Recovery must be outside the code whose panic it handles.",
-              "Authentication must run before the protected endpoint.",
-              "Write an order test instead of guessing from helper names."
-            ]
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of Middleware Basics, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "answerSize": "standard",
-            "content": "- Nested middleware follows ordinary Go function calls. If the final value is `A(B(handler))`, A receives the request first. A calls B, B calls the handler, and the call stack then unwinds: B's after-work runs before A's after-work. This is often called onion order because the request moves inward and the response moves outward.\n\n- The code is just composition:\n\n```go\nwrapped := requestID(logging(endpoint))\n```\n\nHere `requestID` is outermost and runs first. `logging` can read the ID if the outer layer stores it before calling next. After the endpoint returns, logging finishes before requestID's after-work.\n\n- For example, put recovery outside the handlers and middleware whose panics it must catch. Put authentication before the protected endpoint. If logging should record rejected authentication attempts, logging must wrap authentication; if it should record only accepted application work, its placement can be inside. Neither order is universally correct because they answer different observation questions.\n\n- Helper functions can obscure construction order. A loop over a middleware slice may need to apply entries from right to left so the written list matches request order. Response headers also have timing constraints: an outer layer can prepare a header before next, but changing it after next may be too late because the inner handler may have committed the response.\n\n- I document the intended request order beside the composition and keep a tiny test that appends enter and exit labels. The expected trace makes the full contract visible. Middleware order is not styling; it affects access control, panic handling, context availability, metrics, and the final response."
-          },
-          {
-            "type": "overview",
-            "title": "Request order and return order are mirror images",
-            "content": "Every call to next adds a frame to the call stack. Enter work follows the wrappers toward the endpoint; exit work follows the same stack back toward the client."
+            "content": "Middleware Basics is useful when it solves a clear problem in the code. I would first check the input, expected output, and constraints, then choose it if the simpler option cannot meet those needs. For example, I would use it in the part of an application where its main benefit is visible, rather than adding it everywhere. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
           },
           {
             "type": "deep_explanation",
-            "title": "Middleware composition order",
-            "content": "**Construction order.** `A(B(H))` is evaluated into handler values before any request arrives. B wraps H, then A wraps that result. A is therefore the object given to the server and becomes the first entry point.\n\n**Request path.** A runs its before-work and calls B. B runs its before-work and calls H. Any layer can return early, so inner layers do not run when an outer authentication or limit check rejects the request.\n\n**Response path.** When H returns, execution continues immediately after B's call to next, then after A's call. Cleanup and timing use this reverse order. The HTTP bytes may already be committed even though Go control is still unwinding.\n\n**Order choices.** Recovery must wrap possible panic sources. A request ID must be added before a logger that reads it. Compression usually wraps the response written by inner code. Access logs can be outside authentication when rejected requests should be counted.\n\n**Composition helpers.** If a configuration lists middleware in desired request order, a helper usually wraps from the end of the slice to the beginning. Name that contract and test it. A four-line trace test is clearer than relying on whether “use” or “chain” inserts at the front or back."
+            "title": "Build the mental model",
+            "content": "When debug a problem involving Middleware Basics causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Middleware Basics is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
           },
           {
-            "type": "sequence_diagram",
-            "title": "A(B(handler)) request and return order",
-            "content": "```mermaid\nsequenceDiagram\n  participant Client\n  participant A as Middleware A\n  participant B as Middleware B\n  participant H as Handler\n  Client->>A: request\n  A->>B: next\n  B->>H: next\n  H-->>B: return\n  B-->>A: after B\n  A-->>Client: after A / response\n```"
-          },
-          {
-            "type": "code_example",
-            "title": "Middleware entry and exit trace",
-            "content": "**go.mod**\n\n```text\nmodule example.test/http\n\ngo 1.23.0\n```\n\n**order.go**\n\n```go\npackage lesson\n\nimport \"net/http\"\n\nfunc Mark(name string, trace *[]string, next http.Handler) http.Handler {\n\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n\t\t*trace = append(*trace, \"enter \"+name)\n\t\tnext.ServeHTTP(w, r)\n\t\t*trace = append(*trace, \"exit \"+name)\n\t})\n}\n```\n\n**order_test.go**\n\n```go\npackage lesson\n\nimport (\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"reflect\"\n\t\"testing\"\n)\n\nfunc TestOnionOrder(t *testing.T) {\n\tvar trace []string\n\tendpoint := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { trace = append(trace, \"handler\") })\n\thandler := Mark(\"A\", &trace, Mark(\"B\", &trace, endpoint))\n\thandler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, \"/\", nil))\n\twant := []string{\"enter A\", \"enter B\", \"handler\", \"exit B\", \"exit A\"}\n\tif !reflect.DeepEqual(trace, want) {\n\t\tt.Fatalf(\"trace=%v\", trace)\n\t}\n}\n```\n\n**Run it**\n\n```bash\ngo test ./...\ngo vet ./...\n```\n\nThe shared trace is safe because this test sends one request. A production logger would not mutate an unsynchronised shared slice."
+            "type": "tradeoffs",
+            "title": "Important trade-off",
+            "content": "To compare compare Middleware Basics, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
           }
         ]
       },
       "followup_questions": [
-        "Where should recovery sit in a middleware chain?",
-        "How does early return change which layers run?",
-        "Why can after-work be too late to change a response header?"
+        "What is Middleware Basics, and when would you use it?",
+        "How would you compare Middleware Basics with an alternative?",
+        "What is a common mistake when using Middleware Basics?"
       ],
       "order": 2,
       "seo": {
-        "metaTitle": "Understanding middleware's onion order | Go interview",
-        "metaDescription": "For A(B(handler)), request-side code runs A then B then the handler. When the handler returns, response-side code runs B then A. The outer middleware sees the request first and finishes last. Order is part o..."
-      },
-      "last_updated": "2026-09-07"
+        "metaTitle": "When would you use Middleware Basics in a real project — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for When would you use Middleware Basics in a real project? with a clear explanation, practical example, common mistakes, and follow-up questions."
+      }
     },
     {
       "id": "http-server-basics-go-middleware-basics-q003",
       "slug": "http-server-basics-go-middleware-basics-common-mistake",
-      "question": "How should middleware pass request-scoped values and handle cancellation?",
-      "title": "Using request context without turning it into a data bag",
-      "direct_answer": "Create request-scoped context values with an unexported typed key, attach the new context using `r.WithContext`, and let downstream code read the value through a small helper. Context is for request-scoped metadata, deadlines, and cancellation—not optional function parameters or mutable global state. Downstream work should stop when `r.Context().Done()` is closed.",
-      "layout_type": "concept-explanation",
+      "question": "What is a common mistake when using Middleware Basics?",
+      "title": "a common mistake when using Middleware Basics",
+      "direct_answer": "The common mistake with a common mistake when using Middleware Basics is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns.",
+      "layout_type": "interview-practice",
       "difficulty": "easy",
-      "importance": "high",
-      "reading_time_minutes": 5,
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "interviewer_intent": {
+        "testing": "Practical understanding of Middleware Basics.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
+      },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "Use `context.WithValue` only for request-scoped cross-boundary data.",
-              "Use a private key type to avoid key collisions.",
-              "Pass the copied request from `r.WithContext(ctx)` to next.",
-              "Read cancellation and deadlines from `r.Context()`.",
-              "Do not store optional service parameters or large mutable objects in context."
-            ]
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of a common mistake when using Middleware Basics, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "answerSize": "standard",
-            "content": "- Every server request carries a context. It is cancelled when the client connection closes, the request is cancelled under HTTP/2, or the handler returns. Middleware can derive a context with request-scoped metadata, such as an authenticated user ID or trace ID, and pass a request containing that derived context to the next handler.\n\n- A private key type prevents unrelated packages from accidentally using an equal key. The pattern is small:\n\n```go\ntype userKey struct{}\nctx := context.WithValue(r.Context(), userKey{}, userID)\nnext.ServeHTTP(w, r.WithContext(ctx))\n```\n\nA helper performs the type assertion so endpoints do not repeat unsafe casts.\n\n- For example, authentication middleware checks a token, stores the verified user ID, and calls next with the copied request. The endpoint reads that ID and starts a database query with `r.Context()`. If the client leaves or the request deadline expires, a context-aware driver can stop the query and release resources sooner.\n\n- Context values are not a replacement for explicit dependencies. A repository, logger configuration, or feature option normally belongs on a handler or function argument. Stored values should be small, request-scoped, and safe for concurrent reads. Do not place credentials in logs merely because they are available through context.\n\n- Cancellation is cooperative: closing `Done` does not forcibly stop arbitrary code. Loops and blocking calls must select on the context or call APIs that accept it. I preserve the incoming context, derive only what is needed, pass it downstream, and test both value availability and cancellation."
-          },
-          {
-            "type": "overview",
-            "title": "Context carries request lifetime and narrow metadata",
-            "content": "Middleware derives rather than replaces the incoming context. The new request carries both the original cancellation chain and the additional typed value to downstream handlers and services."
+            "content": "The common mistake with a common mistake when using Middleware Basics is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
           },
           {
             "type": "deep_explanation",
-            "title": "Context values and cancellation boundaries",
-            "content": "**Request context lifetime.** The server creates a context that carries the request's cancellation and deadline. Code should not keep it after the request as a long-lived container. A background job that must outlive the response needs its own explicit lifecycle and copied safe data.\n\n**Typed keys.** String keys can collide across packages. An unexported zero-sized key type, or an unexported value of a private type, gives ownership to one package. Getter helpers can return `(value, ok)` and keep assertions in one place.\n\n**Derived request.** `WithContext` returns a shallow copy of the request with the new context. The original request is not mutated. Passing the original to next would silently discard the added value even though the derived context was created correctly.\n\n**Cancellation.** Database calls, outgoing HTTP requests, and loops should accept or observe the request context. Cancellation is a signal, not a goroutine kill. Code that blocks in an API with no context support may continue until that API returns.\n\n**API design.** Required business inputs belong in typed function arguments. Context values fit information that crosses process or API boundaries along the request, such as authentication identity and trace metadata. This rule keeps functions readable and prevents hidden behavior from accumulating in a loosely typed bag."
+            "title": "Why the mistake happens",
+            "content": "When debug a problem involving Middleware Basics causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Middleware Basics is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
           },
           {
-            "type": "flow_diagram",
-            "title": "Metadata and cancellation share one request chain",
-            "content": "```mermaid\nflowchart LR\n  A[Server request context] --> B[Auth middleware verifies token]\n  B --> C[WithValue: typed user ID]\n  C --> D[r.WithContext]\n  D --> E[Handler reads user ID]\n  E --> F[Database call uses same context]\n  A -. cancellation .-> D\n  D -. cancellation .-> F\n```"
-          },
-          {
-            "type": "code_example",
-            "title": "Typed request context example",
-            "content": "**go.mod**\n\n```text\nmodule example.test/http\n\ngo 1.23.0\n```\n\n**context.go**\n\n```go\npackage lesson\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\t\"net/http\"\n)\n\ntype userIDKey struct{}\n\nfunc WithUser(userID string, next http.Handler) http.Handler {\n\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n\t\tctx := context.WithValue(r.Context(), userIDKey{}, userID)\n\t\tnext.ServeHTTP(w, r.WithContext(ctx))\n\t})\n}\n\nfunc UserID(ctx context.Context) (string, bool) {\n\tvalue, ok := ctx.Value(userIDKey{}).(string)\n\treturn value, ok\n}\nfunc Profile(w http.ResponseWriter, r *http.Request) {\n\tuserID, ok := UserID(r.Context())\n\tif !ok {\n\t\thttp.Error(w, \"missing user\", 401)\n\t\treturn\n\t}\n\tfmt.Fprint(w, userID)\n}\n```\n\n**context_test.go**\n\n```go\npackage lesson\n\nimport (\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"testing\"\n)\n\nfunc TestUserContext(t *testing.T) {\n\trecorder := httptest.NewRecorder()\n\tWithUser(\"u-7\", http.HandlerFunc(Profile)).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, \"/profile\", nil))\n\tif recorder.Code != 200 || recorder.Body.String() != \"u-7\" {\n\t\tt.Fatalf(\"status=%d body=%q\", recorder.Code, recorder.Body.String())\n\t}\n}\n```\n\n**Run it**\n\n```bash\ngo test -race ./...\ngo vet ./...\n```\n\nThe key type and getter stay private to the package contract; the endpoint receives the derived request rather than the original one."
+            "type": "tradeoffs",
+            "title": "Important trade-off",
+            "content": "To compare compare Middleware Basics, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
           }
         ]
       },
       "followup_questions": [
-        "Why is a plain string a weak context key?",
-        "Does context cancellation forcibly stop a goroutine?",
-        "Which dependencies should remain explicit instead of living in context?"
+        "What is Middleware Basics, and when would you use it?",
+        "When would you use Middleware Basics in a real project?",
+        "How would you compare Middleware Basics with an alternative?"
       ],
       "order": 3,
       "seo": {
-        "metaTitle": "Using request context without turning it into a data bag | Go interview",
-        "metaDescription": "Create request-scoped context values with an unexported typed key, attach the new context using r.WithContext, and let downstream code read the value through a small helper. Context is for request-scoped met..."
+        "metaTitle": "a common mistake when using Middleware Basics — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for What is a common mistake when using Middleware Basics? with a clear explanation, practical example, common mistakes, and follow-up questions."
+      }
+    },
+    {
+      "id": "http-server-basics-go-middleware-basics-q004",
+      "slug": "http-server-basics-go-middleware-basics-compare",
+      "question": "How would you compare Middleware Basics with an alternative?",
+      "title": "compare Middleware Basics with an alternative",
+      "direct_answer": "To compare compare Middleware Basics, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case.",
+      "layout_type": "interview-practice",
+      "difficulty": "easy",
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "interviewer_intent": {
+        "testing": "Practical understanding of Middleware Basics.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
       },
-      "last_updated": "2026-09-07"
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of compare Middleware Basics, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview answer",
+            "content": "To compare compare Middleware Basics, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Understand the decision",
+            "content": "When debug a problem involving Middleware Basics causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nTo compare compare Middleware Basics, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case.\n\nThe common mistake with a common mistake when using Middleware Basics is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is Middleware Basics, and when would you use it?",
+        "When would you use Middleware Basics in a real project?",
+        "What is a common mistake when using Middleware Basics?"
+      ],
+      "order": 4,
+      "seo": {
+        "metaTitle": "compare Middleware Basics with an alternative — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for How would you compare Middleware Basics with an alternative? with a clear explanation, practical example, common mistakes, and follow-up questions."
+      }
+    },
+    {
+      "id": "http-server-basics-go-middleware-basics-q005",
+      "slug": "http-server-basics-go-middleware-basics-scenario",
+      "question": "How would you debug a problem involving Middleware Basics?",
+      "title": "debug a problem involving Middleware Basics",
+      "direct_answer": "When debug a problem involving Middleware Basics causes a problem, I reproduce it with the smallest input I can find. I check the inputs and the expected result, trace the important state step by step, and add a test for the failure. After the fix, I run the normal case and at least one edge case so the same bug does not return.",
+      "layout_type": "interview-practice",
+      "difficulty": "easy",
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "interviewer_intent": {
+        "testing": "Practical understanding of Middleware Basics.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of debug a problem involving Middleware Basics, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview answer",
+            "content": "When debug a problem involving Middleware Basics causes a problem, I reproduce it with the smallest input I can find. I check the inputs and the expected result, trace the important state step by step, and add a test for the failure. After the fix, I run the normal case and at least one edge case so the same bug does not return. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Reason through the problem",
+            "content": "When debug a problem involving Middleware Basics causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Middleware Basics is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Important trade-off",
+            "content": "To compare compare Middleware Basics, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is Middleware Basics, and when would you use it?",
+        "When would you use Middleware Basics in a real project?",
+        "How would you compare Middleware Basics with an alternative?"
+      ],
+      "order": 5,
+      "seo": {
+        "metaTitle": "debug a problem involving Middleware Basics — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for How would you debug a problem involving Middleware Basics? with a clear explanation, practical example, common mistakes, and follow-up questions."
+      }
     }
   ]
 }

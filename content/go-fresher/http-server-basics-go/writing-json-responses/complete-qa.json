@@ -1,196 +1,251 @@
 {
-  "topic": "Writing JSON Responses",
+  "topic": "Writing Json Responses",
   "topicSlug": "writing-json-responses",
   "questions": [
     {
       "id": "http-server-basics-go-writing-json-responses-q001",
       "slug": "http-server-basics-go-writing-json-responses-interview-basics",
-      "question": "In what order should a Go handler set JSON headers, status, and body?",
-      "title": "Writing JSON headers, status, and body in the right order",
-      "direct_answer": "Set `Content-Type: application/json` before committing the response, choose the status with `WriteHeader`, and encode the JSON body once. If `WriteHeader` is omitted, the first `Write` or encoder write commits status 200. For responses whose value might fail to encode, marshal before commitment so the handler can still return a deliberate error.",
+      "question": "How do you write JSON responses in Go?",
+      "title": "Writing Json Responses",
+      "direct_answer": "Set the Content-Type header, then json.NewEncoder(w).Encode(v) — it marshals AND writes to the ResponseWriter in one step. Set the status first if non-200 (w.WriteHeader(200) before Encode).",
       "layout_type": "concept-explanation",
       "difficulty": "easy",
       "importance": "high",
-      "reading_time_minutes": 5,
+      "reading_time_minutes": 6,
+      "interviewer_intent": {
+        "testing": "Whether you understand Writing Json Responses beyond memorized syntax.",
+        "common_mistake": "Giving a definition without explaining a practical trade-off.",
+        "to_stand_out": "Connect the concept to a small production example and state its complexity or failure mode."
+      },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "Set JSON content type before `WriteHeader` or the first body write.",
-              "Call `WriteHeader` once when the status is not 200.",
-              "The first body write implicitly commits 200 when no status was set.",
-              "`json.Encoder.Encode` writes JSON directly and adds a newline.",
-              "Marshal before committing when encoding can fail and status must remain controllable."
-            ]
+            "type": "interviewer_expectation",
+            "title": "Quick Revision",
+            "content": "Set the Content-Type header, then json.NewEncoder(w).Encode(v) — it marshals AND writes to the ResponseWriter in one step. Set the status first if non-200 (w.WriteHeader(200) before Encode)."
           },
           {
             "type": "speakable_answer",
-            "title": "Interview answer",
-            "answerSize": "standard",
-            "content": "- A JSON response has three ordered parts: headers, status, and body. The handler first sets `Content-Type` to `application/json`, then calls `WriteHeader` if the result is not 200, and finally writes exactly one encoded representation. Once the response is committed, later header changes or status calls cannot rewrite what the client already received.\n\n- `json.NewEncoder(w).Encode(value)` is convenient because it writes directly to the response and appends a newline. If the handler never calls `WriteHeader`, the encoder's first write commits status 200. For a create operation, the handler must therefore call `WriteHeader(http.StatusCreated)` before encoding if it wants 201.\n\n- The ordering is small but important:\n\n```go\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.WriteHeader(http.StatusCreated)\nif err := json.NewEncoder(w).Encode(result); err != nil {\n    log.Printf(\"write response: %v\", err)\n}\n```\n\nTests should check status, media type, and decoded body rather than depend on the encoder's trailing newline.\n\n- Direct encoding has an error boundary: an unsupported value, such as a channel or function, can fail after headers or part of a response are committed. For a small API object that could fail, `json.Marshal` into bytes first, handle its error, then commit and write. For known encodable structs, a direct encoder is usually clear and avoids an extra full output buffer.\n\n- I centralise the ordering in a small helper, keep response structs narrow, and return after invoking it. The helper still needs an error policy because `ResponseWriter.Write` can fail when a client disconnects. Correct JSON is not only valid bytes; it is a consistent media type, status, schema, and single commitment."
-          },
-          {
-            "type": "overview",
-            "title": "Response metadata and commitment boundary",
-            "content": "Headers remain editable until the first status or body write. Preparing the media type and intended status first prevents a valid JSON body from being paired with the wrong status or default content type."
-          },
-          {
-            "type": "deep_explanation",
-            "title": "JSON response commitment",
-            "content": "**Headers.** `w.Header()` returns the map that will be sent with the response. Set content type and any cache or location metadata before commitment. Changing the map later may affect trailers in specific cases, but it does not replace ordinary headers already sent.\n\n**Status.** `WriteHeader(code)` commits the headers and status. It is needed only for a non-200 status because the first `Write` supplies an implicit `StatusOK`. Multiple calls do not create several responses; the first committed status wins.\n\n**Body.** Encoder writes are streaming writes and include a final newline. Marshal returns a complete byte slice without that newline. Clients should parse the JSON representation rather than rely on whitespace produced by one server implementation.\n\n**Encoding errors.** Ordinary structs of supported fields are predictable, but custom marshalers and unsupported values can fail. Marshal-first allows a clean 500 before any bytes leave. Direct encoding can use less buffering, which matters for larger values, but the handler must accept that a late error cannot change an already committed response.\n\n**Verification.** Decode the recorded body into the promised response shape and assert the status and media type separately. This validates the HTTP contract while avoiding brittle key-order or whitespace tests. A production helper should return or log write failures without attempting a second JSON error on the same response."
+            "title": "Interview Answer",
+            "content": "The pattern, executed:\n\n```go\nfunc usersHandler(w http.ResponseWriter, r *http.Request) {\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    json.NewEncoder(w).Encode(map[string]string{\n        \"name\": \"Al\",\n        \"role\": \"dev\",\n    })\n}\n// GET /users → {\"name\":\"Al\",\"role\":\"dev\"} with Content-Type: application/json — verified\n```\n\nThe two steps in order: header, then encode. The header MUST be set before Encode writes (the body send flushes the headers — setting Content-Type after is a no-op).\n\nWith a status code (non-200):\n\n```go\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.WriteHeader(http.StatusCreated)  // 201\njson.NewEncoder(w).Encode(user)\n```\n\nThe order matters: Header() → WriteHeader() → Encode(). Once WriteHeader or the first write happens, headers are committed.\n\nThe error-response convention every API needs:\n\n```go\nfunc writeError(w http.ResponseWriter, status int, msg string) {\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    w.WriteHeader(status)\n    json.NewEncoder(w).Encode(map[string]string{\"error\": msg})\n}\n```\n\nThe alternative: json.Marshal → w.Write(b) — the marshal-to-then-write form. Encoder is preferred (single step, streaming — writes as it marshals, no intermediate []byte allocation). The only reason to Marshal first: modifying the bytes (encryption, custom wrapping) or testing the marshal error separately."
           },
           {
             "type": "flow_diagram",
-            "title": "The JSON response commit boundary",
-            "content": "```mermaid\nflowchart LR\n  A[Build response value] --> B[Set Content-Type]\n  B --> C{Need non-200 status?}\n  C -->|Yes| D[WriteHeader once]\n  C -->|No| E[First Encode/Write commits 200]\n  D --> F[Encode one JSON body]\n  E --> G[Response committed]\n  F --> G\n  G --> H[Headers/status cannot be replaced]\n```"
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart LR\n    W[ResponseWriter] --> H[Header Set Content-Type]\n    H --> S[WriteHeader 200]\n    S --> E[json.NewEncoder w Encode v]\n```"
           },
           {
-            "type": "code_example",
-            "title": "Typed JSON response example",
-            "content": "**go.mod**\n\n```text\nmodule example.test/http\n\ngo 1.23.0\n```\n\n**response.go**\n\n```go\npackage lesson\n\nimport (\n\t\"encoding/json\"\n\t\"log\"\n\t\"net/http\"\n)\n\ntype userResponse struct {\n\tID   int    `json:\"id\"`\n\tName string `json:\"name\"`\n}\n\nfunc User(w http.ResponseWriter, r *http.Request) {\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tw.WriteHeader(http.StatusOK)\n\tif err := json.NewEncoder(w).Encode(userResponse{ID: 7, Name: \"Ada\"}); err != nil {\n\t\tlog.Printf(\"write user response: %v\", err)\n\t}\n}\n```\n\n**response_test.go**\n\n```go\npackage lesson\n\nimport (\n\t\"encoding/json\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"testing\"\n)\n\nfunc TestUserResponse(t *testing.T) {\n\trecorder := httptest.NewRecorder()\n\tUser(recorder, httptest.NewRequest(http.MethodGet, \"/users/7\", nil))\n\tresponse := recorder.Result()\n\tdefer response.Body.Close()\n\tif response.StatusCode != 200 || response.Header.Get(\"Content-Type\") != \"application/json\" {\n\t\tt.Fatalf(\"status=%d headers=%v\", response.StatusCode, response.Header)\n\t}\n\tvar body userResponse\n\tif err := json.NewDecoder(response.Body).Decode(&body); err != nil || body.ID != 7 {\n\t\tt.Fatalf(\"body=%+v err=%v\", body, err)\n\t}\n}\n```\n\n**Run it**\n\n```bash\ngo test -race ./...\ngo vet ./...\n```\n\nThe test decodes JSON rather than depending on whitespace, while checking the media type and status as separate parts of the contract."
+            "type": "deep_explanation",
+            "title": "Deep Dive",
+            "content": "The Encoder's mechanics: json.NewEncoder(w).Encode(v) marshals v incrementally and writes directly to w — no intermediate buffer for the full JSON. The trade-off: you can't know the byte count ahead (no Content-Length from the encoder) — Go handles this with chunked transfer encoding for HTTP/1.1 (or streams for HTTP/2). For small responses, the difference is negligible; for large ones, the streaming avoids a full-copy.\n\nThe Encode error path, which people miss: Encode returns an error — but AFTER potentially writing partial bytes to w. The common handler ignores it (w is already committed — what would you do?). The honest pattern: for the critical first-write, Marshal first, check the error, then Write — for streaming large payloads, accept the partial-write-on-error semantics.\n\nThe API-envelope convention, worth naming as the architectural choice: many teams wrap all responses in {\"data\": ..., \"error\": ...} or the JSON:API format. The writeJSON helper encapsulates the decision:\n\n```go\nfunc writeJSON(w http.ResponseWriter, status int, v any) {\n    w.Header().Set(\"Content-Type\", \"application/json\")\n    w.WriteHeader(status)\n    json.NewEncoder(w).Encode(v)\n}\n```\n\nOne function, consistent ordering, every handler uses it — the bug (header after write) becomes structurally impossible."
           }
         ]
       },
       "followup_questions": [
-        "What status is committed when `Encode` writes before `WriteHeader`?",
-        "Why might a handler marshal a small response before writing headers?",
-        "What formatting difference does `Encoder.Encode` add?"
+        "When would you use Writing Json Responses in a real project?",
+        "How would you compare Writing Json Responses with an alternative?",
+        "What is a common mistake when using Writing Json Responses?"
       ],
       "order": 1,
       "seo": {
-        "metaTitle": "Writing JSON headers, status, and body in the right order | Go interview",
-        "metaDescription": "Set Content-Type: application/json before committing the response, choose the status with WriteHeader, and encode the JSON body once. If WriteHeader is omitted, the first Write or encoder write commits statu..."
-      },
-      "last_updated": "2026-09-07"
+        "metaTitle": "Writing Json Responses — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for What is Writing Json Responses, and when would you use it? with a clear explanation, practical example, common mistakes, and follow-up questions."
+      }
     },
     {
       "id": "http-server-basics-go-writing-json-responses-q002",
       "slug": "http-server-basics-go-writing-json-responses-when-to-use",
-      "question": "What happens when `WriteHeader` or `Write` is called more than once?",
-      "title": "Understanding the one-way response commitment",
-      "direct_answer": "The first `WriteHeader` commits the status and ordinary headers; later `WriteHeader` calls cannot replace it. If body bytes are written first, `net/http` implicitly commits status 200 and may detect a content type. Later body writes can append bytes, which can accidentally concatenate success and error output. Structure handlers so exactly one branch owns the final response.",
-      "layout_type": "concept-explanation",
+      "question": "When would you use Writing Json Responses in a real project?",
+      "title": "When would you use Writing Json Responses in a real project",
+      "direct_answer": "Writing Json Responses is useful when it solves a clear problem in the code. I would first check the input, expected output, and constraints, then choose it if the simpler option cannot meet those needs. For example, I would use it in the part of an application where its main benefit is visible, rather than adding it everywhere.",
+      "layout_type": "interview-practice",
       "difficulty": "easy",
-      "importance": "high",
-      "reading_time_minutes": 5,
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "interviewer_intent": {
+        "testing": "Practical understanding of Writing Json Responses.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
+      },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "The first `WriteHeader` commits status and ordinary headers.",
-              "A first `Write` without `WriteHeader` commits 200 automatically.",
-              "Later `WriteHeader` calls do not change the committed status.",
-              "Later `Write` calls append body bytes rather than replacing earlier output.",
-              "Return immediately after an error response to prevent mixed bodies."
-            ]
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of Writing Json Responses, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "answerSize": "standard",
-            "content": "- `http.ResponseWriter` has a one-way commitment point. Before commitment, the handler can set ordinary headers and choose a status. The first call to `WriteHeader` sends that choice. If the handler writes body bytes first, `net/http` automatically calls `WriteHeader(http.StatusOK)` and may infer a content type from the initial bytes.\n\n- Calling `WriteHeader` again does not revise the response. The server can log a superfluous call, but the client keeps the first status. Calling `Write` again is different: it can append more bytes to the body. That makes a missing `return` dangerous because an error JSON object can be followed by success JSON, producing an invalid or misleading response under the original status.\n\n- The safe branch returns as soon as it owns the response:\n\n```go\nif err != nil {\n    http.Error(w, \"invalid id\", http.StatusBadRequest)\n    return\n}\njson.NewEncoder(w).Encode(user)\n```\n\nWithout the return, `http.Error` has already committed its status and body, and the success JSON is appended rather than replacing it.\n\n- Informational 1xx responses have special rules, and declared trailers can be written later, but ordinary final headers and status remain committed. Interfaces wrapped by middleware add another concern: a wrapper that records status must mirror the first-write behavior accurately rather than accepting later codes as if they won.\n\n- I treat response writing as the final stage after parsing and application work whenever possible. One helper or one branch commits the final result, and every error branch returns. This keeps the handler easy to reason about and prevents attempts to recover from an encoding or write failure by sending a second HTTP response that the protocol cannot provide."
-          },
-          {
-            "type": "overview",
-            "title": "A response can grow, but its first final status cannot be revised",
-            "content": "Commitment freezes final status and ordinary headers. Additional writes may still extend the body, which is why accidental fall-through can be more confusing than a simple ignored status call."
+            "content": "Writing Json Responses is useful when it solves a clear problem in the code. I would first check the input, expected output, and constraints, then choose it if the simpler option cannot meet those needs. For example, I would use it in the part of an application where its main benefit is visible, rather than adding it everywhere. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
           },
           {
             "type": "deep_explanation",
-            "title": "ResponseWriter commitment states",
-            "content": "**Uncommitted state.** Header mutations are being prepared locally. The handler may still choose a final status and can abandon a response value that failed to marshal without having sent it to the client.\n\n**Explicit commitment.** `WriteHeader` sends the status and current headers. Only one final 2xx–5xx header is meaningful. Calling it early removes the ability to select a different final status after later work fails.\n\n**Implicit commitment.** `Write` must send a response, so it commits 200 when no status was chosen. For small initial writes, the server may use content detection if no content type was set. Relying on that for JSON is less clear than declaring the media type.\n\n**Body state.** More writes add more bytes. Two separately valid JSON objects written without an agreed streaming format do not become one valid JSON document. A status recorder or logging middleware should capture the first status and count all body bytes.\n\n**Response ownership consequence.** Complete fallible application work before commitment when practical. Use early returns for errors, or have inner functions return typed results to a thin HTTP adapter. Once writing begins, handle the write error for logging or cancellation, but do not try to erase bytes or send a replacement status."
+            "title": "Build the mental model",
+            "content": "When debug a problem involving Writing Json Responses causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Writing Json Responses is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
           },
           {
-            "type": "flow_diagram",
-            "title": "ResponseWriter state changes",
-            "content": "```mermaid\nstateDiagram-v2\n  [*] --> Uncommitted\n  Uncommitted --> Committed200: first Write\n  Uncommitted --> CommittedStatus: first WriteHeader(code)\n  Committed200 --> Committed200: later Write appends\n  CommittedStatus --> CommittedStatus: later Write appends\n  Committed200 --> Committed200: later WriteHeader ignored\n  CommittedStatus --> CommittedStatus: later WriteHeader ignored\n```"
-          },
-          {
-            "type": "code_example",
-            "title": "Response commitment behavior",
-            "content": "**go.mod**\n\n```text\nmodule example.test/http\n\ngo 1.23.0\n```\n\n**commit.go**\n\n```go\npackage lesson\n\nimport (\n\t\"fmt\"\n\t\"net/http\"\n)\n\nfunc ExampleHandler(w http.ResponseWriter, r *http.Request) {\n\tw.Header().Set(\"Content-Type\", \"text/plain\")\n\tw.WriteHeader(http.StatusAccepted)\n\t_, _ = fmt.Fprint(w, \"first\")\n\tw.WriteHeader(http.StatusInternalServerError)\n\t_, _ = fmt.Fprint(w, \"+second\")\n}\n```\n\n**commit_test.go**\n\n```go\npackage lesson\n\nimport (\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"testing\"\n)\n\nfunc TestFirstStatusWinsAndBodiesAppend(t *testing.T) {\n\trecorder := httptest.NewRecorder()\n\tExampleHandler(recorder, httptest.NewRequest(http.MethodGet, \"/\", nil))\n\tif recorder.Code != http.StatusAccepted || recorder.Body.String() != \"first+second\" {\n\t\tt.Fatalf(\"status=%d body=%q\", recorder.Code, recorder.Body.String())\n\t}\n}\n```\n\n**Run it**\n\n```bash\ngo test -race ./...\ngo vet ./...\n```\n\nThe intentionally poor handler demonstrates protocol behavior. Real handlers should choose one response branch and return."
+            "type": "tradeoffs",
+            "title": "Important trade-off",
+            "content": "To compare compare Writing Json Responses, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
           }
         ]
       },
       "followup_questions": [
-        "What status is used when the first operation is `Write`?",
-        "Why can a missing return create invalid JSON even though the status stays fixed?",
-        "How should status-recording middleware handle repeated `WriteHeader` calls?"
+        "What is Writing Json Responses, and when would you use it?",
+        "How would you compare Writing Json Responses with an alternative?",
+        "What is a common mistake when using Writing Json Responses?"
       ],
       "order": 2,
       "seo": {
-        "metaTitle": "Understanding the one-way response commitment | Go interview",
-        "metaDescription": "The first WriteHeader commits the status and ordinary headers; later WriteHeader calls cannot replace it. If body bytes are written first, net/http implicitly commits status 200 and may detect a content type..."
-      },
-      "last_updated": "2026-09-07"
+        "metaTitle": "When would you use Writing Json Responses in a real project — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for When would you use Writing Json Responses in a real project? with a clear explanation, practical example, common mistakes, and follow-up questions."
+      }
     },
     {
       "id": "http-server-basics-go-writing-json-responses-q003",
       "slug": "http-server-basics-go-writing-json-responses-common-mistake",
-      "question": "How do you build a reusable JSON response and error helper without double writes?",
-      "title": "Centralising a stable JSON response contract",
-      "direct_answer": "Use a helper that sets the JSON media type, commits one status, and writes one prepared response value. Keep the error envelope stable and make callers return immediately after invoking the helper. If marshaling can fail, marshal before `WriteHeader`; report the server-side cause internally and send a safe fallback only while the response is still uncommitted.",
-      "layout_type": "concept-explanation",
+      "question": "What is a common mistake when using Writing Json Responses?",
+      "title": "a common mistake when using Writing Json Responses",
+      "direct_answer": "The common mistake with a common mistake when using Writing Json Responses is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns.",
+      "layout_type": "interview-practice",
       "difficulty": "easy",
-      "importance": "high",
-      "reading_time_minutes": 5,
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "interviewer_intent": {
+        "testing": "Practical understanding of Writing Json Responses.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
+      },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "Give success and error responses explicit Go structs.",
-              "Set content type and commit status in one helper.",
-              "Marshal before commitment when response encoding can fail.",
-              "Return immediately after the helper writes an error.",
-              "Log internal causes separately from stable public error codes.",
-              "Do not attempt a second response after a write failure."
-            ]
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of a common mistake when using Writing Json Responses, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "answerSize": "standard",
-            "content": "- A reusable JSON helper is valuable when it owns a small, stable protocol rule rather than hiding all handler behavior. It should set `Content-Type`, choose one status, and write one JSON representation. Error responses should use an explicit envelope such as `code` and `message`, so clients do not have to parse changing Go error strings.\n\n- The safest small-value helper marshals before calling `WriteHeader`. If marshaling fails, no final response has been committed, so the handler can send a controlled 500 fallback. After marshaling succeeds, the helper sets the media type, commits the requested status, and writes the bytes. A write failure is then mainly an operational signal because the client may have disconnected and another response cannot replace the first.\n\n- A handler calls one helper and returns:\n\n```go\nerr := writeJSON(w, http.StatusNotFound, APIError{\n    Code: \"user_not_found\", Message: \"user was not found\",\n})\nif err != nil { log.Printf(\"write response: %v\", err) }\nreturn\n```\n\nThe server log can retain the internal cause separately; the client receives a stable safe shape.\n\n- A universal helper has limits. Streaming, file downloads, 204 responses, and endpoints with custom caching or content negotiation may need different writers. JSON encoding can also fail for custom marshalers, so a helper returning an error makes that boundary testable. Middleware cannot reliably send a neat JSON error after downstream code has already committed bytes.\n\n- I keep the helper narrow, return its error for logging, and enforce one ownership rule: the code that invokes it does not write again. This removes repeated header ordering and keeps public error vocabulary consistent without turning every endpoint into the same response. Reuse is useful because the HTTP contract is repeated, not because all application outcomes are identical."
-          },
-          {
-            "type": "overview",
-            "title": "Shared JSON protocol and endpoint decisions",
-            "content": "The helper should standardise media type, one status commitment, and a response envelope. The endpoint still decides which outcome occurred and must stop after handing ownership of the response to the helper."
+            "content": "The common mistake with a common mistake when using Writing Json Responses is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
           },
           {
             "type": "deep_explanation",
-            "title": "Response preparation, commitment, and reporting",
-            "content": "**Typed envelopes.** Named response structs make JSON field names and omission rules reviewable. A public error code should remain stable enough for clients; a human message can be clearer but should not expose secrets or low-level causes.\n\n**Preparation.** `json.Marshal` completes encoding before touching the writer. This uses memory proportional to the payload, which is reasonable for small API objects and less suitable for huge or streaming responses. Known simple structs can also be encoded directly under a documented error policy.\n\n**Commitment.** After bytes are ready, set the media type, call `WriteHeader` once, and write. A 204 response should not carry a JSON body, so callers need either a separate path or a helper that explicitly understands bodyless statuses.\n\n**Reporting.** Marshal failure is an internal server problem. A write failure may mean the connection disappeared after partial output. Log these causes with safe context, but do not call the same helper recursively after the final status may already have left the process.\n\n**Caller discipline.** Every call is followed by `return` unless it is the final statement. Tests should verify one status, one valid document, and the public fields. A custom recording writer can additionally prove that a helper does not make multiple final `WriteHeader` calls."
+            "title": "Why the mistake happens",
+            "content": "When debug a problem involving Writing Json Responses causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Writing Json Responses is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
           },
           {
-            "type": "flow_diagram",
-            "title": "One helper owns the final response",
-            "content": "```mermaid\nflowchart LR\n  A[Handler chooses outcome] --> B[Build typed response]\n  B --> C{Marshal succeeds?}\n  C -->|No, still uncommitted| D[Safe 500 fallback]\n  C -->|Yes| E[Set JSON header]\n  E --> F[Commit one status]\n  F --> G[Write bytes once]\n  G --> H[Caller returns]\n```"
-          },
-          {
-            "type": "code_example",
-            "title": "Marshal-first JSON helper",
-            "content": "**go.mod**\n\n```text\nmodule example.test/http\n\ngo 1.23.0\n```\n\n**json.go**\n\n```go\npackage lesson\n\nimport (\n\t\"encoding/json\"\n\t\"log\"\n\t\"net/http\"\n)\n\ntype APIError struct {\n\tCode    string `json:\"code\"`\n\tMessage string `json:\"message\"`\n}\n\nfunc writeJSON(w http.ResponseWriter, status int, value any) error {\n\tbody, err := json.Marshal(value)\n\tif err != nil {\n\t\treturn err\n\t}\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tw.WriteHeader(status)\n\t_, err = w.Write(append(body, '\\n'))\n\treturn err\n}\n\nfunc MissingUser(w http.ResponseWriter, r *http.Request) {\n\tif err := writeJSON(w, http.StatusNotFound, APIError{Code: \"user_not_found\", Message: \"user was not found\"}); err != nil {\n\t\tlog.Printf(\"write API error: %v\", err)\n\t}\n}\n```\n\n**json_test.go**\n\n```go\npackage lesson\n\nimport (\n\t\"encoding/json\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"testing\"\n)\n\nfunc TestMissingUser(t *testing.T) {\n\trecorder := httptest.NewRecorder()\n\tMissingUser(recorder, httptest.NewRequest(http.MethodGet, \"/users/9\", nil))\n\tvar body APIError\n\tif err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {\n\t\tt.Fatal(err)\n\t}\n\tif recorder.Code != 404 || body.Code != \"user_not_found\" {\n\t\tt.Fatalf(\"status=%d body=%+v\", recorder.Code, body)\n\t}\n}\n```\n\n**Run it**\n\n```bash\ngo test -race ./...\ngo vet ./...\n```\n\nThe helper returns write or marshal errors so production callers can log them; it never attempts a second response after commitment."
+            "type": "tradeoffs",
+            "title": "Important trade-off",
+            "content": "To compare compare Writing Json Responses, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
           }
         ]
       },
       "followup_questions": [
-        "Why is marshaling first helpful for a small response with a custom marshaler?",
-        "Why should a public error code differ from an internal error string?",
-        "Which response types should not be forced through this JSON helper?"
+        "What is Writing Json Responses, and when would you use it?",
+        "When would you use Writing Json Responses in a real project?",
+        "How would you compare Writing Json Responses with an alternative?"
       ],
       "order": 3,
       "seo": {
-        "metaTitle": "Centralising a stable JSON response contract | Go interview",
-        "metaDescription": "Use a helper that sets the JSON media type, commits one status, and writes one prepared response value. Keep the error envelope stable and make callers return immediately after invoking the helper. If marsha..."
+        "metaTitle": "a common mistake when using Writing Json Responses — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for What is a common mistake when using Writing Json Responses? with a clear explanation, practical example, common mistakes, and follow-up questions."
+      }
+    },
+    {
+      "id": "http-server-basics-go-writing-json-responses-q004",
+      "slug": "http-server-basics-go-writing-json-responses-compare",
+      "question": "How would you compare Writing Json Responses with an alternative?",
+      "title": "compare Writing Json Responses with an alternative",
+      "direct_answer": "To compare compare Writing Json Responses, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case.",
+      "layout_type": "interview-practice",
+      "difficulty": "easy",
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "interviewer_intent": {
+        "testing": "Practical understanding of Writing Json Responses.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
       },
-      "last_updated": "2026-09-07"
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of compare Writing Json Responses, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview answer",
+            "content": "To compare compare Writing Json Responses, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Understand the decision",
+            "content": "When debug a problem involving Writing Json Responses causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nTo compare compare Writing Json Responses, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case.\n\nThe common mistake with a common mistake when using Writing Json Responses is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is Writing Json Responses, and when would you use it?",
+        "When would you use Writing Json Responses in a real project?",
+        "What is a common mistake when using Writing Json Responses?"
+      ],
+      "order": 4,
+      "seo": {
+        "metaTitle": "compare Writing Json Responses with an alternative — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for How would you compare Writing Json Responses with an alternative? with a clear explanation, practical example, common mistakes, and follow-up questions."
+      }
+    },
+    {
+      "id": "http-server-basics-go-writing-json-responses-q005",
+      "slug": "http-server-basics-go-writing-json-responses-scenario",
+      "question": "How would you debug a problem involving Writing Json Responses?",
+      "title": "debug a problem involving Writing Json Responses",
+      "direct_answer": "When debug a problem involving Writing Json Responses causes a problem, I reproduce it with the smallest input I can find. I check the inputs and the expected result, trace the important state step by step, and add a test for the failure. After the fix, I run the normal case and at least one edge case so the same bug does not return.",
+      "layout_type": "interview-practice",
+      "difficulty": "easy",
+      "importance": "medium",
+      "reading_time_minutes": 6,
+      "interviewer_intent": {
+        "testing": "Practical understanding of Writing Json Responses.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
+      },
+      "answer": {
+        "sections": [
+          {
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of debug a problem involving Writing Json Responses, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
+          },
+          {
+            "type": "speakable_answer",
+            "title": "Interview answer",
+            "content": "When debug a problem involving Writing Json Responses causes a problem, I reproduce it with the smallest input I can find. I check the inputs and the expected result, trace the important state step by step, and add a test for the failure. After the fix, I run the normal case and at least one edge case so the same bug does not return. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
+          },
+          {
+            "type": "deep_explanation",
+            "title": "Reason through the problem",
+            "content": "When debug a problem involving Writing Json Responses causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Writing Json Responses is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
+          },
+          {
+            "type": "tradeoffs",
+            "title": "Important trade-off",
+            "content": "To compare compare Writing Json Responses, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
+          }
+        ]
+      },
+      "followup_questions": [
+        "What is Writing Json Responses, and when would you use it?",
+        "When would you use Writing Json Responses in a real project?",
+        "How would you compare Writing Json Responses with an alternative?"
+      ],
+      "order": 5,
+      "seo": {
+        "metaTitle": "debug a problem involving Writing Json Responses — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for How would you debug a problem involving Writing Json Responses? with a clear explanation, practical example, common mistakes, and follow-up questions."
+      }
     }
   ]
 }
