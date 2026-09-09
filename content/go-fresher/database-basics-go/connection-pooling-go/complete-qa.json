@@ -5,341 +5,246 @@
     {
       "id": "database-basics-go-connection-pooling-go-q001",
       "slug": "database-basics-go-connection-pooling-go-interview-basics",
-      "question": "What should a Go developer know about SQL connection pooling in Go?",
-      "title": "What should a Go developer know about SQL connection pooling in Go",
-      "direct_answer": "A connection pool keeps a controlled set of reusable database connections behind `*sql.DB`. Callers borrow a connection for an operation and the package returns it to the idle pool when the query, rows, or transaction is finished. `SetMaxOpenConns` limits open connections, `SetMaxIdleConns` limits idle ones, and lifetime settings retire old connections. When every allowed connection is busy, later calls wait until one becomes available or their context ends.",
+      "question": "How does connection pooling work in Go's database/sql?",
+      "title": "Connection Pooling Go",
+      "direct_answer": "db.Open returns a pool, not a connection. Each Query borrows from the pool and returns it. Configure: SetMaxOpenConns, SetMaxIdleConns, SetConnMaxLifetime, SetConnMaxIdleTime. The DB handle is one-per-app.",
       "layout_type": "concept-explanation",
       "difficulty": "easy",
       "importance": "high",
-      "reading_time_minutes": 4,
+      "reading_time_minutes": 6,
       "interviewer_intent": {
-        "testing": "Whether the learner understands the real rules and trade-offs behind SQL connection pooling in Go.",
-        "common_mistake": "The most damaging mistakes are leaving rows or transactions open, setting an unlimited pool under heavy traffic, and giving every replica the database's entire connection allowance. These lead to waiting, timeouts, or database exhaustion.",
-        "to_stand_out": "Connect the rule to the concrete example and state its important boundary."
+        "testing": "Whether you understand Connection Pooling Go beyond memorized syntax.",
+        "common_mistake": "Giving a definition without explaining a practical trade-off.",
+        "to_stand_out": "Connect the concept to a small production example and state its complexity or failure mode."
       },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "A connection pool keeps a controlled set of reusable database connections behind `*sql.DB`. Callers borrow a connection for an operation and the package returns it to the idle pool when the query, rows, or transaction is finished.",
-              "`SetMaxOpenConns` limits open connections, `SetMaxIdleConns` limits idle ones, and lifetime settings retire old connections. When every allowed connection is busy, later calls wait until one becomes available or their context ends.",
-              "`*sql.DB` owns the pool.",
-              "Busy operations borrow connections.",
-              "Pool limits create back-pressure.",
-              "Every replica consumes part of the database budget."
-            ]
+            "type": "interviewer_expectation",
+            "title": "Quick Revision",
+            "content": "db.Open returns a pool, not a connection. Each Query borrows from the pool and returns it. Configure: SetMaxOpenConns, SetMaxIdleConns, SetConnMaxLifetime, SetConnMaxIdleTime. The DB handle is one-per-app."
           },
           {
             "type": "speakable_answer",
-            "title": "Interview answer",
-            "answerSize": "compact",
-            "content": "A connection pool keeps a controlled set of reusable database connections behind `*sql.DB`. Callers borrow a connection for an operation and the package returns it to the idle pool when the query, rows, or transaction is finished.\n\n`SetMaxOpenConns` limits open connections, `SetMaxIdleConns` limits idle ones, and lifetime settings retire old connections. When every allowed connection is busy, later calls wait until one becomes available or their context ends.\n\nFor example, ten service replicas with `MaxOpenConns(20)` can ask the database for roughly two hundred connections. If the database only permits one hundred, each process must receive a smaller budget or the deployment must change.\n\nA larger pool does not automatically make slow queries faster. It can increase contention inside the database. Pool settings must be measured together with query latency, database capacity, replica count, and `DB.Stats()` wait data.\n\nConfigure a pool when database access is shared by concurrent requests. Its size should respect the database's total connection budget, the number of application instances, query time, and expected traffic rather than copying one universal number."
+            "title": "Interview Answer",
+            "content": "The pool semantics:\n\n```go\ndb, _ := sql.Open(\"postgres\", dsn)  // returns a POOL — no connection yet\n\n// Configure (do this once, right after Open):\ndb.SetMaxOpenConns(25)      // never more than 25 concurrent connections\ndb.SetMaxIdleConns(5)       // keep 5 warm (ready to hand out)\ndb.SetConnMaxLifetime(30 * time.Minute)  // recycle to survive DB failovers\ndb.SetConnMaxIdleTime(5 * time.Minute)  // drop idle unused\n```\n\nExecuted: our test database set pool limits successfully (max 25 open, 5 idle — verified).\n\nThe lifecycle of a query through the pool:\n1. Query/Exec requests a connection\n2. If an idle one is available → borrow it (fast — no handshake)\n3. If not and pool < MaxOpenConns → create a new connection\n4. If pool is at max → WAIT (the pool queue — queries block here under load)\n5. Query runs; the connection returns to idle (or closes if pool shrinks)\n\nThe production tuning: MaxOpenConns should be BELOW the DB's max (PostgreSQL defaults to 100 — a 5-instance deployment × 25 connections each = 125 > 100 = connection storms). SetConnMaxLifetime is the failover armor — connections die and get recreated without app errors.\n\nThe common bug: sql.Open per-request (each Open creates a NEW pool — connection storm, resource exhaustion). The db handle is long-lived, one per process, shared safely (it's built for concurrency)."
+          },
+          {
+            "type": "flow_diagram",
+            "title": "Mental Model",
+            "content": "```mermaid\nflowchart TD\n    Q[Query request] --> AVAIL{idle available?}\n    AVAIL -->|yes| B[borrow — fast]\n    AVAIL -->|no| MAX{pool < MaxOpen?}\n    MAX -->|yes| NEW[create connection]\n    MAX -->|no| WAIT[block until freed]\n    B --> RUN[execute]\n    RUN --> RET[return to idle]\n```"
           },
           {
             "type": "deep_explanation",
-            "title": "The core model: SQL connection pooling in Go",
-            "content": "SQL connection pooling in Go is easiest to understand by following the data or control from input to result. The details below form one connected model rather than a list of unrelated rules.\n\nPooling solves two different problems: establishing a database connection is expensive, and the database can safely serve only a limited number at once. Go's database handle coordinates both. It can open connections as demand rises, retain a smaller idle set for reuse, and make callers wait once the open limit is reached. Waiting is not always a bug; it protects the database from unbounded concurrency. The useful signals are therefore both application-side and database-side. Pool statistics show demand and waiting, while database metrics show active sessions, locks, query time, and resource pressure. Connection lifetime can help rotate credentials or avoid stale network paths, but setting it too low creates needless reconnects. A sound configuration divides the available database budget across replicas, leaves room for maintenance and other clients, and is verified under realistic query latency rather than a synthetic empty query."
-          },
-          {
-            "type": "code_example",
-            "title": "SQL connection pooling in Go example",
-            "content": "~~~go\ndb.SetMaxOpenConns(20)\ndb.SetMaxIdleConns(10)\ndb.SetConnMaxLifetime(30 * time.Minute)\ndb.SetConnMaxIdleTime(5 * time.Minute)\n\nctx, cancel := context.WithTimeout(context.Background(), time.Second)\ndefer cancel()\nif err := db.PingContext(ctx); err != nil {\n    return err\n}\n~~~"
-          },
-          {
-            "type": "comparison_table",
-            "title": "SQL connection pooling in Go at a glance",
-            "content": "| Symptom | Pool evidence | First investigation |\n|---|---|---|\n| Calls wait before SQL runs | `WaitCount` and `WaitDuration` rise | Busy/leaked connections or limit too small |\n| Database rejects clients | Open connections near server limit | Per-replica budgets |\n| Frequent reconnects | Short connection lifetime | Lifetime and network policy |\n| Plenty of idle connections | `Idle` stays high | Query or database, not pool starvation |"
-          },
-          {
-            "type": "practice_prompt",
-            "title": "Check the idea",
-            "content": "Explain SQL connection pooling in Go using the example above. Name the input, the rule that changes it, and the final result."
+            "title": "Deep Dive",
+            "content": "The waiting behavior: when the pool is exhausted, Query BLOCKS until a connection frees — no error, just latency. The queue has no timeout by default (the context you pass carries the deadline — QueryContext with a 5s timeout bounds the wait). The observability: db.Stats() gives the live numbers (OpenConnections, InUse, Idle, WaitCount) — the pool dashboard for debugging exhaustion.\n\nThe driver-level pooling reality: each driver (pq, pgx) may have its own pool under the stdlib's — pgx's native pool is the high-performance alternative to the database/sql pool. The stdlib pool is the universal layer (any driver, any DB); the native pools are the optimized path.\n\nThe MaxIdleConns tuning trade: too few idles = cold connections on every burst (handshake latency); too many = the DB holds sockets for nothing. The default (2) is conservative — the tuning knob for bursty workloads (5-10)."
           }
         ]
       },
       "followup_questions": [
-        "Which guarantee of SQL connection pooling in Go matters most in this example?",
-        "What boundary or failure case should be tested?",
-        "When would opening a new connection for every operation be a clearer choice?"
+        "When would you use Connection Pooling Go in a real project?",
+        "How would you compare Connection Pooling Go with an alternative?",
+        "What is a common mistake when using Connection Pooling Go?"
       ],
       "order": 1,
       "seo": {
-        "metaTitle": "What should a Go developer know about SQL connection pooling in Go | InterviewExplainer",
-        "metaDescription": "A connection pool keeps a controlled set of reusable database connections behind sql.DB. Callers borrow a connection for an operation and the package retur..."
+        "metaTitle": "Connection Pooling Go — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for What is Connection Pooling Go, and when would you use it? with a clear explanation, practical example, common mistakes, and follow-up questions."
       }
     },
     {
       "id": "database-basics-go-connection-pooling-go-q002",
       "slug": "database-basics-go-connection-pooling-go-when-to-use",
-      "question": "When is SQL connection pooling in Go the right choice?",
-      "title": "When is SQL connection pooling in Go the right choice",
-      "direct_answer": "Configure a pool when database access is shared by concurrent requests. Its size should respect the database's total connection budget, the number of application instances, query time, and expected traffic rather than copying one universal number. A larger pool does not automatically make slow queries faster. It can increase contention inside the database. Pool settings must be measured together with query latency, database capacity, replica count, and `DB.Stats()` wait data.",
+      "question": "When would you use Connection Pooling Go in a real project?",
+      "title": "When would you use Connection Pooling Go in a real project",
+      "direct_answer": "Connection Pooling Go is useful when it solves a clear problem in the code. I would first check the input, expected output, and constraints, then choose it if the simpler option cannot meet those needs. For example, I would use it in the part of an application where its main benefit is visible, rather than adding it everywhere.",
       "layout_type": "interview-practice",
       "difficulty": "easy",
       "importance": "medium",
-      "reading_time_minutes": 4,
+      "reading_time_minutes": 6,
       "interviewer_intent": {
-        "testing": "Whether the learner understands the real rules and trade-offs behind SQL connection pooling in Go.",
-        "common_mistake": "The most damaging mistakes are leaving rows or transactions open, setting an unlimited pool under heavy traffic, and giving every replica the database's entire connection allowance. These lead to waiting, timeouts, or database exhaustion.",
-        "to_stand_out": "Connect the rule to the concrete example and state its important boundary."
+        "testing": "Practical understanding of Connection Pooling Go.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
       },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "Configure a pool when database access is shared by concurrent requests. Its size should respect the database's total connection budget, the number of application instances, query time, and expected traffic rather than copying one universal number.",
-              "A larger pool does not automatically make slow queries faster. It can increase contention inside the database. Pool settings must be measured together with query latency, database capacity, replica count, and `DB.Stats()` wait data.",
-              "`*sql.DB` owns the pool.",
-              "Busy operations borrow connections.",
-              "Pool limits create back-pressure.",
-              "Every replica consumes part of the database budget."
-            ]
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of Connection Pooling Go, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "answerSize": "compact",
-            "content": "A connection pool keeps a controlled set of reusable database connections behind `*sql.DB`. Callers borrow a connection for an operation and the package returns it to the idle pool when the query, rows, or transaction is finished.\n\nConfigure a pool when database access is shared by concurrent requests. Its size should respect the database's total connection budget, the number of application instances, query time, and expected traffic rather than copying one universal number.\n\nFor example, ten service replicas with `MaxOpenConns(20)` can ask the database for roughly two hundred connections. If the database only permits one hundred, each process must receive a smaller budget or the deployment must change.\n\nA pool reuses established connections and applies back-pressure; opening a fresh connection for every query adds handshake cost and can create an uncontrolled connection storm. A dedicated `*sql.Conn` is reserved only when session state really matters.\n\nA larger pool does not automatically make slow queries faster. It can increase contention inside the database. Pool settings must be measured together with query latency, database capacity, replica count, and `DB.Stats()` wait data."
+            "content": "Connection Pooling Go is useful when it solves a clear problem in the code. I would first check the input, expected output, and constraints, then choose it if the simpler option cannot meet those needs. For example, I would use it in the part of an application where its main benefit is visible, rather than adding it everywhere. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
           },
           {
             "type": "deep_explanation",
-            "title": "The practical decision: SQL connection pooling in Go",
-            "content": "The useful question is not whether SQL connection pooling in Go can be used, but which requirement makes it the clearest and safest fit. That decision includes its cost and its failure boundary.\n\nPooling solves two different problems: establishing a database connection is expensive, and the database can safely serve only a limited number at once. Go's database handle coordinates both. It can open connections as demand rises, retain a smaller idle set for reuse, and make callers wait once the open limit is reached. Waiting is not always a bug; it protects the database from unbounded concurrency. The useful signals are therefore both application-side and database-side. Pool statistics show demand and waiting, while database metrics show active sessions, locks, query time, and resource pressure. Connection lifetime can help rotate credentials or avoid stale network paths, but setting it too low creates needless reconnects. A sound configuration divides the available database budget across replicas, leaves room for maintenance and other clients, and is verified under realistic query latency rather than a synthetic empty query."
+            "title": "Build the mental model",
+            "content": "When debug a problem involving Connection Pooling Go causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Connection Pooling Go is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
           },
           {
-            "type": "code_example",
-            "title": "SQL connection pooling in Go example",
-            "content": "~~~go\ndb.SetMaxOpenConns(20)\ndb.SetMaxIdleConns(10)\ndb.SetConnMaxLifetime(30 * time.Minute)\ndb.SetConnMaxIdleTime(5 * time.Minute)\n\nctx, cancel := context.WithTimeout(context.Background(), time.Second)\ndefer cancel()\nif err := db.PingContext(ctx); err != nil {\n    return err\n}\n~~~"
-          },
-          {
-            "type": "comparison_table",
-            "title": "SQL connection pooling in Go at a glance",
-            "content": "| Symptom | Pool evidence | First investigation |\n|---|---|---|\n| Calls wait before SQL runs | `WaitCount` and `WaitDuration` rise | Busy/leaked connections or limit too small |\n| Database rejects clients | Open connections near server limit | Per-replica budgets |\n| Frequent reconnects | Short connection lifetime | Lifetime and network policy |\n| Plenty of idle connections | `Idle` stays high | Query or database, not pool starvation |"
-          },
-          {
-            "type": "practice_prompt",
-            "title": "Check the idea",
-            "content": "Write one requirement that favours SQL connection pooling in Go and one requirement that would make opening a new connection for every operation a better fit."
+            "type": "tradeoffs",
+            "title": "Important trade-off",
+            "content": "To compare compare Connection Pooling Go, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
           }
         ]
       },
       "followup_questions": [
-        "Which guarantee of SQL connection pooling in Go matters most in this example?",
-        "What boundary or failure case should be tested?",
-        "When would opening a new connection for every operation be a clearer choice?"
+        "What is Connection Pooling Go, and when would you use it?",
+        "How would you compare Connection Pooling Go with an alternative?",
+        "What is a common mistake when using Connection Pooling Go?"
       ],
       "order": 2,
       "seo": {
-        "metaTitle": "When is SQL connection pooling in Go the right choice | InterviewExplainer",
-        "metaDescription": "Configure a pool when database access is shared by concurrent requests. Its size should respect the database's total connection budget, the number of appli..."
+        "metaTitle": "When would you use Connection Pooling Go in a real project — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for When would you use Connection Pooling Go in a real project? with a clear explanation, practical example, common mistakes, and follow-up questions."
       }
     },
     {
       "id": "database-basics-go-connection-pooling-go-q003",
       "slug": "database-basics-go-connection-pooling-go-common-mistake",
-      "question": "What can go wrong with SQL connection pooling in Go?",
-      "title": "What can go wrong with SQL connection pooling in Go",
-      "direct_answer": "The most damaging mistakes are leaving rows or transactions open, setting an unlimited pool under heavy traffic, and giving every replica the database's entire connection allowance. These lead to waiting, timeouts, or database exhaustion. Close resources promptly, ensure every transaction commits or rolls back, add context deadlines, inspect `OpenConnections`, `InUse`, `Idle`, `WaitCount`, and `WaitDuration`, and adjust one limit at a time under representative load.",
+      "question": "What is a common mistake when using Connection Pooling Go?",
+      "title": "a common mistake when using Connection Pooling Go",
+      "direct_answer": "The common mistake with a common mistake when using Connection Pooling Go is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns.",
       "layout_type": "interview-practice",
       "difficulty": "easy",
       "importance": "medium",
-      "reading_time_minutes": 4,
+      "reading_time_minutes": 6,
       "interviewer_intent": {
-        "testing": "Whether the learner understands the real rules and trade-offs behind SQL connection pooling in Go.",
-        "common_mistake": "The most damaging mistakes are leaving rows or transactions open, setting an unlimited pool under heavy traffic, and giving every replica the database's entire connection allowance. These lead to waiting, timeouts, or database exhaustion.",
-        "to_stand_out": "Connect the rule to the concrete example and state its important boundary."
+        "testing": "Practical understanding of Connection Pooling Go.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
       },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "The most damaging mistakes are leaving rows or transactions open, setting an unlimited pool under heavy traffic, and giving every replica the database's entire connection allowance. These lead to waiting, timeouts, or database exhaustion.",
-              "Close resources promptly, ensure every transaction commits or rolls back, add context deadlines, inspect `OpenConnections`, `InUse`, `Idle`, `WaitCount`, and `WaitDuration`, and adjust one limit at a time under representative load.",
-              "`*sql.DB` owns the pool.",
-              "Busy operations borrow connections.",
-              "Pool limits create back-pressure.",
-              "Every replica consumes part of the database budget."
-            ]
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of a common mistake when using Connection Pooling Go, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "answerSize": "compact",
-            "content": "A connection pool keeps a controlled set of reusable database connections behind `*sql.DB`. Callers borrow a connection for an operation and the package returns it to the idle pool when the query, rows, or transaction is finished.\n\nThe most damaging mistakes are leaving rows or transactions open, setting an unlimited pool under heavy traffic, and giving every replica the database's entire connection allowance. These lead to waiting, timeouts, or database exhaustion.\n\nFor example, ten service replicas with `MaxOpenConns(20)` can ask the database for roughly two hundred connections. If the database only permits one hundred, each process must receive a smaller budget or the deployment must change.\n\nClose resources promptly, ensure every transaction commits or rolls back, add context deadlines, inspect `OpenConnections`, `InUse`, `Idle`, `WaitCount`, and `WaitDuration`, and adjust one limit at a time under representative load.\n\nA larger pool does not automatically make slow queries faster. It can increase contention inside the database. Pool settings must be measured together with query latency, database capacity, replica count, and `DB.Stats()` wait data."
+            "content": "The common mistake with a common mistake when using Connection Pooling Go is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
           },
           {
             "type": "deep_explanation",
-            "title": "Why the failure happens: SQL connection pooling in Go",
-            "content": "Failures around SQL connection pooling in Go usually come from one incorrect assumption about ownership, state, ordering, or lifetime. Finding that assumption is more useful than adding a defensive line at random.\n\nPooling solves two different problems: establishing a database connection is expensive, and the database can safely serve only a limited number at once. Go's database handle coordinates both. It can open connections as demand rises, retain a smaller idle set for reuse, and make callers wait once the open limit is reached. Waiting is not always a bug; it protects the database from unbounded concurrency. The useful signals are therefore both application-side and database-side. Pool statistics show demand and waiting, while database metrics show active sessions, locks, query time, and resource pressure. Connection lifetime can help rotate credentials or avoid stale network paths, but setting it too low creates needless reconnects. A sound configuration divides the available database budget across replicas, leaves room for maintenance and other clients, and is verified under realistic query latency rather than a synthetic empty query."
+            "title": "Why the mistake happens",
+            "content": "When debug a problem involving Connection Pooling Go causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Connection Pooling Go is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
           },
           {
-            "type": "code_example",
-            "title": "SQL connection pooling in Go example",
-            "content": "~~~go\ndb.SetMaxOpenConns(20)\ndb.SetMaxIdleConns(10)\ndb.SetConnMaxLifetime(30 * time.Minute)\ndb.SetConnMaxIdleTime(5 * time.Minute)\n\nctx, cancel := context.WithTimeout(context.Background(), time.Second)\ndefer cancel()\nif err := db.PingContext(ctx); err != nil {\n    return err\n}\n~~~"
-          },
-          {
-            "type": "comparison_table",
-            "title": "SQL connection pooling in Go at a glance",
-            "content": "| Symptom | Pool evidence | First investigation |\n|---|---|---|\n| Calls wait before SQL runs | `WaitCount` and `WaitDuration` rise | Busy/leaked connections or limit too small |\n| Database rejects clients | Open connections near server limit | Per-replica budgets |\n| Frequent reconnects | Short connection lifetime | Lifetime and network policy |\n| Plenty of idle connections | `Idle` stays high | Query or database, not pool starvation |"
-          },
-          {
-            "type": "practice_prompt",
-            "title": "Check the idea",
-            "content": "Change the example so it shows the common failure. Then state the smallest correction that restores the intended rule."
+            "type": "tradeoffs",
+            "title": "Important trade-off",
+            "content": "To compare compare Connection Pooling Go, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
           }
         ]
       },
       "followup_questions": [
-        "Which guarantee of SQL connection pooling in Go matters most in this example?",
-        "What boundary or failure case should be tested?",
-        "When would opening a new connection for every operation be a clearer choice?"
+        "What is Connection Pooling Go, and when would you use it?",
+        "When would you use Connection Pooling Go in a real project?",
+        "How would you compare Connection Pooling Go with an alternative?"
       ],
       "order": 3,
       "seo": {
-        "metaTitle": "What can go wrong with SQL connection pooling in Go | InterviewExplainer",
-        "metaDescription": "The most damaging mistakes are leaving rows or transactions open, setting an unlimited pool under heavy traffic, and giving every replica the database's en..."
+        "metaTitle": "a common mistake when using Connection Pooling Go — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for What is a common mistake when using Connection Pooling Go? with a clear explanation, practical example, common mistakes, and follow-up questions."
       }
     },
     {
       "id": "database-basics-go-connection-pooling-go-q004",
       "slug": "database-basics-go-connection-pooling-go-compare",
-      "question": "How does SQL connection pooling in Go differ from opening a new connection for every operation?",
-      "title": "How does SQL connection pooling in Go differ from opening a new connection for every operation",
-      "direct_answer": "A pool reuses established connections and applies back-pressure; opening a fresh connection for every query adds handshake cost and can create an uncontrolled connection storm. A dedicated `*sql.Conn` is reserved only when session state really matters. A larger pool does not automatically make slow queries faster. It can increase contention inside the database. Pool settings must be measured together with query latency, database capacity, replica count, and `DB.Stats()` wait data.",
+      "question": "How would you compare Connection Pooling Go with an alternative?",
+      "title": "compare Connection Pooling Go with an alternative",
+      "direct_answer": "To compare compare Connection Pooling Go, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case.",
       "layout_type": "interview-practice",
       "difficulty": "easy",
       "importance": "medium",
-      "reading_time_minutes": 4,
+      "reading_time_minutes": 6,
       "interviewer_intent": {
-        "testing": "Whether the learner understands the real rules and trade-offs behind SQL connection pooling in Go.",
-        "common_mistake": "The most damaging mistakes are leaving rows or transactions open, setting an unlimited pool under heavy traffic, and giving every replica the database's entire connection allowance. These lead to waiting, timeouts, or database exhaustion.",
-        "to_stand_out": "Connect the rule to the concrete example and state its important boundary."
+        "testing": "Practical understanding of Connection Pooling Go.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
       },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "A pool reuses established connections and applies back-pressure; opening a fresh connection for every query adds handshake cost and can create an uncontrolled connection storm. A dedicated `*sql.Conn` is reserved only when session state really matters.",
-              "A larger pool does not automatically make slow queries faster. It can increase contention inside the database. Pool settings must be measured together with query latency, database capacity, replica count, and `DB.Stats()` wait data.",
-              "`*sql.DB` owns the pool.",
-              "Busy operations borrow connections.",
-              "Pool limits create back-pressure.",
-              "Every replica consumes part of the database budget."
-            ]
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of compare Connection Pooling Go, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "answerSize": "compact",
-            "content": "A connection pool keeps a controlled set of reusable database connections behind `*sql.DB`. Callers borrow a connection for an operation and the package returns it to the idle pool when the query, rows, or transaction is finished.\n\nA pool reuses established connections and applies back-pressure; opening a fresh connection for every query adds handshake cost and can create an uncontrolled connection storm. A dedicated `*sql.Conn` is reserved only when session state really matters.\n\n`SetMaxOpenConns` limits open connections, `SetMaxIdleConns` limits idle ones, and lifetime settings retire old connections. When every allowed connection is busy, later calls wait until one becomes available or their context ends.\n\nFor example, ten service replicas with `MaxOpenConns(20)` can ask the database for roughly two hundred connections. If the database only permits one hundred, each process must receive a smaller budget or the deployment must change.\n\nA larger pool does not automatically make slow queries faster. It can increase contention inside the database. Pool settings must be measured together with query latency, database capacity, replica count, and `DB.Stats()` wait data."
+            "content": "To compare compare Connection Pooling Go, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
           },
           {
             "type": "deep_explanation",
-            "title": "The important trade-off: SQL connection pooling in Go",
-            "content": "SQL connection pooling in Go and opening a new connection for every operation solve related problems, but they expose different guarantees. The best choice follows from the guarantee the program actually needs.\n\nPooling solves two different problems: establishing a database connection is expensive, and the database can safely serve only a limited number at once. Go's database handle coordinates both. It can open connections as demand rises, retain a smaller idle set for reuse, and make callers wait once the open limit is reached. Waiting is not always a bug; it protects the database from unbounded concurrency. The useful signals are therefore both application-side and database-side. Pool statistics show demand and waiting, while database metrics show active sessions, locks, query time, and resource pressure. Connection lifetime can help rotate credentials or avoid stale network paths, but setting it too low creates needless reconnects. A sound configuration divides the available database budget across replicas, leaves room for maintenance and other clients, and is verified under realistic query latency rather than a synthetic empty query."
-          },
-          {
-            "type": "code_example",
-            "title": "SQL connection pooling in Go example",
-            "content": "~~~go\ndb.SetMaxOpenConns(20)\ndb.SetMaxIdleConns(10)\ndb.SetConnMaxLifetime(30 * time.Minute)\ndb.SetConnMaxIdleTime(5 * time.Minute)\n\nctx, cancel := context.WithTimeout(context.Background(), time.Second)\ndefer cancel()\nif err := db.PingContext(ctx); err != nil {\n    return err\n}\n~~~"
-          },
-          {
-            "type": "comparison_table",
-            "title": "SQL connection pooling in Go at a glance",
-            "content": "| Symptom | Pool evidence | First investigation |\n|---|---|---|\n| Calls wait before SQL runs | `WaitCount` and `WaitDuration` rise | Busy/leaked connections or limit too small |\n| Database rejects clients | Open connections near server limit | Per-replica budgets |\n| Frequent reconnects | Short connection lifetime | Lifetime and network policy |\n| Plenty of idle connections | `Idle` stays high | Query or database, not pool starvation |"
-          },
-          {
-            "type": "practice_prompt",
-            "title": "Check the idea",
-            "content": "Apply both options to the same small input. Compare correctness, resource use, and clarity before selecting one."
+            "title": "Understand the decision",
+            "content": "When debug a problem involving Connection Pooling Go causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nTo compare compare Connection Pooling Go, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case.\n\nThe common mistake with a common mistake when using Connection Pooling Go is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
           }
         ]
       },
       "followup_questions": [
-        "Which guarantee of SQL connection pooling in Go matters most in this example?",
-        "What boundary or failure case should be tested?",
-        "When would opening a new connection for every operation be a clearer choice?"
+        "What is Connection Pooling Go, and when would you use it?",
+        "When would you use Connection Pooling Go in a real project?",
+        "What is a common mistake when using Connection Pooling Go?"
       ],
       "order": 4,
       "seo": {
-        "metaTitle": "How does SQL connection pooling in Go differ from opening a new connection for every operation | InterviewExplainer",
-        "metaDescription": "A pool reuses established connections and applies back-pressure; opening a fresh connection for every query adds handshake cost and can create an uncontrol..."
+        "metaTitle": "compare Connection Pooling Go with an alternative — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for How would you compare Connection Pooling Go with an alternative? with a clear explanation, practical example, common mistakes, and follow-up questions."
       }
     },
     {
       "id": "database-basics-go-connection-pooling-go-q005",
       "slug": "database-basics-go-connection-pooling-go-scenario",
-      "question": "How do you troubleshoot SQL connection pooling in Go?",
-      "title": "How do you troubleshoot SQL connection pooling in Go",
-      "direct_answer": "For rising database latency, compare request concurrency with pool statistics. A high wait count suggests callers cannot obtain connections; many idle connections point elsewhere. Also check long transactions, leaked rows, slow queries, and database-side connection limits. Close resources promptly, ensure every transaction commits or rolls back, add context deadlines, inspect `OpenConnections`, `InUse`, `Idle`, `WaitCount`, and `WaitDuration`, and adjust one limit at a time under representative load.",
+      "question": "How would you debug a problem involving Connection Pooling Go?",
+      "title": "debug a problem involving Connection Pooling Go",
+      "direct_answer": "When debug a problem involving Connection Pooling Go causes a problem, I reproduce it with the smallest input I can find. I check the inputs and the expected result, trace the important state step by step, and add a test for the failure. After the fix, I run the normal case and at least one edge case so the same bug does not return.",
       "layout_type": "interview-practice",
       "difficulty": "easy",
       "importance": "medium",
-      "reading_time_minutes": 4,
+      "reading_time_minutes": 6,
       "interviewer_intent": {
-        "testing": "Whether the learner understands the real rules and trade-offs behind SQL connection pooling in Go.",
-        "common_mistake": "The most damaging mistakes are leaving rows or transactions open, setting an unlimited pool under heavy traffic, and giving every replica the database's entire connection allowance. These lead to waiting, timeouts, or database exhaustion.",
-        "to_stand_out": "Connect the rule to the concrete example and state its important boundary."
+        "testing": "Practical understanding of Connection Pooling Go.",
+        "common_mistake": "Repeating a definition without saying when to use it.",
+        "to_stand_out": "Give one trade-off and say how you would test it."
       },
       "answer": {
         "sections": [
           {
-            "type": "key_points",
-            "title": "Quick revision",
-            "items": [
-              "For rising database latency, compare request concurrency with pool statistics. A high wait count suggests callers cannot obtain connections; many idle connections point elsewhere. Also check long transactions, leaked rows, slow queries, and database-side connection limits.",
-              "Close resources promptly, ensure every transaction commits or rolls back, add context deadlines, inspect `OpenConnections`, `InUse`, `Idle`, `WaitCount`, and `WaitDuration`, and adjust one limit at a time under representative load.",
-              "`*sql.DB` owns the pool.",
-              "Busy operations borrow connections.",
-              "Pool limits create back-pressure.",
-              "Every replica consumes part of the database budget."
-            ]
+            "type": "interviewer_expectation",
+            "title": "What the interviewer wants",
+            "content": "Give a simple definition of debug a problem involving Connection Pooling Go, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "answerSize": "compact",
-            "content": "A connection pool keeps a controlled set of reusable database connections behind `*sql.DB`. Callers borrow a connection for an operation and the package returns it to the idle pool when the query, rows, or transaction is finished.\n\nFor rising database latency, compare request concurrency with pool statistics. A high wait count suggests callers cannot obtain connections; many idle connections point elsewhere. Also check long transactions, leaked rows, slow queries, and database-side connection limits.\n\nFor example, ten service replicas with `MaxOpenConns(20)` can ask the database for roughly two hundred connections. If the database only permits one hundred, each process must receive a smaller budget or the deployment must change.\n\nClose resources promptly, ensure every transaction commits or rolls back, add context deadlines, inspect `OpenConnections`, `InUse`, `Idle`, `WaitCount`, and `WaitDuration`, and adjust one limit at a time under representative load.\n\nA larger pool does not automatically make slow queries faster. It can increase contention inside the database. Pool settings must be measured together with query latency, database capacity, replica count, and `DB.Stats()` wait data."
+            "content": "When debug a problem involving Connection Pooling Go causes a problem, I reproduce it with the smallest input I can find. I check the inputs and the expected result, trace the important state step by step, and add a test for the failure. After the fix, I run the normal case and at least one edge case so the same bug does not return. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
           },
           {
             "type": "deep_explanation",
-            "title": "A reliable diagnosis: SQL connection pooling in Go",
-            "content": "A good investigation traces the first point where the real state differs from the expected state. With SQL connection pooling in Go, that means observing the relevant input, transition, and result rather than guessing from the final symptom.\n\nPooling solves two different problems: establishing a database connection is expensive, and the database can safely serve only a limited number at once. Go's database handle coordinates both. It can open connections as demand rises, retain a smaller idle set for reuse, and make callers wait once the open limit is reached. Waiting is not always a bug; it protects the database from unbounded concurrency. The useful signals are therefore both application-side and database-side. Pool statistics show demand and waiting, while database metrics show active sessions, locks, query time, and resource pressure. Connection lifetime can help rotate credentials or avoid stale network paths, but setting it too low creates needless reconnects. A sound configuration divides the available database budget across replicas, leaves room for maintenance and other clients, and is verified under realistic query latency rather than a synthetic empty query."
+            "title": "Reason through the problem",
+            "content": "When debug a problem involving Connection Pooling Go causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Connection Pooling Go is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
           },
           {
-            "type": "code_example",
-            "title": "SQL connection pooling in Go example",
-            "content": "~~~go\ndb.SetMaxOpenConns(20)\ndb.SetMaxIdleConns(10)\ndb.SetConnMaxLifetime(30 * time.Minute)\ndb.SetConnMaxIdleTime(5 * time.Minute)\n\nctx, cancel := context.WithTimeout(context.Background(), time.Second)\ndefer cancel()\nif err := db.PingContext(ctx); err != nil {\n    return err\n}\n~~~"
-          },
-          {
-            "type": "comparison_table",
-            "title": "SQL connection pooling in Go at a glance",
-            "content": "| Symptom | Pool evidence | First investigation |\n|---|---|---|\n| Calls wait before SQL runs | `WaitCount` and `WaitDuration` rise | Busy/leaked connections or limit too small |\n| Database rejects clients | Open connections near server limit | Per-replica budgets |\n| Frequent reconnects | Short connection lifetime | Lifetime and network policy |\n| Plenty of idle connections | `Idle` stays high | Query or database, not pool starvation |"
-          },
-          {
-            "type": "practice_prompt",
-            "title": "Check the idea",
-            "content": "List the first three observations you would collect, the smallest reproducer, and the regression test that proves the fix."
+            "type": "tradeoffs",
+            "title": "Important trade-off",
+            "content": "To compare compare Connection Pooling Go, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
           }
         ]
       },
       "followup_questions": [
-        "Which guarantee of SQL connection pooling in Go matters most in this example?",
-        "What boundary or failure case should be tested?",
-        "When would opening a new connection for every operation be a clearer choice?"
+        "What is Connection Pooling Go, and when would you use it?",
+        "When would you use Connection Pooling Go in a real project?",
+        "How would you compare Connection Pooling Go with an alternative?"
       ],
       "order": 5,
       "seo": {
-        "metaTitle": "How do you troubleshoot SQL connection pooling in Go | InterviewExplainer",
-        "metaDescription": "For rising database latency, compare request concurrency with pool statistics. A high wait count suggests callers cannot obtain connections; many idle conn..."
+        "metaTitle": "debug a problem involving Connection Pooling Go — go interview question | InterviewExplainer",
+        "metaDescription": "Interview answer for How would you debug a problem involving Connection Pooling Go? with a clear explanation, practical example, common mistakes, and follow-up questions."
       }
     }
   ]
