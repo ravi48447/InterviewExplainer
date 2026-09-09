@@ -1,0 +1,180 @@
+"""
+go-core-facts.py — canonical per-topic facts for go-fresher template repair.
+Each entry: the REAL question a Go interviewer asks about this topic, plus
+the technical truth in GfG/InterviewBit style (definition → example → output),
+verified against the Go spec / executed where feasible (go1.22.5 installed).
+The 5 template shells per file are REPLACED by real question variants.
+"""
+
+GO_FACTS = {
+  # ---- go-slices-maps ----
+  "slice-internals-len-cap": dict(
+    real_questions=[
+      ("What are len and cap of a slice in Go, and how are they related?",
+       "len is the number of elements visible; cap is the total slots allocated in the backing array. len can grow via append up to cap without new allocation; past cap, append reallocates (roughly doubling for small slices) and copies."),
+      ("What is the internal structure of a Go slice?",
+       "A slice is a 3-word header: pointer to the backing array's first element, length, capacity. Assigning or passing a slice copies only this header — elements stay shared."),
+      ("How does append grow a slice internally?",
+       "If len < cap, append writes into the spare slot in place (aliases see it). At len == cap, it allocates a larger array (~2x for small slices), copies elements, and the new slice forks from old views."),
+      ("Why does printing a slice show different values than expected after a sub-slice and append?",
+       "Because t := s[:2] shares backing storage; append within capacity writes into s's array. Verified: s=[1 2 3], t=s[:2], append(t,42) → both print [1 2 42]."),
+      ("What is the zero value of a slice and what operations work on it?",
+       "nil. len(nil slice) is 0, appending works (allocates), range iterates zero times; only index access panics."),
+    ],
+  ),
+  "append-and-growth": dict(
+    real_questions=[
+      ("What does append() do in Go, and why must you assign its result?",
+       "append returns a possibly-new slice header: in place if capacity remains, reallocated if not. Because the header may change, the caller must reassign: s = append(s, x). Ignoring the return silently drops elements when growth occurred."),
+      ("Does append always allocate new memory?",
+       "No. Below cap it writes into existing storage (visible to all aliases). Only at cap does it allocate, copy, and fork. So 'may allocate' is the honest phrasing."),
+      ("How can you make append allocation-free when the final size is known?",
+       "Pre-size with make([]T, 0, n). All appends then fit within cap and write in place — one allocation up front instead of the grow-copy chain."),
+      ("Why is append(s, x) without assignment a classic Go bug?",
+       "When capacity forces reallocation, the new header lives only in the return value. The original s still sees the old array — the appended element is lost to the caller."),
+      ("What is the growth factor of Go slices?",
+       "Roughly doubling for small slices (cap 3 → 6 → 12...); growth tapers for very large slices. Verified: append past cap 3 yields cap 6."),
+    ],
+  ),
+  "maps-make-and-literal": dict(
+    real_questions=[
+      ("How do you create a map in Go, and what happens if you write to a nil map?",
+       "make(map[string]int) or literal map[string]int{\"a\": 1}. A nil map reads fine (zero values) but WRITES panic: assignment to entry in nil map. Always make() before writing."),
+      ("make(map) with capacity hint — what does it do?",
+       "make(map[K]V, n) pre-allocates ~n buckets: a performance hint only, not a limit — the map grows past n transparently. Not the same as slice capacity."),
+      ("Map literal vs make — when each?",
+       "Literal when initial pairs are known statically; make when populated at runtime or when you need the capacity hint."),
+      ("What are the zero values in a Go map?",
+       "Missing keys return the value type's zero value: m[\"missing\"] is 0, \"\", false — not an error. The comma-ok idiom distinguishes stored-zero from missing."),
+      ("How do map keys work — what types can be keys?",
+       "Any comparable type: strings, ints, bools, arrays, structs of comparables, pointers. Slices, maps, functions cannot (not comparable). Keys must support == and hashing."),
+    ],
+  ),
+  "map-iteration-and-nil": dict(
+    real_questions=[
+      ("Is Go map iteration order random?",
+       "Deliberately randomized — the runtime shuffles bucket order so code never depends on it (it was deterministic in early Go; the spec now forbids relying on order). Use a sorted key slice when order matters."),
+      ("What is the comma-ok idiom for maps?",
+       "v, ok := m[key] — ok is true only when the key exists, distinguishing a stored zero value from a missing key."),
+      ("How do you delete from a map, and is it safe if the key is missing?",
+       "delete(m, key) — safe on any key including missing ones and nil maps. No error, no return value."),
+      ("What operations are safe on a nil map?",
+       "Reads (len, index → zero value), range (zero iterations), delete. ONLY writes panic."),
+      ("How do you iterate a map in sorted order?",
+       "Collect keys into a slice, sort it, then range over the sorted keys — the standard pattern since the language forbids ordered iteration."),
+    ],
+  ),
+  "range-over-slice-map": dict(
+    real_questions=[
+      ("What does range over a slice give you, and what is the common trap?",
+       "index, value — and value is a COPY of the element. Modifying it does not touch the slice; use s[i] = new or index into a slice of pointers. The trap: for _, v := range s { v.X = 1 } silently does nothing."),
+      ("Can you modify a map's values while ranging over it?",
+       "Yes — m[k] = v inside range over the map is allowed (update existing keys); adding new keys during iteration is unspecified. Deleting is safe."),
+      ("Does range copy the slice?",
+       "range evaluates the range expression once — for a slice it copies the HEADER. Length is fixed at loop start: appends inside the loop are invisible to it."),
+      ("What is the classic range gotcha with loop variables (pre Go 1.22)?",
+       "Before 1.22, the loop variable was a single reused variable — closures/goroutines capturing it saw the last value. Go 1.22 made each iteration a fresh variable (per-loop semantics change; scope the answer to the version)."),
+      ("How do you skip or break in a range loop?",
+       "continue skips to the next iteration; break exits. There is no labeled-continue need in Go — labels exist for breaking out of nested loops."),
+    ],
+  ),
+  "slice-tricks": dict(
+    real_questions=[
+      ("How do you remove an element from a slice in Go?",
+       "s = append(s[:i], s[i+1:]...) shifts the tail left — order preserved, O(n). Or s[i] = s[len(s)-1]; s = s[:len(s)-1] — order destroyed, O(1)."),
+      ("How do you insert an element at a position in a slice?",
+       "s = append(s[:i], append([]T{x}, s[i:]...)...) — the inner append creates a copy of the tail; or the manual grow-shift for zero extra allocation."),
+      ("How do you copy a slice safely?",
+       "dst := make([]T, len(s)); copy(dst, s) — or append([]T(nil), s...). Both give genuinely new backing storage (t := s shares)."),
+      ("How do you reverse a slice?",
+       "for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 { s[i], s[j] = s[j], s[i] } — in-place swap, no allocation."),
+      ("How do you filter a slice into a new one?",
+       "out := s[:0] reuses backing storage (careful: overwrites the source) — or the safe filtered := make([]T, 0); for _, v := range s { if keep(v) { filtered = append(filtered, v) } }."),
+    ],
+  ),
+  # ---- go-errors-basics ----
+  "if-err-not-nil-pattern": dict(
+    real_questions=[
+      ("Why is if err != nil the standard Go error check?",
+       "Go returns errors as values: functions return (result, error) and the caller checks immediately. The if err != nil block IS Go's exception handling — explicit, happens at the point of failure, and composes with wrapping."),
+      ("Should you check err after checking the result?",
+       "Check err first. On error, other return values may be invalid zero values — reading them before the check is a classic bug (e.g., bytes read 0 but also -1 undefined)."),
+      ("Is checking err == nil instead of err != nil different?",
+       "Same predicate inverted; convention is if err != nil { return ... } — the guard-clause style keeps the happy path unindented."),
+      ("What is the difference between returning err and wrapping it?",
+       "Returning err passes it up unchanged; fmt.Errorf(\"...: %w\", err) wraps it with context while keeping errors.Is/As unwrapping working. Wrap when your function adds meaning; pass through when you add nothing."),
+      ("Why does Go not use try/catch?",
+       "Explicit returns make the failure path visible in the code and the compiler forces dealing with the error value (unused variable discipline). Panic is reserved for unrecoverable program bugs."),
+    ],
+  ),
+  "errors-new": dict(
+    real_questions=[
+      ("What does errors.New do, and when do you use it?",
+       "Creates a simple error value with a static message: errors.New(\"file not found\"). Use when the error needs no data — just a fixed identity."),
+      ("What is errors.New vs fmt.Errorf?",
+       "errors.New: constant message, no formatting. fmt.Errorf: formatted message; with %w it also wraps an underlying error for errors.Is/As. Use Errorf when you need context or values in the message."),
+      ("Can two errors.New with the same text be compared equal?",
+       "No — each errors.New call creates a distinct pointer. Compare with errors.Is (sentinel errors declared as package vars) or compare errors by == on the SAME value."),
+      ("How do you define sentinel errors in Go?",
+       "var ErrNotFound = errors.New(\"not found\") at package level; callers check errors.Is(err, ErrNotFound). The single package-level value is the identity."),
+      ("What is the downside of errors.New for caller-side decisions?",
+       "A static string carries no data — callers can only match the identity, not extract fields. Custom error types (struct implementing error) carry the details."),
+    ],
+  ),
+  "fmt-errorf": dict(
+    real_questions=[
+      ("What does fmt.Errorf with %w do?",
+       "Creates an error whose message wraps another error AND records it as unwrap-able — errors.Is/As traverse the chain. %v would embed the text but break unwrapping."),
+      ("%w vs %v in error messages — what is the practical difference?",
+       "%w makes errors.Is(err, target) work through the wrap; %v just prints the message. If callers need to match the underlying error, use %w."),
+      ("Can you wrap multiple errors with fmt.Errorf?",
+       "Not with %w (only one). Go 1.20+ has errors.Join(err1, err2) for multiple — returns an error that Is-matches any component."),
+      ("When should you add context with Errorf instead of returning err directly?",
+       "When your layer adds meaning the caller cannot infer: the operation attempted, the file name, the request ID. If the error already says everything, pass it through — every wrap adds reading cost."),
+      ("What does errors.Is do with a wrapped chain?",
+       "Walks the Unwrap chain comparing each error to the target (== on identity). fmt.Errorf %w links the chain; errors.Is finds the sentinel inside."),
+    ],
+  ),
+  "panic-vs-error": dict(
+    real_questions=[
+      ("When should you panic vs return an error in Go?",
+       "Error: any expected failure a caller could handle (missing file, bad input, network). Panic: programmer bugs and unrecoverable invariants (impossible state, index math you PROVED safe). Libraries should almost never panic on caller input."),
+      ("What happens when a panic occurs?",
+       "The goroutine unwinds: deferred functions run (in LIFO order) — this is how recover works — then the program prints the panic value + stack and exits (unhandled)."),
+      ("What is recover and where is it valid?",
+       "recover() inside a deferred function during a panic stops the unwinding and returns the panic value. Only meaningful in defer — elsewhere it returns nil. Pattern: a deferred func that checks recover to convert panics to errors at API boundaries."),
+      ("Does panic in one goroutine crash the whole program?",
+       "Yes — an unrecovered panic in ANY goroutine terminates the entire program. Each goroutine that might panic needs its own deferred recover at its boundary."),
+      ("Is panic/recover Go's exception handling?",
+       "No — it is a crash mechanism with a recovery hatch for boundaries. Idiomatic error flow is returned values; panics are for bugs. Using panic for control flow defeats Go's explicit error design."),
+    ],
+  ),
+  "custom-error-types-basics": dict(
+    real_questions=[
+      ("How do you create a custom error type in Go?",
+       "Any type implementing error (a method Error() string): type NotFoundError struct { Name string }; func (e *NotFoundError) Error() string { return \"not found: \" + e.Name }. Callers use errors.As to extract the fields."),
+      ("How do callers inspect a custom error?",
+       "var nfe *NotFoundError; if errors.As(err, &nfe) { use nfe.Name } — errors.As walks the wrap chain and finds the first matching type."),
+      ("Why define error types instead of using errors.New strings?",
+       "Typed errors carry data (which file, what code) and match by type not text; string matching breaks when messages change. Types make the failure actionable."),
+      ("Should custom errors be pointer or value receivers?",
+       "Convention: pointer receivers and errors.As with a pointer target (var e *MyErr). Mixing value and pointer error types is a classic errors.As-mismatch bug."),
+      ("What is the error interface exactly?",
+       "type error interface { Error() string } — one method. Everything else (wrapping, Is, As, Unwrap) is convention built on top via the errors package."),
+    ],
+  ),
+  "multiple-return-error": dict(
+    real_questions=[
+      ("Why does Go return (value, error) pairs?",
+       "Errors as values: the signature documents what can fail, the caller must handle it at the call site, and multiple returns make the pairing natural. No exceptions means no hidden failure paths."),
+      ("What are the conventions for the error return value?",
+       "error is the LAST return value; on failure other values should be zero/nil (documented); on success error is nil. Callers check err before using other values."),
+      ("Can a function return multiple errors?",
+       "Idiomatically one; Go 1.20 errors.Join(err...) wraps several into a single error that Is-matches each — used when collecting parallel failures."),
+      ("What is the blank identifier's role with errors?",
+       "_, err := f() when you only need the error; v, _ := f() IGNORES an error — a lint smell unless failure is genuinely impossible. The _ silences the compiler's unused check."),
+      ("How does the (T, error) pattern affect API design?",
+       "It forces explicit failure modeling: every call site answers 'what happens if this fails?' — which is why Go code has more visible branches but no surprise throws."),
+    ],
+  ),
+}
