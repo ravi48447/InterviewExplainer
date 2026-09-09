@@ -1,4 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
+import { existsSync } from "node:fs";
+
+const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
+const baseURL = externalBaseUrl ?? "http://127.0.0.1:3100";
+const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const launchOptions = existsSync(macChrome) ? { executablePath: macChrome } : undefined;
 
 export default defineConfig({
   testDir: "./tests/visual",
@@ -13,16 +19,19 @@ export default defineConfig({
     },
   },
   use: {
-    baseURL: "http://127.0.0.1:3100",
+    baseURL,
+    launchOptions,
     colorScheme: "light",
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: "WATCHPACK_POLLING=true npm run dev -- --port 3100",
-    url: "http://127.0.0.1:3100",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: externalBaseUrl
+    ? undefined
+    : {
+        command: "WATCHPACK_POLLING=true npm run dev -- --port 3100",
+        url: "http://127.0.0.1:3100",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
   projects: [
     {
       name: "desktop",

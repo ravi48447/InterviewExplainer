@@ -9,6 +9,7 @@ import {
 } from "@/lib/seo-slugs";
 import { PILLAR_HUB_SLUGS } from "@/lib/seo-pillars";
 import { getAppConfig, buildSecurityHeaders } from "@/lib/platform";
+import contentSources from "@/content/source-of-truth.json";
 
 /**
  * Proxy — URL canonicalisation + personalised level redirect
@@ -90,50 +91,28 @@ const MIGRATED_DOMAINS = new Set([
   "ruby-fullstack-intermediate",
 ]);
 
+interface SourceDomainConfig {
+  legacyRoute?: { lang: string; track: string; level: string };
+  legacyStackSlugs?: Record<string, string>;
+  legacyQuestionRoutes?: Record<string, { stackSlug: string; questionSlug: string }>;
+}
+
+const SOURCE_DOMAINS = contentSources.domains as Record<string, SourceDomainConfig>;
+const LEGACY_ROUTE_TO_DOMAIN = new Map<string, string>();
+for (const [domainSlug, source] of Object.entries(SOURCE_DOMAINS)) {
+  if (!source.legacyRoute) continue;
+  const { lang, track, level } = source.legacyRoute;
+  LEGACY_ROUTE_TO_DOMAIN.set(`${lang}/${track}/${level}`, domainSlug);
+}
+
 /**
  * Per-domain stack-slug rename map.
  * Old URL slug → new locked module slug.
  * Applied as a 301 so browsers, bookmarks and Google re-index to the new URL.
  */
 const STACK_SLUG_RENAMES: Record<string, Record<string, string>> = {
-  "java-backend-intermediate": {
-    "collections-data-structures": "java-collections",
-    "jvm-performance":              "jvm-internals",
-    "spring-data-hibernate":        "spring-data-jpa",
-    "rest-api-web":                 "rest-api",
-    "security":                     "application-security",
-    "devops-cicd":                  "cicd",
-    "aws":                          "aws-cloud",
-    "production-operations":        "production-sre",
-    // Split-module aliases (old URL served by one of the new modules):
-    "advanced-java":                "java-streams",
-    "testing":                      "unit-testing",
-    "architecture-design-patterns": "design-patterns",
-    "database":                     "sql-databases",
-    "event-driven":                 "messaging-events",
-    "event-driven-architecture":    "messaging-events",
-    "kafka":                        "messaging-events",
-    "caching-performance":          "redis-caching",
-    "redis":                        "redis-caching",
-    "cloud-deployment":             "aws-cloud",
-    "git":                          "git-build-tools",
-    "maven-gradle":                 "java-build-tools",
-    // Merge redirect (Apr 2026): advanced-testing folded into unit-testing.
-    "advanced-testing":             "unit-testing",
-    // Granular-split redirects (Apr 2026): umbrella App URLs kept pointing to
-    // the umbrella module, but we now also publish focused alias URLs that
-    // happen to match the new standalone moduleSlugs. Example:
-    //   /java-backend-intermediate/gcp  (new) → /java-backend-intermediate/gcp (real)
-    // Nothing to rename here because the new modules already have matching
-    // App URLs. Aliases below are for common user-typed variants only.
-    "google-cloud":                 "gcp",
-    "microsoft-azure":              "azure",
-    "iac":                          "terraform",
-    "infrastructure-as-code":       "terraform",
-    "amqp":                         "rabbitmq",
-    "protobuf":                     "grpc",
-    "oop":                          "java-oop",
-  },
+  "java-backend-intermediate": SOURCE_DOMAINS["java-backend-intermediate"].legacyStackSlugs ?? {},
+  "java-backend-fresher": SOURCE_DOMAINS["java-backend-fresher"].legacyStackSlugs ?? {},
   // JFI is a greenfield track — no legacy URL shapes to rename. Its reused
   // modules share slugs with JBI (core-java, spring-boot, …) and resolve
   // content via _index.json.contentSource in the content-reader.
@@ -215,6 +194,12 @@ function buildDomainSlug(lang: string, track: string, level: string): string {
   return `${lang}-${track}-${level}`;
 }
 
+/** Resolve legacy route coordinates to the published canonical domain slug. */
+function publishedDomainSlug(lang: string, track: string, level: string): string {
+  return LEGACY_ROUTE_TO_DOMAIN.get(`${lang}/${track}/${level}`)
+    ?? buildDomainSlug(lang, track, level);
+}
+
 /**
  * Apply a stack-slug rename for a migrated domain.
  * Returns the canonical slug (same as input if no rename applies).
@@ -223,6 +208,32 @@ function canonicalStackSlug(domainSlug: string, stackSlug: string): string {
   const renames = STACK_SLUG_RENAMES[domainSlug];
   if (!renames) return stackSlug;
   return renames[stackSlug] ?? stackSlug;
+}
+
+/**
+ * Resolve a legacy route as one unit. A few questions moved to a different
+ * canonical module, so changing only the stack segment would still create a
+ * valid-looking 404. The registry preserves those URLs without keeping a
+ * second active content tree.
+ */
+function canonicalMigratedPath(domainSlug: string, rest: string[]): string[] {
+  const canonical = [...rest];
+  if (canonical.length >= 1) {
+    canonical[0] = canonicalStackSlug(domainSlug, stripNumericPrefix(canonical[0]));
+  }
+
+  if (
+    (domainSlug === "java-backend-intermediate" || domainSlug === "java-backend-fresher")
+    && canonical.length >= 2
+  ) {
+    const redirect = SOURCE_DOMAINS[domainSlug]?.legacyQuestionRoutes?.[canonical[1]];
+    if (redirect) {
+      canonical[0] = redirect.stackSlug;
+      canonical[1] = redirect.questionSlug;
+    }
+  }
+
+  return canonical;
 }
 
 export function proxy(request: NextRequest) {
@@ -379,17 +390,14 @@ function handleProxy(request: NextRequest) {
       return NextResponse.next();
     }
 
-    const domainSlug = buildDomainSlug(lang, track, level);
+    const domainSlug = publishedDomainSlug(lang, track, level);
     if (!MIGRATED_DOMAINS.has(domainSlug)) {
       // Non-migrated domain — keep /interview/ URL shape for now.
       return NextResponse.next();
     }
 
     // Migrated: rewrite any old stack slug to its new name and 301.
-    const rewritten = [...rest];
-    if (rewritten.length >= 1) {
-      rewritten[0] = canonicalStackSlug(domainSlug, stripNumericPrefix(rewritten[0]));
-    }
+    const rewritten = canonicalMigratedPath(domainSlug, rest);
 
     const url = request.nextUrl.clone();
     url.pathname = ["", domainSlug, ...rewritten].join("/");
@@ -403,15 +411,23 @@ function handleProxy(request: NextRequest) {
   const parsed = parseDomainSlug(domainSlug);
   if (!parsed) return NextResponse.next();
 
+  // Word-level aliases such as /java-backend-beginner use the same route
+  // coordinates as the published /java-backend-fresher curriculum.
+  const publishedSlug = publishedDomainSlug(parsed.lang, parsed.track, parsed.level);
+  if (publishedSlug !== domainSlug && MIGRATED_DOMAINS.has(publishedSlug)) {
+    const url = request.nextUrl.clone();
+    url.pathname = ["", publishedSlug, ...canonicalMigratedPath(publishedSlug, rest)].join("/");
+    return NextResponse.redirect(url, { status: 301 });
+  }
+
   // ── 301: Canonicalise legacy numeric level suffixes ──
   //    /java-backend-0-1/... → /java-backend-beginner/...
   //    /java-backend-5+/...  → /java-backend-advanced/...
   if (parsed.rawLevelSuffix !== parsed.level) {
-    const canonicalDomainSlug = buildDomainSlug(parsed.lang, parsed.track, parsed.level);
-    const canonicalRest = [...rest];
-    if (MIGRATED_DOMAINS.has(canonicalDomainSlug) && canonicalRest.length >= 1) {
-      canonicalRest[0] = canonicalStackSlug(canonicalDomainSlug, stripNumericPrefix(canonicalRest[0]));
-    }
+    const canonicalDomainSlug = publishedDomainSlug(parsed.lang, parsed.track, parsed.level);
+    const canonicalRest = MIGRATED_DOMAINS.has(canonicalDomainSlug)
+      ? canonicalMigratedPath(canonicalDomainSlug, rest)
+      : [...rest];
     const url = request.nextUrl.clone();
     url.pathname = ["", canonicalDomainSlug, ...canonicalRest].join("/");
     return NextResponse.redirect(url, { status: 301 });
@@ -419,16 +435,11 @@ function handleProxy(request: NextRequest) {
 
   // ── Migrated domain: render directly, after normalising the stack slug ──
   if (MIGRATED_DOMAINS.has(domainSlug)) {
-    if (rest.length >= 1) {
-      const raw = rest[0];
-      const stripped = stripNumericPrefix(raw);
-      const canonical = canonicalStackSlug(domainSlug, stripped);
-      // 301 only if the URL's stack slug differs from canonical.
-      if (canonical !== raw) {
-        const url = request.nextUrl.clone();
-        url.pathname = ["", domainSlug, canonical, ...rest.slice(1)].join("/");
-        return NextResponse.redirect(url, { status: 301 });
-      }
+    const canonicalRest = canonicalMigratedPath(domainSlug, rest);
+    if (canonicalRest.some((segment, index) => segment !== rest[index])) {
+      const url = request.nextUrl.clone();
+      url.pathname = ["", domainSlug, ...canonicalRest].join("/");
+      return NextResponse.redirect(url, { status: 301 });
     }
     // Fall through to the personalised-level check below, no rewrite needed.
   } else {
@@ -457,7 +468,7 @@ function handleProxy(request: NextRequest) {
     KNOWN_LEVELS.has(savedLevel) &&
     savedLevel !== parsed.level
   ) {
-    const newDomainSlug = buildDomainSlug(parsed.lang, parsed.track, savedLevel);
+    const newDomainSlug = publishedDomainSlug(parsed.lang, parsed.track, savedLevel);
     const url = request.nextUrl.clone();
     url.pathname = ["", newDomainSlug, ...rest].join("/");
     // 302 — don't break SEO on the intermediate URL.

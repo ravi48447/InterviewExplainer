@@ -14,6 +14,7 @@
 // ─── Experience Levels ───────────────────────────────────────────────────────
 
 import type { SpeakableV2 } from './speakable/schema';
+import type { SpeakingCue } from './api';
 
 export type Level = 'beginner' | 'intermediate' | 'advanced';
 export type Difficulty = 'easy' | 'medium' | 'hard';
@@ -51,6 +52,9 @@ export interface V2AnswerSection {
   content: string | string[];
   language?: string;
   replaceSection?: boolean;
+  /** Authored presentation blocks for a guided Interview Answer article. */
+  beats?: SpeakingCue[];
+  answerSize?: 'compact' | 'standard' | 'deep';
 }
 
 export interface V2Answer {

@@ -1,0 +1,209 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const questionFile = path.join(
+  repoRoot,
+  "content/go-fresher/go-slices-maps/arrays-vs-slices/complete-qa.json",
+);
+const fence = String.fromCharCode(96).repeat(3);
+
+const lessons = {
+  "go-slices-maps-arrays-vs-slices-interview-basics": {
+    directAnswer: "An array, such as `[3]int`, is a complete value with exactly three elements. Its length is part of the type, and assignment copies all elements. A slice, such as `[]int`, is a small descriptor with a length and capacity that refers to an underlying array. Copying the descriptor can leave two slices sharing elements. Slices can be resliced and appended; append may reuse or replace the underlying storage. Arrays fit meaningful fixed sizes, while slices fit most variable-length collections.",
+    quick: [
+      "`[3]int` is an array with three elements; `[]int` is a slice of any current length.",
+      "An array's length belongs to its type, so `[3]int` and `[4]int` differ.",
+      "Assigning an array copies every element into an independent array value.",
+      "Assigning a slice copies its descriptor, so both slices may share elements.",
+      "A slice can be resliced or appended; an array's length never changes.",
+    ],
+    beats: [
+      {
+        cue: "Define an array through its type and storage",
+        stage: "An array owns a fixed value",
+        spokenText: "An array type includes its length. `[3]int` means one complete value containing exactly three integers, and `[4]int` is a different type. Once the array exists, its length cannot grow or shrink.",
+      },
+      {
+        cue: "Explain what array assignment does",
+        stage: "Array copies are independent",
+        spokenText: "Array assignment copies the elements. After `b := a`, changing `b[0]` does not change `a[0]`. Passing an array to an ordinary value parameter makes the same kind of element copy.",
+      },
+      {
+        cue: "Define a slice as a view rather than an array",
+        stage: "A slice describes a view",
+        spokenText: "A slice has type `[]T`. It records a visible length, a capacity, and access to an underlying array. The slice value is therefore a description of elements, not a second copy of all those elements.",
+      },
+      {
+        cue: "Show the sharing created by a slice copy",
+        stage: "Slice copies may share data",
+        spokenText: "After `t := s`, the two slice descriptors normally reach the same positions in the same underlying array. A write such as `t[0] = 9` is then visible through `s[0]` as well. This is slice aliasing.",
+      },
+      {
+        cue: "Explain growth and close with the practical choice",
+        stage: "Growth may change sharing",
+        spokenText: "`append` returns a slice. It reuses the current array when capacity is available and allocates another array when it is not, so sharing can change after growth. Use arrays when an exact size has meaning and slices for normal variable-length collections.",
+        recallRule: "An array is a fixed value; a slice is a flexible view that may share an underlying array.",
+      },
+    ],
+    overview: {
+      title: "Arrays are values; slices are views",
+      content: "An array stores a fixed number of elements as one value. The length appears in the type, so `[3]int` and `[4]int` cannot be used interchangeably without an explicit conversion where one is allowed. Assignment copies every element. The same rule applies when an array is passed to a function by value. This gives arrays clear ownership and makes arrays directly comparable when their element type is comparable.\n\nA slice uses the type `[]T` because its current length is not part of its type. Conceptually, the slice value records access to an underlying array, plus a length and capacity. The length is the number of elements that may be indexed now. The capacity is the number of elements available from the slice's starting position before new storage is needed.\n\nCopying a slice copies this small description, not the elements. Two slice values can therefore expose the same array positions. Changing a shared element through either view is visible through the other. Reslicing changes only the copied descriptor. Appending returns a new descriptor and may either reuse the array or allocate a replacement, depending on available capacity.\n\nThe types communicate different ideas. `[16]byte` can mean exactly sixteen bytes as part of a protocol or identifier. `[]byte` means a sequence whose length can vary. Most collection APIs accept slices because they work across many lengths, while arrays remain useful when fixed size, value copying, or direct equality is part of the model.",
+    },
+    visual: {
+      type: "comparison_table",
+      title: "Array and slice behavior side by side",
+      content: "| Property | Array `[N]T` | Slice `[]T` |\n|---|---|---|\n| Length | Fixed and part of the type | Stored in the slice value |\n| Assignment | Copies all elements | Copies the descriptor |\n| Element storage | Belongs to the array value | Lives in an underlying array |\n| Growth | Requires another array | `append` returns a longer slice |\n| Equality | `==` works when `T` is comparable | Only comparison with `nil` is allowed |",
+    },
+    example: {
+      title: "See independent arrays and shared slice elements",
+      code: "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tarrayA := [3]int{1, 2, 3}\n\tarrayB := arrayA\n\tarrayB[0] = 9\n\n\tsliceA := make([]int, 3, 3)\n\tcopy(sliceA, []int{1, 2, 3})\n\tsliceB := sliceA\n\tsliceB[0] = 9\n\n\tgrown := append(sliceB, 4)\n\tgrown[1] = 8\n\n\tfmt.Println(\"arrays:\", arrayA, arrayB)\n\tfmt.Println(\"shared slices:\", sliceA, sliceB)\n\tfmt.Println(\"grown slice:\", grown)\n}",
+    },
+  },
+  "go-slices-maps-arrays-vs-slices-when-to-use": {
+    directAnswer: "Go passes both arrays and slices by value, but it copies different values. Passing `[3]int` copies all three elements, so changing the array parameter leaves the caller's array unchanged. Passing `[]int` copies a slice descriptor that still reaches the caller's underlying array, so changing `values[0]` can be visible to the caller. Reslicing or assigning the result of `append` changes only the local descriptor. Return the resulting slice when a function may change its length or storage.",
+    quick: [
+      "Every ordinary Go argument is passed by value, including arrays and slices.",
+      "An array parameter receives a copy of every array element.",
+      "A slice parameter receives a copied descriptor that may share backing storage.",
+      "Changing `s[i]` can reach the caller; changing the local length cannot.",
+      "Return the slice when `append` or reslicing is part of the function's result.",
+    ],
+    beats: [
+      {
+        cue: "Start from Go's single parameter rule",
+        stage: "Every argument is copied",
+        spokenText: "Go uses value parameters. A call copies the argument value into the parameter whether that value is an integer, an array, a slice, or a pointer. The behavior after the copy depends on what that value contains.",
+      },
+      {
+        cue: "Apply the rule to a fixed array",
+        stage: "An array parameter owns a copy",
+        spokenText: "A parameter declared as `[2]int` receives two copied elements. Writing `a[0] = 7` changes only that parameter. If a function truly needs to edit the caller's exact fixed array, it can accept `*[2]int` instead.",
+      },
+      {
+        cue: "Apply the same rule to a slice descriptor",
+        stage: "A slice parameter shares data",
+        spokenText: "A `[]int` parameter receives a copied slice descriptor. That descriptor still points at the same underlying elements, so `s[0] = 7` can be observed through the caller's slice. The function does not need a pointer to the slice for element updates.",
+      },
+      {
+        cue: "Separate element writes from descriptor changes",
+        stage: "Elements and headers differ",
+        spokenText: "The parameter has its own length and capacity fields. Operations such as `s = s[:1]` or `s = append(s, 9)` replace the local descriptor, not the caller's slice variable. Append may also move the result to new storage.",
+      },
+      {
+        cue: "Give the normal API pattern",
+        stage: "Return the changed slice",
+        spokenText: "When the function changes the collection's shape, return the resulting slice and let the caller write `s = add(s, value)`. A pointer to a slice is reserved for APIs that specifically need to replace the caller's slice variable; it is not the usual append helper.",
+        recallRule: "Slice elements may be shared across a value parameter, but the slice descriptor itself is local.",
+      },
+    ],
+    overview: {
+      title: "Value passing copies different kinds of values",
+      content: "Go does not have a separate pass-by-reference mode. Every argument is evaluated and its value is assigned to a parameter. An array value contains its elements, so passing `[2]int` copies both elements. Changes made through that parameter stay in the copy. A pointer to an array can expose the original array, but it should be used because the function needs that fixed array, not merely to imitate slice behavior.\n\nA slice value is different. It describes part of an underlying array with its current length and capacity. Passing `[]int` copies that description. The caller's slice and the parameter can still reach the same array positions, which is why assigning `s[0] = 7` inside the function can update what the caller sees.\n\nThe two descriptors remain separate values. Reslicing the parameter changes its local length. Appending assigns a returned descriptor to the local parameter and may choose new storage. Neither operation replaces the caller's slice variable. If append reuses the existing array, it can write elements within that capacity, but the caller's length still does not grow automatically.\n\nThe normal shape-changing API returns a slice: `items = add(items, value)`. This works whether append reused storage or allocated another array. Functions that only edit existing elements can accept a slice and return nothing. Keeping element mutation and descriptor replacement separate makes function behavior predictable without introducing a pointer to every slice.",
+    },
+    visual: {
+      type: "flow_diagram",
+      title: "What a function receives",
+      content: "```mermaid\nflowchart LR\n  A[Caller array] -->|copy all elements| B[Independent array parameter]\n  S[Caller slice descriptor] -->|copy descriptor| T[Slice parameter]\n  S --> U[Underlying array]\n  T --> U\n```\nThe slice descriptors are separate, but they can still reach the same elements.",
+    },
+    example: {
+      title: "Compare array copies, shared elements, and returned growth",
+      code: "package main\n\nimport \"fmt\"\n\nfunc changeArray(values [2]int) {\n\tvalues[0] = 7\n}\n\nfunc changeElement(values []int) {\n\tvalues[0] = 7\n}\n\nfunc showLocalLength(values []int) {\n\tvalues = values[:1]\n\tfmt.Println(\"inside length:\", len(values))\n}\n\nfunc add(values []int, value int) []int {\n\treturn append(values, value)\n}\n\nfunc main() {\n\tarray := [2]int{1, 2}\n\tslice := []int{1, 2}\n\n\tchangeArray(array)\n\tchangeElement(slice)\n\tshowLocalLength(slice)\n\tfmt.Println(\"caller values:\", array, slice, len(slice))\n\n\tslice = add(slice, 9)\n\tfmt.Println(\"after returned append:\", slice)\n}",
+    },
+  },
+  "go-slices-maps-arrays-vs-slices-common-mistake": {
+    directAnswer: "Use an array when the exact element count is part of the value or contract, such as `[16]byte` for an identifier, `[3]float64` for a coordinate, or a fixed protocol field. The compiler distinguishes array lengths, and an array can be copied or compared as one value when its elements are comparable. Use a slice for variable-length lists and general collection APIs. If only preallocated space is needed, make a slice with capacity instead of turning capacity into an array type.",
+    quick: [
+      "Choose an array when an exact length has domain meaning.",
+      "An array parameter lets the compiler reject a value with the wrong length.",
+      "Arrays support value copying and `==` when their elements are comparable.",
+      "Choose slices for variable lists, `append`, and general collection APIs.",
+      "Use `make([]T, 0, n)` for capacity; capacity alone is not an array contract.",
+    ],
+    beats: [
+      {
+        cue: "Make the decision about meaning, not syntax",
+        stage: "Exact length has meaning",
+        spokenText: "Use an array when the count is part of what the value is. A `type TraceID [16]byte` is always sixteen bytes, and a `[3]float64` can represent one three-dimensional coordinate. The size communicates a rule.",
+      },
+      {
+        cue: "Show how the compiler enforces the rule",
+        stage: "The type enforces the size",
+        spokenText: "A function accepting `[16]byte` cannot receive `[15]byte` by accident because those are different types. With a `[]byte` parameter, the function must check `len(data) == 16` at run time if that size is required.",
+      },
+      {
+        cue: "Explain useful array value behavior",
+        stage: "Arrays have value semantics",
+        spokenText: "Small arrays can be assigned and returned as complete values. If the element type is comparable, arrays also support `==` and may be map keys. This is convenient for fixed identifiers, hashes, and small mathematical values.",
+      },
+      {
+        cue: "Contrast the normal collection choice",
+        stage: "Slices serve general lists",
+        spokenText: "Use `[]T` for batches, query results, request items, and other collections whose length varies. One slice type accepts many lengths, supports reslicing, and works naturally with `append`, so it is the usual function boundary for a list.",
+      },
+      {
+        cue: "Close with copying and preallocation boundaries",
+        stage: "Capacity is not a contract",
+        spokenText: "Do not choose `[1000]T` only to reserve memory. Use `make([]T, 0, 1000)` when the logical length is still variable. Also avoid copying large arrays casually; use a slice or pointer when the API does not need fixed-size value semantics.",
+        recallRule: "Choose an array for a meaningful exact size, and a slice for a collection whose current length may vary.",
+      },
+    ],
+    overview: {
+      title: "Meaningful fixed sizes in array types",
+      content: "An array is most valuable when its length says something important. A sixteen-byte identifier, a thirty-two-byte digest, an RGB triplet, or a fixed matrix has a known shape. Putting that shape in `[N]T` lets the compiler distinguish values with different lengths and removes a repeated run-time length check at trusted boundaries.\n\nArrays also behave as complete values. Assignment copies them, and equality is available when the element type is comparable. That can make small fixed records easy to return, compare, or use as map keys. The same behavior can be a cost for a large array because passing or assigning it copies every element unless code uses a pointer.\n\nA slice is a better default for an ordinary collection. Request items, database rows, batches, and filtered results naturally change length. A `[]T` parameter accepts any current length and works with reslicing and append. Even when storage began as a local array, a slice can expose the needed portion without forcing the array's length into every caller's type.\n\nCapacity is a storage plan, not a domain rule. If code expects about one thousand items but may receive fewer or more, use `make([]T, 0, 1000)`. Choosing `[1000]T` would say that exactly one thousand positions are part of the value. The clearest choice is the one whose type states the real size requirement.",
+    },
+    visual: {
+      type: "comparison_table",
+      title: "Choose from the collection contract",
+      content: "| Requirement | Better fit | Why |\n|---|---|---|\n| Exact count is meaningful | Array | Length is enforced by the type |\n| Small comparable fixed value | Array | Value copying and `==` are available |\n| Length changes at run time | Slice | Reslicing and `append` are supported |\n| General list parameter | Slice | One type accepts many lengths |\n| Reserve space for expected growth | Slice with capacity | Capacity does not pretend to be logical length |",
+    },
+    example: {
+      title: "Use a fixed identifier and a variable batch",
+      code: "package main\n\nimport \"fmt\"\n\ntype TraceID [16]byte\n\nfunc sameTrace(left, right TraceID) bool {\n\treturn left == right\n}\n\nfunc total(values []int) int {\n\tsum := 0\n\tfor _, value := range values {\n\t\tsum += value\n\t}\n\treturn sum\n}\n\nfunc main() {\n\tfirst := TraceID{0x7f}\n\tsecond := first\n\tbatch := make([]int, 0, 4)\n\tbatch = append(batch, 2, 3, 5)\n\n\tfmt.Println(\"same trace:\", sameTrace(first, second))\n\tfmt.Println(\"batch total:\", total(batch))\n}",
+    },
+  },
+};
+
+const document = JSON.parse(fs.readFileSync(questionFile, "utf8"));
+let curated = 0;
+
+for (const [targetSlug, lesson] of Object.entries(lessons)) {
+  const matches = document.questions.filter((question) => question.slug === targetSlug);
+  if (matches.length !== 1) {
+    throw new Error("Expected exactly one " + targetSlug + " question, found " + matches.length);
+  }
+
+  const question = matches[0];
+  const sections = question.answer?.sections ?? [];
+  const quick = sections.find((section) => section.type === "key_points");
+  const speaking = sections.find((section) => section.type === "speakable_answer");
+  const overview = sections.find((section) => section.type === "overview");
+  const visual = sections.find((section) => section.type === lesson.visual.type);
+  const example = sections.find((section) => section.type === "code_example");
+  if (!quick || !speaking || !overview || !visual || !example) {
+    throw new Error("Missing an existing array-versus-slice section for " + targetSlug);
+  }
+
+  question.direct_answer = lesson.directAnswer;
+  quick.items = lesson.quick;
+  speaking.answerSize = "compact";
+  speaking.beats = lesson.beats;
+  speaking.content = lesson.beats.map((beat) => beat.spokenText.trim()).join("\n\n");
+  overview.title = lesson.overview.title;
+  overview.content = lesson.overview.content;
+  visual.title = lesson.visual.title;
+  visual.content = lesson.visual.content;
+  example.title = lesson.example.title;
+  example.content = fence + "go\n" + lesson.example.code.trim() + "\n" + fence;
+  curated += 1;
+}
+
+if (curated !== document.questions.length) {
+  throw new Error("Curated " + curated + " of " + document.questions.length + " questions");
+}
+
+fs.writeFileSync(questionFile, JSON.stringify(document, null, 2) + "\n");
+console.log("Curated " + curated + " Go array-versus-slice lessons");

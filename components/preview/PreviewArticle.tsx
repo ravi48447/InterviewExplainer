@@ -18,6 +18,8 @@ import {
   Star,
   Target,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   XCircle,
 } from "lucide-react";
 import type { PreviewArticle as PreviewArticleData } from "@/lib/preview-loader";
@@ -313,13 +315,23 @@ function CodeBlock({
   language,
   code,
   highlightedHtml,
+  collapseAfterLines = 0,
 }: {
   language: string;
   code: string;
   highlightedHtml: string;
+  collapseAfterLines?: number;
 }) {
   const { flavour, title, cleanedCode } = classifyCode(code);
   const [copied, setCopied] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(false);
+  const codeRegionId = React.useId();
+  const lineCount = cleanedCode.trimEnd().split("\n").length;
+  const canCollapse = collapseAfterLines > 0 && lineCount > collapseAfterLines;
+
+  React.useEffect(() => {
+    setExpanded(false);
+  }, [cleanedCode]);
 
   const accent =
     flavour === "bad"
@@ -403,12 +415,31 @@ function CodeBlock({
         </button>
       </div>
 
-      <pre className="m-0 overflow-x-auto bg-code text-muted-foreground text-[13px] leading-[1.65] px-5 py-4">
-        <code
-          className={`hljs language-${language || "plaintext"} font-mono whitespace-pre`}
-          dangerouslySetInnerHTML={{ __html: codeHtml }}
-        />
-      </pre>
+      <div className={`relative ${canCollapse && !expanded ? "max-h-[390px] overflow-hidden" : ""}`}>
+        <pre id={codeRegionId} className="m-0 overflow-x-auto bg-code px-5 py-4 text-[13px] leading-[1.65] text-muted-foreground">
+          <code
+            className={`hljs language-${language || "plaintext"} font-mono whitespace-pre`}
+            data-ie-highlighted="1"
+            dangerouslySetInnerHTML={{ __html: codeHtml }}
+          />
+        </pre>
+        {canCollapse && !expanded && (
+          <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-code" />
+        )}
+      </div>
+
+      {canCollapse && (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          aria-controls={codeRegionId}
+          className="flex min-h-10 w-full items-center justify-center gap-1.5 border-t border-border bg-surface px-4 text-[11.5px] font-semibold text-muted-foreground outline-none transition-colors hover:bg-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60"
+        >
+          {expanded ? <ChevronUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />}
+          {expanded ? "Collapse code" : `Show all ${lineCount} lines`}
+        </button>
+      )}
     </div>
   );
 }
@@ -443,7 +474,13 @@ function MarkdownCode({ inline, className, children }: CodeProps) {
   return <code className={className}>{children}</code>;
 }
 
-function MarkdownPre({ children }: { children?: React.ReactNode }) {
+export function MarkdownPre({
+  children,
+  collapseAfterLines = 0,
+}: {
+  children?: React.ReactNode;
+  collapseAfterLines?: number;
+}) {
   const child = React.Children.toArray(children)[0];
   if (!React.isValidElement(child)) return <pre>{children}</pre>;
 
@@ -459,7 +496,14 @@ function MarkdownPre({ children }: { children?: React.ReactNode }) {
 
   const rawText = extractText(codeProps.children);
   const highlightedHtml = renderToHtml(codeProps.children);
-  return <CodeBlock language={language} code={rawText} highlightedHtml={highlightedHtml} />;
+  return (
+    <CodeBlock
+      language={language}
+      code={rawText}
+      highlightedHtml={highlightedHtml}
+      collapseAfterLines={collapseAfterLines}
+    />
+  );
 }
 
 function renderToHtml(node: React.ReactNode): string {

@@ -1,108 +1,187 @@
-# Java Backend Fresher (JBF) — Answer Quality Spec
+# Java Backend Fresher content contract
 
-This is the **Definition of Done** for every JBF question. Goal: lift all ~1,552 JBF
-questions to the depth/structure of `java-backend-intermediate` (JBI) and `/dsa`, at
-**fresher depth** (0–2 YOE; clear, grounded, internet-familiar definitions —
-GeeksforGeeks / Baeldung level — not staff-level).
+This is the definition of done for content under `content/java-backend-fresher`.
+It extends `docs/GOLD-STANDARD-CONTENT.md` for a 0–2 YOE Java backend learner.
+The goal is not to make every answer equally long. The goal is to give every
+question the amount and kind of teaching it actually needs.
 
-## Gold reference (READ THIS FIRST)
+## One source and three learner zones
 
-Open and study this file — it is the structural template:
+`content/java-backend-fresher` is the active source of truth for this domain.
+Legacy trees are not alternative authoring locations.
 
-`content/java-backend-intermediate/java-oop/oop-principles/complete-qa.json`
-→ question slug `oop-four-pillars-java`.
+Every question has exactly three learner-facing zones:
 
-It uses: `overview → concept_map → phase → before_code → after_code → ... → comparison_table → step → key_points → speakable_answer` with `layout_type: "article"`.
+1. **Quick Revision** — recall the exact answer.
+2. **Interview Answer** — understand the complete answer expected in an interview.
+3. **Deep Dive** — learn the subject from the beginning and apply it.
 
-## File shapes (PRESERVE the existing shape)
+The zones are independent. A learner may open any one of them directly, so each
+must name and answer the real question without relying on text from another zone.
+They may share the same central fact, but they must not repeat the same paragraphs.
 
-Each topic = `content/java-backend-fresher/<module>/<topic>/complete-qa.json`. Two shapes exist:
-- **dict shape**: `{ "topic": "...", "topicSlug": "...", "questions": [ ... ] }`
-- **list shape**: a top-level JSON array of question objects.
+## Preserve stable identity
 
-Detect which shape the file already uses and KEEP it. Never change a file's shape.
+Content improvement must not break routes or curriculum order.
 
-## Per-question fields (keep all existing keys; upgrade these)
+- Preserve every existing `id`, `slug`, and `order` unless a separately reviewed
+  catalog migration explicitly changes it.
+- Preserve the existing top-level file shape. A topic may be either an object with
+  a `questions` array or a top-level array; do not convert between the two.
+- Keep existing SEO URLs and aliases stable. Improve a malformed visible question
+  through a catalog migration rather than silently changing its route identity.
+- Keep one canonical question body. Do not maintain divergent copies in a legacy
+  content tree.
 
-A question object has: `id, slug, question, title, direct_answer, layout_type,
-difficulty, importance?, reading_time_minutes, last_updated, interviewer_intent,
-company_tags, answer, followup_questions, seo, order, speakable_v2`.
+## Reference and language standard
 
-Upgrade:
-1. **`direct_answer`** — 2–3 sentences, **bold** the key terms, internet-familiar
-   definition. No "Think of it like a combo meal" filler.
-2. **`interviewer_intent`** — object `{testing, common_mistake, to_stand_out}`, tightened
-   to a REAL fresher trap (not generic).
-3. **`layout_type`** — set from the routing table below. NEVER leave `default` or
-   `explanation`.
-4. **`answer.sections`** — rebuild to match the archetype (see below).
-5. **`followup_questions`** — 3 real interview threads (array of strings, or keep existing
-   object shape if present).
-6. **`speakable_v2.hook`** — must NOT be a copy of `direct_answer`. **`speakable_v2`** beats
-   must be real spoken English (contractions OK, NO backticks, NO "at-RestController" — write
-   "the at sign RestController annotation" or "RestController annotation").
-7. Update `last_updated` to today's date (`2026-06-04`).
+Technical claims must be checked against the strongest available primary source:
+the Java Language Specification and JDK API for Java, official Spring/Jakarta
+documentation for frameworks, RFCs for HTTP, OWASP guidance for security, and the
+official documentation for JUnit, Mockito, Git, Maven, Gradle, Docker, and database
+products.
 
-## Allowed `answer.sections[].type` (renderer-supported ONLY)
+GeeksforGeeks, JavaTpoint, InterviewBit, and Baeldung may be used to understand the
+familiar vocabulary and examples learners already recognise. They are not the
+authority for disputed facts, and their wording must not be copied.
 
-`overview`, `phase`, `step`, `code_example`, `before_code`, `after_code`,
-`architecture_diagram`, `flow_diagram`, `sequence_diagram`, `concept_map`,
-`comparison_table`, `key_points`, `common_mistakes`, `when_to_use`, `tradeoffs`,
-`component`, `reference_group`.
+Write in simple, natural English:
 
-Do NOT invent new types. Every section is `{ "type": "...", "title": "...", "content": "..." }`
-(content is a string; for `key_points` content is a markdown bullet list string).
+- use the common name before an internal implementation term;
+- define an unavoidable advanced term where it first appears;
+- prefer a concrete example over abstract promotional language;
+- remove coaching filler such as “say this,” “to impress the interviewer,” or
+  “I would begin by” unless the question genuinely asks for a debugging or design
+  process;
+- never use a generated shell such as “compare X with an alternative.”
 
-### Section format rules
-- **code blocks** (`code_example`, `before_code`, `after_code`): content is a fenced
-  block — ` ```java\n...code...\n``` ` — Java 17, runnable, with brief inline comments.
-  Optional prose AFTER the closing fence renders as an italic note.
-- **`before_code` + `after_code`**: MUST appear consecutively, immediately after the `phase`/
-  `step`/`overview` they illustrate (the renderer groups trailing code blocks under the
-  preceding main section and shows a "Without … vs … With" diff). Use them wherever a fresher
-  writes the wrong pattern (e.g. `==` vs `.equals()`, public field vs getter, `Statement` vs
-  `PreparedStatement`, field vs constructor injection, N+1 vs `JOIN FETCH`).
-- **`concept_map`**: each line is `color|Title|~subtitle|point|point|point`. Colors:
-  `amber|blue|emerald|violet|rose|cyan`. Use for hierarchies / "X at a glance".
-- **`comparison_table`** / `step`: standard markdown tables (`| col | col |`).
-- **Diagrams** (`architecture_diagram`, `flow_diagram`, `sequence_diagram`): content is a
-  fenced ` ```mermaid\n...\n``` ` block (flowchart/sequenceDiagram). Use `<br/>` for line
-  breaks inside nodes. Keep node labels short. One diagram per question max.
-- **`speakable_answer`** section: 900–1400 chars spoken prose, no backticks, contractions OK.
+## 1. Quick Revision
 
-## Archetype → layout_type → required sections
+Quick Revision is a self-contained memory aid.
 
-| Archetype | `layout_type` | Sections (in order) |
-|---|---|---|
-| What is X / how X works (concept) | `concept-explainer` | overview → (concept_map OR phase) → code_example → common_mistakes → key_points → speakable_answer |
-| X vs Y (comparison) | `comparison-arena` | overview → comparison_table → before_code → after_code → when_to_use → key_points → speakable_answer |
-| Steps / config / Maven / JUnit setup | `recipe-builder` | overview → step×N (or code_example) → common_mistakes → key_points → speakable_answer |
-| Request/response or lifecycle flow | `lifecycle-timeline` | overview → flow_diagram (mermaid) → phase steps → key_points → speakable_answer |
-| Architecture / "how does Spring …" | `architecture-map` | overview → architecture_diagram (mermaid) → phase → key_points → speakable_answer |
-| SQL query | `sql-playground` | overview → code_example (query + sample output table) → common_mistakes → key_points → speakable_answer |
-| LLD / design | `design-whiteboard` | overview → step → architecture_diagram → key_points → speakable_answer |
-| DSA concept (in dsa modules) | `algorithm-workshop` | overview → flow_diagram → code_example (Java) → key_points → speakable_answer + `related_dsa_slug` |
-| Behavioral / HR | `reference-cards` | overview → step (STAR example script) → key_points → speakable_answer |
+- Begin with the direct answer, definition, or decision.
+- Add only the few facts needed to recall the concept correctly.
+- Include a boundary when it prevents a common wrong answer.
+- Make every point specific to the question; generic interview advice fails.
+- Do not introduce a code listing, table, or diagram unless that small artifact is
+  genuinely the shortest way to recall the answer.
 
-Pick the archetype from the question wording. When unsure use `concept-explainer`.
+A small syntax question may need one rule and one example. A lifecycle or design
+question may need more recall points. Completeness and recall value decide the
+depth, not a universal word or bullet count.
 
-## Quality bar (each upgraded question MUST)
-- Have a non-`default`/`explanation` `layout_type`.
-- Have ≥1 runnable Java 17 (or SQL) code block on any concept/coding question.
-- Add `before_code` + `after_code` wherever a wrong→right pattern exists.
-- Add ONE diagram (mermaid concept_map / flowchart) on flow/hierarchy questions.
-- Have a `speakable_answer` section AND a `speakable_v2` whose `hook` ≠ `direct_answer`.
-- Use internet-standard definitions; ≤1 analogy per answer.
-- Be valid JSON (file parses) and preserve the file's original shape + all existing keys.
+## 2. Interview Answer
 
-## DSA modules special rule (`dsa-fundamentals`, `problem-solving-patterns`)
-For algorithmic topics that exist in `/dsa`, add a top-level `related_dsa_slug` on the
-question pointing to the matching `content/dsa/.../` slug, keep a short verbal explanation +
-a small Java snippet with a dry-run, and use `layout_type: "algorithm-workshop"`. Keep
-~5–8 pure-concept questions verbal-only.
+Interview Answer is a complete technical answer, not a performance script. It must
+give learners the information they need and let them choose their own speaking
+style.
 
-## Validation (run before finishing)
-```
-python3 scripts/validate_jbf.py content/java-backend-fresher/<module>/
-```
-Fix every CRITICAL it reports. Aim for 0 CRITICAL and minimal MODERATE.
+Select only the elements the question needs:
+
+- a plain definition or direct decision;
+- the important mechanism or reasoning;
+- a concrete example, request, query, or small code sample;
+- when it matters or when to choose it;
+- a real limitation, failure mode, or trade-off;
+- a concise conclusion that answers the question.
+
+The order should feel like one connected explanation. Bullets are useful when they
+make a comparison or sequence easier to follow; they must not turn the answer into
+disconnected notes. An example must be complete enough to prove the explanation.
+Do not stretch an atomic question into an essay or compress an implementation or
+architecture question into a few generic lines.
+
+## 3. Deep Dive
+
+Deep Dive is a self-contained mini lesson written as a readable article. It should
+teach a learner who has not opened Quick Revision or Interview Answer.
+
+Choose a natural teaching path for the question, for example:
+
+- plain meaning and the problem the concept solves;
+- mental model, lifecycle, or internal mechanism;
+- one worked example carried through the explanation;
+- important variants or comparison boundaries;
+- common failure and its correction;
+- verification or a short knowledge check.
+
+These are possible teaching moves, not mandatory sub-sections. Keep headings
+meaningful and connected. Supporting code, tables, traces, and diagrams belong
+inside the article where they explain the surrounding text; they are not a second
+collection of unrelated cards.
+
+## Adaptive depth
+
+Decide depth from the question before writing:
+
+- **Atomic question:** one rule, definition, annotation, or syntax difference.
+  Explain it accurately, give a small example, and stop.
+- **Working concept:** a mechanism, comparison, API, data structure, or testing
+  choice. Explain how it behaves, demonstrate it, and cover the main boundary.
+- **System question:** an implementation, lifecycle, debugging scenario, security
+  flow, or architecture decision. Trace the system end to end, include failure
+  behavior, and show how the result is verified.
+
+There is no required word count, paragraph count, heading count, or reading time
+for a zone. Longer is better only when every additional part teaches something the
+question requires.
+
+## Meaning-driven code and visuals
+
+Use an artifact only when it teaches better than prose:
+
+- use code for language behavior, an implementation, a query, or a correct/wrong
+  pattern that must be seen;
+- use a sequence or flow diagram for order, state changes, request flow, or data
+  movement;
+- use a concept map for a genuine hierarchy or ownership relationship;
+- use a table for a symmetric comparison or compact reference data;
+- use before/after code only when both versions reveal a real mistake and fix.
+
+No question is required to contain code, a diagram, a table, or a particular block
+type. Decorative diagrams and forced code reduce quality and should be removed.
+Prefer one strong explanatory artifact to several weak ones.
+
+All examples must be verified. Java examples must match the Java version they
+claim, framework examples must use compatible APIs, SQL must be traceable against
+sample data, HTTP examples must have valid semantics, and Mermaid must render and
+match the prose. Pseudocode must be labelled as pseudocode.
+
+## Question-archetype outcome
+
+Use the question wording to set the learning outcome rather than to force a fixed
+section sequence:
+
+| Question | Learner must be able to do after Deep Dive |
+|---|---|
+| What is X? | Define X, recognise it, explain its purpose, and separate it from a nearby concept. |
+| X vs Y | Compare the same meaningful criteria and choose one for a concrete situation. |
+| How does X work? | Trace one input through the important stages to its output or state change. |
+| How do you implement X? | Build and verify a minimal complete example, including the relevant failure path. |
+| Debug this scenario | Use evidence to isolate the cause, justify a fix, and add a regression check. |
+| When should X be used? | State positive and negative selection criteria and defend a decision. |
+| What is the common mistake? | Recognise the wrong pattern, explain its consequence, and correct it. |
+| Architecture or security | Explain responsibilities, trust or data boundaries, flow, failure behavior, and the main trade-off. |
+| Testing | Choose the correct scope, identify real and mocked parts, and write assertions that catch a named bug. |
+
+## Per-question definition of done
+
+A question is complete only when all of the following are true:
+
+- the visible question is clear, natural, and contains no answer text;
+- all three zones answer that exact question independently;
+- Quick Revision supports correct recall rather than generic advice;
+- Interview Answer contains a complete, question-specific explanation;
+- Deep Dive teaches the concept in a coherent article flow;
+- content depth matches the complexity of the question;
+- every factual claim and example has been checked;
+- code or visuals are present only when meaningful and are technically valid;
+- no paragraph is copied across zones or unrelated questions;
+- `id`, `slug`, `order`, file shape, and canonical routing are preserved.
+
+## Validation
+
+Run the relevant content, catalog, source, JSON, example, and build checks after
+each topic-sized batch. Automated length and presence checks are warning signals,
+not proof of quality. Every batch also requires semantic review for exactness,
+simple language, factual accuracy, unnecessary repetition, and artifact value.

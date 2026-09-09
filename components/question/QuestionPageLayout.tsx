@@ -12,7 +12,6 @@ import {
   Clock,
   Compass,
   Folder,
-  HelpCircle,
   Home,
   MessageSquare,
   Moon,
@@ -30,140 +29,10 @@ import { MarkCompleteButton } from "@/components/mark-complete-button";
 import ReadingProgressBar from "@/components/ReadingProgressBar";
 import ViewTracker from "@/components/ViewTracker";
 import { CompanyTagsBadges } from "./CompanyTagsBadges";
+import { DeepDiveArticle } from "./DeepDiveArticle";
 import { InterviewSpeakingStudio } from "./InterviewSpeakingStudio";
 import { QuickAnswer } from "./QuickAnswer";
-import { SectionRenderer } from "./DetailedExplanation";
 import { ContentThemeProvider, useContentTheme } from "./ThemeContext";
-
-/* ──────────────────────────────────────────────────────────────────────────
- * Deep-dive section → markdown transform
- *
- * The whole answer page renders through a single framework — <MarkdownContent>
- * (the same renderer the "In a nutshell" card uses). To feed Zone 3 through it,
- * the typed answer sections are flattened into one markdown string. Code stays
- * fenced (so the shared client highlighter colours it) and the bespoke
- * `concept_map` pipe format is rewritten as plain markdown.
- * ────────────────────────────────────────────────────────────────────────── */
-
-function ensureFenced(content: string, lang = "java"): string {
-  if (content.includes("```")) return content;
-  return `\`\`\`${lang}\n${content.trim()}\n\`\`\``;
-}
-
-/** `color|heading|~subtitle|point|point` → bold heading + bullet list. */
-function conceptMapToMarkdown(content: string): string {
-  return content
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const parts = line.split("|").map((p) => p.trim());
-      const heading = parts[1] || "";
-      let subtitle = "";
-      const points: string[] = [];
-      for (const p of parts.slice(2)) {
-        if (p.startsWith("~")) subtitle = p.slice(1).trim();
-        else if (p) points.push(p);
-      }
-      const head = subtitle
-        ? `**${heading}** — _${subtitle}_`
-        : `**${heading}**`;
-      const bullets = points.map((p) => `- ${p}`).join("\n");
-      return bullets ? `${head}\n${bullets}` : head;
-    })
-    .join("\n\n");
-}
-
-function deepDiveToMarkdown(sections: AnswerSection[]): string {
-  const parts: string[] = [];
-  for (const s of sections) {
-    const type = s.sectionType;
-    const title = s.sectionTitle || "";
-    const content = (s.content || "").trim();
-    if (!content) continue;
-
-    if (type === "concept_map") {
-      if (title) parts.push(`## ${title}`);
-      parts.push(conceptMapToMarkdown(content));
-      continue;
-    }
-    if (
-      type === "code_example" ||
-      type === "before_code" ||
-      type === "after_code"
-    ) {
-      parts.push(ensureFenced(content));
-      continue;
-    }
-    if (title) parts.push(`## ${title}`);
-    parts.push(content);
-  }
-  return parts.join("\n\n");
-}
-
-type DeepDiveTone = "blue" | "green" | "amber";
-
-function deepDivePresentation(section: AnswerSection, index: number): {
-  label: string;
-  tone: DeepDiveTone;
-} {
-  const type = section.sectionType;
-
-  if (type === "code_example" || type === "before_code" || type === "after_code") {
-    return { label: "See it in code", tone: "green" };
-  }
-  if (type.includes("diagram") || type === "concept_map") {
-    return { label: "Visualise it", tone: "blue" };
-  }
-  if (type === "comparison_table" || type === "tradeoffs") {
-    return { label: "Compare", tone: "amber" };
-  }
-  if (
-    type.includes("mistake") ||
-    type.includes("warning") ||
-    type.includes("pitfall") ||
-    type === "problem_statement" ||
-    type === "diagnosis"
-  ) {
-    return { label: "Watch the boundary", tone: "amber" };
-  }
-  if (
-    type === "when_to_use" ||
-    type === "real_world_example" ||
-    type === "scenario_based" ||
-    type === "best_practices"
-  ) {
-    return { label: "Apply it", tone: "green" };
-  }
-
-  return { label: index === 0 ? "Understand" : "Build the model", tone: "blue" };
-}
-
-const deepDiveToneClasses: Record<DeepDiveTone, {
-  dot: string;
-  label: string;
-  number: string;
-  edge: string;
-}> = {
-  blue: {
-    dot: "bg-primary",
-    label: "text-primary",
-    number: "border-primary/20 bg-primary/[0.055] text-primary",
-    edge: "border-t-primary/45",
-  },
-  green: {
-    dot: "bg-success",
-    label: "text-success",
-    number: "border-success/20 bg-success/[0.055] text-success",
-    edge: "border-t-success/45",
-  },
-  amber: {
-    dot: "bg-warning",
-    label: "text-amber-700 dark:text-amber-300",
-    number: "border-warning/25 bg-warning/[0.065] text-amber-700 dark:text-amber-300",
-    edge: "border-t-warning/50",
-  },
-};
 
 export interface V2ExtendedFields {
   directAnswer?: string;
@@ -267,7 +136,7 @@ function QuestionPageLayoutInner({
   }, [curriculumOpen]);
 
   const sections = (data.answerSections || []).filter(
-    (s) => s.content != null && s.content.length > 0
+    (s) => (s.content != null && s.content.length > 0) || Boolean(s.speakingCues?.length)
   );
 
   const speakableAnswerSection = sections.find(
@@ -284,7 +153,8 @@ function QuestionPageLayoutInner({
   const zone1Types = [
     "speakable_answer",
     "interviewer_expectation",
-    ...(keyPointsSection ? [keyPointsSection.sectionType] : []),
+    "key_points",
+    "important_points",
   ];
   const deepDiveSections = sections
     .filter((s) => !zone1Types.includes(s.sectionType))
@@ -319,6 +189,11 @@ function QuestionPageLayoutInner({
 
   // Zone 2 + Zone 3 both render through the single <MarkdownContent> framework.
   const answerMarkdown = speakableText || v2?.directAnswer || "";
+  const hasInterviewAnswer = Boolean(
+    answerMarkdown
+    || speakableAnswerSection?.speakingCues?.length
+    || v2?.speakableV2,
+  );
   const followups = v2?.followupQuestions ?? [];
 
   const currentQuickQ =
@@ -470,7 +345,7 @@ function QuestionPageLayoutInner({
           >
             {/* Compact route context — curriculum opens without consuming width. */}
             <div
-              className={`sticky top-0 z-[var(--z-sticky)] -mx-2 mb-6 flex flex-col gap-3 rounded-xl border px-3 py-2.5 shadow-sm backdrop-blur sm:flex-row sm:items-center ${
+              className={`sticky top-0 z-[var(--z-sticky)] -mx-2 mb-5 flex items-center gap-2 rounded-xl border px-2.5 py-2 shadow-sm backdrop-blur sm:px-3 ${
                 d
                   ? "border-border/60 bg-surface/95"
                   : "border-primary/10 bg-background/95 shadow-slate-200/50"
@@ -514,7 +389,7 @@ function QuestionPageLayoutInner({
                 )}
               </nav>
 
-              <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-auto">
+              <div className="flex shrink-0 items-center gap-1">
                 {previousQuestion && (
                   <Link
                     href={buildQuestionUrl(
@@ -545,12 +420,12 @@ function QuestionPageLayoutInner({
                   <button
                     type="button"
                     onClick={() => setCurriculumOpen(true)}
-                    className="touch-target inline-flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs font-extrabold text-primary transition-colors hover:border-primary/40 hover:bg-primary/10"
+                    className="touch-target inline-flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-2 py-1.5 text-xs font-extrabold text-primary transition-colors hover:border-primary/40 hover:bg-primary/10 sm:px-3"
                     aria-haspopup="dialog"
                     aria-expanded={curriculumOpen}
                   >
                     <BookOpen className="h-4 w-4" />
-                    All {topicQuestions.length} questions
+                    <span className="hidden sm:inline">All {topicQuestions.length} questions</span>
                   </button>
                 )}
               </div>
@@ -677,7 +552,7 @@ function QuestionPageLayoutInner({
                     }`}
                   >
                     <Clock className="h-3 w-3" />
-                    {readTime}–{Math.min(readTime + 1, 5)} min
+                    {readTime} min
                   </span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -739,11 +614,15 @@ function QuestionPageLayoutInner({
 
             {/* Title */}
             <h1
-              className={`type-display text-[26px] sm:text-[30px] lg:text-[32px] font-extrabold mb-3 leading-[1.15] tracking-[-0.015em] ${
+              className={`mb-3 font-display text-[23px] font-extrabold leading-[1.2] tracking-[-0.015em] sm:text-[30px] sm:leading-[1.15] lg:text-[32px] ${
                 d ? "text-white" : "text-foreground"
               }`}
             >
-              {data.questionText || data.title}
+              <MarkdownContent
+                content={data.questionText || data.title}
+                inline
+                className="[&_code]:!border-slate-200 [&_code]:!bg-slate-100 [&_code]:!text-[#2d5368] dark:[&_code]:!border-slate-700 dark:[&_code]:!bg-slate-800 dark:[&_code]:!text-slate-200"
+              />
             </h1>
             {/* Meta row */}
             <div
@@ -761,7 +640,7 @@ function QuestionPageLayoutInner({
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="h-3.5 w-3.5" />
-                {readTime}–{Math.min(readTime + 1, 5)} min read
+                {readTime} min read
               </span>
               {v2?.companyTags && v2.companyTags.length > 0 && (
                 <>
@@ -917,7 +796,7 @@ function QuestionPageLayoutInner({
                     <span
                       className={`ml-auto text-[11px] text-success`}
                     >
-                      {readTime}–{Math.min(readTime + 1, 5)} min
+                      {readTime} min
                     </span>
                   </div>
                   <div className="px-6 py-5 sm:px-7 sm:py-6">
@@ -935,7 +814,7 @@ function QuestionPageLayoutInner({
             )}
 
             {/* ── Zone 2: practise one complete, detailed interview answer ── */}
-            {answerMarkdown && (
+            {hasInterviewAnswer && (
               <InterviewSpeakingStudio
                 content={answerMarkdown}
                 questionId={Number(data.id)}
@@ -947,145 +826,11 @@ function QuestionPageLayoutInner({
 
             {/* ── Zone 3: Deep Dive ── */}
             {deepDiveSections.length > 0 && (
-              <section className="mb-6" data-testid="deep-dive">
-                <div
-                  className={`overflow-hidden rounded-2xl border shadow-sm ${
-                    d
-                      ? "border-border/60 bg-surface shadow-black/30"
-                      : "border-slate-200 bg-[#fffdf9] shadow-slate-200/50"
-                  }`}
-                >
-                  <div
-                    className={`flex flex-wrap items-center gap-3 border-b px-5 py-4 sm:px-6 ${
-                      d
-                        ? "border-border/60 bg-slate-950"
-                        : "border-slate-800 bg-[#172033]"
-                    }`}
-                  >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/[0.06] text-[11px] font-extrabold tabular-nums text-blue-200">
-                      03
-                    </span>
-                    <BookOpen className="h-4 w-4 shrink-0 text-blue-300" />
-                    <div className="min-w-0 flex-1">
-                      <h2 className="text-[14px] font-extrabold text-white">Deep dive</h2>
-                      <p className="mt-0.5 text-[11.5px] text-slate-300">
-                        Build the mental model, see it work, then test your understanding.
-                      </p>
-                    </div>
-                    <div className="ml-auto flex items-center gap-2 text-[10.5px] font-semibold text-slate-300">
-                      <span className="rounded-full border border-white/10 bg-white/[0.055] px-2.5 py-1">
-                        {deepDiveSections.length} focused {deepDiveSections.length === 1 ? "part" : "parts"}
-                      </span>
-                      {deepDiveSections.some((section) => section.sectionType.includes("code")) && (
-                        <span className="hidden items-center gap-1.5 rounded-full border border-emerald-300/15 bg-emerald-300/[0.06] px-2.5 py-1 text-emerald-200 sm:inline-flex">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                          Code included
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className={`px-4 py-5 sm:px-6 sm:py-6 ${d ? "bg-surface" : "bg-stone-50/55"}`}>
-                    <div className="relative space-y-4">
-                      <span className={`absolute bottom-7 left-[17px] top-7 w-px ${d ? "bg-border/70" : "bg-slate-200"}`} aria-hidden="true" />
-                      {deepDiveSections.map((section, index) => {
-                        const presentation = deepDivePresentation(section, index);
-                        const tone = deepDiveToneClasses[presentation.tone];
-                        return (
-                          <article
-                            key={`${section.sectionType}-${index}`}
-                            className="relative pl-11 sm:pl-12"
-                          >
-                            <span className={`absolute left-0 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-xl border text-[10px] font-extrabold tabular-nums shadow-sm ${tone.number}`}>
-                              {String(index + 1).padStart(2, "0")}
-                            </span>
-                            <div className={`overflow-hidden rounded-xl border border-t-2 px-4 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.035)] transition-colors sm:px-5 sm:py-5 ${tone.edge} ${d ? "border-x-border/55 border-b-border/55 bg-surface-elevated/20" : "border-x-stone-200 border-b-stone-200 bg-white hover:border-x-slate-300 hover:border-b-slate-300"}`}>
-                              <div className="mb-3 flex items-center gap-2">
-                                <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
-                                <span className={`text-[10px] font-extrabold uppercase tracking-[0.14em] ${tone.label}`}>
-                                  {presentation.label}
-                                </span>
-                              </div>
-                              <SectionRenderer section={section} theme={theme} />
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-
-                    {followups.length > 0 && (
-                      <div className={`ml-11 mt-5 overflow-hidden rounded-xl border sm:ml-12 ${d ? "border-border/55 bg-surface-elevated/20" : "border-amber-200/70 bg-white"}`}>
-                        <div className={`flex items-center gap-2 border-b px-4 py-3 sm:px-5 ${d ? "border-border/55 bg-warning/[0.05]" : "border-amber-100 bg-amber-50/65"}`}>
-                          <HelpCircle className="h-4 w-4 text-amber-700 dark:text-amber-300" />
-                          <div>
-                            <h3 className="text-[12px] font-extrabold text-foreground">Check your understanding</h3>
-                            <p className="mt-0.5 text-[10.5px] text-muted-foreground">Answer these without looking back.</p>
-                          </div>
-                        </div>
-                        <ol className="grid gap-px bg-border/55 sm:grid-cols-2">
-                          {followups.map((question, index) => (
-                            <li key={question} className={`flex gap-3 px-4 py-3.5 text-[12.5px] leading-relaxed text-foreground sm:px-5 ${d ? "bg-surface" : "bg-white"}`}>
-                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-amber-200 bg-amber-50 text-[9px] font-extrabold text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">{index + 1}</span>
-                              <span>{question}</span>
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* ── Follow-up questions ── */}
-            {followups.length > 0 && (
-              <section className="hidden mb-6" aria-live="polite">
-                <div
-                  className={`rounded-xl overflow-hidden ${
-                    d
-                      ? "border border-default dark:border-default/40 bg-surface"
-                      : "border border-primary/20 bg-primary/10"
-                  }`}
-                >
-                  <div
-                    className={`flex items-center gap-2 px-5 py-2.5 border-b ${
-                      d
-                        ? "border-default dark:border-default/50 bg-primary/20"
-                        : "border-primary/20 bg-primary/10"
-                    }`}
-                  >
-                    <HelpCircle
-                      className={`h-3.5 w-3.5 text-primary`}
-                    />
-                    <span
-                      className={`text-[11px] font-bold uppercase tracking-widest text-primary`}
-                    >
-                      Follow-up questions
-                    </span>
-                  </div>
-                  <ol className="px-5 py-4 space-y-3">
-                    {followups.map((q, i) => (
-                      <li key={i} className="flex items-start gap-3">
-                        <span
-                          className={`mt-[2px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-extrabold border ${
-                            d
-                              ? "bg-primary/20 text-primary border-default dark:border-default/60"
-                              : "bg-primary/10 text-primary dark:text-primary border-default dark:border-default/20"
-                          }`}
-                        >
-                          {i + 1}
-                        </span>
-                        <span
-                          className={`text-[15px] leading-[1.65] ${
-                            d ? "text-muted-foreground" : "text-foreground"
-                          }`}
-                        >
-                          {q}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              </section>
+              <DeepDiveArticle
+                sections={deepDiveSections}
+                followupQuestions={followups}
+                question={data.questionText || data.title}
+              />
             )}
 
             {/* Prev / Next */}
@@ -1468,7 +1213,7 @@ function QuestionPageLayoutInner({
                   d ? "text-muted-foreground" : "text-muted-foreground"
                 }`}
               >
-                {readTime}–{Math.min(readTime + 1, 5)} min
+                {readTime} min
               </span>
             </div>
             <div className="flex items-center justify-between">

@@ -1,23 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
+  ChevronDown,
+  ChevronUp,
   Code2,
   GitCompareArrows,
   ListChecks,
-  Mic,
-  RotateCcw,
   Square,
   Volume2,
 } from "lucide-react";
 import MarkdownContent from "@/components/MarkdownContent";
 import { MarkCompleteButton } from "@/components/mark-complete-button";
-import { Speakable } from "@/components/speakable";
 import type { SpeakingCue, SpeakingCueSupport } from "@/lib/api";
 import type { SpeakableV2 } from "@/lib/speakable/schema";
 import { toSpeech } from "@/lib/speakable/toSpeech";
-import { useContentTheme } from "./ThemeContext";
 
 interface InterviewSpeakingStudioProps {
   content: string;
@@ -41,6 +39,10 @@ function learningStatement(markdown: string): string {
   return markdown.replace(/^([a-z])/, (letter) => letter.toUpperCase());
 }
 
+function sentenceFragment(value: string): string {
+  return /^[A-Z]{2,}\b/.test(value) ? value : value.replace(/^([A-Z])/, (letter) => letter.toLowerCase());
+}
+
 function toSentences(markdown: string): string[] {
   const text = markdown
     .replace(/```[\s\S]*?```/g, " ")
@@ -53,41 +55,6 @@ function toSentences(markdown: string): string[] {
   return matches.map((sentence) => sentence.trim()).filter(Boolean);
 }
 
-function groupIntoSpeakingPoints(sentences: string[]): string[] {
-  if (sentences.length <= 1) return sentences;
-  const totalWords = sentences.reduce(
-    (total, sentence) => total + plainText(sentence).split(/\s+/).filter(Boolean).length,
-    0,
-  );
-  const groupCount = Math.min(5, Math.max(2, Math.ceil(totalWords / 45)));
-  const points: string[] = [];
-  let cursor = 0;
-  for (let index = 0; index < groupCount; index += 1) {
-    const take = Math.ceil((sentences.length - cursor) / (groupCount - index));
-    points.push(sentences.slice(cursor, cursor + take).join(" "));
-    cursor += take;
-  }
-  return points.filter(Boolean);
-}
-
-function fallbackStageNames(count: number): string[] {
-  if (count <= 1) return ["Core idea"];
-  if (count === 2) return ["Core idea", "Takeaway"];
-  if (count === 3) return ["Core idea", "Example", "Takeaway"];
-  if (count === 4) return ["Core idea", "Example", "Important points", "Takeaway"];
-  return ["Core idea", "How it works", "Example", "Important points", "Takeaway"];
-}
-
-function learningStageNames(cues: SpeakingCue[]): string[] {
-  return cues.map((cue, index) => {
-    if (index === 0) return "Core idea";
-    if (cue.support?.type === "code") return "Example";
-    if (index === cues.length - 1) return "Practical takeaway";
-    if (cue.support?.type === "comparison") return "Comparison";
-    return "Important points";
-  });
-}
-
 const supportIcon = {
   code: Code2,
   trace: GitCompareArrows,
@@ -95,88 +62,302 @@ const supportIcon = {
   comparison: GitCompareArrows,
 };
 
-const supportTone = {
-  neutral: "border-border bg-background text-foreground",
-  blue: "border-primary/20 bg-primary/[0.055] text-primary",
-  green: "border-success/20 bg-success/[0.055] text-success",
-  orange: "border-warning/25 bg-warning/[0.07] text-warning-foreground",
+const supportAccent = {
+  neutral: "bg-slate-400 dark:bg-slate-500",
+  blue: "bg-blue-500 dark:bg-blue-400",
+  green: "bg-emerald-500 dark:bg-emerald-400",
+  orange: "bg-amber-500 dark:bg-amber-400",
 };
 
-const stageTone = [
-  "border-primary/25 bg-background text-primary dark:bg-surface-elevated/30",
-  "border-success/25 bg-background text-success dark:bg-surface-elevated/30",
-  "border-warning/30 bg-background text-amber-800 dark:bg-surface-elevated/30 dark:text-amber-300",
-  "border-slate-300 bg-background text-slate-700 dark:border-slate-600 dark:bg-surface-elevated/30 dark:text-slate-200",
-];
+const supportPresentation: Record<SpeakingCueSupport["type"], { header: string; icon: string }> = {
+  code: {
+    header: "bg-slate-100/80 dark:bg-slate-800/80",
+    icon: "text-slate-600 dark:text-slate-300",
+  },
+  comparison: {
+    header: "bg-blue-50/75 dark:bg-blue-950/20",
+    icon: "text-blue-700 dark:text-blue-300",
+  },
+  trace: {
+    header: "bg-emerald-50/70 dark:bg-emerald-950/20",
+    icon: "text-emerald-700 dark:text-emerald-300",
+  },
+  checklist: {
+    header: "bg-amber-50/70 dark:bg-amber-950/20",
+    icon: "text-amber-700 dark:text-amber-300",
+  },
+};
 
-const stageDot = ["bg-primary", "bg-success", "bg-warning", "bg-slate-600 dark:bg-slate-300"];
+function structuredArticleText(cues: SpeakingCue[]): string {
+  return cues
+    .flatMap((cue) => [
+      cue.stage,
+      cue.spokenText,
+      cue.recallRule,
+      cue.support?.title,
+      cue.support?.code,
+      cue.support?.caption,
+      ...(cue.support?.items ?? []).flatMap((item) => [item.label, item.value, item.detail]),
+    ])
+    .filter(Boolean)
+    .join(" ");
+}
 
-const leadTone = [
-  "text-primary",
-  "text-success",
-  "text-amber-700 dark:text-amber-300",
-  "text-slate-700 dark:text-slate-200",
-];
+function wordCount(value: string): number {
+  const text = plainText(value);
+  return text ? text.split(/\s+/).filter(Boolean).length : 0;
+}
 
-function CanvasSupport({ support }: { support?: SpeakingCueSupport }) {
+/**
+ * Older answers sometimes contain several ideas in one very long paragraph.
+ * Preserve the authored wording, but add reading breaks when there is no
+ * existing Markdown structure for the author to have chosen deliberately.
+ */
+function addReadingRhythm(markdown: string): string {
+  const value = markdown.trim();
+  const alreadyStructured = /\n\s*\n|^\s{0,3}(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|```|\|)/m.test(value);
+  if (alreadyStructured || wordCount(value) < 120) return value;
+
+  const sentences = value.match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
+  if (sentences.length < 5) return value;
+
+  const paragraphs: string[] = [sentences[0]];
+  let current: string[] = [];
+  let currentWords = 0;
+  const beginsNewIdea = /^(?:The\s+[A-Z]\s+(?:is|stands)\b|For example\b|In practice\b|A common\b|The trade-off\b|Finally\b)/i;
+
+  for (const sentence of sentences.slice(1)) {
+    const sentenceWords = wordCount(sentence);
+    const shouldBreak = current.length > 0 && (
+      current.length >= 3
+      || currentWords + sentenceWords > 72
+      || beginsNewIdea.test(sentence)
+    );
+    if (shouldBreak) {
+      paragraphs.push(current.join(" "));
+      current = [];
+      currentWords = 0;
+    }
+    current.push(sentence);
+    currentWords += sentenceWords;
+  }
+  if (current.length > 0) paragraphs.push(current.join(" "));
+  return paragraphs.join("\n\n");
+}
+
+type GuidedParagraphRole = "core" | "explanation" | "example" | "boundary" | "takeaway" | "rich";
+
+interface GuidedParagraph {
+  id: string;
+  label: string;
+  role: GuidedParagraphRole;
+  content: string;
+}
+
+const guidedParagraphMeta: Record<GuidedParagraphRole, { label: string; shell: string; marker: string }> = {
+  core: {
+    label: "Core idea",
+    shell: "border-l-[3px] border-blue-500 bg-blue-50/55 pl-4 pr-3 py-3.5 dark:border-blue-400 dark:bg-blue-950/15",
+    marker: "text-blue-700 dark:text-blue-300",
+  },
+  explanation: {
+    label: "How it works",
+    shell: "border-t border-[#e3ebe8] pt-5 dark:border-slate-800",
+    marker: "text-[#50706b] dark:text-slate-400",
+  },
+  example: {
+    label: "Example",
+    shell: "rounded-xl border border-emerald-200/80 bg-emerald-50/45 px-4 py-4 dark:border-emerald-900/60 dark:bg-emerald-950/15 sm:px-5",
+    marker: "text-emerald-700 dark:text-emerald-300",
+  },
+  boundary: {
+    label: "Important boundary",
+    shell: "rounded-xl border border-amber-200/90 bg-amber-50/55 px-4 py-4 dark:border-amber-900/55 dark:bg-amber-950/15 sm:px-5",
+    marker: "text-amber-800 dark:text-amber-300",
+  },
+  takeaway: {
+    label: "Practical takeaway",
+    shell: "border-t border-[#d8e5e1] pt-5 dark:border-slate-700",
+    marker: "text-[#2d7165] dark:text-emerald-300",
+  },
+  rich: {
+    label: "Complete answer",
+    shell: "",
+    marker: "text-[#50706b] dark:text-slate-400",
+  },
+};
+
+function roleForParagraph(markdown: string, index: number, total: number): GuidedParagraphRole {
+  if (index === 0) return "core";
+
+  const value = plainText(markdown);
+  if (/^(?:for example|for instance|consider|suppose|imagine|take the case)\b/i.test(value)) {
+    return "example";
+  }
+  if (/^(?:however|the trade-?off|a limitation|the (?:important )?boundary|one (?:important )?boundary|a common mistake|be careful|watch out)\b/i.test(value)) {
+    return "boundary";
+  }
+  if (index === total - 1 && /\b(?:choose|default|therefore|in practice|the main point|the practical|use)\b/i.test(value)) {
+    return "takeaway";
+  }
+  return "explanation";
+}
+
+function guidedParagraphs(markdown: string): GuidedParagraph[] {
+  const readable = addReadingRhythm(markdown);
+  // Legacy answers do not contain authored semantic headings. Keep their
+  // wording as one readable article instead of guessing labels such as
+  // “What matters” from paragraph position. Reviewed answers provide
+  // explicit structured cues, so their real headings are rendered above.
+  return [{
+    id: "complete-answer",
+    label: guidedParagraphMeta.rich.label,
+    role: "rich",
+    content: readable,
+  }];
+}
+
+function AnswerSupport({ support }: { support?: SpeakingCueSupport }) {
+  const codeRegionId = useId();
+  const [codeExpanded, setCodeExpanded] = useState(false);
+
+  useEffect(() => {
+    setCodeExpanded(false);
+  }, [support?.code]);
+
   if (!support) return null;
   const Icon = supportIcon[support.type];
-  const isExample = support.type === "code";
+  const isFlow = support.type === "trace";
+  const items = support.items ?? [];
+  const codeLineCount = support.code?.trimEnd().split("\n").length ?? 0;
+  const canCollapseCode = codeLineCount > 16;
+  const ItemList = isFlow ? "ol" : "ul";
+  const presentation = supportPresentation[support.type];
+  const traceLayout = items.length === 4
+    ? "sm:grid-cols-2"
+    : items.length === 3
+      ? "md:grid-cols-3"
+      : items.length === 2
+        ? "sm:grid-cols-2"
+        : "";
+  const itemLayout = isFlow
+    ? traceLayout
+    : items.length === 4
+      ? "sm:grid-cols-2"
+      : items.length === 3
+      ? "md:grid-cols-3"
+      : items.length > 1
+        ? "sm:grid-cols-2"
+        : "";
+  const flowArrowBreakpoint = items.length === 3 ? "md:flex" : "sm:flex";
 
   return (
-    <div className="mt-4" aria-label={support.title ?? "Visual explanation"}>
-      <div className="mb-2.5 flex items-center gap-2">
-        <span className={`flex h-6 w-6 items-center justify-center rounded-md border bg-background ${isExample ? "border-success/25 text-success" : "border-warning/30 text-amber-700 dark:text-amber-300"}`}>
-          <Icon className="h-3.5 w-3.5" />
+    <figure
+      data-support-type={support.type}
+      className="mt-5 max-w-[48rem] overflow-hidden rounded-xl border border-[#d8e4e1] bg-[#fbfdfc] shadow-[0_1px_2px_rgba(28,70,61,0.035)] dark:border-slate-700 dark:bg-slate-900/70"
+      aria-label={support.title ?? "Supporting example"}
+    >
+      <figcaption className={`flex min-h-11 items-center gap-2.5 border-b border-[#dce7e4] px-4 py-2.5 dark:border-slate-700 ${presentation.header}`}>
+        <Icon aria-hidden="true" className={`h-4 w-4 shrink-0 ${presentation.icon}`} />
+        <span className="min-w-0 flex-1 font-display text-[13px] font-semibold text-[#26485a] dark:text-slate-200">
+          {support.title ?? "Supporting example"}
         </span>
-        <p className="text-[11px] font-extrabold text-foreground">
-          {support.title ?? "See it in the example"}
-        </p>
-      </div>
+        {support.language && (
+          <span className="rounded bg-white/70 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[#657985] dark:bg-slate-900/70 dark:text-slate-400">
+            {support.language}
+          </span>
+        )}
+      </figcaption>
 
       {support.code && (
-        <pre className="overflow-x-auto rounded-lg border border-slate-800/10 bg-slate-950 px-3.5 py-3 text-[11.5px] leading-5 text-slate-100 shadow-inner">
-          <code>{support.code}</code>
-        </pre>
+        <>
+          <div className={`relative ${canCollapseCode && !codeExpanded ? "max-h-[320px] overflow-hidden" : ""}`}>
+            <pre id={codeRegionId} className="overflow-x-auto bg-[#101827] px-4 py-4 font-mono text-[13px] leading-[1.62] text-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400/70 sm:px-5" tabIndex={0} aria-label={`${support.title ?? "Example"} code`}>
+              <code>{support.code}</code>
+            </pre>
+            {canCollapseCode && !codeExpanded && (
+              <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent to-[#101827]" />
+            )}
+          </div>
+          {canCollapseCode && (
+            <button
+              type="button"
+              onClick={() => setCodeExpanded((value) => !value)}
+              aria-expanded={codeExpanded}
+              aria-controls={codeRegionId}
+              className="flex min-h-10 w-full items-center justify-center gap-1.5 border-t border-[#dce7e4] bg-[#f7faf9] px-4 text-[11.5px] font-semibold text-[#3f675f] outline-none transition-colors hover:bg-[#eef5f2] hover:text-[#21695c] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500/60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-emerald-300"
+            >
+              {codeExpanded ? <ChevronUp aria-hidden="true" className="h-3.5 w-3.5" /> : <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />}
+              {codeExpanded ? "Collapse example" : `Show all ${codeLineCount} lines`}
+            </button>
+          )}
+        </>
       )}
 
-      {support.items && support.items.length > 0 && (
-        support.type === "comparison" ? (
-          <div className="overflow-hidden rounded-lg border border-border/70 bg-background/80">
-            {support.items.map((item, index) => (
-              <div key={`${item.label}-${index}`} className={`flex items-start gap-2.5 px-3 py-2.5 ${index > 0 ? "border-t border-border/55" : ""}`}>
-                <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.tone === "green" ? "bg-success" : item.tone === "orange" ? "bg-warning" : "bg-primary"}`} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[11px] font-extrabold text-foreground">{item.label}</span>
-                    {item.value && <code className="shrink-0 text-[10.5px] font-black text-foreground/75">{item.value}</code>}
-                  </div>
-                  {item.detail && <p className="mt-0.5 text-[10.5px] leading-4 text-muted-foreground">{item.detail}</p>}
-                </div>
+      {items.length > 0 && (
+        <ItemList className={`grid gap-px bg-[#e2ebe8] dark:bg-slate-700 ${itemLayout}`}>
+          {items.map((item, index) => (
+            <li
+              key={`${item.label}-${index}`}
+              className="relative min-w-0 bg-white px-4 py-4 dark:bg-slate-900 sm:px-5"
+            >
+              <div className="flex min-w-0 flex-wrap items-start gap-x-2.5 gap-y-1">
+                {isFlow ? (
+                  <span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#cbdcd7] bg-[#f4f9f7] font-mono text-[10px] font-semibold text-[#3e6f65] dark:border-slate-600 dark:bg-slate-800 dark:text-emerald-300">
+                    {index + 1}
+                  </span>
+                ) : (
+                  <span aria-hidden="true" className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${supportAccent[item.tone ?? "neutral"]}`} />
+                )}
+                <span className="min-w-[8rem] flex-1 font-display text-[13px] font-semibold leading-5 text-[#243e50] dark:text-slate-200">{item.label}</span>
+                {item.value && <code className="max-w-full break-words rounded-[3px] bg-[#eef3f3] px-1.5 py-0.5 font-mono text-[11px] font-semibold leading-5 text-[#365566] dark:bg-slate-800 dark:text-slate-200">{item.value}</code>}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {support.items.map((item, index) => (
-              <div key={`${item.label}-${index}`} className={`rounded-lg border px-3 py-2 ${supportTone[item.tone ?? "neutral"]}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-[11px] font-bold leading-5">{item.label}</span>
-                  {item.value && <code className="shrink-0 rounded bg-background/80 px-1.5 py-0.5 text-[11px] font-black">{item.value}</code>}
-                </div>
-                {item.detail && <p className="mt-1 text-[10.5px] leading-4 text-muted-foreground">{item.detail}</p>}
-              </div>
-            ))}
-          </div>
-        )
+              {item.detail && <p className="mt-2 text-[12.5px] leading-[1.62] text-[#5d707b] dark:text-slate-400">{item.detail}</p>}
+              {isFlow && items.length <= 3 && index < items.length - 1 && (
+                <span aria-hidden="true" className={`absolute -right-2.5 top-1/2 z-10 hidden h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full border border-[#d2dfdc] bg-white text-[12px] text-[#4a776d] shadow-sm dark:border-slate-600 dark:bg-slate-900 dark:text-emerald-300 ${flowArrowBreakpoint}`}>→</span>
+              )}
+            </li>
+          ))}
+        </ItemList>
       )}
 
       {support.caption && (
-        <p className="mt-2 text-[10.5px] leading-4 text-muted-foreground">
+        <p className="border-t border-[#e1e9e7] bg-[#f8fbfa] px-4 py-3 text-[12px] leading-[1.6] text-[#60727d] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 sm:px-5">
           {support.caption}
         </p>
       )}
-    </div>
+    </figure>
+  );
+}
+
+function FullAnswerArticle({ content }: { content: string }) {
+  const blocks = guidedParagraphs(content);
+  const isRichMarkdown = blocks.length === 1 && blocks[0].role === "rich";
+
+  if (isRichMarkdown) {
+    return (
+      <article data-testid="interview-answer-article" data-presentation="authored-markdown" className="interview-answer-copy font-sans text-[15.5px] leading-[1.75] text-[#334861] dark:text-slate-300 [&_h2]:mb-3 [&_h2]:mt-8 [&_h2]:font-display [&_h2]:text-[21px] [&_h2]:font-bold [&_h2]:tracking-[-0.016em] [&_h2]:text-[#173b4d] [&_h3]:mb-2.5 [&_h3]:mt-7 [&_h3]:font-display [&_h3]:text-[18px] [&_h3]:font-semibold [&_h3]:text-[#285565] [&_p]:mb-4 [&_li]:mb-2 [&_strong]:font-semibold [&_strong]:text-[#173b4d] [&_code]:!rounded-[3px] [&_code]:!border-0 [&_code]:!bg-[#eef3f3] [&_code]:!text-[#263e4b] dark:[&_h2]:text-slate-100 dark:[&_h3]:text-emerald-200 dark:[&_strong]:text-slate-100 dark:[&_code]:!bg-slate-800 dark:[&_code]:!text-slate-200">
+        <MarkdownContent content={blocks[0].content} />
+      </article>
+    );
+  }
+
+  return (
+    <article data-testid="interview-answer-article" data-presentation="guided-prose" className="interview-answer-copy space-y-6 font-sans text-[#334861] dark:text-slate-300">
+      {blocks.map((block) => {
+        const meta = guidedParagraphMeta[block.role];
+        return (
+          <section key={block.id} id={block.id} data-answer-role={block.role} className={`scroll-mt-24 ${meta.shell}`}>
+            <p className={`mb-2 font-sans text-[10.5px] font-bold uppercase tracking-[0.14em] ${meta.marker}`}>
+              {block.label}
+            </p>
+            <div className={`max-w-[68ch] text-[15.5px] leading-[1.75] tracking-[-0.002em] [&_.markdown-body>p]:mb-0 [&_strong]:font-semibold [&_strong]:text-[#173b4d] [&_code]:!rounded-[3px] [&_code]:!border-0 [&_code]:!bg-[#eef3f3] [&_code]:!px-1 [&_code]:!py-[2px] [&_code]:!font-mono [&_code]:!text-[0.88em] [&_code]:!font-medium [&_code]:!text-[#263e4b] dark:[&_strong]:text-slate-100 dark:[&_code]:!bg-slate-800 dark:[&_code]:!text-slate-200 ${block.role === "core" ? "text-[16.5px] font-medium leading-[1.76] text-[#294656] dark:text-slate-200" : ""}`}>
+              <MarkdownContent content={block.content} />
+            </div>
+          </section>
+        );
+      })}
+    </article>
   );
 }
 
@@ -187,303 +368,172 @@ export function InterviewSpeakingStudio({
   cues,
   speakableV2,
 }: InterviewSpeakingStudioProps) {
-  const { theme } = useContentTheme();
-  const dark = theme === "dark";
   const structuredCues = useMemo(
     () => (cues ?? []).filter((cue) => cue.cue.trim() && cue.spokenText.trim()),
     [cues],
   );
   const hasStructuredCues = structuredCues.length > 0;
   const approvedV2 = speakableV2?.speakable_status === "approved" ? speakableV2 : undefined;
-  const legacyPoints = useMemo(
-    () => groupIntoSpeakingPoints(toSentences(approvedV2 ? toSpeech(approvedV2) : content)),
-    [approvedV2, content],
-  );
-  const points = hasStructuredCues
-    ? structuredCues.map((cue) => learningStatement(cue.spokenText.trim()))
-    : legacyPoints;
-  const [activePoint, setActivePoint] = useState<number | null>(hasStructuredCues ? 0 : null);
+  const structuredText = useMemo(() => structuredArticleText(structuredCues), [structuredCues]);
+  // Structured cues are explicitly authored article blocks. When they exist,
+  // they are the visible source; plain Markdown and approved V2 are fallbacks.
+  const useStructuredArticle = hasStructuredCues;
+  const structuredPracticeText = structuredCues
+    .flatMap((cue) => [
+      cue.spokenText,
+      ...(cue.support?.items ?? []).flatMap((item) => [item.label, item.detail]),
+      cue.support?.caption,
+      cue.recallRule,
+    ])
+    .filter(Boolean)
+    .join("\n\n");
+  const practiceSource = useStructuredArticle
+    ? structuredPracticeText
+    : content.trim() || (approvedV2 ? toSpeech(approvedV2) : "");
+  const points = useMemo(() => toSentences(practiceSource), [practiceSource]);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
-  const [recordingError, setRecordingError] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const speechRunRef = useRef(0);
 
-  const selectedText = plainText(points.join(" "));
-  const wordCount = selectedText.split(/\s+/).filter(Boolean).length;
-  const speakingMinutes = Math.max(1, Math.round((wordCount / 135) * 10) / 10);
-
   useEffect(() => {
-    setActivePoint(hasStructuredCues ? 0 : null);
-  }, [questionId, hasStructuredCues]);
+    setIsSpeaking(false);
+    speechRunRef.current += 1;
+    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+  }, [questionId]);
 
   useEffect(() => {
     return () => {
       speechRunRef.current += 1;
       if (typeof window !== "undefined") window.speechSynthesis?.cancel();
-      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-      mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
     };
-  }, [recordingUrl]);
+  }, []);
 
   function stopSpeaking() {
     speechRunRef.current += 1;
     window.speechSynthesis?.cancel();
     setIsSpeaking(false);
-    if (!hasStructuredCues) setActivePoint(null);
   }
 
   function listen(startIndex = 0) {
     if (!("speechSynthesis" in window) || points.length === 0) return;
-    stopSpeaking();
+    window.speechSynthesis.cancel();
+    speechRunRef.current += 1;
     const run = speechRunRef.current;
     setIsSpeaking(true);
 
     const speakAt = (index: number) => {
       if (speechRunRef.current !== run || index >= points.length) {
         setIsSpeaking(false);
-        if (!hasStructuredCues) setActivePoint(null);
         return;
       }
-      setActivePoint(index);
       const utterance = new SpeechSynthesisUtterance(plainText(points[index]));
       utterance.rate = 0.96;
       utterance.onend = () => speakAt(index + 1);
-      utterance.onerror = () => setIsSpeaking(false);
+      utterance.onerror = () => {
+        if (speechRunRef.current === run) setIsSpeaking(false);
+      };
       window.speechSynthesis.speak(utterance);
     };
 
     speakAt(startIndex);
   }
 
-  async function startRecording() {
-    setRecordingError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.push(event.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-        if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-        setRecordingUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach((track) => track.stop());
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
-      setIsRecording(true);
-    } catch {
-      setRecordingError("Microphone access is needed to record a practice answer.");
-    }
-  }
+  if (!content.trim() && !structuredText.trim() && !approvedV2) return null;
 
-  function stopRecording() {
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== "inactive") recorder.stop();
-    setIsRecording(false);
-  }
+  const sectionTitle = (cue: SpeakingCue) => {
+    const stage = cue.stage?.trim().toLowerCase();
+    const supportTitle = cue.support?.title?.trim();
+    if (stage === "meaning") return "What it means";
+    if (stage === "example") return supportTitle ? `A working ${sentenceFragment(supportTitle)}` : "A working example";
+    if (stage === "request flow") return supportTitle ? `What happens during ${supportTitle}` : "How the request works";
+    if (stage === "design") return "Responsibilities and practical boundaries";
+    if (stage === "use") return "Where it is useful";
+    if (stage === "best fit") return "Where it fits best";
+    if (stage === "decision") return "How to choose safely";
+    if (stage === "important points") return "Details that matter";
+    if (stage === "trade-off") return "Trade-offs";
+    if (stage === "practical takeaway") return "Practical takeaway";
+    return cue.stage?.trim() || cue.cue.trim();
+  };
 
-  function resetPractice() {
-    stopSpeaking();
-    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-    setRecordingUrl(null);
-    setRecordingError(null);
-  }
+  let answerSource = "full-content";
+  let articleContent;
 
-  if (!selectedText) return null;
-
-  const header = (
-    <div className={`flex flex-wrap items-center gap-3 border-b px-5 py-3.5 ${dark ? "border-border/60 bg-surface-elevated/40" : "border-slate-200 bg-stone-50/70"}`}>
-      <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <span className="text-[11px] font-extrabold tabular-nums text-success">02</span>
-        {technologySlug ? (
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-success/20 bg-background">
-            <Image src={`/logos/${technologySlug}.svg`} alt={`${technologySlug} logo`} width={20} height={20} className="h-5 w-5 object-contain" />
-          </span>
-        ) : (
-          <Mic className="h-4 w-4 text-primary" />
-        )}
-        <div>
-          <h2 className="text-[13px] font-extrabold text-foreground">Interview answer</h2>
-          <p className="text-[11px] text-muted-foreground">
-            {hasStructuredCues ? "Learn the idea first, then explain it naturally in your own words" : "Understand the points, then answer naturally in your own words"}
-          </p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="hidden rounded-full border border-success/20 bg-background px-2.5 py-1 text-[11px] font-semibold text-success sm:inline-flex">~{speakingMinutes} min answer</span>
-        <button type="button" onClick={isSpeaking ? stopSpeaking : () => listen(0)} className="inline-flex items-center gap-2 rounded-lg border border-success/25 bg-background px-3 py-2 text-[12px] font-bold text-success hover:bg-success/5">
-          {isSpeaking ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-          {isSpeaking ? "Stop" : "Listen"}
-        </button>
-        <button type="button" onClick={isRecording ? stopRecording : startRecording} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-bold ${isRecording ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground hover:bg-primary/90"}`}>
-          {isRecording ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-          <span className="hidden sm:inline">{isRecording ? "Stop recording" : "Practice aloud"}</span>
-          <span className="sm:hidden">{isRecording ? "Stop" : "Practice"}</span>
-        </button>
-      </div>
-    </div>
-  );
-
-  const recordingPanel = recordingUrl || recordingError ? (
-    <div className="mt-4 rounded-lg border border-border bg-surface/40 p-3">
-      {recordingUrl && <div className="flex flex-wrap items-center gap-3"><audio controls src={recordingUrl} className="h-9 flex-1" aria-label="Your recorded answer" /><button type="button" onClick={resetPractice} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground hover:text-foreground"><RotateCcw className="h-3.5 w-3.5" /> Retry</button></div>}
-      {recordingError && <p className="text-[12px] text-destructive">{recordingError}</p>}
-    </div>
-  ) : null;
-
-  if (approvedV2 && !hasStructuredCues) {
-    return (
-      <section className="mb-6" data-testid="interview-speaking-answer" data-answer-source="reviewed-v2">
-        <div className={`overflow-hidden rounded-xl border ${dark ? "border-border/60 bg-surface" : "border-slate-200 bg-[#fffdf9] shadow-sm"}`}>
-          {header}
-          <div className="p-4 sm:p-5">
-            <div className={`overflow-hidden rounded-xl border ${dark ? "border-border/60 bg-surface-elevated/20" : "border-stone-200 bg-white"}`}>
-              <div className={`border-b border-border/60 px-5 py-3 ${dark ? "bg-surface-elevated/35" : "bg-stone-50/80"}`}>
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-success">Reviewed interview answer</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Understand the flow, then explain it naturally in your own words.</p>
+  if (useStructuredArticle) {
+    const takeaway = [...structuredCues].reverse().find((cue) => cue.recallRule)?.recallRule;
+    answerSource = "structured-article";
+    articleContent = (
+      <>
+        <article
+          data-testid="interview-answer-article"
+          data-presentation="guided-article"
+          className="interview-answer-copy"
+        >
+          {structuredCues.map((cue, index) => (
+            <section
+              id={`interview-part-${index + 1}`}
+              key={`answer-part-${cue.cue}`}
+              data-testid="speaking-beat"
+              className={`scroll-mt-24 ${index > 0 ? "mt-7 border-t border-[#e0e9e6] pt-6 dark:border-slate-800" : ""}`}
+            >
+              <h3 className="max-w-[42rem] font-display text-[19px] font-semibold leading-[1.4] tracking-[-0.012em] text-[#173b4d] sm:text-[20px] dark:text-slate-100">
+                {sectionTitle(cue)}
+              </h3>
+              <div className="mt-3 max-w-[42rem] font-sans text-[16px] leading-[1.72] tracking-[-0.002em] text-[#334861] [&_strong]:font-semibold [&_strong]:text-[#173b4d] [&_code]:!rounded-[3px] [&_code]:!border-0 [&_code]:!bg-[#eef3f3] [&_code]:!px-1 [&_code]:!py-[2px] [&_code]:!font-mono [&_code]:!text-[0.88em] [&_code]:!font-medium [&_code]:!text-[#263e4b] dark:text-slate-300 dark:[&_strong]:text-slate-100 dark:[&_code]:!bg-slate-800 dark:[&_code]:!text-slate-200">
+                <MarkdownContent content={learningStatement(cue.spokenText.trim())} inline />
               </div>
-              <div className="px-5 py-5 sm:px-7 sm:py-6">
-                <Speakable source={{ kind: "v2", v2: approvedV2 }} theme={dark ? "dark" : "light"} />
+              <AnswerSupport support={cue.support} />
+            </section>
+          ))}
+
+          {takeaway && (
+            <aside className="mt-7 max-w-[42rem] border-l-[3px] border-amber-400 bg-[#fff9ed] px-5 py-3.5 dark:border-amber-500/70 dark:bg-amber-950/15" aria-label="Key takeaway">
+              <p className="font-sans text-[10.5px] font-bold uppercase tracking-[0.15em] text-[#8a5a12] dark:text-amber-300">Key takeaway</p>
+              <div className="mt-2 font-sans text-[14.5px] leading-[1.68] text-[#4f5660] [&_strong]:font-semibold [&_strong]:text-[#394550] [&_code]:!rounded-[3px] [&_code]:!border-0 [&_code]:!bg-amber-100/80 [&_code]:!text-[#5c461d] dark:text-slate-300 dark:[&_strong]:text-slate-100 dark:[&_code]:!bg-amber-950/40 dark:[&_code]:!text-amber-200">
+                <MarkdownContent content={takeaway} inline />
               </div>
-            </div>
-            {recordingPanel}
-            <div className="mt-5 border-t border-border pt-4"><MarkCompleteButton questionId={questionId} /></div>
-          </div>
-        </div>
-      </section>
+            </aside>
+          )}
+        </article>
+      </>
     );
+  } else if (content.trim()) {
+    articleContent = <FullAnswerArticle content={content} />;
+  } else {
+    answerSource = "approved-v2-fallback";
+    articleContent = <FullAnswerArticle content={toSpeech(approvedV2!)} />;
   }
-
-  if (hasStructuredCues) {
-    const exampleSupport = structuredCues.find((cue) => cue.support?.type === "code")?.support;
-    const decisionSupport = structuredCues.at(-1)?.support;
-    const foundationItems = structuredCues[0]?.support?.items?.slice(1);
-    const recallRule = structuredCues.at(-1)?.recallRule;
-    const learningStages = learningStageNames(structuredCues);
-
-    return (
-      <section className="mb-6" data-testid="interview-speaking-answer">
-        <div className={`overflow-hidden rounded-xl border ${dark ? "border-border/60 bg-surface" : "border-slate-200 bg-[#fffdf9] shadow-sm"}`}>
-          {header}
-          <div className="p-4 sm:p-5">
-            <div className={`overflow-hidden rounded-xl border ${dark ? "border-border/60 bg-surface-elevated/20" : "border-stone-200 bg-white"}`}>
-              <div className={`border-b border-border/60 px-5 py-3 ${dark ? "bg-surface-elevated/35" : "bg-stone-50/80"}`}>
-                <div className="flex items-center gap-1.5 overflow-hidden" aria-label="Answer flow">
-                  {structuredCues.map((cue, index) => (
-                    <div key={`flow-${cue.cue}`} className="flex min-w-0 flex-1 items-center">
-                      <div className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 transition-all ${stageTone[index % stageTone.length]} ${isSpeaking && activePoint === index ? "shadow-sm ring-1 ring-current/10" : "opacity-80"}`}>
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${stageDot[index % stageDot.length]}`} />
-                        <span className="truncate text-[10px] font-extrabold uppercase tracking-[0.1em]">{learningStages[index]}</span>
-                      </div>
-                      {index < structuredCues.length - 1 && <span className="mx-1 h-px w-4 shrink-0 bg-border" />}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid lg:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)]">
-                <article className="p-5 sm:p-6 lg:border-r lg:border-border/60">
-                  <div className="mb-4">
-                    <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-success">Interview-ready explanation</p>
-                    <p className="mt-1 text-[11px] text-muted-foreground">Understand the knowledge; the wording can remain your own.</p>
-                  </div>
-
-                  <div className="relative ml-1 border-l-2 border-slate-200 pl-5 dark:border-border">
-                    {structuredCues.map((cue, index) => (
-                      <div key={`script-${cue.cue}`} className={`relative rounded-r-lg py-3 pr-3 transition-colors ${index > 0 ? "border-t border-border/45" : ""} ${isSpeaking && activePoint === index ? "bg-primary/[0.045] pl-3" : ""}`}>
-                        <span className={`absolute -left-[27px] top-[23px] h-2.5 w-2.5 rounded-full border-2 border-background ${stageDot[index % stageDot.length]} ${isSpeaking && activePoint === index ? "ring-2 ring-primary/15" : ""}`} />
-                        <p className={`mb-1 text-[10px] font-extrabold uppercase tracking-[0.08em] ${leadTone[index % leadTone.length]}`}>{learningStages[index]}</p>
-                        <div className="text-[14px] leading-7 text-foreground/88 [&_code]:border-slate-300 [&_code]:bg-slate-100 [&_code]:text-slate-700 dark:[&_code]:border-slate-600 dark:[&_code]:bg-slate-800 dark:[&_code]:text-slate-100">
-                          <MarkdownContent content={learningStatement(cue.spokenText.trim())} inline />
-                        </div>
-
-                        {index === 0 && foundationItems && foundationItems.length > 0 && (
-                          <div className="mt-3 grid overflow-hidden rounded-lg border border-border/65 bg-surface/30 sm:grid-cols-3 sm:divide-x sm:divide-border/55">
-                            {foundationItems.map((item, itemIndex) => (
-                              <div key={item.label} className={`px-2.5 py-2 ${itemIndex > 0 ? "border-t border-border/55 sm:border-t-0" : ""}`}>
-                                <p className={`text-[10px] font-extrabold ${leadTone[itemIndex % leadTone.length]}`}>{item.label}</p>
-                                <p className="mt-0.5 text-[9.5px] leading-4 text-muted-foreground">{item.detail}</p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </article>
-
-                <aside className={`p-5 sm:p-6 ${dark ? "bg-surface-elevated/20" : "bg-stone-50/65"}`}>
-                  <div>
-                    <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-success">Example in code</p>
-                    <CanvasSupport support={exampleSupport} />
-                  </div>
-                  <div className="my-5 border-t border-border/60" />
-                  <div>
-                    <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">Quick comparison</p>
-                    <CanvasSupport support={decisionSupport} />
-                  </div>
-                </aside>
-              </div>
-
-              {recallRule && (
-                <div className={`flex items-start gap-3 border-t border-border/60 px-5 py-3.5 ${dark ? "bg-warning/[0.04]" : "bg-amber-50/55"}`}>
-                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-warning" />
-                  <p className="text-[11.5px] leading-5 text-foreground/80 [&_code]:border-amber-200 [&_code]:bg-amber-100/70 [&_code]:text-amber-900 dark:[&_code]:border-amber-700 dark:[&_code]:bg-amber-950/40 dark:[&_code]:text-amber-200"><strong className="font-extrabold text-foreground">Recall rule:</strong> <MarkdownContent content={recallRule} inline /></p>
-                </div>
-              )}
-            </div>
-            {recordingPanel}
-            <div className="mt-5 border-t border-border pt-4"><MarkCompleteButton questionId={questionId} /></div>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  const legacyStages = fallbackStageNames(points.length);
 
   return (
-    <section className="mb-6" data-testid="interview-speaking-answer" data-answer-source="legacy-guided">
-      <div className={`overflow-hidden rounded-xl border ${dark ? "border-border/60 bg-surface" : "border-slate-200 bg-[#fffdf9] shadow-sm"}`}>
-        {header}
-        <div className="p-4 sm:p-5">
-          <div className={`overflow-hidden rounded-xl border ${dark ? "border-border/60 bg-surface-elevated/20" : "border-stone-200 bg-white"}`} aria-live="polite">
-            <div className={`border-b border-border/60 px-5 py-3 ${dark ? "bg-surface-elevated/35" : "bg-stone-50/80"}`}>
-              <div className="flex items-center gap-1.5 overflow-hidden" aria-label="Answer flow">
-                {legacyStages.map((stage, index) => (
-                  <div key={`${stage}-${index}`} className="flex min-w-0 flex-1 items-center">
-                    <div className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 transition-all ${stageTone[index % stageTone.length]} ${isSpeaking && activePoint === index ? "shadow-sm ring-1 ring-current/10" : "opacity-80"}`}>
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${stageDot[index % stageDot.length]}`} />
-                      <span className="truncate text-[10px] font-extrabold uppercase tracking-[0.1em]">{stage}</span>
-                    </div>
-                    {index < legacyStages.length - 1 && <span className="mx-1 h-px w-4 shrink-0 bg-border" />}
-                  </div>
-                ))}
-              </div>
+    <section id="zone-interview" aria-labelledby="interview-answer-title" className="mb-8 scroll-mt-8" data-testid="interview-speaking-answer" data-answer-source={answerSource}>
+      <div className="relative overflow-hidden rounded-2xl border border-[#d7e4e0] bg-[#fbfdfc] shadow-[0_8px_30px_rgba(27,67,57,0.05)] dark:border-slate-800 dark:bg-slate-950">
+        <span aria-hidden="true" className="absolute inset-x-0 top-0 z-10 h-[3px] bg-gradient-to-r from-emerald-500 via-blue-600 to-sky-400" />
+        <header className="border-b border-[#dce7e4] bg-[linear-gradient(112deg,#eaf5f1_0%,#f4f8f7_58%,#eef4f8_100%)] px-5 py-5 sm:px-8 sm:py-6 dark:border-slate-800 dark:bg-none dark:bg-slate-900">
+          <div className="flex items-start gap-3.5">
+            <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#b8d2ca] bg-white/75 font-sans text-[11px] font-extrabold tabular-nums text-[#286556] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-emerald-300">02</span>
+            {technologySlug && (
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#c7d9d3] bg-white/75 dark:border-slate-700 dark:bg-slate-950">
+                <Image src={`/logos/${technologySlug}.svg`} alt={`${technologySlug} logo`} width={20} height={20} className="h-5 w-5 object-contain" />
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="mb-1 font-sans text-[10.5px] font-bold uppercase tracking-[0.17em] text-[#287568] dark:text-emerald-300">Interview-ready guide</p>
+              <h2 id="interview-answer-title" className="font-display text-[21px] font-bold tracking-[-0.018em] text-[#17324d] sm:text-[23px] dark:text-slate-100">Interview answer</h2>
             </div>
-
-            <article className="mx-auto max-w-4xl p-5 sm:p-7">
-              <div className="mb-4">
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-success">A natural answer you can speak</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Learn the idea in order; use your own words in the interview.</p>
-              </div>
-              <div className="relative ml-1 border-l-2 border-slate-200 pl-5 dark:border-border">
-                {points.map((point, index) => (
-                  <div key={`${point}-${index}`} data-testid="speaking-beat" className={`relative rounded-r-lg py-3 pr-3 transition-colors ${index > 0 ? "border-t border-border/45" : ""} ${isSpeaking && activePoint === index ? "bg-primary/[0.045] pl-3" : ""}`}>
-                    <span className={`absolute -left-[27px] top-[23px] h-2.5 w-2.5 rounded-full border-2 border-background ${stageDot[index % stageDot.length]} ${isSpeaking && activePoint === index ? "ring-2 ring-primary/15" : ""}`} />
-                    <p className={`mb-1 text-[10px] font-extrabold uppercase tracking-[0.08em] ${leadTone[index % leadTone.length]}`}>{legacyStages[index] ?? `Point ${index + 1}`}</p>
-                    <div className="text-[14px] leading-7 text-foreground/88 [&_code]:border-slate-300 [&_code]:bg-slate-100 [&_code]:text-slate-700 dark:[&_code]:border-slate-600 dark:[&_code]:bg-slate-800 dark:[&_code]:text-slate-100"><MarkdownContent content={point} inline /></div>
-                  </div>
-                ))}
-              </div>
-            </article>
           </div>
-          {recordingPanel}
-          <div className="mt-5 border-t border-border pt-4"><MarkCompleteButton questionId={questionId} /></div>
+        </header>
+
+        <div className="bg-[radial-gradient(circle_at_top_left,rgba(225,241,235,0.38),transparent_28%),#fbfdfc] px-5 py-7 sm:px-8 sm:py-8 lg:px-12 dark:bg-none dark:bg-slate-950">
+          <div className="mx-auto max-w-[48rem]">
+            {articleContent}
+
+            <footer className="mt-8 flex flex-col-reverse gap-4 border-t border-[#dce7e4] pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800">
+              <button type="button" onClick={isSpeaking ? stopSpeaking : () => listen(0)} aria-pressed={isSpeaking} className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-2.5 text-[12px] font-semibold text-[#527069] outline-none transition-colors hover:bg-[#edf5f2] hover:text-[#21695c] focus-visible:ring-2 focus-visible:ring-emerald-500/60 focus-visible:ring-offset-2 sm:justify-start dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-emerald-300">
+                {isSpeaking ? <Square aria-hidden="true" className="h-3.5 w-3.5" /> : <Volume2 aria-hidden="true" className="h-4 w-4" />}
+                {isSpeaking ? "Stop reading" : "Read answer aloud"}
+              </button>
+              <MarkCompleteButton questionId={questionId} />
+            </footer>
+          </div>
         </div>
       </div>
     </section>

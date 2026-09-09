@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { fetchPagePayload, QuestionPagePayload } from "@/lib/api";
-import { getQuestionPagePayload, getJBIRawQuestion, isLockedDomain, getNextCurriculumModule, listAllQuestionParams } from "@/lib/content-reader";
+import { getQuestionPagePayload, getJBIRawQuestion, getPublishedDomainSlug, isLockedDomain, getNextCurriculumModule, listAllQuestionParams } from "@/lib/content-reader";
 import { parseDomainSlug } from "@/lib/domain-display";
 import { resolveStackContent } from "@/lib/contentV2";
 import type { Level } from "@/lib/contentV2-types";
@@ -25,9 +25,7 @@ import ContentTreeNav from "@/components/ContentTreeNav";
  *      "java-backend-beginner" → unchanged
  */
 function canonicaliseDomainSlug(domainSlug: string): string {
-  const parsed = parseDomainSlug(domainSlug);
-  if (!parsed) return domainSlug;
-  return `${parsed.langSlug}-${parsed.trackSlug}-${parsed.levelKey}`;
+  return getPublishedDomainSlug(domainSlug);
 }
 
 export const revalidate = 3600;
@@ -79,10 +77,18 @@ export async function generateMetadata({
   const seoSlug = getSeoSlugForModule(domainSlug, strippedStack);
   const canonicalUrl = seoSlug
     ? `${SITE_URL}/${seoSlug}/${questionSlug}`
+    : isLockedDomain(domainSlug)
+      ? `${SITE_URL}/${domainSlug}/${strippedStack}/${questionSlug}`
     : parsed
       ? `${SITE_URL}/interview/${parsed.langSlug}/${parsed.trackSlug}/${parsed.levelKey}/${strippedStack}/${questionSlug}`
       : `${SITE_URL}/${domainSlug}/${stackSlug}/${questionSlug}`;
-  const title = data.metaTitle ?? `${data.title} | InterviewExplainer`;
+  // The root layout owns the site-name template. Canonical content often
+  // carries an older branded meta title, so strip that suffix before handing
+  // the page title to Next.js and add it explicitly only to social metadata.
+  const title = (data.metaTitle ?? data.title)
+    .replace(/\s*\|\s*InterviewExplainer\s*$/i, "")
+    .trim();
+  const socialTitle = `${title} | InterviewExplainer`;
   const description = data.metaDescription ?? undefined;
 
   return {
@@ -90,7 +96,7 @@ export async function generateMetadata({
     description,
     alternates: { canonical: canonicalUrl },
     openGraph: {
-      title,
+      title: socialTitle,
       description,
       url: canonicalUrl,
       type: "article",
@@ -98,7 +104,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: "summary_large_image",
-      title,
+      title: socialTitle,
       description,
     },
   };

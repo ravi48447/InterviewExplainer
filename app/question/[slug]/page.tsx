@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { fetchPagePayload } from "@/lib/api";
-import { listAllQuestionParams } from "@/lib/content-reader";
+import { isLockedDomain, listAllQuestionParams } from "@/lib/content-reader";
 import { parseDomainSlug } from "@/lib/domain-display";
 
 /**
@@ -24,6 +24,9 @@ export default async function LegacyQuestionPage({
   const allParams = listAllQuestionParams();
   const localMatch = allParams.find((p) => p.questionSlug === slug);
   if (localMatch) {
+    if (isLockedDomain(localMatch.domainSlug)) {
+      redirect(`/${localMatch.domainSlug}/${localMatch.stackSlug}/${slug}`);
+    }
     const p = parseDomainSlug(localMatch.domainSlug);
     const strippedStack = localMatch.stackSlug.replace(/^\d+-/, "");
     if (p) {

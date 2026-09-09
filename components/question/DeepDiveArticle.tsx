@@ -1,18 +1,10 @@
 /**
- * DeepDiveArticle — Zone 3 "deep dive" rendered in the JBI / preview
- * magazine-article style (flat single card, serif display headings with a
- * left accent bar, side-by-side bad/good code, light callout asides, an
- * "On this page" jump list, and an indigo follow-up block).
+ * DeepDiveArticle — the third learning zone rendered as one continuous article.
  *
- * Unlike PreviewArticle (which renders from markdown strings), this renders
- * from the typed `answerSections[]` payload used on live question pages. It
- * does so by transforming the sections into the exact markdown shape the
- * preview pipeline already knows how to render, then feeding it through the
- * same ReactMarkdown component set (`baseComponents`) + rehype plugins that
- * PreviewArticle uses — so the output matches JBI 1:1.
- *
- * The article is intentionally light-only (a self-contained "paper" card)
- * to mirror the JBI preview as-is, regardless of the page theme toggle.
+ * The source data is still split into typed sections so authors can validate and
+ * reorder it. Presentation is intentionally different: headings, paragraphs,
+ * lists and whitespace establish the reading flow. Only content that benefits
+ * from a boundary (code, a diagram or a table) gets its own visual container.
  */
 
 "use client";
@@ -21,383 +13,366 @@ import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import { BookOpen, MessageCircle } from "lucide-react";
+import { BookOpen, Clock3 } from "lucide-react";
 import type { AnswerSection } from "@/lib/api";
 import {
   baseComponents,
-  extractTocFromBody,
-  rehypePairCodeBlocks,
+  MarkdownPre,
   slugify,
-  ZoneHeader,
   type TocItem,
 } from "@/components/preview/PreviewArticle";
 
 interface Props {
   sections: AnswerSection[];
   followupQuestions?: string[];
+  question?: string;
 }
 
-const DISPLAY_SERIF =
-  "'Crimson Pro', 'Source Serif 4', Charter, 'Iowan Old Style', Palatino, Georgia, serif";
+const CODE_TYPES = new Set(["code_example", "before_code", "after_code"]);
+const SUPPORTING_TYPES = new Set([
+  ...CODE_TYPES,
+  "comparison_table",
+  "concept_map",
+  "diagram",
+  "flow_diagram",
+  "sequence_diagram",
+  "table",
+  "visual",
+]);
+const PRACTICE_TYPES = new Set(["practice_prompt", "practice", "exercise"]);
 
-/* ──────────────────────────────────────────────────────────────────────────
- * Section → markdown transform
- * ────────────────────────────────────────────────────────────────────────── */
-
-/** Section types that map onto a GitHub-style callout aside. */
-function alertKindFor(type: string): "warning" | "tip" | "note" | null {
-  if (
-    type === "common_mistakes" ||
-    type === "problem_statement" ||
-    type.includes("mistake") ||
-    type.includes("pitfall") ||
-    type.includes("warning")
-  ) {
-    return "warning";
-  }
-  if (
-    type === "best_practices" ||
-    type === "when_to_use" ||
-    type.includes("best_practice") ||
-    type.includes("tip")
-  ) {
-    return "tip";
-  }
-  if (
-    type === "key_points" ||
-    type === "important_points" ||
-    type === "real_world_example" ||
-    type === "scenario_based" ||
-    type === "tradeoffs" ||
-    type === "requirements" ||
-    type === "approach" ||
-    type === "diagnosis" ||
-    type === "recipe" ||
-    type === "reference_group" ||
-    type === "practice_prompt" ||
-    type === "component"
-  ) {
-    return "note";
-  }
-  return null;
-}
-
-/** Wrap a section body in a GFM alert blockquote so the preview renderer
- *  draws it as a light callout aside. */
-function toAlert(
-  kind: "warning" | "tip" | "note",
-  title: string,
-  content: string
-): string {
-  const head = `> [!${kind}]${title ? ` ${title}` : ""}`;
-  const body = content
-    .split("\n")
-    .map((l) => `> ${l}`)
-    .join("\n");
-  return `${head}\n>\n${body}`;
-}
-
-/** Ensure code content is wrapped in a fenced block so it renders through the
- *  highlighted CodeBlock. Many `code_example` sections ship raw code with no
- *  ``` fence — those would otherwise collapse into a plain paragraph. */
-function ensureFenced(content: string, lang = "java"): string {
+function ensureFenced(content: string): string {
   if (content.includes("```")) return content;
-  return `\`\`\`${lang}\n${content.trim()}\n\`\`\``;
+  // Plaintext is the only honest global fallback. The same renderer serves
+  // Java, Python, Go, Ruby, JavaScript, SQL and other domains.
+  return `\`\`\`text\n${content.trim()}\n\`\`\``;
 }
 
-/** Inject a leading ❌ / ✅ comment so classifyCode + the pairing plugin
- *  render before/after blocks side-by-side with the right flavour. */
-function injectCodeMarker(
-  content: string,
-  flavour: "bad" | "good",
-  title: string
-): string {
-  const marker =
-    flavour === "bad"
-      ? `// ❌ ${title || "Without"}`
-      : `// ✅ ${title || "With"}`;
-  const nl = content.indexOf("\n");
-  if (content.startsWith("```") && nl !== -1) {
-    return `${content.slice(0, nl + 1)}${marker}\n${content.slice(nl + 1)}`;
-  }
-  return content;
-}
+/** Convert the compact concept-map authoring syntax into normal article prose. */
+function conceptMapToMarkdown(content: string): string {
+  // Many newer concept maps are authored as Mermaid. They already have the
+  // right article-native representation and must not be parsed as pipe rows.
+  if (content.includes("```")) return content;
 
-type Block =
-  | { kind: "md"; md: string }
-  | { kind: "conceptmap"; title: string; content: string };
-
-function sectionsToBlocks(sections: AnswerSection[]): Block[] {
-  const blocks: Block[] = [];
-  let buf = "";
-  const flush = () => {
-    if (buf.trim()) blocks.push({ kind: "md", md: buf.trim() });
-    buf = "";
-  };
-
-  for (const s of sections) {
-    const type = s.sectionType;
-    const title = s.sectionTitle || "";
-    const content = s.content || "";
-
-    if (type === "concept_map") {
-      flush();
-      blocks.push({ kind: "conceptmap", title, content });
-      continue;
-    }
-    if (type === "before_code") {
-      buf += `\n\n${injectCodeMarker(content, "bad", title)}`;
-      continue;
-    }
-    if (type === "after_code") {
-      buf += `\n\n${injectCodeMarker(content, "good", title)}`;
-      continue;
-    }
-    if (type === "code_example") {
-      // The code window derives its own title from the first comment line,
-      // so we skip a redundant `### {title}` heading here.
-      buf += `\n\n${ensureFenced(content)}`;
-      continue;
-    }
-
-    const kind = alertKindFor(type);
-    if (kind) {
-      buf += `\n\n${toAlert(kind, title, content)}`;
-      continue;
-    }
-
-    if (title) buf += `\n\n### ${title}\n`;
-    buf += `\n${content}`;
-  }
-  flush();
-  return blocks;
-}
-
-/** TOC entries — headings only (titled, non-callout, non-code sections). */
-function buildToc(sections: AnswerSection[]): TocItem[] {
-  const items: TocItem[] = [];
-  for (const s of sections) {
-    const type = s.sectionType;
-    const title = s.sectionTitle || "";
-    if (!title) continue;
-    if (
-      type === "before_code" ||
-      type === "after_code" ||
-      type === "code_example"
-    )
-      continue;
-    if (alertKindFor(type)) continue;
-    items.push({ id: slugify(title), text: title });
-  }
-  return items;
-}
-
-/* ──────────────────────────────────────────────────────────────────────────
- * Concept map — light card grid (self-contained, theme-independent)
- * ────────────────────────────────────────────────────────────────────────── */
-
-const CM_COLORS: Record<string, { bar: string; chip: string }> = {
-  amber: { bar: "bg-warning", chip: "text-warning bg-warning/10" },
-  blue: { bar: "bg-primary", chip: "text-primary bg-primary/10" },
-  emerald: { bar: "bg-success", chip: "text-success bg-success/10" },
-  violet: { bar: "bg-primary", chip: "text-primary bg-primary/10" },
-  indigo: { bar: "bg-primary", chip: "text-primary bg-primary/10" },
-  rose: { bar: "bg-destructive", chip: "text-destructive bg-destructive/10" },
-  slate: { bar: "bg-slate-400 dark:bg-slate-800", chip: "text-foreground bg-surface" },
-};
-
-function ConceptMapLight({
-  title,
-  content,
-}: {
-  title: string;
-  content: string;
-}) {
-  const cards = content
+  const rows = content
     .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!rows.some((line) => line.includes("|"))) return content;
+
+  return rows
     .map((line) => {
-      const parts = line.split("|").map((p) => p.trim());
-      const color = parts[0] || "slate";
-      const heading = parts[1] || "";
+      const parts = line.split("|").map((part) => part.trim());
+      const heading = parts[1] || "Concept";
       let subtitle = "";
       const points: string[] = [];
-      for (const p of parts.slice(2)) {
-        if (p.startsWith("~")) subtitle = p.slice(1).trim();
-        else if (p) points.push(p);
+
+      for (const part of parts.slice(2)) {
+        if (part.startsWith("~")) subtitle = part.slice(1).trim();
+        else if (part) points.push(part);
       }
-      return { color, heading, subtitle, points };
-    });
 
-  if (cards.length === 0) return null;
-
-  return (
-    <div className="my-8" aria-live="polite">
-      {title && (
-        <h3
-          id={slugify(title)}
-          className="preview-display text-[20px] font-bold text-foreground tracking-[-0.005em] mb-4 scroll-mt-24"
-        >
-          {title}
-        </h3>
-      )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {cards.map((c, i) => {
-          const theme = CM_COLORS[c.color] || CM_COLORS.slate;
-          return (
-            <div
-              key={i}
-              className="relative rounded-xl border border-border/80 bg-background pl-4 pr-4 py-3.5 overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-            >
-              <span
-                className={`absolute left-0 top-0 bottom-0 w-[3px] ${theme.bar}`}
-              />
-              <div className="flex items-baseline justify-between gap-2 mb-2">
-                <span className="text-[14.5px] font-bold text-foreground leading-snug">
-                  {c.heading}
-                </span>
-                {c.subtitle && (
-                  <span
-                    className={`shrink-0 text-[10.5px] font-semibold px-1.5 py-[1px] rounded ${theme.chip}`}
-                  >
-                    {c.subtitle}
-                  </span>
-                )}
-              </div>
-              <ul className="space-y-1.5">
-                {c.points.map((p, j) => (
-                  <li
-                    key={j}
-                    className="flex items-start gap-2 text-[13px] leading-[1.55] text-muted-foreground"
-                  >
-                    <span
-                      className={`mt-[7px] h-1 w-1 rounded-full shrink-0 ${theme.bar}`}
-                    />
-                    <span>{p}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+      const intro = subtitle ? `#### ${heading}\n\n_${subtitle}_` : `#### ${heading}`;
+      const list = points.map((point) => `- ${point}`).join("\n");
+      return list ? `${intro}\n\n${list}` : intro;
+    })
+    .join("\n\n");
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * "On this page" jump list
- * ────────────────────────────────────────────────────────────────────────── */
+function sectionToMarkdown(section: AnswerSection): string {
+  const title = section.sectionTitle?.trim() || "";
+  let content = section.content?.trim() || "";
+  if (!content) return "";
 
-function TopToc({ items }: { items: TocItem[] }) {
-  return (
-    <nav className="mb-8 rounded-xl border border-border/70 bg-surface/60 px-5 py-4">
-      <div className="text-[10.5px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground mb-2.5">
-        On this page
+  if (section.sectionType === "concept_map") {
+    content = conceptMapToMarkdown(content);
+  } else if (CODE_TYPES.has(section.sectionType)) {
+    content = ensureFenced(content);
+  }
+
+  const heading = SUPPORTING_TYPES.has(section.sectionType) ? "####" : "###";
+  return title ? `${heading} ${title}\n\n${content}` : content;
+}
+
+function sectionsToMarkdown(sections: AnswerSection[]): string {
+  return sections
+    .map(sectionToMarkdown)
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function buildToc(sections: AnswerSection[]): TocItem[] {
+  const seen = new Set<string>();
+
+  return sections.flatMap((section) => {
+    if (SUPPORTING_TYPES.has(section.sectionType) || PRACTICE_TYPES.has(section.sectionType)) return [];
+    const text = section.sectionTitle?.trim();
+    if (!text) return [];
+    const id = slugify(text);
+    if (!id || seen.has(id)) return [];
+    seen.add(id);
+    return [{ id, text }];
+  });
+}
+
+function readingMinutes(markdown: string): number {
+  const codeBlocks = markdown.match(/```[\s\S]*?```/g) ?? [];
+  const codeLines = codeBlocks.reduce((total, block) => total + block.split("\n").length - 2, 0);
+  const prose = markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[`*_>#|\[\]()-]/g, " ")
+    .trim();
+  const words = prose ? prose.split(/\s+/).length : 0;
+  return Math.max(2, Math.ceil(words / 190 + codeLines / 14));
+}
+
+function textFromNode(node: React.ReactNode): string {
+  if (node == null) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textFromNode).join("");
+  if (React.isValidElement(node)) {
+    return textFromNode((node.props as { children?: React.ReactNode }).children);
+  }
+  return "";
+}
+
+const articleComponents = {
+  ...baseComponents,
+  p({ children }: { children?: React.ReactNode }) {
+    return (
+      <p className="my-4 text-[17px] leading-[1.78] tracking-[-0.002em] text-[#334861] first:mt-0 last:mb-0 dark:text-slate-300">
+        {children}
+      </p>
+    );
+  },
+  h2({ children }: { children?: React.ReactNode }) {
+    const id = slugify(textFromNode(children));
+    return (
+      <h2
+        id={id}
+        className="scroll-mt-24 pt-10 font-display text-[23px] font-bold leading-[1.28] tracking-[-0.02em] text-[#17324d] after:mt-2.5 after:block after:h-[2px] after:w-9 after:rounded-full after:bg-[#4f8795] sm:text-[25px] dark:text-slate-100 dark:after:bg-blue-400/80"
+      >
+        {children}
+      </h2>
+    );
+  },
+  h3({ children }: { children?: React.ReactNode }) {
+    const id = slugify(textFromNode(children));
+    return (
+      <h3
+        id={id}
+        className="scroll-mt-24 pt-10 font-display text-[22px] font-bold leading-[1.3] tracking-[-0.018em] text-[#17324d] after:mt-2.5 after:block after:h-[2px] after:w-9 after:rounded-full after:bg-[#4f8795] sm:text-[24px] dark:text-slate-100 dark:after:bg-blue-400/80"
+      >
+        {children}
+      </h3>
+    );
+  },
+  h4({ children }: { children?: React.ReactNode }) {
+    return (
+      <h4 className="pt-7 font-display text-[18px] font-semibold leading-[1.4] tracking-[-0.01em] text-[#28506b] sm:text-[19px] dark:text-blue-200">
+        {children}
+      </h4>
+    );
+  },
+  ul({ children }: { children?: React.ReactNode }) {
+    return (
+      <ul className="my-5 list-disc space-y-2 pl-6 marker:text-blue-500/75 dark:marker:text-blue-400/70">
+        {children}
+      </ul>
+    );
+  },
+  ol({ children }: { children?: React.ReactNode }) {
+    return (
+      <ol className="my-5 list-decimal space-y-2 pl-6 marker:font-semibold marker:text-blue-700/75 dark:marker:text-blue-300/75">
+        {children}
+      </ol>
+    );
+  },
+  li({ children }: { children?: React.ReactNode }) {
+    return (
+      <li className="pl-1.5 text-[16.5px] leading-[1.75] text-[#334861] dark:text-slate-300 [&>p]:my-0">
+        {children}
+      </li>
+    );
+  },
+  strong({ children }: { children?: React.ReactNode }) {
+    return <strong className="font-bold text-[#162a46] dark:text-slate-100">{children}</strong>;
+  },
+  em({ children }: { children?: React.ReactNode }) {
+    return <em className="italic text-[#40566f] dark:text-slate-300">{children}</em>;
+  },
+  code({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) {
+    const isInline = inline ?? !className;
+    if (isInline) {
+      return (
+        <code className="box-decoration-clone rounded-[3px] bg-[#eff3f7] px-1 py-[2px] font-mono text-[0.88em] font-medium text-[#26364d] dark:bg-slate-800 dark:text-slate-200">
+          {children}
+        </code>
+      );
+    }
+    return <code className={className}>{children}</code>;
+  },
+  blockquote({ children }: { children?: React.ReactNode }) {
+    return (
+      <blockquote className="my-7 border-l-[3px] border-amber-400/80 bg-amber-50/45 py-3.5 pl-5 pr-5 text-[#4c5663] dark:border-amber-500/60 dark:bg-amber-950/15 dark:text-slate-300 [&>p]:my-1">
+        {children}
+      </blockquote>
+    );
+  },
+  table({ children }: { children?: React.ReactNode }) {
+    return (
+      <div
+        className="my-7 overflow-x-auto rounded-xl border border-[#dbe3e8] bg-white shadow-[0_1px_2px_rgba(15,35,55,0.035)] outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-900"
+        tabIndex={0}
+        role="region"
+        aria-label="Scrollable data table"
+      >
+        <table className="w-full border-collapse font-sans text-[14px]">{children}</table>
       </div>
-      <ul className="flex flex-wrap gap-x-5 gap-y-1.5">
-        {items.map((item) => (
-          <li key={item.id}>
+    );
+  },
+  thead({ children }: { children?: React.ReactNode }) {
+    return <thead className="bg-[#edf3f7] dark:bg-slate-800">{children}</thead>;
+  },
+  th({ children }: { children?: React.ReactNode }) {
+    return (
+      <th className="border-b border-[#d9e2e8] px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.08em] text-[#294b65] dark:border-slate-700 dark:text-blue-200">
+        {children}
+      </th>
+    );
+  },
+  td({ children }: { children?: React.ReactNode }) {
+    return (
+      <td className="border-b border-slate-100 px-4 py-3.5 align-top leading-[1.62] text-slate-700 dark:border-slate-800 dark:text-slate-300 [&_code]:text-[12.5px]">
+        {children}
+      </td>
+    );
+  },
+  tr({ children }: { children?: React.ReactNode }) {
+    return <tr className="even:bg-[#fafbf9] last:[&_td]:border-b-0 dark:even:bg-slate-900/70">{children}</tr>;
+  },
+  pre({ children }: { children?: React.ReactNode }) {
+    return <MarkdownPre collapseAfterLines={18}>{children}</MarkdownPre>;
+  },
+};
+
+function ArticleToc({ items }: { items: TocItem[] }) {
+  if (items.length < 2) return null;
+
+  return (
+    <nav aria-label="In this deep dive" className="mb-9 rounded-xl bg-[#f1f5f7] px-5 py-4 ring-1 ring-inset ring-[#e2e9ed] dark:bg-slate-900/70 dark:ring-slate-800">
+      <p className="mb-2.5 font-sans text-[10.5px] font-bold uppercase tracking-[0.17em] text-[#42637a] dark:text-slate-400">
+        In this article
+      </p>
+      <ol className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+        {items.map((item, index) => (
+          <li key={item.id} className="flex min-w-0 items-baseline gap-2.5">
+            <span className="shrink-0 font-sans text-[10px] font-bold tabular-nums text-[#7690a1] dark:text-slate-600">
+              {String(index + 1).padStart(2, "0")}
+            </span>
             <a
               href={`#${item.id}`}
-              className="text-[13px] leading-snug text-muted-foreground hover:text-foreground transition-colors"
+              className="flex min-h-8 items-center rounded-sm font-sans text-[14px] font-medium leading-snug text-[#435b6c] underline-offset-4 outline-none transition-colors hover:text-blue-700 hover:underline focus-visible:ring-2 focus-visible:ring-blue-500/60 focus-visible:ring-offset-2 dark:text-slate-400 dark:hover:text-blue-300"
             >
               {item.text}
             </a>
           </li>
         ))}
-      </ul>
+      </ol>
     </nav>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────────────────
- * DeepDiveArticle
- * ────────────────────────────────────────────────────────────────────────── */
+export function DeepDiveArticle({ sections, followupQuestions, question }: Props) {
+  const hasFollowups = Boolean(followupQuestions?.length);
+  const practiceSections = sections.filter((section) => PRACTICE_TYPES.has(section.sectionType));
+  const articleSections = sections.filter((section) => !PRACTICE_TYPES.has(section.sectionType));
+  const hasConclusion = practiceSections.length > 0 || hasFollowups;
+  if (articleSections.length === 0 && !hasConclusion) return null;
 
-export function DeepDiveArticle({ sections, followupQuestions }: Props) {
-  const hasFollowups = !!followupQuestions && followupQuestions.length > 0;
-  if (sections.length === 0 && !hasFollowups) return null;
-
-  const blocks = sectionsToBlocks(sections);
-  const toc = buildToc(sections);
-
-  // Fold in any deeper `###` headings the markdown itself introduced so the
-  // jump list is complete even when section bodies carry their own subheads.
-  const mdToc = blocks
-    .filter((b): b is { kind: "md"; md: string } => b.kind === "md")
-    .flatMap((b) => extractTocFromBody(b.md));
-  const seen = new Set<string>();
-  const tocItems = [...toc, ...mdToc].filter((t) => {
-    if (seen.has(t.id)) return false;
-    seen.add(t.id);
-    return true;
-  });
+  const markdown = sectionsToMarkdown(articleSections);
+  const tocItems = buildToc(articleSections);
+  const minutes = readingMinutes(markdown);
 
   return (
-    <section id="zone-deep" className="mb-8 scroll-mt-8 deepdive-scope">
-      <style>{`
-        .deepdive-scope .preview-display {
-          font-family: ${DISPLAY_SERIF};
-          font-feature-settings: "kern", "liga", "calt";
-        }
-      `}</style>
+    <section id="zone-deep" data-testid="deep-dive" aria-labelledby="deep-dive-title" className="mb-8 scroll-mt-8">
+      <div className="relative overflow-hidden rounded-2xl border border-[#d8e1e7] bg-[#fffefa] shadow-[0_8px_30px_rgba(27,48,69,0.055)] dark:border-slate-800 dark:bg-slate-950">
+        <span className="absolute inset-x-0 top-0 z-10 h-[3px] bg-gradient-to-r from-blue-600 via-emerald-500 to-amber-400" aria-hidden="true" />
+        <header className="border-b border-[#dce5ea] bg-[linear-gradient(112deg,#eaf2f8_0%,#f5f8f7_58%,#faf3e8_100%)] px-5 py-5 sm:px-8 sm:py-6 dark:border-slate-800 dark:bg-none dark:bg-slate-900">
+          <div className="flex items-start gap-3.5">
+            <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#b9cad7] bg-white/75 font-sans text-[11px] font-extrabold tabular-nums text-[#244c68] shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+              03
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center gap-2 font-sans text-[10.5px] font-bold uppercase tracking-[0.17em] text-blue-700 dark:text-blue-300">
+                <BookOpen aria-hidden="true" className="h-3.5 w-3.5" />
+                03 · Deep dive
+              </div>
+              <h2 id="deep-dive-title" className="font-display text-[21px] font-bold tracking-[-0.018em] text-[#17324d] sm:text-[23px] dark:text-slate-100">
+                {question?.replace(/\?$/, "") || "Complete explanation"}
+              </h2>
+            </div>
+            <span className="hidden items-center gap-1.5 pt-1 font-sans text-[11px] font-medium text-[#627784] sm:flex dark:text-slate-400">
+              <Clock3 aria-hidden="true" className="h-3.5 w-3.5" />
+              About {minutes} min with examples
+            </span>
+          </div>
+        </header>
 
-      <ZoneHeader
-        kicker="Zone 3"
-        title="Deep dive"
-        subtitle="Read top to bottom — the full picture"
-        icon={BookOpen}
-        accent="slate"
-      />
+        <div className="bg-[radial-gradient(circle_at_top_left,rgba(232,242,248,0.32),transparent_28%),#fffefa] px-5 py-8 sm:px-8 sm:py-9 lg:px-12 dark:bg-none dark:bg-slate-950">
+          <article className="mx-auto max-w-[790px]" data-testid="deep-dive-article">
+            <ArticleToc items={tocItems} />
 
-      {sections.length > 0 && (
-        <div className="rounded-2xl border border-border/80 bg-background px-5 sm:px-8 lg:px-10 py-8 sm:py-10 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-          {tocItems.length > 1 && <TopToc items={tocItems} />}
-          {blocks.map((b, i) =>
-            b.kind === "md" ? (
-              <ReactMarkdown
-                key={i}
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[
-                  [rehypeHighlight, { detect: true, ignoreMissing: true }],
-                  rehypePairCodeBlocks,
-                ]}
-                components={baseComponents as never}
-              >
-                {b.md}
-              </ReactMarkdown>
-            ) : (
-              <ConceptMapLight key={i} title={b.title} content={b.content} />
-            )
-          )}
+            {markdown && (
+              <div className="deep-dive-copy font-serif [&>h2:first-child]:pt-0 [&>h3:first-child]:pt-0 [&_.not-prose]:font-sans [&_pre]:font-mono [&_table]:font-sans">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+                  components={articleComponents as never}
+                >
+                  {markdown}
+                </ReactMarkdown>
+              </div>
+            )}
+
+            {hasConclusion && (
+              <section className="mt-10 border-t border-[#d7e3e9] pt-7 dark:border-slate-800" aria-labelledby="deep-dive-followups">
+                <h3 id="deep-dive-followups" className="font-display text-[21px] font-bold tracking-[-0.018em] text-[#17324d] dark:text-slate-100">
+                  Check your understanding
+                </h3>
+
+                {practiceSections.map((section) => (
+                  <aside key={`${section.sectionTitle}-${section.sectionOrder}`} className="mt-5 border-l-[3px] border-amber-400 bg-[#fff9ed] px-5 py-4 dark:border-amber-500/70 dark:bg-amber-950/15">
+                    <p className="font-sans text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#8a5a12] dark:text-amber-300">
+                      {section.sectionTitle || "Try it yourself"}
+                    </p>
+                    <div className="mt-2 font-serif text-[16px] leading-[1.72] text-[#4b5965] dark:text-slate-300 [&_p]:my-0">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={articleComponents as never}>
+                        {section.content}
+                      </ReactMarkdown>
+                    </div>
+                  </aside>
+                ))}
+
+                {hasFollowups && (
+                  <>
+                    <p className="mt-5 font-sans text-[13.5px] leading-relaxed text-[#637782] dark:text-slate-400">
+                      Answer these without looking back at the article.
+                    </p>
+                    <ol className="mt-4 list-decimal space-y-2.5 pl-6 marker:font-semibold marker:text-blue-700/75 dark:marker:text-blue-300/75">
+                      {followupQuestions!.map((followup) => (
+                        <li key={followup} className="pl-1 font-serif text-[16px] leading-[1.68] text-[#43515f] dark:text-slate-300">
+                          {followup}
+                        </li>
+                      ))}
+                    </ol>
+                  </>
+                )}
+              </section>
+            )}
+          </article>
         </div>
-      )}
-
-      {hasFollowups && (
-        <div className="mt-6">
-          <ZoneHeader
-            kicker="What comes next"
-            title="Follow-up questions"
-            subtitle="Be ready for these"
-            icon={MessageCircle}
-            accent="indigo"
-          />
-          <ol className="rounded-2xl border border-border/80 bg-background px-6 py-6 sm:px-8 sm:py-7 space-y-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-            {followupQuestions!.map((q, i) => (
-              <li key={i} className="flex items-start gap-3.5">
-                <span className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary text-[11px] font-extrabold border border-default dark:border-default/20">
-                  {i + 1}
-                </span>
-                <span className="text-[15.5px] leading-[1.65] text-foreground pt-[1px]">
-                  {q}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
+      </div>
     </section>
   );
 }

@@ -12,12 +12,18 @@ import type { ExperienceLevelKey } from "@/lib/levels";
 
 export const revalidate = 3600;
 
+const MIGRATED_DOMAINS = new Set<string>([
+  "java/backend/beginner",
+  "java/backend/intermediate",
+]);
+
 export async function generateStaticParams() {
   const { listLanguages, listTracks, listLevels, listStacksForPath, resolveStackContent } = await import("@/lib/contentV2");
   const params: { lang: string; track: string; level: string; stack: string; slug: string }[] = [];
   for (const lang of listLanguages()) {
     for (const track of listTracks(lang)) {
       for (const level of listLevels(lang, track)) {
+        if (MIGRATED_DOMAINS.has(`${lang}/${track}/${level}`)) continue;
         for (const stack of listStacksForPath(lang, track, level as import("@/lib/contentV2-types").Level)) {
           const content = resolveStackContent(lang, track, level as import("@/lib/contentV2-types").Level, stack);
           for (const q of content?.questions ?? []) {

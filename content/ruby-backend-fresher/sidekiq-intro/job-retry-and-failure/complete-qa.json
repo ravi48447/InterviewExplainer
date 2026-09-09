@@ -7,12 +7,12 @@
       "slug": "ruby-job-retry-and-failure-basics",
       "question": "How does Sidekiq handle job retries and failures?",
       "title": "Job Retry and Failure",
-      "direct_answer": "Sidekiq retries failed jobs automatically. By default a job retries 25 times with exponential backoff (15s, 30s, 60s, ... up to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids). Don't retry non-retryable errors (a bad arg) — rescue them and re-raise with a 'skip' class, or set retry: 0 for that job.",
+      "direct_answer": "When a Sidekiq job raises an unexpected exception, Sidekiq records the failure and normally schedules retries with increasing delay. Retry count and final handling are configurable; under current defaults, exhausted jobs move to the Dead set for later inspection before eventual removal. Retrying creates at-least-once execution possibilities, so jobs must be idempotent. Expected business failures should be modelled explicitly rather than retried, and persistent failures need error reporting, queue metrics, ownership, and a safe manual recovery path.",
       "layout_type": "concept-explanation",
       "difficulty": "easy",
       "importance": "high",
-      "reading_time_minutes": 7,
-      "last_updated": "2026-08-08",
+      "reading_time_minutes": 8,
+      "last_updated": "2026-09-07",
       "interviewer_intent": {
         "testing": "Whether you know Sidekiq retries failed jobs with exponential backoff (default 25x) then moves them to the dead set.",
         "common_mistake": "Retrying non-idempotent jobs (double charges/emails) — make jobs idempotent; or retry: 0 for bad-arg errors.",
@@ -22,253 +22,43 @@
       "answer": {
         "sections": [
           {
-            "type": "interviewer_expectation",
-            "title": "What the interviewer wants",
-            "content": "Define Job Retry and Failure simply, show a small example, and mention the main trade-off or edge case."
-          },
-          {
             "type": "key_points",
-            "title": "Key Takeaways",
-            "items": [
-              "Sidekiq retries failed jobs automatically (default 25x, exponential backoff).",
-              "Configure: sidekiq_options retry: 5 (or retry: 0 for no retries).",
-              "After retries are exhausted, the job moves to the dead set (morgue).",
-              "View/retry via the Sidekiq Web UI: /sidekiq/retries, /sidekiq/morgue.",
-              "Make jobs idempotent (running twice == once) so retries are safe; use idempotency keys."
-            ]
+            "title": "Quick revision",
+            "content": "- Raise unexpected failures so Sidekiq can record and apply retry policy.\n- Retries use delayed attempts and may eventually enter the Dead set.\n- A retry can repeat work that partly succeeded, so effects must be idempotent.\n- Do not retry permanent validation or business-rule outcomes indefinitely.\n- Alert on repeated failure and provide an inspected, authorised recovery path."
           },
           {
             "type": "speakable_answer",
-            "title": "Spoken Answer",
-            "content": "Sidekiq retries failed jobs automatically. By default a job retries 25 times with exponential backoff (15s, 30s, 60s, dot dot dot up to about 21 days), then moves to the dead set (morgue). You configure: sidekiq options retry 5 (5 retries) or retry 0 (no retries) or retry 600. The job's perform is wrapped in your sidekiq retries exhausted block for final handling. Failures are usually network or timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (slash sidekiq retries, slash sidekiq morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids). Don't retry non-retryable errors (a bad arg) — rescue them and re-raise with a skip class, or set retry 0 for that job. A common mistake is retrying non-idempotent jobs, like double charges, when you should make them idempotent."
+            "title": "Interview answer",
+            "answerSize": "compact",
+            "content": "Sidekiq treats a raised exception as a failed execution. It records error details and, when retry is enabled, places the job in the retry schedule with increasing delay. This gives transient failures such as a provider outage time to recover without blocking a web request.\n\nCurrent Sidekiq defaults retry a job a finite number of times over an extended period, then move exhausted work into the Dead set where operators can inspect or retry it before retention expires. Those numbers and retention can change by version or configuration, so operational policy should be read from the deployed setup rather than memorised as a universal guarantee.\n\nFor example, a charge request may reach the payment provider, then time out before the worker records success. Retrying the same payload without a provider idempotency key can charge twice. Reusing one business key lets the provider return the original result for the repeated logical operation.\n\nRetries suit unexpected, potentially temporary failures. An invalid address, cancelled order, or rejected business rule will not become valid through blind repetition; the job should record a permanent outcome, discard according to policy, or move the workflow to human review. Broad rescue that only logs an error creates false success.\n\nReliable operation combines idempotent effects, bounded timeouts, error-service reporting, retry and dead counts, oldest-job age, and a named owner for recovery. Retrying is one control within that system, not proof that work cannot be lost or duplicated."
           },
           {
             "type": "deep_explanation",
-            "title": "Reason through the problem",
-            "content": "Sidekiq retries failed jobs automatically.\n\nBy default a job retries 25 times with exponential backoff (15s, 30s, 60s, ...\n\nup to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids).\n\nRetrying non-idempotent jobs (double charges/emails) — make jobs idempotent; or retry: 0 for bad-arg errors."
+            "title": "Retry the operation only after defining what partial success means",
+            "content": "A failure can occur before an effect, during it, or after the external system completed it but before the worker recorded completion. The last window is why exception type alone cannot make retry safe. The job needs a durable key or state transition that survives process loss and distinguishes a repeated attempt from a new business request.\n\nBackoff protects a struggling dependency and gives transient conditions time to clear. Immediate tight retries amplify an outage. Randomness and increasing delay reduce synchronised retry spikes, but long delays also mean the product must expose pending or failed state rather than silently promising instant completion.\n\nPermanent and expected outcomes belong outside automatic exception retry. A payment decline is a business result; invalid serialized data may require dead-letter inspection; a missing record may be harmless or a data-loss signal depending on the operation. Classifying each path prevents wasted attempts and hidden abandonment.\n\nManual retry is another execution and needs authorization, audit, and current-state checks. After deploying a fix, an operator should know which payloads are safe to replay, which external effects already occurred, and how success will be verified. Deleting failed work without reconciliation changes queue cleanliness, not business correctness."
           },
           {
             "type": "flow_diagram",
-            "title": "Retry + Failure",
-            "content": "retries with backoff (default 25x) then dead set. sidekiq_options retry: N. Idempotent jobs. Web UI.\n\n```mermaid\nflowchart LR\n  J[job fails] --> R[retry: 25 (default)]\n  R --> B[backoff: 15s 30s 60s...]\n  R -->|exhausted| D[dead set / morgue]\n  D --> M[manual retry via Web UI]\n```"
+            "title": "A failed job moves through delayed and operational states",
+            "content": "```mermaid\nstateDiagram-v2\n  [*] --> Queued\n  Queued --> Running\n  Running --> Complete: effect recorded\n  Running --> RetryScheduled: unexpected exception\n  RetryScheduled --> Queued: delay expires\n  RetryScheduled --> Dead: attempts exhausted\n  Dead --> Queued: inspected manual retry\n  Dead --> Reconciled: discard or compensate by policy\n```"
           },
           {
             "type": "code_example",
-            "title": "Sidekiq retry and failure",
-            "content": "```ruby\nclass MailJob\n  include Sidekiq::Job\n  sidekiq_options retry: 5          # 5 retries (default 25, exp backoff)\n  # sidekiq_options retry: 0        # no retries (fail fast)\n  # sidekiq_options retry: 600      # lots of retries\n\n  def perform(user_id)\n    user = User.find(user_id)\n    Mailer.welcome(user).deliver_now\n  end\nend\n\n# Default backoff: 15s, 30s, 60s, 2m, 4m, 8m, ... up to ~21 days, 25 tries.\n# Failures (network/timeout blips) often self-heal on retry.\n\n# Final handling when retries are exhausted:\nclass MailJob\n  sidekiq_retries_exhausted do |msg, ex|\n    logger.error \"giving up on #{msg}: #{ex.message}\"\n    # alert, enqueue a cleanup job, etc.\n  end\nend\n\n# After retries exhausted -> DEAD SET (morgue):\n#   Sidekiq Web UI:  /sidekiq/retries  (in-flight retries)\n#                   /sidekiq/morgue   (dead jobs; retry manually)\n\n# Make jobs IDEMPOTENT (safe to retry): running twice == once.\n  # - check before create (don't duplicate)\n  # - use unique job ids / dedupe\n  # - money: use a payment idempotency key\n\n# Non-retryable errors (bad arg): don't retry forever.\n  # rescue SpecificError => e; raise  # OR  sidekiq_options retry: 0\n```"
+            "title": "Let transient failure raise and protect the external effect",
+            "content": "```ruby\nclass CapturePaymentJob\n  include Sidekiq::Job\n  sidekiq_options retry: 10\n\n  def perform(payment_id)\n    payment = Payment.find(payment_id)\n    return if payment.captured?\n\n    result = Gateway.capture(\n      payment.amount_cents,\n      idempotency_key: \"payment-#{payment.id}\"\n    )\n    payment.update!(provider_reference: result.id, captured_at: Time.current)\n  end\nend\n\n# A timeout raises; the next attempt reuses the same provider key.\n```"
           }
         ]
       },
       "followup_questions": [
-        "How would you compare Job Retry And Failure with an alternative?",
-        "What is a common mistake when using Job Retry And Failure?",
-        "When would you use Job Retry And Failure in a real project?"
+        "Which failure window can cause an external effect to succeed before a retry?",
+        "Why should a payment decline usually not use automatic exception retries?",
+        "What evidence is needed before manually retrying a dead job?"
       ],
       "seo": {
         "metaTitle": "Job Retry and Failure — ruby backend interview question | InterviewExplainer",
-        "metaDescription": "Interview answer for How does Sidekiq handle job retries and failures? with a clear explanation, practical example, common mistakes, and follow-up questions."
+        "metaDescription": "Learn How does Sidekiq handle job retries and failures? with a direct answer, lifecycle model, retry boundary, and focused follow-up questions."
       },
       "order": 1
-    },
-    {
-      "id": "sidekiq-intro-job-retry-and-failure-q001",
-      "slug": "sidekiq-intro-job-retry-and-failure-when-to-use",
-      "question": "When would you use Job Retry And Failure in a real project?",
-      "title": "When would you use Job Retry And Failure in a real project",
-      "direct_answer": "I would use How does Sidekiq handle job retries and failures when the problem matches its main benefit. Sidekiq retries failed jobs automatically. In a real project, I would confirm that benefit with the input shape, correctness rules, and expected load before choosing it. I would keep the use local and explain the decision in the code review.",
-      "layout_type": "interview-practice",
-      "difficulty": "easy",
-      "importance": "medium",
-      "reading_time_minutes": 6,
-      "interviewer_intent": {
-        "testing": "Whether you can explain How does Sidekiq handle job retries and failures in plain language and apply it to a small example.",
-        "common_mistake": "Giving a slogan about How does Sidekiq handle job retries and failures without checking its scope, boundary cases, or trade-offs.",
-        "to_stand_out": "State the rule, walk through one concrete example, and name the test or edge case you would verify."
-      },
-      "answer": {
-        "sections": [
-          {
-            "type": "interviewer_expectation",
-            "title": "What the interviewer wants",
-            "content": "Start by defining How does Sidekiq handle job retries and failures in one sentence, then connect it to a decision: what kind of input or behaviour makes it a good fit. The interviewer is looking for a practical reason, not a list of buzzwords. Sidekiq retries failed jobs automatically. By default a job retries 25 times with exponential backoff (15s, 30s, 60s, ... up to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids). Don't retry non-retryable errors (a bad arg) — rescue them and re-raise with a 'skip' class, or set retry: 0 for that job."
-          },
-          {
-            "type": "speakable_answer",
-            "title": "Interview answer",
-            "content": "I use How does Sidekiq handle job retries and failures when its rule makes the code safer, clearer, or more efficient for the actual problem. Sidekiq retries failed jobs automatically. By default a job retries 25 times with exponential backoff (15s, 30s, 60s, ... up to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids). Don't retry non-retryable errors (a bad arg) — rescue them and re-raise with a 'skip' class, or set retry: 0 for that job. I would first check the input and constraints, use a small example to confirm the behaviour, and then add a test for the boundary case. If the simpler option is just as clear and fast, I would choose that instead."
-          },
-          {
-            "type": "deep_explanation",
-            "title": "Reason through the problem",
-            "content": "Sidekiq retries failed jobs automatically.\n\nBy default a job retries 25 times with exponential backoff (15s, 30s, 60s, ...\n\nup to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids).\n\nRetrying non-idempotent jobs (double charges/emails) — make jobs idempotent; or retry: 0 for bad-arg errors."
-          },
-          {
-            "type": "code_example",
-            "title": "Sidekiq retry and failure",
-            "content": "```ruby\nclass MailJob\n  include Sidekiq::Job\n  sidekiq_options retry: 5          # 5 retries (default 25, exp backoff)\n  # sidekiq_options retry: 0        # no retries (fail fast)\n  # sidekiq_options retry: 600      # lots of retries\n\n  def perform(user_id)\n    user = User.find(user_id)\n    Mailer.welcome(user).deliver_now\n  end\nend\n\n# Default backoff: 15s, 30s, 60s, 2m, 4m, 8m, ... up to ~21 days, 25 tries.\n# Failures (network/timeout blips) often self-heal on retry.\n\n# Final handling when retries are exhausted:\nclass MailJob\n  sidekiq_retries_exhausted do |msg, ex|\n    logger.error \"giving up on #{msg}: #{ex.message}\"\n    # alert, enqueue a cleanup job, etc.\n  end\nend\n\n# After retries exhausted -> DEAD SET (morgue):\n#   Sidekiq Web UI:  /sidekiq/retries  (in-flight retries)\n#                   /sidekiq/morgue   (dead jobs; retry manually)\n\n# Make jobs IDEMPOTENT (safe to retry): running twice == once.\n  # - check before create (don't duplicate)\n  # - use unique job ids / dedupe\n  # - money: use a payment idempotency key\n\n# Non-retryable errors (bad arg): don't retry forever.\n  # rescue SpecificError => e; raise  # OR  sidekiq_options retry: 0\n```"
-          }
-        ]
-      },
-      "followup_questions": [
-        "How would you compare Job Retry And Failure with an alternative?",
-        "What is a common mistake when using Job Retry And Failure?",
-        "How does Sidekiq handle job retries and failures?"
-      ],
-      "order": 2,
-      "seo": {
-        "metaTitle": "When would you use Job Retry And Failure in a real project — ruby backend interview question | InterviewExplainer",
-        "metaDescription": "Interview answer for When would you use Job Retry And Failure in a real project? with a clear explanation, practical example, common mistakes, and follow-up questions."
-      }
-    },
-    {
-      "id": "sidekiq-intro-job-retry-and-failure-q002",
-      "slug": "sidekiq-intro-job-retry-and-failure-common-mistake",
-      "question": "What is a common mistake when using Job Retry And Failure?",
-      "title": "a common mistake when using Job Retry And Failure",
-      "direct_answer": "A common mistake with How does Sidekiq handle job retries and failures is using the rule without checking its boundary conditions. Sidekiq retries failed jobs automatically. That can make a valid-looking result fail for an empty input, a nil value, a duplicate, or a different ordering. I prevent it by naming the assumption, testing the boundary, and checking the result against a small hand-worked example.",
-      "layout_type": "interview-practice",
-      "difficulty": "easy",
-      "importance": "medium",
-      "reading_time_minutes": 6,
-      "interviewer_intent": {
-        "testing": "Whether you can explain How does Sidekiq handle job retries and failures in plain language and apply it to a small example.",
-        "common_mistake": "Giving a slogan about How does Sidekiq handle job retries and failures without checking its scope, boundary cases, or trade-offs.",
-        "to_stand_out": "State the rule, walk through one concrete example, and name the test or edge case you would verify."
-      },
-      "answer": {
-        "sections": [
-          {
-            "type": "interviewer_expectation",
-            "title": "What the interviewer wants",
-            "content": "Name one mistake, show why it happens, and explain the guard you would add. Avoid saying only “be careful”; connect the mistake to the behaviour of How does Sidekiq handle job retries and failures. Sidekiq retries failed jobs automatically. By default a job retries 25 times with exponential backoff (15s, 30s, 60s, ... up to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids). Don't retry non-retryable errors (a bad arg) — rescue them and re-raise with a 'skip' class, or set retry: 0 for that job."
-          },
-          {
-            "type": "speakable_answer",
-            "title": "Interview answer",
-            "content": "The mistake I watch for with How does Sidekiq handle job retries and failures is assuming the happy path is the whole rule. Sidekiq retries failed jobs automatically. By default a job retries 25 times with exponential backoff (15s, 30s, 60s, ... up to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids). Don't retry non-retryable errors (a bad arg) — rescue them and re-raise with a 'skip' class, or set retry: 0 for that job. For example, the normal case may work while the zero, nil, duplicate, or error case behaves differently. I make the assumption explicit, add a focused test for it, and verify the result with a small input before shipping."
-          },
-          {
-            "type": "deep_explanation",
-            "title": "Why the mistake happens",
-            "content": "Sidekiq retries failed jobs automatically.\n\nBy default a job retries 25 times with exponential backoff (15s, 30s, 60s, ...\n\nup to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids).\n\nRetrying non-idempotent jobs (double charges/emails) — make jobs idempotent; or retry: 0 for bad-arg errors."
-          },
-          {
-            "type": "code_example",
-            "title": "Sidekiq retry and failure",
-            "content": "```ruby\nclass MailJob\n  include Sidekiq::Job\n  sidekiq_options retry: 5          # 5 retries (default 25, exp backoff)\n  # sidekiq_options retry: 0        # no retries (fail fast)\n  # sidekiq_options retry: 600      # lots of retries\n\n  def perform(user_id)\n    user = User.find(user_id)\n    Mailer.welcome(user).deliver_now\n  end\nend\n\n# Default backoff: 15s, 30s, 60s, 2m, 4m, 8m, ... up to ~21 days, 25 tries.\n# Failures (network/timeout blips) often self-heal on retry.\n\n# Final handling when retries are exhausted:\nclass MailJob\n  sidekiq_retries_exhausted do |msg, ex|\n    logger.error \"giving up on #{msg}: #{ex.message}\"\n    # alert, enqueue a cleanup job, etc.\n  end\nend\n\n# After retries exhausted -> DEAD SET (morgue):\n#   Sidekiq Web UI:  /sidekiq/retries  (in-flight retries)\n#                   /sidekiq/morgue   (dead jobs; retry manually)\n\n# Make jobs IDEMPOTENT (safe to retry): running twice == once.\n  # - check before create (don't duplicate)\n  # - use unique job ids / dedupe\n  # - money: use a payment idempotency key\n\n# Non-retryable errors (bad arg): don't retry forever.\n  # rescue SpecificError => e; raise  # OR  sidekiq_options retry: 0\n```"
-          }
-        ]
-      },
-      "followup_questions": [
-        "How would you compare Job Retry And Failure with an alternative?",
-        "How does Sidekiq handle job retries and failures?",
-        "When would you use Job Retry And Failure in a real project?"
-      ],
-      "order": 3,
-      "seo": {
-        "metaTitle": "a common mistake when using Job Retry And Failure — ruby backend interview question | InterviewExplainer",
-        "metaDescription": "Interview answer for What is a common mistake when using Job Retry And Failure? with a clear explanation, practical example, common mistakes, and follow-up questions."
-      }
-    },
-    {
-      "id": "sidekiq-intro-job-retry-and-failure-q003",
-      "slug": "sidekiq-intro-job-retry-and-failure-compare",
-      "question": "How would you compare Job Retry And Failure with an alternative?",
-      "title": "compare Job Retry And Failure with an alternative",
-      "direct_answer": "I compare How does Sidekiq handle job retries and failures with the simpler alternative by looking at correctness first, then time, memory, and readability. Sidekiq retries failed jobs automatically. The better choice depends on the input and the failure modes, so I would state that trade-off instead of claiming one option is always best.",
-      "layout_type": "interview-practice",
-      "difficulty": "easy",
-      "importance": "medium",
-      "reading_time_minutes": 6,
-      "interviewer_intent": {
-        "testing": "Whether you can explain How does Sidekiq handle job retries and failures in plain language and apply it to a small example.",
-        "common_mistake": "Giving a slogan about How does Sidekiq handle job retries and failures without checking its scope, boundary cases, or trade-offs.",
-        "to_stand_out": "State the rule, walk through one concrete example, and name the test or edge case you would verify."
-      },
-      "answer": {
-        "sections": [
-          {
-            "type": "interviewer_expectation",
-            "title": "What the interviewer wants",
-            "content": "A strong comparison names the rule, the alternative, and the condition that changes the choice. Use the same input for both approaches so the trade-off is concrete. Sidekiq retries failed jobs automatically. By default a job retries 25 times with exponential backoff (15s, 30s, 60s, ... up to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids). Don't retry non-retryable errors (a bad arg) — rescue them and re-raise with a 'skip' class, or set retry: 0 for that job."
-          },
-          {
-            "type": "speakable_answer",
-            "title": "Interview answer",
-            "content": "I would compare How does Sidekiq handle job retries and failures with the straightforward alternative on the same example. Sidekiq retries failed jobs automatically. By default a job retries 25 times with exponential backoff (15s, 30s, 60s, ... up to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids). Don't retry non-retryable errors (a bad arg) — rescue them and re-raise with a 'skip' class, or set retry: 0 for that job. If How does Sidekiq handle job retries and failures removes repeated work or makes an important guarantee explicit, I would choose it when that benefit matters. Otherwise, I would keep the simpler version because fewer moving parts are easier to test and maintain. I would mention both complexity and the edge case that separates them."
-          },
-          {
-            "type": "deep_explanation",
-            "title": "Understand the decision",
-            "content": "Sidekiq retries failed jobs automatically.\n\nBy default a job retries 25 times with exponential backoff (15s, 30s, 60s, ...\n\nup to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids).\n\nRetrying non-idempotent jobs (double charges/emails) — make jobs idempotent; or retry: 0 for bad-arg errors."
-          },
-          {
-            "type": "code_example",
-            "title": "Sidekiq retry and failure",
-            "content": "```ruby\nclass MailJob\n  include Sidekiq::Job\n  sidekiq_options retry: 5          # 5 retries (default 25, exp backoff)\n  # sidekiq_options retry: 0        # no retries (fail fast)\n  # sidekiq_options retry: 600      # lots of retries\n\n  def perform(user_id)\n    user = User.find(user_id)\n    Mailer.welcome(user).deliver_now\n  end\nend\n\n# Default backoff: 15s, 30s, 60s, 2m, 4m, 8m, ... up to ~21 days, 25 tries.\n# Failures (network/timeout blips) often self-heal on retry.\n\n# Final handling when retries are exhausted:\nclass MailJob\n  sidekiq_retries_exhausted do |msg, ex|\n    logger.error \"giving up on #{msg}: #{ex.message}\"\n    # alert, enqueue a cleanup job, etc.\n  end\nend\n\n# After retries exhausted -> DEAD SET (morgue):\n#   Sidekiq Web UI:  /sidekiq/retries  (in-flight retries)\n#                   /sidekiq/morgue   (dead jobs; retry manually)\n\n# Make jobs IDEMPOTENT (safe to retry): running twice == once.\n  # - check before create (don't duplicate)\n  # - use unique job ids / dedupe\n  # - money: use a payment idempotency key\n\n# Non-retryable errors (bad arg): don't retry forever.\n  # rescue SpecificError => e; raise  # OR  sidekiq_options retry: 0\n```"
-          }
-        ]
-      },
-      "followup_questions": [
-        "What is a common mistake when using Job Retry And Failure?",
-        "How does Sidekiq handle job retries and failures?",
-        "When would you use Job Retry And Failure in a real project?"
-      ],
-      "order": 4,
-      "seo": {
-        "metaTitle": "compare Job Retry And Failure with an alternative — ruby backend interview question | InterviewExplainer",
-        "metaDescription": "Interview answer for How would you compare Job Retry And Failure with an alternative? with a clear explanation, practical example, common mistakes, and follow-up questions."
-      }
-    },
-    {
-      "id": "sidekiq-intro-job-retry-and-failure-q004",
-      "slug": "sidekiq-intro-job-retry-and-failure-scenario",
-      "question": "How would you debug a problem involving Job Retry And Failure?",
-      "title": "debug a problem involving Job Retry And Failure",
-      "direct_answer": "I would debug a problem involving How does Sidekiq handle job retries and failures by reproducing it with the smallest input first. Sidekiq retries failed jobs automatically. Then I would inspect the values at the boundary where the result changes, add a regression test, and check an empty, nil, duplicate, or maximum-size case as appropriate. This keeps the investigation evidence-based instead of guessing.",
-      "layout_type": "interview-practice",
-      "difficulty": "easy",
-      "importance": "medium",
-      "reading_time_minutes": 6,
-      "interviewer_intent": {
-        "testing": "Whether you can explain How does Sidekiq handle job retries and failures in plain language and apply it to a small example.",
-        "common_mistake": "Giving a slogan about How does Sidekiq handle job retries and failures without checking its scope, boundary cases, or trade-offs.",
-        "to_stand_out": "State the rule, walk through one concrete example, and name the test or edge case you would verify."
-      },
-      "answer": {
-        "sections": [
-          {
-            "type": "interviewer_expectation",
-            "title": "What the interviewer wants",
-            "content": "Explain a repeatable debugging sequence: reproduce, isolate, observe, fix, and prove the fix. Tie each step to what How does Sidekiq handle job retries and failures is supposed to guarantee. Sidekiq retries failed jobs automatically. By default a job retries 25 times with exponential backoff (15s, 30s, 60s, ... up to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids). Don't retry non-retryable errors (a bad arg) — rescue them and re-raise with a 'skip' class, or set retry: 0 for that job."
-          },
-          {
-            "type": "speakable_answer",
-            "title": "Interview answer",
-            "content": "I would start by reproducing the How does Sidekiq handle job retries and failures bug with the smallest input that still fails. I would log or inspect the state before and after the key operation, then compare it with the expected rule: Sidekiq retries failed jobs automatically. By default a job retries 25 times with exponential backoff (15s, 30s, 60s, ... up to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids). Don't retry non-retryable errors (a bad arg) — rescue them and re-raise with a 'skip' class, or set retry: 0 for that job. Once I find the first incorrect state, I would make the smallest fix, add a regression test, and run the boundary cases. I would also check the change under realistic load before calling it done."
-          },
-          {
-            "type": "deep_explanation",
-            "title": "Reason through the problem",
-            "content": "Sidekiq retries failed jobs automatically.\n\nBy default a job retries 25 times with exponential backoff (15s, 30s, 60s, ...\n\nup to ~21 days), then moves to the dead set (morgue). You configure: `sidekiq_options retry: 5` (5 retries) or `retry: 0` (no retries) or `retry: 600`. The job's perform is wrapped in your sidekiq_retries_exhausted block for final handling. Failures are usually network/timeout blips, so retrying with backoff often self-heals. Dead jobs are viewable in the Sidekiq Web UI (/sidekiq/retries, /sidekiq/morgue) and can be retried manually. To make a job idempotent (safe to retry), ensure performing it twice has the same effect as once (check before create; use unique job ids).\n\nRetrying non-idempotent jobs (double charges/emails) — make jobs idempotent; or retry: 0 for bad-arg errors."
-          },
-          {
-            "type": "code_example",
-            "title": "Sidekiq retry and failure",
-            "content": "```ruby\nclass MailJob\n  include Sidekiq::Job\n  sidekiq_options retry: 5          # 5 retries (default 25, exp backoff)\n  # sidekiq_options retry: 0        # no retries (fail fast)\n  # sidekiq_options retry: 600      # lots of retries\n\n  def perform(user_id)\n    user = User.find(user_id)\n    Mailer.welcome(user).deliver_now\n  end\nend\n\n# Default backoff: 15s, 30s, 60s, 2m, 4m, 8m, ... up to ~21 days, 25 tries.\n# Failures (network/timeout blips) often self-heal on retry.\n\n# Final handling when retries are exhausted:\nclass MailJob\n  sidekiq_retries_exhausted do |msg, ex|\n    logger.error \"giving up on #{msg}: #{ex.message}\"\n    # alert, enqueue a cleanup job, etc.\n  end\nend\n\n# After retries exhausted -> DEAD SET (morgue):\n#   Sidekiq Web UI:  /sidekiq/retries  (in-flight retries)\n#                   /sidekiq/morgue   (dead jobs; retry manually)\n\n# Make jobs IDEMPOTENT (safe to retry): running twice == once.\n  # - check before create (don't duplicate)\n  # - use unique job ids / dedupe\n  # - money: use a payment idempotency key\n\n# Non-retryable errors (bad arg): don't retry forever.\n  # rescue SpecificError => e; raise  # OR  sidekiq_options retry: 0\n```"
-          }
-        ]
-      },
-      "followup_questions": [
-        "How would you compare Job Retry And Failure with an alternative?",
-        "What is a common mistake when using Job Retry And Failure?",
-        "How does Sidekiq handle job retries and failures?"
-      ],
-      "order": 5,
-      "seo": {
-        "metaTitle": "debug a problem involving Job Retry And Failure — ruby backend interview question | InterviewExplainer",
-        "metaDescription": "Interview answer for How would you debug a problem involving Job Retry And Failure? with a clear explanation, practical example, common mistakes, and follow-up questions."
-      }
     }
   ]
 }

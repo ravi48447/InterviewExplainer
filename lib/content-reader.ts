@@ -25,6 +25,7 @@ import { parseDomainSlug, parsedToContentPath } from './domain-display';
 import { resolveStackContent } from './contentV2';
 import { getV2QuestionPagePayload } from './contentV2';
 import type { Level } from './contentV2-types';
+import contentSources from '../content/source-of-truth.json';
 
 // ─── In-process cache (survives HMR via globalThis) ──────────────────────────
 // Using globalThis ensures caches are NOT wiped on Next.js hot reloads in dev.
@@ -73,7 +74,7 @@ function _cachePutBounded<V>(map: Map<string, V>, key: string, value: V, max: nu
 
 const REPOSITORY_CONTENT_ROOT = resolveContentRoot();
 const CONTENT_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'domains');
-// New canonical location per MASTER_PLAN.md: content/interview/{lang}/{track}/{level}/{stack}
+// Secondary tree for domains that are not registered as locked domains.
 const CONTENT_INTERVIEW_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'interview');
 
 // ─── Locked-domain registry ──────────────────────────────────────────────────
@@ -111,33 +112,7 @@ export const CONTENT_RBF_ROOT = path.join(REPOSITORY_CONTENT_ROOT, 'ruby-backend
  * Keeps pre-migration URLs working while the canonical URL uses the new slug.
  */
 const JBI_STACK_ALIAS: Record<string, string> = {
-  'collections-data-structures': 'java-collections',
-  'jvm-performance':              'jvm-internals',
-  'spring-data-hibernate':        'spring-data-jpa',
-  'rest-api-web':                 'rest-api',
-  'security':                     'application-security',
-  'devops-cicd':                  'cicd',
-  'aws':                          'aws-cloud',
-  'production-operations':        'production-sre',
-  // Split modules — old `advanced-java` is now split; default old URL to java-streams
-  // (java-concurrency also exists; users can reach it via its canonical slug).
-  'advanced-java':                'java-streams',
-  // `testing` was split into `unit-testing` + `advanced-testing`; default to unit-testing.
-  'testing':                      'unit-testing',
-  // `architecture-design-patterns` was split into design-patterns + architecture-patterns.
-  'architecture-design-patterns': 'design-patterns',
-  // Aggregate legacy folders merged elsewhere — route them to their new home.
-  'database':                     'sql-databases',
-  'postgresql':                   'sql-databases',
-  'event-driven':                 'messaging-events',
-  'event-driven-architecture':    'messaging-events',
-  'kafka':                        'messaging-events',
-  'caching-performance':          'redis-caching',
-  'redis':                        'redis-caching',
-  'cloud-deployment':             'cloud-native',
-  'git':                          'git-build-tools',
-  'maven-gradle':                 'git-build-tools',
-  'docker':                       'docker',
+  ...contentSources.domains['java-backend-intermediate'].legacyStackSlugs,
 };
 
 interface LockedDomainInfo {
@@ -216,6 +191,31 @@ function getLockedDomain(domainSlug: string): LockedDomainInfo | null {
 /** True iff the given domain slug is served by a locked content tree. */
 export function isLockedDomain(domainSlug: string): boolean {
   return domainSlug in LOCKED_DOMAINS;
+}
+
+/**
+ * Maps legacy route-level names such as `java-backend-beginner` to the
+ * published locked curriculum (`java-backend-fresher`).
+ */
+export function getPublishedDomainSlug(domainSlug: string): string {
+  if (isLockedDomain(domainSlug)) return domainSlug;
+  const parsed = parseDomainSlug(domainSlug);
+  if (!parsed) return domainSlug;
+
+  const domains = contentSources.domains as Record<string, {
+    legacyRoute?: { lang: string; track: string; level: string };
+  }>;
+  for (const [publishedSlug, config] of Object.entries(domains)) {
+    const route = config.legacyRoute;
+    if (
+      route?.lang === parsed.langSlug &&
+      route.track === parsed.trackSlug &&
+      route.level === parsed.levelKey
+    ) {
+      return publishedSlug;
+    }
+  }
+  return `${parsed.langSlug}-${parsed.trackSlug}-${parsed.levelKey}`;
 }
 
 /** Returns the resolved module slug under the given locked tree, applying aliases. */
@@ -569,17 +569,14 @@ function stackDir(domainSlug: string, stackSlug: string): string | null {
   //    to the source domain's tree (e.g. JFI's spring-boot → JBI's spring-boot).
   if (isLockedDomain(domainSlug)) {
     const lockedDir = resolveLockedModuleDir(domainSlug, stackSlug);
-    if (lockedDir) {
-      const hasDirectQA = fs.existsSync(path.join(lockedDir, 'complete-qa.json'));
-      const hasSubTopics = fs.readdirSync(lockedDir, { withFileTypes: true })
-        .some(e => e.isDirectory() && (
-          fs.existsSync(path.join(lockedDir, e.name, 'complete-qa.json')) ||
-          fs.existsSync(path.join(lockedDir, e.name, 'questions.json'))
-        ));
-      if (hasDirectQA || hasSubTopics) return lockedDir;
-      // Module folder exists but is empty — fall through so we still serve
-      // legacy content during the transition window.
-    }
+    if (!lockedDir) return null;
+    const hasDirectQA = fs.existsSync(path.join(lockedDir, 'complete-qa.json'));
+    const hasSubTopics = fs.readdirSync(lockedDir, { withFileTypes: true })
+      .some(e => e.isDirectory() && (
+        fs.existsSync(path.join(lockedDir, e.name, 'complete-qa.json')) ||
+        fs.existsSync(path.join(lockedDir, e.name, 'questions.json'))
+      ));
+    return hasDirectQA || hasSubTopics ? lockedDir : null;
   }
 
   const rel = domainSlugToContentPath(domainSlug);
@@ -703,6 +700,7 @@ interface RawSection {
   type: string;
   title?: string;
   content?: string | string[];
+  items?: string[];
   summary?: string;
   language?: string;
   mistakes?: RawMistake[];
@@ -817,6 +815,12 @@ function sectionToContent(s: RawSection): string {
       return comparisonTableToMarkdown(s.content as { headers: string[]; rows: string[][] });
     }
   }
+  if (Array.isArray(s.items) && s.items.length) {
+    return s.items
+      .filter(item => typeof item === 'string' && item.trim())
+      .map(item => `- ${item.trim()}`)
+      .join('\n');
+  }
   if (s.summary && typeof s.summary === 'string' && s.summary.trim()) return s.summary.trim();
   if (s.mistakes && s.mistakes.length) return mistakesToMarkdown(s.mistakes);
   if (s.questions && s.questions.length) return followupsToMarkdown(s.questions);
@@ -825,7 +829,7 @@ function sectionToContent(s: RawSection): string {
 
 function estimateReadTime(text: string): number {
   const words = text.split(/\s+/).length;
-  return Math.max(5, Math.ceil(words / 200));
+  return Math.max(2, Math.ceil(words / 200));
 }
 
 // ─── Safe JSON reader (cached) ────────────────────────────────────────────────
@@ -1583,7 +1587,7 @@ export function getQuestionPagePayload(
           )
         : undefined,
     }))
-    .filter(s => s.content.length > 0);
+    .filter(s => s.content.length > 0 || Boolean(s.speakingCues?.length));
 
   // Stub detection: explicit stub flag OR no usable sections → render the
   // "Detailed answer coming soon" placeholder so pages stay navigable while
@@ -1751,6 +1755,27 @@ function scanContentRoot(
   }
 }
 
+/** Collect the canonical routes for every locked curriculum. */
+function scanLockedDomains(
+  params: { domainSlug: string; stackSlug: string; questionSlug: string }[],
+): void {
+  for (const domainSlug of Object.keys(LOCKED_DOMAINS)) {
+    const index = loadLockedIndex(domainSlug);
+    if (!index) continue;
+    for (const module of index.modules ?? []) {
+      if (!module?.moduleSlug) continue;
+      for (const question of getAllQuestionsForStack(domainSlug, module.moduleSlug)) {
+        if (!question.slug) continue;
+        params.push({
+          domainSlug,
+          stackSlug: module.moduleSlug,
+          questionSlug: question.slug,
+        });
+      }
+    }
+  }
+}
+
 export function listAllQuestionParams(): {
   domainSlug: string;
   stackSlug: string;
@@ -1759,10 +1784,14 @@ export function listAllQuestionParams(): {
   const params: { domainSlug: string; stackSlug: string; questionSlug: string }[] = [];
   const seen = new Set<string>();
 
-  // Scan legacy content/domains/ first
+  // Locked curricula are the published source of truth and must win any
+  // one-segment legacy lookup when an older tree contains the same slug.
+  scanLockedDomains(params);
+
+  // Scan secondary sources only for domains that have not been migrated.
   scanContentRoot(CONTENT_ROOT, params, seen);
 
-  // Then scan new content/interview/ (higher priority — slug deduplication handled by seen set scoped per root)
+  // Then scan content/interview for non-locked legacy domains.
   if (fs.existsSync(CONTENT_INTERVIEW_ROOT)) {
     scanContentRoot(CONTENT_INTERVIEW_ROOT, params, seen);
   }

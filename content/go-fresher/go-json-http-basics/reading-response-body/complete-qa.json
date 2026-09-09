@@ -1,251 +1,204 @@
 {
-  "topic": "Reading Response Body",
+  "topic": "HTTP Response Bodies and Errors",
   "topicSlug": "reading-response-body",
   "questions": [
     {
       "id": "go-json-http-basics-reading-response-body-q001",
       "slug": "go-json-http-basics-reading-response-body-interview-basics",
-      "question": "What is Reading Response Body, and when would you use it?",
-      "title": "Reading Response Body",
-      "direct_answer": "Reading Response Body is a core interview concept. In simple terms, it describes a way to solve a common programming problem. I explain what goes in, what happens step by step, and what comes out. The right choice depends on the input size, correctness needs, and the code's maintainability.",
+      "question": "Why must a Go HTTP client close the response body?",
+      "title": "Response body ownership and connection reuse",
+      "direct_answer": "After a successful Client.Do, the caller owns a non-nil response body and must close it. Reading to EOF and closing lets the Transport reuse HTTP/1 connections when possible.",
       "layout_type": "concept-explanation",
       "difficulty": "easy",
       "importance": "high",
-      "reading_time_minutes": 6,
+      "reading_time_minutes": 5,
       "interviewer_intent": {
-        "testing": "Whether you understand Reading Response Body beyond memorized syntax.",
-        "common_mistake": "Giving a definition without explaining a practical trade-off.",
-        "to_stand_out": "Connect the concept to a small production example and state its complexity or failure mode."
+        "testing": "Body ownership, EOF and close behavior, early-exit cleanup, and bounded draining."
       },
       "answer": {
         "sections": [
           {
-            "type": "interviewer_expectation",
-            "title": "What the interviewer wants",
-            "content": "Give a simple definition of Reading Response Body, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
+            "type": "key_points",
+            "title": "Quick revision",
+            "items": [
+              "If Client.Do returns nil error, resp.Body is non-nil.",
+              "The caller must close the response body when finished.",
+              "Reading to EOF and closing supports HTTP/1 keep-alive reuse.",
+              "Defer Close immediately after the successful Do check in a small function.",
+              "Do not drain an unlimited untrusted body merely to save a connection."
+            ]
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "content": "Reading Response Body is a core interview concept. In simple terms, it describes a way to solve a common programming problem. I explain what goes in, what happens step by step, and what comes out. The right choice depends on the input size, correctness needs, and the code's maintainability. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
+            "answerSize": "standard",
+            "content": "A successful `http.Client.Do` returns a Response with a non-nil Body, and the caller becomes responsible for closing it. The body represents a live stream from the transport, not just a byte field. Forgetting cleanup can retain connections and file-descriptor resources until much later.\n\nFor HTTP/1 persistent connections, the Transport may be unable to reuse the connection unless the body is read to EOF and closed. Normal successful code decodes or reads the expected body completely, checks the read error, then closes it. In a short function, `defer resp.Body.Close()` immediately after the successful Do check protects later error returns.\n\nFor example, a JSON client can check status, decode one small response object from Body, and return. If it rejects a status before normal decoding, it may read a small bounded error payload or discard a bounded remainder before closing. It should not copy an attacker-controlled multi-gigabyte body solely to preserve one keep-alive connection.\n\nCurrent Transport implementations can try to finish a limited amount asynchronously when Close is called, but the public contract still says callers should read to EOF and close for reuse. Reuse is an optimization, whereas bounded memory and timely cancellation are correctness and safety requirements.\n\nI keep body lifetime inside the method that made the request, never return a decoded value while leaving a hidden stream open, and preserve read or decode errors. The practical rule is close every successful response, consume expected bounded bodies fully, and choose a safe early-exit policy for unexpected responses."
+          },
+          {
+            "type": "overview",
+            "title": "A response is a stream plus metadata",
+            "content": "Status and headers arrive before the entire body. Do returning successfully means the exchange reached a response; it does not mean the body has been consumed, decoded, or released."
           },
           {
             "type": "deep_explanation",
-            "title": "Build the mental model",
-            "content": "When debug a problem involving Reading Response Body causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Reading Response Body is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
+            "title": "Handle normal and early-return paths separately",
+            "content": "On the normal path, decode the expected representation until completion, check that operation's error, and let a deferred Close release the body. A JSON Decoder may stop after one value, so a protocol expecting exact EOF can perform its own boundary check.\n\nOn an error-status path, the body can contain useful diagnostics but remains untrusted. Read only a documented maximum, close it, and build a typed error containing status and a safe message. If the remaining body is large, sacrificing that connection is preferable to unbounded draining.\n\nClose errors are uncommon for response reads and often secondary to a prior read error, but code that writes to or depends on special body implementations may need an explicit policy. The central non-negotiable step is that Close is reached on every successful Do path.\n\nConnection-reuse tests are transport-level and can be brittle; unit tests should first prove the body gets closed on success, status failure, and decode failure using a tracked ReadCloser or controlled test server."
           },
           {
-            "type": "tradeoffs",
-            "title": "Important trade-off",
-            "content": "To compare compare Reading Response Body, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
+            "type": "flow_diagram",
+            "title": "Response body lifecycle",
+            "content": "```mermaid\nflowchart LR\n  D[Client.Do succeeds] --> O[Caller owns Body]\n  O --> S{Expected response?}\n  S -- Yes --> E[Read or decode to completion]\n  S -- No --> B[Read only bounded diagnostics]\n  E --> C[Close]\n  B --> C\n  C --> R[Transport may reuse connection]\n```"
+          },
+          {
+            "type": "code_example",
+            "title": "Read and close a bounded test response",
+            "content": "```go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"io\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n)\n\nfunc main() {\n\tserver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, \"small body\") }))\n\tdefer server.Close()\n\tresp, err := server.Client().Get(server.URL)\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tdefer resp.Body.Close()\n\tbody, err := io.ReadAll(io.LimitReader(resp.Body, 1024))\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tfmt.Println(string(body))\n}\n```\nThe limit protects memory and the deferred Close covers every later return in this small operation."
           }
         ]
       },
       "followup_questions": [
-        "When would you use Reading Response Body in a real project?",
-        "How would you compare Reading Response Body with an alternative?",
-        "What is a common mistake when using Reading Response Body?"
+        "Why does reading to EOF matter for HTTP/1 reuse?",
+        "Should a client always drain an unlimited error body?",
+        "When does the caller own resp.Body?"
       ],
       "order": 1,
       "seo": {
-        "metaTitle": "Reading Response Body — go interview question | InterviewExplainer",
-        "metaDescription": "Interview answer for What is Reading Response Body, and when would you use it? with a clear explanation, practical example, common mistakes, and follow-up questions."
-      }
+        "metaTitle": "Response body ownership and connection reuse | Go interview",
+        "metaDescription": "After a successful Client.Do, the caller owns a non-nil response body and must close it. Reading to EOF and closing lets the Transport reuse HTTP/1 connections when possible."
+      },
+      "last_updated": "2026-09-07"
     },
     {
       "id": "go-json-http-basics-reading-response-body-q002",
       "slug": "go-json-http-basics-reading-response-body-when-to-use",
-      "question": "When would you use Reading Response Body in a real project?",
-      "title": "When would you use Reading Response Body in a real project",
-      "direct_answer": "Reading Response Body is useful when it solves a clear problem in the code. I would first check the input, expected output, and constraints, then choose it if the simpler option cannot meet those needs. For example, I would use it in the part of an application where its main benefit is visible, rather than adding it everywhere.",
-      "layout_type": "interview-practice",
+      "question": "How do you safely read or decode an HTTP response body in Go?",
+      "title": "Bounded response-body decoding",
+      "direct_answer": "Check the status and media type, place a size limit around the body, decode into the expected type, verify the document boundary when required, and always close the original response body.",
+      "layout_type": "concept-explanation",
       "difficulty": "easy",
-      "importance": "medium",
-      "reading_time_minutes": 6,
+      "importance": "high",
+      "reading_time_minutes": 5,
       "interviewer_intent": {
-        "testing": "Practical understanding of Reading Response Body.",
-        "common_mistake": "Repeating a definition without saying when to use it.",
-        "to_stand_out": "Give one trade-off and say how you would test it."
+        "testing": "Resource limits, typed decoding, media/status checks, and decoder boundary behavior."
       },
       "answer": {
         "sections": [
           {
-            "type": "interviewer_expectation",
-            "title": "What the interviewer wants",
-            "content": "Give a simple definition of Reading Response Body, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
+            "type": "key_points",
+            "title": "Quick revision",
+            "items": [
+              "Inspect StatusCode before treating the body as success data.",
+              "Validate Content-Type when the protocol requires JSON.",
+              "Use io.LimitReader or another explicit response-size limit.",
+              "Decode into a typed struct and check the Decode error.",
+              "Close resp.Body even when status or decoding fails."
+            ]
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "content": "Reading Response Body is useful when it solves a clear problem in the code. I would first check the input, expected output, and constraints, then choose it if the simpler option cannot meet those needs. For example, I would use it in the part of an application where its main benefit is visible, rather than adding it everywhere. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
+            "answerSize": "standard",
+            "content": "An HTTP body is remote input, so safe processing begins before decoding. After Do succeeds, I arrange for Close, check whether the status is accepted, and confirm the response media type when the API contract requires JSON. A 200 response containing HTML from a proxy should not be treated as a valid JSON success.\n\nI then bound the bytes. `io.LimitReader` can expose at most a chosen number of bytes to `io.ReadAll` or `json.Decoder`, but by itself it does not report that additional bytes existed. Reading limit plus one and checking the length is a simple way to reject an oversized response rather than silently truncate it.\n\nFor example, a client expecting a small `User` object can read at most 1 MiB plus one byte, reject anything larger, then call `json.Unmarshal` on the complete bounded bytes. This gives exact single-document validation because Unmarshal rejects non-whitespace trailing data and avoids treating a second JSON value as valid.\n\nStreaming Decoder is better when values are intentionally streamed or reading directly is important. For one response document, the caller should still enforce exactly one value, just as for a request. Strict unknown-field policy is a compatibility decision; response consumers often tolerate additive fields but still validate required values.\n\nI report transport, status, size, media-type, and decode failures distinctly enough to diagnose them, while keeping the external error safe. Successful parsing is followed by domain validation. This sequence prevents an unlimited read, an error page decoded as data, or a partially understood document from entering application logic."
+          },
+          {
+            "type": "overview",
+            "title": "Metadata narrows what the body is allowed to mean",
+            "content": "Status tells whether the body is on the success path, Content-Type identifies the representation, a byte limit bounds cost, and the destination type defines shape. Each check removes one category of ambiguity before business logic sees the value."
           },
           {
             "type": "deep_explanation",
-            "title": "Build the mental model",
-            "content": "When debug a problem involving Reading Response Body causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Reading Response Body is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
+            "title": "Concept guide · Bounded response-body decoding",
+            "content": "A bounded full read is often simplest for small API documents. It makes the actual size known, allows Unmarshal to enforce one complete value, and lets callers include a sanitized snippet in status errors without leaving the stream half-consumed.\n\nA Decoder avoids assembling a separate full byte slice and supports sequential JSON values. It still allocates destination data, buffers ahead, and needs a caller-defined size and end-of-document policy. Streaming does not mean automatically safe or constant memory.\n\nContent-Type parameters are valid, so parse the media type rather than comparing the header to one exact string when strict checking is required. `application/json; charset=utf-8` still has the JSON media type.\n\nTests should return wrong status, absent or wrong media type, malformed JSON, an exact-limit body, an over-limit body, two values, and valid JSON with invalid domain data. Each case targets a distinct boundary."
           },
           {
-            "type": "tradeoffs",
-            "title": "Important trade-off",
-            "content": "To compare compare Reading Response Body, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
+            "type": "flow_diagram",
+            "title": "Safe response decode order",
+            "content": "```mermaid\nflowchart LR\n  R[Response] --> S[Check status]\n  S --> M[Check media type]\n  M --> L[Read up to limit + 1]\n  L -->|too large| X[Reject]\n  L --> U[Unmarshal typed value]\n  U --> V[Validate meaning]\n```"
+          },
+          {
+            "type": "code_example",
+            "title": "Reject a response larger than the limit",
+            "content": "```go\npackage main\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"io\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n)\n\ntype Reply struct {\n\tName string `json:\"name\"`\n}\n\nfunc main() {\n\tserver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {\n\t\tw.Header().Set(\"Content-Type\", \"application/json\")\n\t\tfmt.Fprint(w, `{\"name\":\"Mira\"}`)\n\t}))\n\tdefer server.Close()\n\tresp, err := server.Client().Get(server.URL)\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tdefer resp.Body.Close()\n\tconst limit = 1024\n\tb, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tif len(b) > limit {\n\t\tpanic(\"response too large\")\n\t}\n\tvar reply Reply\n\tif err := json.Unmarshal(b, &reply); err != nil {\n\t\tpanic(err)\n\t}\n\tfmt.Println(reply.Name)\n}\n```\nReading one byte beyond the limit distinguishes an exact-limit document from truncated oversized input."
           }
         ]
       },
       "followup_questions": [
-        "What is Reading Response Body, and when would you use it?",
-        "How would you compare Reading Response Body with an alternative?",
-        "What is a common mistake when using Reading Response Body?"
+        "Why read limit plus one byte?",
+        "Does json.Decoder remove the need for a size limit?",
+        "How should Content-Type parameters be handled?"
       ],
       "order": 2,
       "seo": {
-        "metaTitle": "When would you use Reading Response Body in a real project — go interview question | InterviewExplainer",
-        "metaDescription": "Interview answer for When would you use Reading Response Body in a real project? with a clear explanation, practical example, common mistakes, and follow-up questions."
-      }
+        "metaTitle": "Bounded response-body decoding | Go interview",
+        "metaDescription": "Check the status and media type, place a size limit around the body, decode into the expected type, verify the document boundary when required, and always close the original response body."
+      },
+      "last_updated": "2026-09-07"
     },
     {
       "id": "go-json-http-basics-reading-response-body-q003",
       "slug": "go-json-http-basics-reading-response-body-common-mistake",
-      "question": "What is a common mistake when using Reading Response Body?",
-      "title": "a common mistake when using Reading Response Body",
-      "direct_answer": "The common mistake with a common mistake when using Reading Response Body is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns.",
-      "layout_type": "interview-practice",
+      "question": "How do transport errors, HTTP status errors, and JSON errors differ?",
+      "title": "Separating HTTP client failure layers",
+      "direct_answer": "A transport error means no usable exchange completed, an HTTP status error is an application decision about a real response, and a JSON error means the received representation could not be decoded as expected.",
+      "layout_type": "concept-explanation",
       "difficulty": "easy",
-      "importance": "medium",
-      "reading_time_minutes": 6,
+      "importance": "high",
+      "reading_time_minutes": 5,
       "interviewer_intent": {
-        "testing": "Practical understanding of Reading Response Body.",
-        "common_mistake": "Repeating a definition without saying when to use it.",
-        "to_stand_out": "Give one trade-off and say how you would test it."
+        "testing": "Accurate failure classification, body ownership at each layer, and useful typed errors."
       },
       "answer": {
         "sections": [
           {
-            "type": "interviewer_expectation",
-            "title": "What the interviewer wants",
-            "content": "Give a simple definition of a common mistake when using Reading Response Body, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
+            "type": "key_points",
+            "title": "Quick revision",
+            "items": [
+              "Client.Do errors cover policy, connection, protocol, and timeout failures.",
+              "A 4xx or 5xx response normally arrives with nil Go error.",
+              "Status failures can still carry a useful bounded response body.",
+              "JSON syntax or type failures happen while processing a response body.",
+              "Retry rules depend on operation semantics and failure class, not one generic error."
+            ]
           },
           {
             "type": "speakable_answer",
             "title": "Interview answer",
-            "content": "The common mistake with a common mistake when using Reading Response Body is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
+            "answerSize": "compact",
+            "content": "An HTTP integration can fail at different layers, and combining them into 'request failed' loses important meaning. A non-nil error from `Client.Do` normally describes policy or inability to complete the HTTP exchange: DNS, connection, TLS, timeout, redirect policy, or protocol failure.\n\nIf Do returns a response with nil error, HTTP worked. The server may still answer 404, 409, 429, or 500. Those statuses are not Go errors; the client maps them into its own domain error after reading a small bounded error representation and closing the body.\n\nA third failure occurs after an accepted status when the body is malformed JSON, has a wrong field type, exceeds the limit, or violates domain validation. For example, a 200 containing `{\"count\":\"many\"}` cannot populate an integer field. Calling that a transport error would point debugging and retry logic in the wrong direction.\n\nRetry decisions need this separation. A context deadline may or may not be safe to retry depending on whether the remote operation committed. A 429 can include retry guidance, a 400 normally requires changing the request, and malformed success JSON signals a contract or deployment problem. Idempotency and attempt limits remain required.\n\nI return typed or wrapped errors that preserve operation and cause, plus status when one exists, without leaking a huge remote body. Tests force one case from each layer. That makes logs, metrics, user messages, and retry policy reflect what actually failed."
+          },
+          {
+            "type": "overview",
+            "title": "Each later layer proves the earlier one succeeded",
+            "content": "An HTTP status exists only after a response was exchanged. A body-decode error exists only after a response and chosen status path. This ordering tells code which metadata is available and who owns cleanup."
           },
           {
             "type": "deep_explanation",
-            "title": "Why the mistake happens",
-            "content": "When debug a problem involving Reading Response Body causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Reading Response Body is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
+            "title": "Design errors around available evidence",
+            "content": "On a Do error, the response can normally be ignored; the special redirect-policy case may return a response whose body is already closed. Wrap the error with the operation while preserving it for `errors.Is` and timeout inspection.\n\nOn an unacceptable status, capture the numeric code and perhaps a structured remote error code. Limit and sanitize text because upstream HTML, secrets, or attacker input should not become an unbounded log message.\n\nOn decode failure, retain content type, status, and a wrapped parse error. Do not continue with a partially populated struct. Domain-validation failures belong beside decoding in the representation layer but should remain distinguishable when clients can correct them.\n\nMetrics can then count transport availability, status classes, contract-decode failures, and validation failures separately. A rise in each category points to a different owner and response."
           },
           {
-            "type": "tradeoffs",
-            "title": "Important trade-off",
-            "content": "To compare compare Reading Response Body, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
+            "type": "flow_diagram",
+            "title": "Where an HTTP call can fail",
+            "content": "```mermaid\nflowchart LR\n  D[Client.Do] -->|error| T[Transport/policy]\n  D -->|response| S{Accepted status?}\n  S -- No --> H[HTTP status]\n  S -- Yes --> J{JSON valid?}\n  J -- No --> P[Representation]\n  J -- Yes --> V{Domain valid?}\n  V -- No --> B[Business validation]\n  V -- Yes --> O[Success]\n```"
+          },
+          {
+            "type": "code_example",
+            "title": "Return status and decode failures separately",
+            "content": "```go\npackage main\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n)\n\ntype Reply struct {\n\tCount int `json:\"count\"`\n}\n\nfunc fetch(client *http.Client, url string) error {\n\tresp, err := client.Get(url)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"transport: %w\", err)\n\t}\n\tdefer resp.Body.Close()\n\tif resp.StatusCode != http.StatusOK {\n\t\treturn fmt.Errorf(\"HTTP status %d\", resp.StatusCode)\n\t}\n\tvar reply Reply\n\tif err := json.NewDecoder(resp.Body).Decode(&reply); err != nil {\n\t\treturn fmt.Errorf(\"decode JSON: %w\", err)\n\t}\n\treturn nil\n}\n\nfunc main() {\n\ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {\n\t\tw.WriteHeader(502)\n\t\tfmt.Fprint(w, `{\"error\":\"upstream\"}`)\n\t}))\n\tdefer s.Close()\n\tfmt.Println(fetch(s.Client(), s.URL))\n}\n```\nThe local server completes HTTP with status 502, so fetch reports a status failure rather than a transport or JSON failure."
           }
         ]
       },
       "followup_questions": [
-        "What is Reading Response Body, and when would you use it?",
-        "When would you use Reading Response Body in a real project?",
-        "How would you compare Reading Response Body with an alternative?"
+        "Can a response be returned with a non-nil Do error?",
+        "Which failures are safe to retry?",
+        "Why limit an upstream error body?"
       ],
       "order": 3,
       "seo": {
-        "metaTitle": "a common mistake when using Reading Response Body — go interview question | InterviewExplainer",
-        "metaDescription": "Interview answer for What is a common mistake when using Reading Response Body? with a clear explanation, practical example, common mistakes, and follow-up questions."
-      }
-    },
-    {
-      "id": "go-json-http-basics-reading-response-body-q004",
-      "slug": "go-json-http-basics-reading-response-body-compare",
-      "question": "How would you compare Reading Response Body with an alternative?",
-      "title": "compare Reading Response Body with an alternative",
-      "direct_answer": "To compare compare Reading Response Body, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case.",
-      "layout_type": "interview-practice",
-      "difficulty": "easy",
-      "importance": "medium",
-      "reading_time_minutes": 6,
-      "interviewer_intent": {
-        "testing": "Practical understanding of Reading Response Body.",
-        "common_mistake": "Repeating a definition without saying when to use it.",
-        "to_stand_out": "Give one trade-off and say how you would test it."
+        "metaTitle": "Separating HTTP client failure layers | Go interview",
+        "metaDescription": "A transport error means no usable exchange completed, an HTTP status error is an application decision about a real response, and a JSON error means the received representation could not be decoded as expected."
       },
-      "answer": {
-        "sections": [
-          {
-            "type": "interviewer_expectation",
-            "title": "What the interviewer wants",
-            "content": "Give a simple definition of compare Reading Response Body, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
-          },
-          {
-            "type": "speakable_answer",
-            "title": "Interview answer",
-            "content": "To compare compare Reading Response Body, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
-          },
-          {
-            "type": "deep_explanation",
-            "title": "Understand the decision",
-            "content": "When debug a problem involving Reading Response Body causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nTo compare compare Reading Response Body, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case.\n\nThe common mistake with a common mistake when using Reading Response Body is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
-          }
-        ]
-      },
-      "followup_questions": [
-        "What is Reading Response Body, and when would you use it?",
-        "When would you use Reading Response Body in a real project?",
-        "What is a common mistake when using Reading Response Body?"
-      ],
-      "order": 4,
-      "seo": {
-        "metaTitle": "compare Reading Response Body with an alternative — go interview question | InterviewExplainer",
-        "metaDescription": "Interview answer for How would you compare Reading Response Body with an alternative? with a clear explanation, practical example, common mistakes, and follow-up questions."
-      }
-    },
-    {
-      "id": "go-json-http-basics-reading-response-body-q005",
-      "slug": "go-json-http-basics-reading-response-body-scenario",
-      "question": "How would you debug a problem involving Reading Response Body?",
-      "title": "debug a problem involving Reading Response Body",
-      "direct_answer": "When debug a problem involving Reading Response Body causes a problem, I reproduce it with the smallest input I can find. I check the inputs and the expected result, trace the important state step by step, and add a test for the failure. After the fix, I run the normal case and at least one edge case so the same bug does not return.",
-      "layout_type": "interview-practice",
-      "difficulty": "easy",
-      "importance": "medium",
-      "reading_time_minutes": 6,
-      "interviewer_intent": {
-        "testing": "Practical understanding of Reading Response Body.",
-        "common_mistake": "Repeating a definition without saying when to use it.",
-        "to_stand_out": "Give one trade-off and say how you would test it."
-      },
-      "answer": {
-        "sections": [
-          {
-            "type": "interviewer_expectation",
-            "title": "What the interviewer wants",
-            "content": "Give a simple definition of debug a problem involving Reading Response Body, then explain the small decision or rule behind it. A good answer includes one familiar example and one edge case; it does not need jargon."
-          },
-          {
-            "type": "speakable_answer",
-            "title": "Interview answer",
-            "content": "When debug a problem involving Reading Response Body causes a problem, I reproduce it with the smallest input I can find. I check the inputs and the expected result, trace the important state step by step, and add a test for the failure. After the fix, I run the normal case and at least one edge case so the same bug does not return. If I were writing this in production, I would keep the implementation small, name the assumption clearly, and cover the important edge case with a test."
-          },
-          {
-            "type": "deep_explanation",
-            "title": "Reason through the problem",
-            "content": "When debug a problem involving Reading Response Body causes a problem, I reproduce it with the smallest input I can find.\n\nI check the inputs and the expected result, trace the important state step by step, and add a test for the failure.\n\nAfter the fix, I run the normal case and at least one edge case so the same bug does not return.\n\nThe common mistake with a common mistake when using Reading Response Body is using it from memory without checking its assumptions. That can produce wrong results, slow code, or confusing failures. I avoid this by stating the assumption, handling the edge case, and adding a small test that would fail if the mistake returns."
-          },
-          {
-            "type": "tradeoffs",
-            "title": "Important trade-off",
-            "content": "To compare compare Reading Response Body, I look at correctness first, then time and space cost, readability, and how easy each option is to operate. I normally choose the simplest option that meets the requirement, and I explain why the other option is not needed for this case."
-          }
-        ]
-      },
-      "followup_questions": [
-        "What is Reading Response Body, and when would you use it?",
-        "When would you use Reading Response Body in a real project?",
-        "How would you compare Reading Response Body with an alternative?"
-      ],
-      "order": 5,
-      "seo": {
-        "metaTitle": "debug a problem involving Reading Response Body — go interview question | InterviewExplainer",
-        "metaDescription": "Interview answer for How would you debug a problem involving Reading Response Body? with a clear explanation, practical example, common mistakes, and follow-up questions."
-      }
+      "last_updated": "2026-09-07"
     }
   ]
 }

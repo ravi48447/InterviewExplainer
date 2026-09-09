@@ -1,12 +1,14 @@
 /**
  * contentV2.ts — 3-Layer Content Resolution Chain
  *
- * Server-side only. Reads from the new content architecture:
+ * Server-side only. Reads from the layered content architecture used by
+ * domains that are not pinned to a locked flat tree:
  *   Layer 1: content/shared/     (tools, frontend, architecture, data, behavioral)
  *   Layer 2: content/interview/  (language-specific, with $ref to shared)
  *   Layer 3: content/dsa/        (standalone DSA problems, tagged for contextual surfacing)
  *
- * Does NOT replace content-reader.ts — runs alongside it.
+ * Does NOT replace content-reader.ts. Locked domains registered there remain
+ * authoritative and must not fall back to pre-migration interview mirrors.
  * The existing pages can call contentV2 functions and get back the same
  * QuestionPagePayload / QuestionSummary types they already use.
  *
@@ -941,8 +943,16 @@ export function v2ToQuestionPagePayload(
       sectionOrder: i,
       content: sectionToContent(s),
       sectionTitle: s.title ?? '',
+      speakingCues: Array.isArray(s.beats)
+        ? s.beats.filter(
+            cue => typeof cue?.cue === 'string'
+              && cue.cue.trim().length > 0
+              && typeof cue?.spokenText === 'string'
+              && cue.spokenText.trim().length > 0
+          )
+        : undefined,
     }))
-    .filter(s => s.content.length > 0);
+    .filter(s => s.content.length > 0 || Boolean(s.speakingCues?.length));
 
   const totalText = answerSections.map(s => s.content).join(' ');
 

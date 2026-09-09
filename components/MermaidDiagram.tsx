@@ -25,7 +25,10 @@ function loadMermaid(): Promise<MermaidApi> {
         curve: "basis",
         padding: 16,
         htmlLabels: true,
-        useMaxWidth: true,
+        // Keep Mermaid's intrinsic geometry. The scroll shell below preserves
+        // readable labels on a phone instead of shrinking every diagram to
+        // the column width.
+        useMaxWidth: false,
       },
       themeVariables: {
         // Mermaid parses these values before the SVG reaches the page, so CSS
@@ -127,14 +130,19 @@ export default function MermaidDiagram({ chart, className = "" }: MermaidDiagram
     return (
       <div
         ref={ref}
-        className="rounded-lg border border-default dark:border-default/20 bg-red-50 dark:bg-red-500/10 p-4 my-4 text-[13px] text-red-700 dark:text-red-400"
+        data-testid="mermaid-diagram"
+        data-diagram-state="error"
+        className="my-4 rounded-lg border border-amber-200 bg-amber-50/60 p-4 text-[13px] text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200"
       >
-        <div className="font-bold mb-1">Diagram render error</div>
-        <pre className="text-[12px] whitespace-pre-wrap font-mono">{error}</pre>
-        <details className="mt-2">
-          <summary className="cursor-pointer text-[12px] font-semibold">show source</summary>
-          <pre className="text-[12px] whitespace-pre-wrap font-mono mt-2 text-foreground">{chart}</pre>
-        </details>
+        <div className="font-semibold">This diagram could not be displayed.</div>
+        <p className="mt-1 text-amber-800/90 dark:text-amber-300/90">The written explanation below is still available.</p>
+        {process.env.NODE_ENV === "development" && (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-[12px] font-semibold">Developer details</summary>
+            <pre className="mt-2 whitespace-pre-wrap font-mono text-[12px] text-foreground">{error}</pre>
+            <pre className="mt-2 whitespace-pre-wrap font-mono text-[12px] text-foreground">{chart}</pre>
+          </details>
+        )}
       </div>
     );
   }
@@ -149,6 +157,8 @@ export default function MermaidDiagram({ chart, className = "" }: MermaidDiagram
     return (
       <div
         ref={ref}
+        data-testid="mermaid-diagram"
+        data-diagram-state="loading"
         className={`my-4 h-40 rounded-lg border border-border bg-surface ${className}`}
         aria-hidden="true"
       />
@@ -158,7 +168,9 @@ export default function MermaidDiagram({ chart, className = "" }: MermaidDiagram
   return (
     <div
       ref={ref}
-      className={`my-4 flex justify-center overflow-x-auto rounded-lg border border-border bg-background px-4 py-6 [&>svg]:!w-full [&>svg]:!max-w-[250%] [&>svg]:!h-auto ${className}`}
+      data-testid="mermaid-diagram"
+      data-diagram-state="ready"
+      className={`my-5 max-h-[440px] overflow-auto rounded-lg border border-border bg-background px-4 py-5 text-center sm:max-h-[520px] [&>svg]:mx-auto [&>svg]:block [&>svg]:!h-auto [&>svg]:!max-w-none ${className}`}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

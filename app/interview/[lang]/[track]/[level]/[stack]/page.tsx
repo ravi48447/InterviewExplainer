@@ -19,6 +19,7 @@ export const revalidate = 3600;
 // for these, the proxy 301s the legacy /interview/... URL to the new one,
 // so there's no point prerendering them here. See frontend/proxy.ts.
 const MIGRATED_DOMAINS = new Set<string>([
+  "java/backend/beginner",
   "java/backend/intermediate",
 ]);
 

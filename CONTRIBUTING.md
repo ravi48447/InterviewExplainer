@@ -5,19 +5,19 @@ content is the **dual-tree decision rule** below.
 
 ## Where does new content go?
 
-InterviewExplainer has TWO content trees. Use this rule on every PR.
+InterviewExplainer has a locked-domain tree and a secondary interview tree.
+Use this rule on every PR.
 
 1. **Is the module already listed in any locked domain's `_index.json`?**
    - `content/java-backend-intermediate/_index.json`
    - `content/java-fullstack-intermediate/_index.json`
    - `content/python-backend-intermediate/_index.json`
    - Any future locked domain registered in
-     [`frontend/lib/content-reader.ts`](frontend/lib/content-reader.ts)
+     [`lib/content-reader.ts`](lib/content-reader.ts)
      under the `LOCKED_DOMAINS` map.
 
    **Yes** → write the content under the matching locked-domain folder.
-   The locked tree is the SSOT for these domains until playbook 50
-   migrates them.
+   The locked tree is the permanent source of truth for that domain.
 
 2. **Otherwise** → write the content under
    `content/interview/{lang}/{track}/{level}/<module>/<topic>/complete-qa.json`.
@@ -39,14 +39,17 @@ pointer keeps the SSOT in one place; copies drift.
 
 ### What if I find duplicate content across both trees?
 
-Do **not** delete. Add a row to
-`content/_audits/duplicate-modules-<DATE>.md` and surface the duplicate
-in your PR description. Playbook 50 owns the migration.
+Do not edit both copies. Preserve the locked-domain copy, verify legacy URLs,
+then move the interview-tree mirror into `content/.archive/`. Record the move
+in `content/source-of-truth.json` and run `npm run audit:content-sources`.
+
+The former Java Backend Intermediate mirror was archived on 2026-09-05.
+Do not recreate `content/interview/java/backend/intermediate`; its canonical
+source is `content/java-backend-intermediate`.
 
 ### Why two trees?
 
-The locked tree predates the interview tree and serves JBI / JFI / PBI
-at frozen URLs. The interview tree hosts every other language + track.
-Playbook 50 migrates locked → interview when the team commits to the
-single-tree future; until then, both coexist and the rule above routes
-new content correctly.
+The locked tree predates the interview tree and serves registered domains at
+stable URLs. The interview tree hosts domains that have not been promoted to
+a locked curriculum. `content/source-of-truth.json` records migrations and
+legacy aliases so only one active copy owns a migrated domain.
