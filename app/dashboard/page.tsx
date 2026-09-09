@@ -28,6 +28,9 @@ import { ProgressSection } from '@/modules/dashboard/components/ProgressSection'
 import { ActivityHeatmapCard } from '@/modules/dashboard/components/ActivityHeatmapCard';
 import { AchievementsCard } from '@/modules/dashboard/components/AchievementsCard';
 import { RoadmapCard } from '@/modules/dashboard/components/RoadmapCard';
+import { NextBestActionCard } from '@/modules/dashboard/components/NextBestActionCard';
+import { MockTrendsCard } from '@/modules/dashboard/components/MockTrendsCard';
+import { PremiumEnginePanel } from '@/modules/dashboard/components/PremiumEnginePanel';
 import { InsightsCard } from '@/modules/dashboard/components/InsightsCard';
 import { RecentActivityCard } from '@/modules/dashboard/components/RecentActivityCard';
 import { Card } from '@/components/ui/card';
@@ -361,6 +364,27 @@ export default function DashboardPage() {
         fmtExp={fmtExp}
         initialsOf={initialsOf}
       />
+      <div className='grid gap-4 md:grid-cols-2'>
+        <NextBestActionCard />
+        <MockTrendsCard />
+      </div>
+      <PremiumEnginePanel />
+
+      {/* Offer Ready — campaign CTA */}
+      <a href="/offer-ready" className="flex items-center gap-4 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-violet-500/5 to-transparent p-5 hover:border-amber-400/50 transition group">
+        <div className="h-12 w-12 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+          <Trophy className="h-6 w-6 text-amber-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold flex items-center gap-2">
+            Have an interview coming?
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 uppercase tracking-wide">Offer Ready</span>
+          </div>
+          <p className="text-sm text-slate-400 mt-0.5">A 30-day day-by-day campaign ending in a full dress rehearsal — built from your mastery data.</p>
+        </div>
+        <span className="text-slate-500 group-hover:text-amber-300 transition">→</span>
+      </a>
+
 
       {/* Metric Cards Row */}
       <StatsGrid

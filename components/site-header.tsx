@@ -26,6 +26,7 @@ import {
   Layers,
   Search,
   Crown,
+  Trophy,
 } from "lucide-react";
 import { PageContainer } from "@/components/page-container";
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,7 @@ const MOBILE_NAV: Array<{ title: string; items: Array<{ href: string; label: str
     items: [
       { href: "/dashboard",       label: "Dashboard",        icon: LayoutDashboard, hub: "dashboard"      },
       { href: "/mock-interviews", label: "Mock Interview",   icon: Mic,             hub: "mockInterviews" },
+      { href: "/offer-ready",     label: "Offer Ready",      icon: Trophy                                        },
       { href: "/search",          label: "Search Questions", icon: Search,          hub: "search"         },
       { href: "/pricing",         label: "Pricing",          icon: Crown                                  },
     ],
