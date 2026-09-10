@@ -375,12 +375,12 @@ export default function PremiumMockPage() {
             A real interview, not a quiz. Your interviewer listens, adapts, and pushes back.
           </p>
 
-          {error && <div className="mb-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
+          {error && <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
           {upsell && (
-            <div className="mb-6 rounded-xl border border-primary/40 bg-primary/[0.04] p-4">
+            <div className="mb-6 rounded-lg border border-primary/40 bg-primary/[0.04] p-4">
               <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-primary"><Lock className="h-4 w-4" /> Interview Pass required</div>
               <p className="mb-3 text-sm text-muted-foreground">{upsell.message ?? 'This tier/persona is part of Interview Pass.'}</p>
-              <Link href="/pricing" className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground">
+              <Link href="/pricing" className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
                 See plans <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
@@ -393,9 +393,9 @@ export default function PremiumMockPage() {
                 <button
                   key={p.key}
                   onClick={() => setPreset(p.key)}
-                  className={`rounded-xl border p-3 text-left transition-all ${preset === p.key ? 'border-primary bg-primary/10' : 'border-border bg-surface hover:bg-muted'}`}
+                  className={`rounded-lg border p-3 text-left transition-all ${preset === p.key ? 'border-foreground/50 bg-muted ring-1 ring-foreground/20' : 'border-border bg-surface hover:bg-muted'}`}
                 >
-                  <p.icon className={`mb-1.5 h-4 w-4 ${preset === p.key ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <p.icon className={`mb-1.5 h-4 w-4 ${preset === p.key ? 'text-foreground' : 'text-muted-foreground'}`} />
                   <div className="text-sm font-semibold">{p.label}</div>
                   <div className="text-caption text-muted-foreground">{p.sub}</div>
                 </button>
@@ -410,10 +410,10 @@ export default function PremiumMockPage() {
                 <button
                   key={m.key}
                   onClick={() => setMode(m.key)}
-                  className={`rounded-xl border p-3 text-left transition-all ${mode === m.key ? 'border-primary bg-primary/10' : 'border-border bg-surface hover:bg-muted'}`}
+                  className={`rounded-lg border p-3 text-left transition-all ${mode === m.key ? 'border-foreground/50 bg-muted ring-1 ring-foreground/20' : 'border-border bg-surface hover:bg-muted'}`}
                 >
                   <div className="mb-1 flex items-center gap-2">
-                    <m.icon className={`h-4 w-4 ${mode === m.key ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <m.icon className={`h-4 w-4 ${mode === m.key ? 'text-foreground' : 'text-muted-foreground'}`} />
                     <span className="text-sm font-semibold">{m.label}</span>
                   </div>
                   <div className="text-caption text-muted-foreground">{m.desc}</div>
@@ -429,10 +429,10 @@ export default function PremiumMockPage() {
                 <button
                   key={p.id}
                   onClick={() => setPersonaChoice(p.id)}
-                  className={`rounded-xl border p-3 text-left transition-all ${personaChoice === p.id ? 'border-primary bg-primary/10' : 'border-border bg-surface hover:bg-muted'}`}
+                  className={`rounded-lg border p-3 text-left transition-all ${personaChoice === p.id ? 'border-foreground/50 bg-muted ring-1 ring-foreground/20' : 'border-border bg-surface hover:bg-muted'}`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${personaChoice === p.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}>{p.name[0]}</span>
+                    <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${personaChoice === p.id ? 'bg-foreground text-background' : 'bg-muted text-foreground'}`}>{p.name[0]}</span>
                     <div>
                       <div className="text-sm font-semibold">{p.name}</div>
                       <div className="text-caption text-muted-foreground">{p.role}</div>
@@ -446,7 +446,7 @@ export default function PremiumMockPage() {
 
           <button
             onClick={startSession}
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-4 text-base font-semibold text-primary-foreground transition-colors hover:opacity-90"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90"
           >
             <Mic className="h-4 w-4" /> Enter the room
           </button>
@@ -470,7 +470,7 @@ export default function PremiumMockPage() {
             in 4 · hold 4 · out 4. Reframe the arousal as readiness — same body, different story.
           </p>
           <BreathingRing />
-          <button onClick={startSession} className="mt-8 rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90">
+          <button onClick={startSession} className="mt-8 rounded-lg bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
             I&apos;m ready
           </button>
         </motion.div>
@@ -531,13 +531,13 @@ export default function PremiumMockPage() {
           <>
             <button
               onClick={beginAnswer}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
               <Mic className="h-4 w-4" /> Answer by voice
             </button>
             <button
               onClick={() => setPhase('listening')}
-              className="flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-3.5 text-sm font-medium text-foreground hover:bg-muted"
+              className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3.5 py-2 text-sm font-medium text-foreground hover:bg-muted"
             >
               <Keyboard className="h-4 w-4" /> Type instead
             </button>
@@ -547,7 +547,7 @@ export default function PremiumMockPage() {
           <>
             <button
               onClick={submitAnswer}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
               <Send className="h-4 w-4" /> Submit answer
             </button>
@@ -555,14 +555,14 @@ export default function PremiumMockPage() {
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
               placeholder="…or type to refine your answer"
-              className="flex-1 rounded-xl border border-border bg-surface px-4 py-3.5 text-sm text-foreground outline-none focus:border-primary/50"
+              className="flex-1 rounded-lg border border-border bg-surface px-3.5 py-2 text-sm text-foreground outline-none focus:border-foreground/40"
             />
           </>
         )}
         {phase === 'coding' && (
           <button
             onClick={() => { const answer = code || typed; advance(answer, { typed: true }); }}
-            className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+            className="flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
             <Send className="h-4 w-4" /> Submit solution
           </button>
@@ -574,7 +574,7 @@ export default function PremiumMockPage() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm"
+          className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm"
         >
           <Trophy className="h-4 w-4 text-primary" />
           <span className="font-medium text-foreground">{lastAve.band?.line ?? 'Answer logged'}</span>

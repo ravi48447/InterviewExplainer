@@ -61,7 +61,7 @@ export function ProductShell({ children }: { children: React.ReactNode }) {
         {/* brand */}
         <div className="flex h-14 items-center gap-2 border-b border-border px-3">
           <Link href="/" className="flex items-center gap-2 min-w-0" aria-label="InterviewExplainer home">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-foreground text-[10px] font-semibold text-background">
               IE
             </span>
             {!collapsed && (
@@ -84,7 +84,7 @@ export function ProductShell({ children }: { children: React.ReactNode }) {
           {NAV.map((group) => (
             <div key={group.section} className="mb-4">
               {!collapsed && (
-                <div className="mb-1 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                <div className="mb-1 px-2 text-[11px] font-medium tracking-wide text-muted-foreground/80">
                   {group.section}
                 </div>
               )}
@@ -97,13 +97,13 @@ export function ProductShell({ children }: { children: React.ReactNode }) {
                       href={item.href}
                       title={collapsed ? item.label : undefined}
                       aria-current={active ? 'page' : undefined}
-                      className={`group flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors ${
+                      className={`group flex items-center gap-2.5 rounded-md px-2 py-1 text-sm transition-colors ${
                         active
-                          ? 'bg-primary/10 text-primary font-medium'
+                          ? 'bg-muted font-medium text-foreground'
                           : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                       }`}
                     >
-                      <item.icon className={`h-4 w-4 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`} />
+                      <item.icon className={`h-4 w-4 shrink-0 ${active ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'}`} />
                       {!collapsed && <span className="truncate">{item.label}</span>}
                     </Link>
                   );

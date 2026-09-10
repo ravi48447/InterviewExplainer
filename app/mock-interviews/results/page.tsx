@@ -160,7 +160,7 @@ export default function ResultsPage() {
     <Shell>
       {/* header */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="md:col-span-2 rounded-2xl border border-border bg-surface p-6 space-y-3">
+        <div className="md:col-span-2 rounded-lg border border-border bg-surface p-6 space-y-3">
           <div className="flex items-center gap-3">
             <Brain className="h-8 w-8 text-blue-400" />
             <div>
@@ -169,7 +169,7 @@ export default function ResultsPage() {
             </div>
           </div>
           <div className="flex items-end gap-3">
-            <span className={cn('text-5xl font-black', scoreColor)}>{report.overallScore}</span>
+            <span className={cn('text-4xl font-semibold tabular-nums tracking-tight', scoreColor)}>{report.overallScore}</span>
             <span className="text-stone-400 pb-2">/ 100 concept-coverage score</span>
             <button onClick={speakReview} className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-white/15 text-xs shrink-0">
               {speaking ? <><VolumeX className="h-3.5 w-3.5" /> stop</> : <><Volume2 className="h-3.5 w-3.5" /> hear review</>}
@@ -182,7 +182,7 @@ export default function ResultsPage() {
         </div>
 
         {/* concepts */}
-        <div className="rounded-2xl border border-border bg-surface p-6 space-y-3">
+        <div className="rounded-lg border border-border bg-surface p-6 space-y-3">
           <div className="text-sm font-semibold flex items-center gap-2">
             <Target className="h-4 w-4 text-blue-400" /> Concepts
           </div>
@@ -212,7 +212,7 @@ export default function ResultsPage() {
 
       {/* ============ REPLAY TIMELINE — re-hear the session, marked ============ */}
       {timeline && summary && (
-        <div className="rounded-2xl border border-border bg-surface p-5 space-y-5 mt-6">
+        <div className="rounded-lg border border-border bg-surface p-5 space-y-5 mt-6">
           <div className="flex items-baseline justify-between">
             <div className="text-xs uppercase tracking-[0.18em] text-stone-500">session replay</div>
             <div className="text-[11px] text-stone-600 tabular-nums">
@@ -299,7 +299,7 @@ export default function ResultsPage() {
           <TrendingUp className="h-4 w-4" /> Question by question
         </h2>
         {report.perQuestion.map((q, i) => (
-          <div key={q.questionId + i} className="rounded-2xl border border-border bg-surface overflow-hidden">
+          <div key={q.questionId + i} className="rounded-lg border border-border bg-surface overflow-hidden">
             <button
               onClick={() => setOpen(open === i ? null : i)}
               className="w-full flex items-center gap-3 p-4 text-left hover:bg-surface"
@@ -373,7 +373,7 @@ export default function ResultsPage() {
 
       {/* move log replay */}
       {report.moveLog?.length > 0 && (
-        <div className="rounded-2xl border border-border bg-surface p-4 mt-6">
+        <div className="rounded-lg border border-border bg-surface p-4 mt-6">
           <h2 className="text-sm font-semibold text-stone-300 mb-3">Why the interviewer asked what it asked</h2>
           <ol className="space-y-1.5 text-xs text-stone-400">
             {report.moveLog.map((m, i) => (

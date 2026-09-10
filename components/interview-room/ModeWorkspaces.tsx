@@ -26,12 +26,12 @@ export function TechnicalWorkspace({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-border bg-surface p-4 lg:p-5">
+      <div className="rounded-lg border border-border bg-surface p-4 lg:p-5">
         <div className="mb-1.5 text-caption font-medium uppercase tracking-wider text-muted-foreground">Question</div>
         <h2 className="text-section font-semibold text-foreground leading-snug">{question.question}</h2>
       </div>
       {rubricChecklist.length > 0 && (
-        <div className="rounded-xl border border-border bg-surface p-4">
+        <div className="rounded-lg border border-border bg-surface p-4">
           <div className="mb-2.5 flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-primary" />
             <span className="text-sm font-medium text-foreground">What the interviewer is listening for</span>
@@ -82,7 +82,7 @@ export function DsaWorkspace({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-border bg-surface p-4 lg:p-5">
+      <div className="rounded-lg border border-border bg-surface p-4 lg:p-5">
         <div className="mb-2 flex items-center gap-2">
           <Code2 className="h-4 w-4 text-primary" />
           <span className="text-caption font-medium uppercase tracking-wider text-muted-foreground">DSA round</span>
@@ -94,7 +94,7 @@ export function DsaWorkspace({
       </div>
 
       {problem.examples && problem.examples.length > 0 && (
-        <div className="space-y-2 rounded-xl border border-border bg-surface p-4">
+        <div className="space-y-2 rounded-lg border border-border bg-surface p-4">
           <div className="text-caption font-medium uppercase tracking-wider text-muted-foreground">Examples</div>
           {problem.examples.map((ex, i) => (
             <div key={i} className="rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm">
@@ -105,7 +105,7 @@ export function DsaWorkspace({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-border">
+      <div className="overflow-hidden rounded-lg border border-border">
         <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-2">
           <span className="flex items-center gap-1.5 text-caption font-medium uppercase tracking-wider text-muted-foreground">
             <Code2 className="h-3.5 w-3.5" /> Your solution
@@ -138,20 +138,20 @@ export function BehavioralWorkspace({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-border bg-surface p-4 lg:p-5">
+      <div className="rounded-lg border border-border bg-surface p-4 lg:p-5">
         <div className="mb-2 flex items-center gap-2">
           <Star className="h-4 w-4 text-primary" />
           <span className="text-caption font-medium uppercase tracking-wider text-muted-foreground">Behavioral round</span>
         </div>
         <h2 className="text-base font-medium leading-relaxed text-foreground">{question.question}</h2>
       </div>
-      <div className="rounded-xl border border-border bg-surface p-4">
+      <div className="rounded-lg border border-border bg-surface p-4">
         <div className="mb-3 text-caption font-medium uppercase tracking-wider text-muted-foreground">STAR structure — live detection</div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {starParts.map((p) => (
             <div
               key={p.part}
-              className={`rounded-xl border p-3 text-center transition-colors ${
+              className={`rounded-lg border p-3 text-center transition-colors ${
                 p.detected ? 'border-emerald-600/40 bg-emerald-500/10' : 'border-border bg-background'
               }`}
             >

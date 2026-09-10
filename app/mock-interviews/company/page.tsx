@@ -147,10 +147,10 @@ export default function CompanyLoopPage() {
     return (
       <Shell>
         <header className="text-center space-y-3 pt-4">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-primary/10 border border-border flex items-center justify-center">
+          <div className="mx-auto h-16 w-16 rounded-lg bg-primary/10 border border-border flex items-center justify-center">
             <Building2 className="h-7 w-7 text-violet-400" />
           </div>
-          <h1 className="text-2xl font-black">Company Loop Runner</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Company Loop Runner</h1>
           <p className="text-sm text-stone-400 max-w-xl mx-auto">
             Full multi-round practice loops — modeled on typical big-tech round structures
             (DSA-heavy loops, backend service loops, bar-raisers). Representative practice
@@ -161,7 +161,7 @@ export default function CompanyLoopPage() {
 
         {/* level + search */}
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex rounded-xl border border-border overflow-hidden">
+          <div className="flex rounded-lg border border-border overflow-hidden">
             {(['fresher', 'intermediate'] as const).map((l) => (
               <button key={l} onClick={() => setLevel(l)}
                 className={cn('px-4 py-2.5 text-sm capitalize flex-1 transition', level === l ? 'bg-primary/15 text-primary' : 'bg-surface text-stone-400 hover:bg-primary')}>
@@ -173,7 +173,7 @@ export default function CompanyLoopPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-600" />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search companies — 'fintech', 'flipkart', 'HFT'…"
-              className="w-full rounded-xl bg-background border border-border pl-9 pr-3 py-2.5 text-sm outline-none focus:border-border/50" />
+              className="w-full rounded-lg bg-background border border-border pl-9 pr-3 py-2.5 text-sm outline-none focus:border-border/50" />
           </div>
         </div>
 
@@ -181,7 +181,7 @@ export default function CompanyLoopPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {companies.map((c) => (
             <button key={c.id} onClick={() => openLoop(c.id)}
-              className="rounded-2xl border border-border bg-surface hover:bg-primary hover:border-violet-400/40 p-4 text-left space-y-2 transition group">
+              className="rounded-lg border border-border bg-surface hover:bg-primary hover:border-violet-400/40 p-4 text-left space-y-2 transition group">
               <div className="flex items-start justify-between gap-2">
                 <span className="font-bold text-sm">{c.name}</span>
                 <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0',
@@ -215,7 +215,7 @@ export default function CompanyLoopPage() {
   return (
     <Shell>
       {/* loop header */}
-      <div className="rounded-2xl border border-border bg-primary/[0.04] p-4 space-y-3">
+      <div className="rounded-lg border border-border bg-primary/[0.04] p-4 space-y-3">
         <div className="flex items-center gap-3">
           <Building2 className="h-5 w-5 text-violet-400 shrink-0" />
           <div className="flex-1 min-w-0">
@@ -268,7 +268,7 @@ export default function CompanyLoopPage() {
       {/* ============ ROUND BRIEF ============ */}
       {roundState === 'brief' && currentRound && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <div className="rounded-2xl border border-border bg-surface p-6 space-y-4">
+          <div className="rounded-lg border border-border bg-surface p-6 space-y-4">
             <div className="flex items-center gap-3">
               <span className="h-9 w-9 rounded-full bg-primary/15 border border-border flex items-center justify-center text-sm font-bold text-muted-foreground">
                 {currentRound.index}
@@ -292,7 +292,7 @@ export default function CompanyLoopPage() {
 
           {/* camera gate */}
           {currentRound.camera === 'required' && !camReady ? (
-            <div className="rounded-2xl border border-border bg-surface p-6 space-y-4 text-center">
+            <div className="rounded-lg border border-border bg-surface p-6 space-y-4 text-center">
               <Video className="h-10 w-10 text-rose-300 mx-auto" />
               <p className="text-sm text-stone-300">This round runs with camera on — like the real one.</p>
               <div className="flex gap-2 justify-center">
@@ -303,7 +303,7 @@ export default function CompanyLoopPage() {
           ) : (
             <div className="space-y-4">
               {camStream && (
-                <div className="rounded-2xl border border-border overflow-hidden aspect-video bg-background relative max-w-md mx-auto">
+                <div className="rounded-lg border border-border overflow-hidden aspect-video bg-background relative max-w-md mx-auto">
                   <video ref={camRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                   <span className="absolute top-2 left-2 flex items-center gap-1.5 text-[10px] bg-black/50 px-2 py-1 rounded-lg">
                     <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" /> live · round {currentRound.index}
@@ -322,14 +322,14 @@ export default function CompanyLoopPage() {
       {roundState === 'live' && currentRound && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
           {camStream && (
-            <div className="rounded-2xl border border-border overflow-hidden aspect-video bg-background relative max-w-md mx-auto">
+            <div className="rounded-lg border border-border overflow-hidden aspect-video bg-background relative max-w-md mx-auto">
               <video ref={camRef} autoPlay muted playsInline className="w-full h-full object-cover" />
               <span className="absolute top-2 left-2 flex items-center gap-1.5 text-[10px] bg-black/50 px-2 py-1 rounded-lg">
                 <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" /> rec · {currentRound.label.split(' —')[0]}
               </span>
             </div>
           )}
-          <div className="rounded-2xl border border-border bg-surface p-5 space-y-3">
+          <div className="rounded-lg border border-border bg-surface p-5 space-y-3">
             <p className="text-sm text-stone-300">
               Round in progress. The engine runs this exactly like the real thing:
               {currentRound.mode === 'coding'
@@ -339,7 +339,7 @@ export default function CompanyLoopPage() {
                   : ' adaptive questioning at this company\'s bar.'}
             </p>
             <a href={roundHref(currentRound)} target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary hover:bg-primary text-primary-foreground py-3 font-medium text-sm transition">
+              className="flex items-center justify-center gap-2 w-full rounded-lg bg-primary hover:bg-primary text-primary-foreground py-3 font-medium text-sm transition">
               {React.createElement(MODE_ICON[currentRound.mode] ?? Brain, { className: 'h-4 w-4' })}
               Open round {currentRound.index} engine →
             </a>
@@ -373,7 +373,7 @@ export default function CompanyLoopPage() {
 
       {/* ============ ROUND VERDICT ============ */}
       {roundState === 'verdict' && !allDone && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-border bg-surface p-6 space-y-4 text-center">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-border bg-surface p-6 space-y-4 text-center">
           <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto" />
           <h3 className="font-bold">Round {currentRound?.index} complete</h3>
           <p className="text-sm text-stone-400">
@@ -390,12 +390,12 @@ export default function CompanyLoopPage() {
       {/* ============ FINAL VERDICT ============ */}
       {allDone && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.05] p-6 space-y-4">
+          <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] p-6 space-y-4">
             <div className="text-center space-y-2">
               <Trophy className="h-12 w-12 text-emerald-400 mx-auto" />
               <h2 className="text-xl font-bold">{loop.companyName} loop complete</h2>
               <div className="flex items-end justify-center gap-3">
-                <span className={cn('text-5xl font-black', totalScore >= 70 ? 'text-emerald-400' : totalScore >= 50 ? 'text-amber-400' : 'text-rose-400')}>
+                <span className={cn('text-4xl font-semibold tabular-nums tracking-tight', totalScore >= 70 ? 'text-emerald-400' : totalScore >= 50 ? 'text-amber-400' : 'text-rose-400')}>
                   {totalScore}
                 </span>
                 <span className="text-stone-400 pb-2 text-sm">avg across {Object.keys(roundScores).length} rounds</span>

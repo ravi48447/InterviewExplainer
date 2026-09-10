@@ -152,7 +152,7 @@ export default function CampaignDashboard() {
                 </>
               ) : (
                 <>
-                  <CountUp to={currentReadiness} className={`${TYPE.num} text-3xl text-foreground`} />
+                  <CountUp to={currentReadiness} className={`${TYPE.num} text-2xl font-semibold tabular-nums text-foreground`} />
                   <span className="text-[9px] uppercase tracking-[0.2em] text-stone-600">ready</span>
                 </>
               )}
@@ -160,7 +160,7 @@ export default function CampaignDashboard() {
           </div>
           <div className="space-y-3">
             <div className={TYPE.eyebrow}>{campaign.companyName ?? 'Your interview'} · {campaign.level}</div>
-            <h1 className={`${TYPE.display} text-3xl sm:text-4xl text-foreground leading-[1.05]`}>
+            <h1 className={`${TYPE.display} text-2xl sm:text-3xl font-semibold tracking-tight text-foreground leading-[1.1]`}>
               {daysLeft === 0
                 ? <>Interview day.<br /><span className="italic text-primary">You are ready.</span></>
                 : <><span className="italic text-primary">{daysLeft} days</span> to go.</>}

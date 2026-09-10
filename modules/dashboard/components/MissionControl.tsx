@@ -102,7 +102,7 @@ export function MissionControl() {
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto p-6 space-y-4 animate-pulse">
-        {[0, 1, 2].map((i) => <div key={i} className="h-28 rounded-xl border border-border bg-surface" />)}
+        {[0, 1, 2].map((i) => <div key={i} className="h-28 rounded-lg border border-border bg-surface" />)}
       </div>
     );
   }
@@ -110,13 +110,13 @@ export function MissionControl() {
   return (
     <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 lg:px-6">
       {/* ============ target bar ============ */}
-      <div className="rounded-xl border border-border bg-surface p-4">
+      <div className="rounded-lg border border-border bg-surface p-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-muted-foreground">
               <Target className="h-3 w-3" /> Active target
             </div>
-            <h2 className="mt-1 font-display text-title tracking-tight">
+            <h2 className="mt-1 text-lg font-semibold tracking-tight text-foreground">
               {profile?.targetDomains?.[0]?.replace(/-/g, ' ') ?? 'Pick your target to focus everything'}
             </h2>
             {daysTo != null && (
@@ -127,10 +127,10 @@ export function MissionControl() {
             )}
           </div>
           <div className="flex gap-2">
-            <Link href="/mock-interviews" className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground hover:bg-muted">
+            <Link href="/mock-interviews" className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-foreground hover:bg-muted">
               <Mic className="h-3.5 w-3.5" /> New mock
             </Link>
-            <Link href="/offer-ready/start" className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90">
+            <Link href="/offer-ready/start" className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90">
               <Sparkles className="h-3.5 w-3.5" /> Plan campaign
             </Link>
           </div>
@@ -139,13 +139,13 @@ export function MissionControl() {
 
       {/* ============ next best action ============ */}
       {nba ? (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-primary/40 bg-primary/[0.04] p-5">
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-border bg-surface p-4 ring-1 ring-primary/15">
           <div className="mb-2 flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-primary">
             <Zap className="h-3 w-3" /> Next best action
           </div>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-base font-semibold text-foreground">{nba.cta}</div>
+              <div className="text-sm font-medium text-foreground">{nba.cta}</div>
               <div className="mt-1 text-sm text-muted-foreground">
                 {nba.domain.replace(/-/g, ' ')} · weakest: {nba.concepts?.slice(0, 3).join(', ') || 'coverage gaps'}
               </div>
@@ -154,15 +154,15 @@ export function MissionControl() {
           </div>
         </motion.div>
       ) : sessions.length === 0 ? (
-        <div className="rounded-xl border border-border bg-surface p-5">
+        <div className="rounded-lg border border-border bg-surface p-5">
           <div className="mb-2 flex items-center gap-2 text-caption font-medium uppercase tracking-wider text-muted-foreground">
             <Zap className="h-3 w-3" /> Start here
           </div>
-          <div className="text-base font-semibold text-foreground">Run your first mock — 15 minutes</div>
+          <div className="text-sm font-medium text-foreground">Run your first mock — 15 minutes</div>
           <div className="mt-1 text-sm text-muted-foreground">
             One session calibrates the engine: your weak concepts become your plan.
           </div>
-          <Link href="/mock-interviews" className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">
+          <Link href="/mock-interviews" className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
             Enter the interview room <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
@@ -198,7 +198,7 @@ export function MissionControl() {
 
       {/* ============ competency gap map ============ */}
       {coverage.length > 0 && (
-        <div className="rounded-xl border border-border bg-surface p-4">
+        <div className="rounded-lg border border-border bg-surface p-4">
           <div className="mb-3 text-caption font-medium uppercase tracking-wider text-muted-foreground">Competency coverage</div>
           <div className="space-y-2.5">
             {coverage.map((c) => {
@@ -226,7 +226,7 @@ export function MissionControl() {
 
       {/* ============ recent sessions ============ */}
       {sessions.length > 0 && (
-        <div className="rounded-xl border border-border bg-surface p-4">
+        <div className="rounded-lg border border-border bg-surface p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="text-caption font-medium uppercase tracking-wider text-muted-foreground">Recent sessions</div>
             <Link href="/mock-interviews/history" className="flex items-center gap-1 text-caption text-muted-foreground hover:text-foreground">
@@ -263,12 +263,12 @@ export function MissionControl() {
 
 function StatCard({ label, value, sub, icon }: { label: string; value: string; sub: string; icon: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-3.5">
+    <div className="rounded-lg border border-border bg-surface p-3">
       <div className="flex items-center justify-between">
         <span className="text-caption font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
         {icon}
       </div>
-      <div className="mt-1.5 text-xl font-semibold tabular-nums">{value}</div>
+      <div className="mt-1.5 text-lg font-semibold tabular-nums tracking-tight">{value}</div>
       <div className="mt-0.5 text-caption text-muted-foreground">{sub}</div>
     </div>
   );

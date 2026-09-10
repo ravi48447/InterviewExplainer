@@ -95,8 +95,8 @@ export function InterviewRoom({
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative shrink-0">
               <div
-                className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold transition-colors ${
-                  isSpeaking ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'
+                className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm font-semibold transition-colors ${
+                  isSpeaking ? 'bg-foreground text-background' : 'bg-muted text-foreground'
                 }`}
               >
                 {persona.name.slice(0, 1)}
@@ -165,12 +165,12 @@ export function InterviewRoom({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className={`mb-5 rounded-xl border p-4 transition-colors lg:p-5 ${
-              isSpeaking ? 'border-primary/40 bg-primary/[0.04]' : 'border-border bg-surface'
+            className={`mb-5 rounded-lg border p-4 transition-colors lg:p-5 ${
+              isSpeaking ? 'border-border bg-surface shadow-[inset_2px_0_0_hsl(var(--primary))]' : 'border-border bg-surface'
             }`}
           >
             <div className="mb-1.5 flex items-center gap-1.5 text-caption font-medium uppercase tracking-wider text-muted-foreground">
-              <Brain className={`h-3.5 w-3.5 ${isSpeaking ? 'text-primary' : 'text-muted-foreground'}`} />
+              <Brain className={`h-3.5 w-3.5 ${isSpeaking ? 'text-foreground' : 'text-muted-foreground'}`} />
               {PHASE_LABEL[phase] ?? 'Interviewer'}
             </div>
             <p className="text-base leading-relaxed text-foreground">{caption || '…'}</p>
@@ -182,7 +182,7 @@ export function InterviewRoom({
 
         {/* answer transcript panel */}
         <div
-          className={`mt-5 rounded-xl border p-4 transition-colors ${
+          className={`mt-5 rounded-lg border p-4 transition-colors ${
             isListening ? 'border-emerald-600/40 bg-emerald-500/[0.04]' : 'border-border bg-surface'
           }`}
         >
