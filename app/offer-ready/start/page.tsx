@@ -95,7 +95,7 @@ export default function OfferReadyStartPage() {
 
         {/* header */}
         <div className="flex items-center gap-4">
-          <Link href="/offer-ready" className="h-9 w-9 flex items-center justify-center text-stone-500 hover:text-stone-300 transition-colors">
+          <Link href="/offer-ready" className="h-9 w-9 flex items-center justify-center text-muted-foreground hover:text-foreground/70 transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div>
@@ -111,12 +111,12 @@ export default function OfferReadyStartPage() {
               <button onClick={() => s.n < step && setStep(s.n)}
                 className={cn(
                   'transition-colors',
-                  step === s.n ? 'text-primary' : step > s.n ? 'text-stone-400 hover:text-stone-200' : 'text-stone-700'
+                  step === s.n ? 'text-primary' : step > s.n ? 'text-muted-foreground hover:text-foreground' : 'text-muted-foreground/60'
                 )}>
                 {step > s.n && <CheckCircle2 className="inline h-3 w-3 -mt-0.5 mr-1" />}
                 {s.label}
               </button>
-              {i < STEPS.length - 1 && <span className="text-stone-700">·</span>}
+              {i < STEPS.length - 1 && <span className="text-muted-foreground/60">·</span>}
             </React.Fragment>
           ))}
         </div>
@@ -141,12 +141,12 @@ export default function OfferReadyStartPage() {
                   onChange={(e) => setInterviewDate(e.target.value)}
                   className="w-full bg-transparent border-b-2 border-border focus:border-border outline-none px-1 py-3 text-lg text-foreground transition-colors" />
                 {daysUntil != null && daysUntil > 0 && (
-                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-stone-400">
+                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-muted-foreground">
                     {daysUntil} days out — <span className="text-primary italic">{trackName}</span>
                   </motion.p>
                 )}
               </div>
-              <p className="text-[13px] text-stone-500 italic">
+              <p className="text-[13px] text-muted-foreground italic">
                 No date yet? Come back when you have one — the campaign works backward from the real thing.
               </p>
               <button onClick={() => setStep(2)} disabled={!interviewDate}
@@ -169,7 +169,7 @@ export default function OfferReadyStartPage() {
                   <button key={c.id} onClick={() => setCompany(c.id)}
                     className={cn(
                       'text-left py-1.5 text-[13px] transition-colors border-b',
-                      company === c.id ? 'text-primary border-border' : 'text-stone-400 border-transparent hover:text-stone-200'
+                      company === c.id ? 'text-primary border-border' : 'text-muted-foreground border-transparent hover:text-foreground'
                     )}>
                     {c.label}
                   </button>
@@ -180,7 +180,7 @@ export default function OfferReadyStartPage() {
                   <button key={l} onClick={() => setLevel(l)}
                     className={cn(
                       'py-1.5 text-sm border-b transition-colors capitalize',
-                      level === l ? 'text-primary border-border' : 'text-stone-400 border-transparent hover:text-stone-200'
+                      level === l ? 'text-primary border-border' : 'text-muted-foreground border-transparent hover:text-foreground'
                     )}>
                     {l}
                   </button>
@@ -207,13 +207,13 @@ export default function OfferReadyStartPage() {
                 <h2 className={`${TYPE.h1} text-foreground`}>Your prep reality</h2>
               </div>
               <div className="space-y-2">
-                <div className="text-xs text-stone-500">Domains — up to 3</div>
+                <div className="text-xs text-muted-foreground">Domains — up to 3</div>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                   {DOMAINS.map((d) => (
                     <button key={d} onClick={() => toggleDomain(d)}
                       className={cn(
                         'text-left py-1.5 text-[13px] border-b transition-colors',
-                        domains.includes(d) ? 'text-primary border-border' : 'text-stone-500 border-transparent hover:text-stone-300'
+                        domains.includes(d) ? 'text-primary border-border' : 'text-muted-foreground border-transparent hover:text-foreground/70'
                       )}>
                       {d.replace(/-/g, ' ')}
                     </button>
@@ -222,24 +222,24 @@ export default function OfferReadyStartPage() {
               </div>
               <div className="grid grid-cols-2 gap-8">
                 <div className="space-y-2">
-                  <div className="text-xs text-stone-500 flex items-center gap-1.5"><Clock className="h-3 w-3" /> Minutes / day</div>
+                  <div className="text-xs text-muted-foreground flex items-center gap-1.5"><Clock className="h-3 w-3" /> Minutes / day</div>
                   <div className="flex gap-4">
                     {[15, 30, 45, 60].map((m) => (
                       <button key={m} onClick={() => setMinutesPerDay(m)}
                         className={cn('py-1 text-sm border-b transition-colors',
-                          minutesPerDay === m ? 'text-primary border-border' : 'text-stone-500 border-transparent hover:text-stone-300')}>
+                          minutesPerDay === m ? 'text-primary border-border' : 'text-muted-foreground border-transparent hover:text-foreground/70')}>
                         {m}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-xs text-stone-500">Days / week</div>
+                  <div className="text-xs text-muted-foreground">Days / week</div>
                   <div className="flex gap-4">
                     {[3, 4, 5, 6].map((d) => (
                       <button key={d} onClick={() => setDaysPerWeek(d)}
                         className={cn('py-1 text-sm border-b transition-colors',
-                          daysPerWeek === d ? 'text-primary border-border' : 'text-stone-500 border-transparent hover:text-stone-300')}>
+                          daysPerWeek === d ? 'text-primary border-border' : 'text-muted-foreground border-transparent hover:text-foreground/70')}>
                         {d}
                       </button>
                     ))}
@@ -272,19 +272,19 @@ export default function OfferReadyStartPage() {
                   const s = PHASE_STYLE[d.phase] ?? PHASE_STYLE.foundation;
                   return (
                     <div key={d.date} className="flex items-baseline gap-5 py-4">
-                      <span className="text-[11px] uppercase tracking-widest text-stone-600 w-12 shrink-0">
+                      <span className="text-[11px] uppercase tracking-widest text-muted-foreground/80 w-12 shrink-0">
                         {new Date(d.date).toLocaleDateString('en-IN', { weekday: 'short' })}
                       </span>
                       <div className="flex-1">
                         <div className="text-sm font-medium text-foreground">{d.title}</div>
-                        <div className="text-xs text-stone-500 mt-0.5">{d.oneThing}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{d.oneThing}</div>
                       </div>
                       <span className={`h-1.5 w-1.5 rounded-full ${s.dot} shrink-0`} />
                     </div>
                   );
                 })}
               </div>
-              <p className="text-[13px] text-stone-500 italic">The full campaign adapts daily from your mastery data.</p>
+              <p className="text-[13px] text-muted-foreground italic">The full campaign adapts daily from your mastery data.</p>
               <div className="flex gap-3">
                 <button onClick={() => setStep(3)} className={`inline-flex items-center gap-1.5 px-5 py-3.5 rounded-none ${CTA_QUIET} text-sm`}>
                   <ArrowLeft className="h-4 w-4" />
@@ -305,7 +305,7 @@ export default function OfferReadyStartPage() {
             className="border border-border bg-surface p-8 space-y-5 text-center">
             <CheckCircle2 className="h-8 w-8 mx-auto" style={{ color: 'hsl(var(--primary))' }} />
             <h2 className={`${TYPE.h1} text-foreground`}>Campaign created</h2>
-            <p className="text-sm text-stone-400">
+            <p className="text-sm text-muted-foreground">
               {created.days.length} days to <span className="text-foreground">{created.companyName ?? 'your interview'}</span> on {created.interviewDate}.
             </p>
             <button onClick={() => (location.href = `/offer-ready/campaign/${created.id}`)}

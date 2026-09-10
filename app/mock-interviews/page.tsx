@@ -1,179 +1,201 @@
 'use client';
-
 /**
- * Mock Hub — the feature menu for the Mock Interview product.
- * Editorial premium: warm charcoal, serif display, hairline rules.
- * Mode configs live in lib/engine/mockModes.mjs.
+ * Mock Hub — rebuilt as a DECISION, not a catalog.
+ *
+ * The old hub listed 9 mode rows + 10 domain links + extras — a menu, not a
+ * product. Best-practice pattern (progressive disclosure, one primary path):
+ *
+ *   1. ONE primary action — Start a mock (smart defaults, zero config)
+ *   2. THREE round types (the real interview vocabulary, everything else
+ *      lives under 'Advanced' inside the room itself)
+ *   3. Domain as a single compact select — not 10 underlined links
+ *
+ * Everything on the token system; neutral until it means something.
  */
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
-  Zap, Flame, Binary, Code2, Layers, MessageSquare, Brain, Building2,
-  ArrowRight, Users, Radio, Check, Sparkles, Trophy,
+  Mic, Code2, MessageSquare, Brain, ChevronRight, Settings2,
+  Building2, Sparkles, ArrowRight,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { TYPE, SHELL, Ambient, PHASE_STYLE, CTA, CTA_QUIET, RULE } from '@/lib/offer-ready/design';
-import { FirstVisitTour } from '@/components/onboarding/FirstVisitTour';
-
-interface MockMode {
-  id: string; name: string; tagline: string; icon: string;
-  minutes: number; description: string;
-  plan: string; isLink?: boolean; href?: string;
-}
-
-const ICONS: Record<string, any> = {
-  zap: Zap, flame: Flame, binary: Binary, code: Code2, layers: Layers,
-  message: MessageSquare, brain: Brain, building: Building2,
-};
 
 const DOMAINS = [
-  'ruby-backend-fresher', 'ruby-backend-intermediate', 'go-fresher', 'go-intermediate',
-  'java-backend-fresher', 'java-backend-intermediate', 'java-fullstack-fresher',
-  'java-fullstack-intermediate', 'python-backend-fresher', 'frontend-fresher',
+  { id: 'java-backend-fresher', label: 'Java Backend' },
+  { id: 'python-backend-fresher', label: 'Python Backend' },
+  { id: 'go-fresher', label: 'Go Backend' },
+  { id: 'ruby-backend-fresher', label: 'Ruby Backend' },
+  { id: 'frontend-fresher', label: 'Frontend' },
+  { id: 'dsa', label: 'DSA (all patterns)' },
 ];
 
-const EASE = [0.22, 1, 0.36, 1] as const;
+const ROUNDS = [
+  {
+    id: 'technical',
+    title: 'Technical',
+    desc: 'Adaptive Q&A with follow-up probes on your weakest concepts',
+    icon: Brain,
+    href: (d: string) => `/mock-interviews/audio?domain=${d}&mode=technical&preset=standard`,
+  },
+  {
+    id: 'coding',
+    title: 'Coding / DSA',
+    desc: 'Real problem statements, editor, examples — then defend complexity',
+    icon: Code2,
+    href: (d: string) => `/mock-interviews/audio?domain=dsa&mode=coding&preset=deep`,
+  },
+  {
+    id: 'behavioral',
+    title: 'Behavioral',
+    desc: 'STAR-tracked storytelling with a live structure detector',
+    icon: MessageSquare,
+    href: (d: string) => `/mock-interviews/audio?domain=${d}&mode=behavioral&preset=standard`,
+  },
+];
 
 export default function MockHubPage() {
-  const [modes, setModes] = useState<MockMode[]>([]);
-  const [domain, setDomain] = useState('ruby-backend-fresher');
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    import('@/lib/engine/mockModes.mjs').then((m) => setModes(m.MOCK_MODES));
-  }, []);
-
-  const startMode = async (m: MockMode) => {
-    setBusy(true);
-    try {
-      const { modeToParams } = await import('@/lib/engine/mockModes.mjs');
-      const { href } = modeToParams(m.id, domain);
-      location.href = href;
-    } catch {
-      setBusy(false);
-    }
-  };
+  const [domain, setDomain] = useState('java-backend-fresher');
+  const [advanced, setAdvanced] = useState(false);
 
   return (
-    <div className={SHELL}>
-      <Ambient />
-      <FirstVisitTour />
-      <main className="relative max-w-3xl mx-auto px-5 sm:px-6 py-14 space-y-12">
-
-        {/* header */}
-        <header className="space-y-6">
-          <div className={TYPE.eyebrow}>Mock Interview</div>
-          <h1 className={`${TYPE.displayLg} text-foreground`}>
-            Pick your<br /><span className="italic text-primary">round.</span>
+    <div className="min-h-[calc(100vh-3.5rem)] bg-background">
+      <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:py-14">
+        {/* ============ header — one sentence, no editorial flourish ============ */}
+        <header className="mb-10">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+            Practice interviews
           </h1>
-          <p className={`${TYPE.lead} max-w-md text-[15px]`}>
-            Every kind of interview practice in one place. The interviewer adapts
-            every turn — and every answer links back to your prep.
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            The interviewer listens, adapts, and pushes back — like the real thing.
           </p>
         </header>
 
-        {/* domain selector — underline style */}
-        <section className="space-y-3">
-          <div className={TYPE.eyebrow}>domain</div>
-          <div className="flex flex-wrap gap-x-6 gap-y-2.5">
-            {DOMAINS.map((d) => (
-              <button key={d} onClick={() => setDomain(d)}
-                className={cn(
-                  'text-[13px] py-0.5 border-b transition-colors capitalize',
-                  domain === d ? 'text-primary border-border' : 'text-stone-500 border-transparent hover:text-stone-300'
-                )}>
-                {d.replace(/-/g, ' ')}
-              </button>
+        {/* ============ the ONE primary action ============ */}
+        <motion.section
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-10"
+        >
+          <div className="rounded-lg border border-border bg-surface p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="flex-1">
+                <div className="text-sm font-medium text-foreground">Standard mock</div>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  30 min · 10 questions · adaptive · voice + typing
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <label className="text-xs text-muted-foreground" htmlFor="hub-domain">Domain</label>
+                  <select
+                    id="hub-domain"
+                    value={domain}
+                    onChange={(e) => setDomain(e.target.value)}
+                    className="rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-foreground/40"
+                  >
+                    {DOMAINS.map((d) => (
+                      <option key={d.id} value={d.id}>{d.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <Link
+                href={`/mock-interviews/audio?domain=${domain}&mode=technical&preset=standard`}
+                className="flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                <Mic className="h-4 w-4" /> Start mock
+              </Link>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* ============ round types — 3, not 9 ============ */}
+        <section className="mb-10">
+          <div className="mb-2.5 text-[11px] font-medium tracking-wide text-muted-foreground/80">
+            Or focus a specific round
+          </div>
+          <div className="space-y-2">
+            {ROUNDS.map((r) => (
+              <Link
+                key={r.id}
+                href={r.href(domain)}
+                className="group flex items-center gap-4 rounded-lg border border-border bg-surface px-4 py-3 transition-colors hover:bg-muted"
+              >
+                <r.icon className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-foreground">{r.title}</div>
+                  <div className="truncate text-sm text-muted-foreground">{r.desc}</div>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60 group-hover:text-foreground" />
+              </Link>
             ))}
           </div>
         </section>
 
-        {/* the mode list — editorial rows, not cards */}
-        <section className={`${RULE} pt-2`}>
-          <div className="divide-y divide-border">
-            {modes.map((m, i) => {
-              const Icon = ICONS[m.icon] ?? Brain;
-              const locked = m.plan !== 'free';
-              return (
-                <motion.button
-                  key={m.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04, duration: 0.4, ease: EASE }}
-                  onClick={() => !busy && startMode(m)}
-                  className="group w-full text-left grid grid-cols-[2.75rem_1fr_auto] gap-5 items-baseline py-6"
-                >
-                  <div className="flex items-center justify-center">
-                    <Icon className={cn('h-5 w-5', locked ? 'text-stone-600' : 'text-primary')} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-baseline gap-2.5">
-                      <h2 className={`${TYPE.h2} text-foreground`}>{m.name}</h2>
-                      <span className="text-[11px] text-stone-600">{m.tagline.split('·')[0].trim()}</span>
-                      {locked && (
-                        <span className="text-[9px] uppercase tracking-widest text-primary border border-border px-1.5 py-0.5">
-                          {m.plan === 'interview_pro' ? 'pro' : 'pass'}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[13px] text-stone-500 leading-relaxed">{m.description}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[11px] text-stone-600 tabular-nums">{m.minutes > 0 ? `${m.minutes}m` : '—'}</span>
-                    <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-primary transition-colors" />
-                  </div>
-                </motion.button>
-              );
-            })}
+        {/* ============ secondary surfaces — quiet, compact, collapsed ============ */}
+        <section className="border-t border-border pt-6">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <QuietLink
+              href="/mock-interviews/company"
+              icon={<Building2 className="h-3.5 w-3.5" />}
+              label="Company loops"
+              sub="Vetted round sequences"
+            />
+            <QuietLink
+              href="/mock-interviews/history"
+              icon={<Sparkles className="h-3.5 w-3.5" />}
+              label="History"
+              sub="Past sessions & reports"
+            />
+            <QuietLink
+              href="/offer-ready"
+              icon={<ArrowRight className="h-3.5 w-3.5" />}
+              label="Offer Ready"
+              sub="30-day campaign"
+            />
           </div>
         </section>
 
-        {/* sample verdict — see feedback quality first */}
-        <section className={`${RULE} pt-8`}>
-          <Link href="/mock-interviews/results?session=demo" className="group grid grid-cols-[2.75rem_1fr_auto] gap-5 items-baseline py-4">
-            <div className="flex items-center justify-center">
-              <Sparkles className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div className="space-y-1">
-              <h3 className={`${TYPE.h2} text-foreground`}>See a sample verdict first</h3>
-              <p className="text-[13px] text-stone-500">
-                A finished session's full report — receipts, expert answers, why each question followed yours.
-              </p>
-            </div>
-            <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-muted-foreground transition-colors" />
-          </Link>
-        </section>
-
-        {/* people surfaces — peer + live rooms */}
-        <section className={`${RULE} pt-8 space-y-8`}>
-          <div className={TYPE.eyebrow}>with real people</div>
-          <div className="divide-y divide-border">
-            <Link href="/mock-interviews/peer" className="group grid grid-cols-[2.75rem_1fr_auto] gap-5 items-baseline py-5">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              <div className="space-y-1">
-                <h3 className={`${TYPE.h2} text-foreground`}>Peer Practice</h3>
-                <p className="text-[13px] text-stone-500">Role-swap with a real person — both seats train you.</p>
+        {/* advanced — one quiet toggle, nothing visible by default */}
+        <section className="mt-6">
+          <button
+            onClick={() => setAdvanced((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+            Advanced (personas, durations, pressure tiers)
+          </button>
+          {advanced && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="mt-3 overflow-hidden"
+            >
+              <div className="rounded-lg border border-border bg-surface p-4 text-sm text-muted-foreground">
+                Persona, pressure tier and duration are set{' '}
+                <span className="text-foreground">inside the room</span> before you start —
+                start any round above and the full setup is the first screen.
               </div>
-              <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-muted-foreground transition-colors" />
-            </Link>
-            <Link href="/mock-interviews/live" className="group grid grid-cols-[2.75rem_1fr_auto] gap-5 items-baseline py-5">
-              <Radio className="h-5 w-5 text-muted-foreground" />
-              <div className="space-y-1">
-                <h3 className={`${TYPE.h2} text-foreground`}>Live 1:1 Room</h3>
-                <p className="text-[13px] text-stone-500">Direct-link room with Director-assist for the interviewer.</p>
-              </div>
-              <ArrowRight className="h-4 w-4 text-stone-700 group-hover:text-muted-foreground transition-colors" />
-            </Link>
-          </div>
+            </motion.div>
+          )}
         </section>
-
-        {/* footer note */}
-        <p className={`${RULE} pt-6 text-[12px] text-stone-600 italic`}>
-          Free: quick · rapid · DSA · behavioral. Pass unlocks live-coding, system design, full mock. Pro adds company loops.
-        </p>
       </main>
     </div>
+  );
+}
+
+function QuietLink({
+  href, icon, label, sub,
+}: { href: string; icon: React.ReactNode; label: string; sub: string }) {
+  return (
+    <Link
+      href={href}
+      className="group flex items-center gap-2.5 rounded-lg border border-transparent px-3 py-2 transition-colors hover:border-border hover:bg-surface"
+    >
+      <span className="text-muted-foreground group-hover:text-foreground">{icon}</span>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-foreground">{label}</span>
+        <span className="block truncate text-xs text-muted-foreground">{sub}</span>
+      </span>
+    </Link>
   );
 }

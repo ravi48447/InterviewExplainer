@@ -137,7 +137,7 @@ export default function ResultsPage() {
       <Shell>
         <div className="text-center py-20 space-y-4">
           <AlertTriangle className="h-10 w-10 text-amber-400 mx-auto" />
-          <p className="text-stone-400">Report not found — it may have expired with the tab.</p>
+          <p className="text-muted-foreground">Report not found — it may have expired with the tab.</p>
           <Button variant="outline" onClick={() => history.back()} className="gap-2">
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
@@ -149,7 +149,7 @@ export default function ResultsPage() {
   if (!report) {
     return (
       <Shell>
-        <div className="py-20 text-center text-stone-400">Loading report…</div>
+        <div className="py-20 text-center text-muted-foreground">Loading report…</div>
       </Shell>
     );
   }
@@ -165,17 +165,17 @@ export default function ResultsPage() {
             <Brain className="h-8 w-8 text-blue-400" />
             <div>
               <h1 className="text-xl font-bold">Session Report</h1>
-              <p className="text-xs text-stone-400">{report.turnsCount} questions · adaptive</p>
+              <p className="text-xs text-muted-foreground">{report.turnsCount} questions · adaptive</p>
             </div>
           </div>
           <div className="flex items-end gap-3">
             <span className={cn('text-4xl font-semibold tabular-nums tracking-tight', scoreColor)}>{report.overallScore}</span>
-            <span className="text-stone-400 pb-2">/ 100 concept-coverage score</span>
+            <span className="text-muted-foreground pb-2">/ 100 concept-coverage score</span>
             <button onClick={speakReview} className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-white/15 text-xs shrink-0">
               {speaking ? <><VolumeX className="h-3.5 w-3.5" /> stop</> : <><Volume2 className="h-3.5 w-3.5" /> hear review</>}
             </button>
           </div>
-          <p className="text-xs text-stone-600 flex items-start gap-1.5">
+          <p className="text-xs text-muted-foreground/80 flex items-start gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5 shrink-0 mt-0.5" />
             {report.methodology}
           </p>
@@ -189,7 +189,7 @@ export default function ResultsPage() {
           <div className="flex-1 space-y-2 max-h-56 overflow-y-auto pr-1">
             {report.strongConcepts.slice(0, 8).map((c) => (
               <div key={c.id} className="flex items-center justify-between text-xs">
-                <span className="text-stone-300 truncate">{c.label}</span>
+                <span className="text-foreground/70 truncate">{c.label}</span>
                 <span className="flex items-center gap-1 text-emerald-400">
                   <CheckCircle2 className="h-3 w-3" /> {c.hits}×
                 </span>
@@ -197,13 +197,13 @@ export default function ResultsPage() {
             ))}
             {report.weakConcepts.slice(0, 8).map((c) => (
               <div key={c.id} className="flex items-center justify-between text-xs">
-                <span className="text-stone-400 truncate">{c.label}</span>
+                <span className="text-muted-foreground truncate">{c.label}</span>
                 <span className="text-rose-400">missed</span>
               </div>
             ))}
           </div>
           {report.weakConcepts.length > 0 && (
-            <p className="text-[11px] text-stone-600">
+            <p className="text-[11px] text-muted-foreground/80">
               Weak concepts are queued to your dashboard for the next session.
             </p>
           )}
@@ -214,8 +214,8 @@ export default function ResultsPage() {
       {timeline && summary && (
         <div className="rounded-lg border border-border bg-surface p-5 space-y-5 mt-6">
           <div className="flex items-baseline justify-between">
-            <div className="text-xs uppercase tracking-[0.18em] text-stone-500">session replay</div>
-            <div className="text-[11px] text-stone-600 tabular-nums">
+            <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">session replay</div>
+            <div className="text-[11px] text-muted-foreground/80 tabular-nums">
               avg {summary.avgScore} · best {summary.bestTurn} · {summary.mistakeCount} mistake{summary.mistakeCount === 1 ? '' : 's'} flagged
             </div>
           </div>
@@ -258,11 +258,11 @@ export default function ResultsPage() {
               {playing ? '❚❚' : '▶'}
             </button>
             <div className="flex-1 min-w-0">
-              <div className="text-xs text-stone-400 tabular-nums">
+              <div className="text-xs text-muted-foreground tabular-nums">
                 {fmtTime(playhead)} / {fmtTime(timeline.totalSeconds)}
               </div>
               {/* current event caption */}
-              <div className="text-[11px] text-stone-600 truncate">
+              <div className="text-[11px] text-muted-foreground/80 truncate">
                 {currentCaption(timeline, playhead) ?? 'press play — or scrub the markers'}
               </div>
             </div>
@@ -276,7 +276,7 @@ export default function ResultsPage() {
           </div>
 
           {/* legend */}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-stone-600">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-muted-foreground/80">
             <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-primary" /> strong</span>
             <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-primary" /> solid</span>
             <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-destructive" /> mistake flagged</span>
@@ -286,7 +286,7 @@ export default function ResultsPage() {
 
           {/* weakest-turn receipts under the replay */}
           {summary.weakestTurn && summary.weakestTurn.missed?.length > 0 && (
-            <div className="border-t border-border pt-3 text-[11px] text-stone-500">
+            <div className="border-t border-border pt-3 text-[11px] text-muted-foreground">
               <span className="text-destructive">Weakest turn</span> missed: {summary.weakestTurn.missed.slice(0, 4).join(', ')}
             </div>
           )}
@@ -295,7 +295,7 @@ export default function ResultsPage() {
 
       {/* per-question accordion */}
       <div className="space-y-3 mt-6">
-        <h2 className="text-sm font-semibold text-stone-300 flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-foreground/70 flex items-center gap-2">
           <TrendingUp className="h-4 w-4" /> Question by question
         </h2>
         {report.perQuestion.map((q, i) => (
@@ -310,14 +310,14 @@ export default function ResultsPage() {
                 q.score >= 50 ? 'bg-amber-500/15 text-amber-400' : 'bg-rose-500/15 text-rose-400'
               )}>{q.score}</span>
               <div className="flex-1 min-w-0">
-                <div className="text-sm text-stone-200 truncate">{q.question}</div>
-                <div className="text-[11px] text-stone-600 flex gap-2 mt-0.5">
+                <div className="text-sm text-foreground truncate">{q.question}</div>
+                <div className="text-[11px] text-muted-foreground/80 flex gap-2 mt-0.5">
                   <span>{q.coverage.hit.length}/{q.coverage.hit.length + q.coverage.missed.length} concepts</span>
                   {q.move && <span>· {q.move}</span>}
                   {q.mistakeFlags?.length > 0 && <span className="text-amber-400">· mistake flagged</span>}
                 </div>
               </div>
-              <ChevronDown className={cn('h-4 w-4 text-stone-600 transition-transform', open === i && 'rotate-180')} />
+              <ChevronDown className={cn('h-4 w-4 text-muted-foreground/80 transition-transform', open === i && 'rotate-180')} />
             </button>
             {open === i && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="border-t border-border px-4 py-4 space-y-4">
@@ -326,18 +326,18 @@ export default function ResultsPage() {
                   <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-3">
                     <div className="text-emerald-400 font-semibold mb-1.5">You covered</div>
                     {q.coverage.hit.length ? q.coverage.hit.map((h) => (
-                      <div key={h} className="flex items-start gap-1.5 text-stone-300">
+                      <div key={h} className="flex items-start gap-1.5 text-foreground/70">
                         <CheckCircle2 className="h-3 w-3 mt-0.5 text-emerald-400 shrink-0" /> {h}
                       </div>
-                    )) : <span className="text-stone-600">none detected</span>}
+                    )) : <span className="text-muted-foreground/80">none detected</span>}
                   </div>
                   <div className="rounded-lg bg-rose-500/5 border border-rose-500/20 p-3">
                     <div className="text-rose-400 font-semibold mb-1.5">Missed</div>
                     {q.coverage.missed.length ? q.coverage.missed.map((m) => (
-                      <div key={m} className="flex items-start gap-1.5 text-stone-400">
+                      <div key={m} className="flex items-start gap-1.5 text-muted-foreground">
                         <AlertTriangle className="h-3 w-3 mt-0.5 text-rose-400 shrink-0" /> {m}
                       </div>
-                    )) : <span className="text-stone-600">nothing — full coverage</span>}
+                    )) : <span className="text-muted-foreground/80">nothing — full coverage</span>}
                   </div>
                 </div>
 
@@ -346,11 +346,11 @@ export default function ResultsPage() {
                   <div className="text-primary font-semibold mb-1.5 text-xs flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5" /> How our expert answers it
                   </div>
-                  <p className="text-sm text-stone-300 leading-relaxed">{q.suggested.spoken}</p>
+                  <p className="text-sm text-foreground/70 leading-relaxed">{q.suggested.spoken}</p>
                   {q.suggested.checklist?.length > 0 && (
                     <ul className="mt-2 space-y-1">
                       {q.suggested.checklist.slice(0, 5).map((c) => (
-                        <li key={c} className="text-xs text-stone-400 flex items-start gap-1.5">
+                        <li key={c} className="text-xs text-muted-foreground flex items-start gap-1.5">
                           <CheckCircle2 className="h-3 w-3 mt-0.5 text-blue-400/70 shrink-0" /> {c}
                         </li>
                       ))}
@@ -360,7 +360,7 @@ export default function ResultsPage() {
 
                 {/* drills */}
                 {q.nextDrills?.length > 0 && (
-                  <div className="text-xs text-stone-400">
+                  <div className="text-xs text-muted-foreground">
                     <span className="font-semibold">Practice next:</span>{' '}
                     {q.nextDrills.join(' · ')}
                   </div>
@@ -374,11 +374,11 @@ export default function ResultsPage() {
       {/* move log replay */}
       {report.moveLog?.length > 0 && (
         <div className="rounded-lg border border-border bg-surface p-4 mt-6">
-          <h2 className="text-sm font-semibold text-stone-300 mb-3">Why the interviewer asked what it asked</h2>
-          <ol className="space-y-1.5 text-xs text-stone-400">
+          <h2 className="text-sm font-semibold text-foreground/70 mb-3">Why the interviewer asked what it asked</h2>
+          <ol className="space-y-1.5 text-xs text-muted-foreground">
             {report.moveLog.map((m, i) => (
               <li key={i} className="flex gap-2">
-                <span className="text-stone-600 w-6 text-right">{m.turn}</span>
+                <span className="text-muted-foreground/80 w-6 text-right">{m.turn}</span>
                 <span className="px-1.5 rounded bg-primary/10 text-primary w-20 text-center shrink-0">{m.move}</span>
                 <span className="truncate">{m.reason}</span>
               </li>

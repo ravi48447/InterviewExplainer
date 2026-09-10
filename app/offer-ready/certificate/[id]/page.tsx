@@ -31,14 +31,14 @@ export default function CertificatePage() {
   if (missing) return (
     <div className={SHELL}><Ambient />
       <main className="relative max-w-xl mx-auto px-5 py-24 text-center space-y-3">
-        <Trophy className="h-9 w-9 text-stone-600 mx-auto" />
-        <p className="text-stone-400">Certificate unlocks when your campaign completes.</p>
+        <Trophy className="h-9 w-9 text-muted-foreground/80 mx-auto" />
+        <p className="text-muted-foreground">Certificate unlocks when your campaign completes.</p>
       </main>
     </div>
   );
   if (!cert) return (
     <div className={SHELL}><Ambient />
-      <main className="relative max-w-xl mx-auto px-5 py-24 text-center text-stone-400 flex items-center justify-center gap-2">
+      <main className="relative max-w-xl mx-auto px-5 py-24 text-center text-muted-foreground flex items-center justify-center gap-2">
         <Loader2 className="h-4 w-4 animate-spin" /> preparing your certificate…
       </main>
     </div>
@@ -58,34 +58,34 @@ export default function CertificatePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease: EASE }}
-          className="relative w-full max-w-lg border border-[#3a362e] bg-[#141311] px-8 sm:px-12 py-12 space-y-10"
+          className="relative w-full max-w-lg border border-border bg-surface px-8 sm:px-12 py-12 space-y-10"
         >
           {/* double rule — the certificate feel */}
-          <div className="absolute inset-2 border border-[#26241f] pointer-events-none" />
+          <div className="absolute inset-2 border border-border pointer-events-none" />
 
           {/* masthead */}
           <header className="relative space-y-2 text-center">
-            <div className="text-[10px] uppercase tracking-[0.3em] text-stone-500">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
               InterviewExplainer
             </div>
-            <div className="h-px w-16 mx-auto bg-[#3a362e]" />
-            <div className="text-[10px] uppercase tracking-[0.3em] text-[#e8a33d]">
+            <div className="h-px w-16 mx-auto bg-border" />
+            <div className="text-[10px] uppercase tracking-[0.3em] text-primary">
               Offer Ready
             </div>
           </header>
 
           {/* title */}
           <div className="relative text-center space-y-3">
-            <h1 className={`${TYPE.display} text-3xl text-[#f5f1e8]`}>Certificate of Readiness</h1>
-            <p className="text-[13px] text-stone-500">
+            <h1 className={`${TYPE.display} text-3xl text-foreground`}>Certificate of Readiness</h1>
+            <p className="text-[13px] text-muted-foreground">
               {cert.company} · {cert.level} · interview on {cert.interviewDate}
             </p>
           </div>
 
           {/* the arc */}
           {pts.length > 1 && (
-            <div className="relative border-y border-[#26241f] py-5">
-              <div className="text-[9px] uppercase tracking-[0.25em] text-stone-600 mb-3 text-center">the readiness arc</div>
+            <div className="relative border-y border-border py-5">
+              <div className="text-[9px] uppercase tracking-[0.25em] text-muted-foreground/80 mb-3 text-center">the readiness arc</div>
               <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-16">
                 <polyline fill="none" stroke="#e8a33d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                   points={pts.map((p: number[]) => p.join(',')).join(' ')} />
@@ -97,39 +97,39 @@ export default function CertificatePage() {
           )}
 
           {/* stats — editorial table, no boxes */}
-          <div className="relative grid grid-cols-3 divide-x divide-[#26241f] text-center">
+          <div className="relative grid grid-cols-3 divide-x divide-border text-center">
             {[
               { val: cert.daysCompleted, label: 'days' },
               { val: cert.sessionsCompleted, label: 'sessions' },
               { val: cert.loopsRun, label: 'full loops' },
             ].map((s) => (
               <div key={s.label} className="space-y-1 px-2">
-                <div className={`${TYPE.num} text-3xl text-[#f5f1e8]`}>{s.val}</div>
-                <div className="text-[9px] uppercase tracking-[0.2em] text-stone-600">{s.label}</div>
+                <div className={`${TYPE.num} text-3xl text-foreground`}>{s.val}</div>
+                <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/80">{s.label}</div>
               </div>
             ))}
           </div>
 
           {/* the score */}
-          <div className="relative text-center space-y-2 py-4 border-t border-b border-[#26241f]">
-            <div className={`${TYPE.num} text-7xl text-[#f5f1e8]`}>{cert.finalReadiness}</div>
-            <div className="text-[10px] uppercase tracking-[0.25em] text-stone-500">final readiness</div>
+          <div className="relative text-center space-y-2 py-4 border-t border-b border-border">
+            <div className={`${TYPE.num} text-7xl text-foreground`}>{cert.finalReadiness}</div>
+            <div className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">final readiness</div>
           </div>
 
           {/* the line */}
-          <p className="relative text-center text-[15px] text-stone-300 italic leading-relaxed">
+          <p className="relative text-center text-[15px] text-foreground/70 italic leading-relaxed">
             {cert.line}
           </p>
 
           {/* seal */}
           <footer className="relative flex items-center justify-between pt-2">
-            <div className="text-[9px] text-stone-600">
+            <div className="text-[9px] text-muted-foreground/80">
               issued {new Date(cert.issuedAt).toLocaleDateString('en-IN')}
               <br />
               {cert.campaignId}
             </div>
-            <div className="h-12 w-12 rounded-full border border-[#3a362e] flex items-center justify-center">
-              <CheckCircle2 className="h-5 w-5 text-[#e8a33d]" />
+            <div className="h-12 w-12 rounded-full border border-border flex items-center justify-center">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
             </div>
           </footer>
         </motion.article>

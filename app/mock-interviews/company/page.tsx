@@ -151,7 +151,7 @@ export default function CompanyLoopPage() {
             <Building2 className="h-7 w-7 text-violet-400" />
           </div>
           <h1 className="text-xl font-semibold tracking-tight">Company Loop Runner</h1>
-          <p className="text-sm text-stone-400 max-w-xl mx-auto">
+          <p className="text-sm text-muted-foreground max-w-xl mx-auto">
             Full multi-round practice loops — modeled on typical big-tech round structures
             (DSA-heavy loops, backend service loops, bar-raisers). Representative practice
             sequences, not any company's confidential process — verify details on their
@@ -164,13 +164,13 @@ export default function CompanyLoopPage() {
           <div className="flex rounded-lg border border-border overflow-hidden">
             {(['fresher', 'intermediate'] as const).map((l) => (
               <button key={l} onClick={() => setLevel(l)}
-                className={cn('px-4 py-2.5 text-sm capitalize flex-1 transition', level === l ? 'bg-primary/15 text-primary' : 'bg-surface text-stone-400 hover:bg-primary')}>
+                className={cn('px-4 py-2.5 text-sm capitalize flex-1 transition', level === l ? 'bg-primary/15 text-primary' : 'bg-surface text-muted-foreground hover:bg-primary')}>
                 {l}
               </button>
             ))}
           </div>
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-600" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/80" />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search companies — 'fintech', 'flipkart', 'HFT'…"
               className="w-full rounded-lg bg-background border border-border pl-9 pr-3 py-2.5 text-sm outline-none focus:border-border/50" />
@@ -191,9 +191,9 @@ export default function CompanyLoopPage() {
                   {TOUGH_LABEL(c.toughness)}
                 </span>
               </div>
-              <div className="text-[11px] text-stone-400">{c.archetypeName}</div>
-              <div className="text-[11px] text-stone-600 leading-snug">{c.note}</div>
-              <div className="flex items-center gap-3 text-[10px] text-stone-600 pt-1">
+              <div className="text-[11px] text-muted-foreground">{c.archetypeName}</div>
+              <div className="text-[11px] text-muted-foreground/80 leading-snug">{c.note}</div>
+              <div className="flex items-center gap-3 text-[10px] text-muted-foreground/80 pt-1">
                 <span className="flex items-center gap-1"><Video className="h-3 w-3" /> {c.roundCount[level] ?? c.roundCount.fresher} rounds</span>
                 <span className="ml-auto flex items-center gap-1 text-violet-300/70 group-hover:text-violet-300">
                   run the loop <ChevronRight className="h-3 w-3" />
@@ -220,7 +220,7 @@ export default function CompanyLoopPage() {
           <Building2 className="h-5 w-5 text-violet-400 shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="font-bold">
-              {loop.companyName} <span className="text-stone-400 font-normal">· {loop.level}</span>
+              {loop.companyName} <span className="text-muted-foreground font-normal">· {loop.level}</span>
               {loop.vetted ? (
                 <span
                   className="ml-2 align-middle text-[9px] uppercase tracking-wide rounded-full border border-emerald-800/60 bg-emerald-950/40 text-emerald-300 px-2 py-0.5"
@@ -237,16 +237,16 @@ export default function CompanyLoopPage() {
                 </span>
               )}
             </div>
-            <div className="text-[11px] text-stone-400">
+            <div className="text-[11px] text-muted-foreground">
               {loop.archetypeName} · {loop.rounds.length} rounds · {loop.totalMinutes} min · toughness {loop.toughness.toFixed(2)}
             </div>
             {loop.vetted && (
-              <div className="text-[10px] text-stone-500">
+              <div className="text-[10px] text-muted-foreground">
                 Based on: {loop.vetted.sourceLabel} · reviewed {loop.vetted.reviewedAt}
               </div>
             )}
           </div>
-          <button onClick={() => { setLoop(null); setRoundScores({}); }} className="text-stone-600 hover:text-stone-300"><X className="h-4 w-4" /></button>
+          <button onClick={() => { setLoop(null); setRoundScores({}); }} className="text-muted-foreground/80 hover:text-foreground/70"><X className="h-4 w-4" /></button>
         </div>
         {/* round progress */}
         <div className="flex gap-1.5">
@@ -256,7 +256,7 @@ export default function CompanyLoopPage() {
               roundScores[i] != null ? '' : '')} />
           ))}
         </div>
-        <div className="flex gap-1.5 text-[9px] text-stone-600 overflow-x-auto">
+        <div className="flex gap-1.5 text-[9px] text-muted-foreground/80 overflow-x-auto">
           {loop.rounds.map((r, i) => (
             <span key={r.index} className={cn('whitespace-nowrap', i === roundIdx && 'text-violet-300')}>
               {r.label.split(' —')[0]}{roundScores[i] != null ? ` (${roundScores[i]})` : ''}
@@ -275,30 +275,30 @@ export default function CompanyLoopPage() {
               </span>
               <div className="flex-1">
                 <h2 className="text-lg font-bold">{currentRound.label}</h2>
-                <div className="text-xs text-stone-400 capitalize">
+                <div className="text-xs text-muted-foreground capitalize">
                   {currentRound.minutes} min · {currentRound.mode} · tier {currentRound.tier} · {currentRound.persona} persona
                 </div>
               </div>
               {currentRound.camera !== 'off' && (
                 <span className={cn('flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg',
-                  currentRound.camera === 'required' ? 'bg-primary/15 text-primary' : 'bg-primary text-stone-300')}>
+                  currentRound.camera === 'required' ? 'bg-primary/15 text-primary' : 'bg-primary text-foreground/70')}>
                   <Camera className="h-3 w-3" /> {currentRound.camera}
                 </span>
               )}
             </div>
-            {currentRound.note && <p className="text-sm text-stone-400">{currentRound.note}</p>}
-            <p className="text-[11px] text-stone-600 italic">{loop.note}</p>
+            {currentRound.note && <p className="text-sm text-muted-foreground">{currentRound.note}</p>}
+            <p className="text-[11px] text-muted-foreground/80 italic">{loop.note}</p>
           </div>
 
           {/* camera gate */}
           {currentRound.camera === 'required' && !camReady ? (
             <div className="rounded-lg border border-border bg-surface p-6 space-y-4 text-center">
               <Video className="h-10 w-10 text-rose-300 mx-auto" />
-              <p className="text-sm text-stone-300">This round runs with camera on — like the real one.</p>
+              <p className="text-sm text-foreground/70">This round runs with camera on — like the real one.</p>
               <div className="flex gap-2 justify-center">
                 <Button onClick={startCamera} className="gap-2"><Video className="h-4 w-4" /> Enable camera</Button>
               </div>
-              <p className="text-[10px] text-stone-600">Camera stays on this device. Nothing is recorded or uploaded.</p>
+              <p className="text-[10px] text-muted-foreground/80">Camera stays on this device. Nothing is recorded or uploaded.</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -330,7 +330,7 @@ export default function CompanyLoopPage() {
             </div>
           )}
           <div className="rounded-lg border border-border bg-surface p-5 space-y-3">
-            <p className="text-sm text-stone-300">
+            <p className="text-sm text-foreground/70">
               Round in progress. The engine runs this exactly like the real thing:
               {currentRound.mode === 'coding'
                 ? ' code, then the dry-run — trace your algorithm on a concrete input, defend your complexity.'
@@ -343,21 +343,21 @@ export default function CompanyLoopPage() {
               {React.createElement(MODE_ICON[currentRound.mode] ?? Brain, { className: 'h-4 w-4' })}
               Open round {currentRound.index} engine →
             </a>
-            <p className="text-[10px] text-stone-600 text-center">Return here when the round ends — log your verdict and advance.</p>
+            <p className="text-[10px] text-muted-foreground/80 text-center">Return here when the round ends — log your verdict and advance.</p>
           </div>
           <div className="space-y-2">
-            <p className="text-[10px] text-stone-500 text-center">
+            <p className="text-[10px] text-muted-foreground text-center">
               Self-assessed score — the evaluated engine report will replace this once the round's
               session results are linked. Record honestly; it feeds your loop summary.
             </p>
             <div className="flex gap-2 items-center">
-              <label className="text-xs text-stone-400 shrink-0">Your score (0–100):</label>
+              <label className="text-xs text-muted-foreground shrink-0">Your score (0–100):</label>
               <input
                 type="number"
                 min={0}
                 max={100}
                 defaultValue={65}
-                className="w-20 rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-stone-200"
+                className="w-20 rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   if (!Number.isNaN(v)) setSelfScore(Math.max(0, Math.min(100, Math.round(v))));
@@ -376,7 +376,7 @@ export default function CompanyLoopPage() {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-border bg-surface p-6 space-y-4 text-center">
           <CheckCircle2 className="h-10 w-10 text-emerald-400 mx-auto" />
           <h3 className="font-bold">Round {currentRound?.index} complete</h3>
-          <p className="text-sm text-stone-400">
+          <p className="text-sm text-muted-foreground">
             {roundIdx + 1 < loop.rounds.length
               ? `Next up: ${loop.rounds[roundIdx + 1].label}`
               : 'That was the last round.'}
@@ -398,13 +398,13 @@ export default function CompanyLoopPage() {
                 <span className={cn('text-4xl font-semibold tabular-nums tracking-tight', totalScore >= 70 ? 'text-emerald-400' : totalScore >= 50 ? 'text-amber-400' : 'text-rose-400')}>
                   {totalScore}
                 </span>
-                <span className="text-stone-400 pb-2 text-sm">avg across {Object.keys(roundScores).length} rounds</span>
+                <span className="text-muted-foreground pb-2 text-sm">avg across {Object.keys(roundScores).length} rounds</span>
               </div>
             </div>
             <div className="space-y-1.5">
               {loop.rounds.map((r, i) => (
                 <div key={r.index} className="flex items-center gap-3 text-xs bg-surface rounded-lg px-3 py-2">
-                  <span className="text-stone-600">{r.index}.</span>
+                  <span className="text-muted-foreground/80">{r.index}.</span>
                   <span className="flex-1 truncate">{r.label}</span>
                   <span className={cn('font-bold', (roundScores[i] ?? 0) >= 70 ? 'text-emerald-400' : 'text-rose-400')}>
                     {roundScores[i] != null ? roundScores[i] : '—'}
@@ -420,7 +420,7 @@ export default function CompanyLoopPage() {
                 <Flame className="h-4 w-4" /> Re-run this loop
               </Button>
             </div>
-            <p className="text-[10px] text-stone-600 text-center flex items-center justify-center gap-1">
+            <p className="text-[10px] text-muted-foreground/80 text-center flex items-center justify-center gap-1">
               <ShieldCheck className="h-3 w-3" /> Interview-day realism: {loop.rounds.length} sequential rounds, {loop.totalMinutes} minutes total.
             </p>
           </div>

@@ -42,7 +42,7 @@ export default function OfferReadyLanding() {
             transition={{ duration: 0.7, ease: EASE }}
             className={TYPE.eyebrow}
           >
-            InterviewExplainer <span className="text-stone-600">·</span> Offer Ready
+            InterviewExplainer <span className="text-muted-foreground/80">·</span> Offer Ready
           </motion.div>
 
           <motion.h1
@@ -108,14 +108,14 @@ export default function OfferReadyLanding() {
                 >
                   <div className="text-right">
                     <div className={`${TYPE.num} text-lg ${s.text}`}>{String(i + 1).padStart(2, '0')}</div>
-                    <div className="text-[10px] uppercase tracking-widest text-stone-600 mt-1">{p.when}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground/80 mt-1">{p.when}</div>
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2.5">
                       <p.icon className={`h-4 w-4 ${s.text}`} />
                       <h3 className={`${TYPE.h2} text-foreground`}>{p.name}</h3>
                     </div>
-                    <p className="text-sm text-stone-400 leading-relaxed max-w-md">{p.what}</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed max-w-md">{p.what}</p>
                   </div>
                   <div className="hidden sm:flex items-start justify-end pt-1">
                     <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
@@ -138,7 +138,7 @@ export default function OfferReadyLanding() {
                 key={f}
                 initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }} transition={{ delay: i * 0.03, duration: 0.4 }}
-                className="flex items-center gap-3 text-sm text-stone-300"
+                className="flex items-center gap-3 text-sm text-foreground/70"
               >
                 <span className="h-4 w-4 rounded-full border border-border flex items-center justify-center shrink-0">
                   <Check className="h-2.5 w-2.5 text-primary" />
@@ -171,18 +171,18 @@ export default function OfferReadyLanding() {
                   transition={{ delay: i * 0.05 }}
                   className="flex items-baseline gap-5 py-4"
                 >
-                  <span className="text-[11px] uppercase tracking-widest text-stone-600 w-8 shrink-0">{d.day}</span>
+                  <span className="text-[11px] uppercase tracking-widest text-muted-foreground/80 w-8 shrink-0">{d.day}</span>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-foreground">{d.t}</div>
-                    <div className="text-xs text-stone-500 mt-0.5">{d.o}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{d.o}</div>
                   </div>
-                  <span className="text-[11px] text-stone-600 shrink-0">{d.m}</span>
+                  <span className="text-[11px] text-muted-foreground/80 shrink-0">{d.m}</span>
                   <span className={`h-1.5 w-1.5 rounded-full ${s.dot} shrink-0`} />
                 </motion.div>
               );
             })}
           </div>
-          <p className="text-[13px] text-stone-500 italic">
+          <p className="text-[13px] text-muted-foreground italic">
             The plan re-shapes daily from your mastery data. Miss a day and it re-flows — never guilt-trips.
           </p>
         </section>

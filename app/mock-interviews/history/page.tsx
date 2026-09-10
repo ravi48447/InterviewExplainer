@@ -9,7 +9,7 @@ export default function Redirect() {
   useEffect(() => { router.replace('/mock-interviews'); }, [router]);
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-      <p className="text-stone-500 text-sm">Redirecting to the Mock Hub…</p>
+      <p className="text-muted-foreground text-sm">Redirecting to the Mock Hub…</p>
     </div>
   );
 }

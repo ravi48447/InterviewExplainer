@@ -72,8 +72,8 @@ export default function CampaignDashboard() {
   if (notFound) return (
     <div className={SHELL}><Ambient />
       <main className="relative max-w-xl mx-auto px-5 py-24 text-center space-y-4">
-        <Clock className="h-9 w-9 text-stone-600 mx-auto" />
-        <p className="text-stone-400">Campaign not found — sign in with the account that created it.</p>
+        <Clock className="h-9 w-9 text-muted-foreground/80 mx-auto" />
+        <p className="text-muted-foreground">Campaign not found — sign in with the account that created it.</p>
         <Link href="/offer-ready/start" className="text-primary text-sm underline underline-offset-4">Start a new campaign</Link>
       </main>
     </div>
@@ -81,7 +81,7 @@ export default function CampaignDashboard() {
 
   if (!data) return (
     <div className={SHELL}><Ambient />
-      <main className="relative max-w-2xl mx-auto px-5 py-24 text-center text-stone-400 flex items-center justify-center gap-2">
+      <main className="relative max-w-2xl mx-auto px-5 py-24 text-center text-muted-foreground flex items-center justify-center gap-2">
         <Loader2 className="h-4 w-4 animate-spin" /> loading your campaign…
       </main>
     </div>
@@ -111,7 +111,7 @@ export default function CampaignDashboard() {
       <Ambient />
       <main className="relative max-w-2xl mx-auto px-5 sm:px-6 py-12 space-y-12">
 
-        <Link href="/offer-ready" className="inline-flex items-center gap-2 text-xs text-stone-500 hover:text-stone-300 transition-colors">
+        <Link href="/offer-ready" className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground/70 transition-colors">
           <ArrowLeft className="h-3.5 w-3.5" /> Offer Ready
         </Link>
 
@@ -123,7 +123,7 @@ export default function CampaignDashboard() {
               <div className="text-sm text-foreground">
                 You're viewing a <span className="italic text-primary">demo campaign</span> — 14 days in.
               </div>
-              <div className="text-xs text-stone-500 mt-0.5">
+              <div className="text-xs text-muted-foreground mt-0.5">
                 Sign in free and every graph hardens with your real sessions — this preview shows the shape of what's coming.
               </div>
             </div>
@@ -147,13 +147,13 @@ export default function CampaignDashboard() {
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               {currentReadiness == null ? (
                 <>
-                  <span className={`${TYPE.num} text-lg text-stone-500 leading-tight`}>no data</span>
-                  <span className="text-[8px] uppercase tracking-[0.2em] text-stone-600 text-center px-3">run a session</span>
+                  <span className={`${TYPE.num} text-lg text-muted-foreground leading-tight`}>no data</span>
+                  <span className="text-[8px] uppercase tracking-[0.2em] text-muted-foreground/80 text-center px-3">run a session</span>
                 </>
               ) : (
                 <>
                   <CountUp to={currentReadiness} className={`${TYPE.num} text-2xl font-semibold tabular-nums text-foreground`} />
-                  <span className="text-[9px] uppercase tracking-[0.2em] text-stone-600">ready</span>
+                  <span className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/80">ready</span>
                 </>
               )}
             </div>
@@ -165,13 +165,13 @@ export default function CampaignDashboard() {
                 ? <>Interview day.<br /><span className="italic text-primary">You are ready.</span></>
                 : <><span className="italic text-primary">{daysLeft} days</span> to go.</>}
             </h1>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-stone-500">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 rounded-full ${ps.dot}`} /> {currentPhase} phase</span>
               <span className="flex items-center gap-1"><Flame className="h-3 w-3 text-primary" /> {doneDays} days done</span>
               {today && <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> ~{today.estMinutes} min today</span>}
             </div>
             {delta != null && delta !== 0 && (
-              <p className="text-xs text-stone-500 flex items-center gap-1.5">
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <TrendingUp className={cn('h-3 w-3', delta >= 0 ? 'text-primary' : 'text-primary')} />
                 readiness {delta >= 0 ? 'up' : 'down'} {Math.abs(delta)} pts since day one
               </p>
@@ -188,7 +188,7 @@ export default function CampaignDashboard() {
             </div>
             <div className="space-y-2">
               <h2 className={`${TYPE.h1} text-foreground`}>{today.title}</h2>
-              <p className="text-[15px] text-stone-300">
+              <p className="text-[15px] text-foreground/70">
                 The one thing: <span className="italic text-foreground">{today.oneThing}</span>
               </p>
             </div>
@@ -218,9 +218,9 @@ export default function CampaignDashboard() {
             <CheckCircle2 className="h-6 w-6 shrink-0" style={{ color: 'hsl(var(--primary))' }} />
             <div className="flex-1">
               <div className="font-medium text-sm text-foreground">Today's done — {today.title}</div>
-              <div className="text-xs text-stone-500 mt-0.5">{today.oneThing}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{today.oneThing}</div>
             </div>
-            <a href="/mock-interviews" className="text-xs text-stone-400 hover:text-primary underline underline-offset-4 shrink-0">bonus session</a>
+            <a href="/mock-interviews" className="text-xs text-muted-foreground hover:text-primary underline underline-offset-4 shrink-0">bonus session</a>
           </motion.section>
         )}
 
@@ -234,7 +234,7 @@ export default function CampaignDashboard() {
               <div className="space-y-4">
                 <div className={TYPE.eyebrow}>your campaign, ahead of you</div>
                 <PlanStrip days={campaign.days} />
-                <p className="text-[12px] text-stone-600 italic">
+                <p className="text-[12px] text-muted-foreground/80 italic">
                   This is the shape of the next {campaign.days.length} days. Your readiness line
                   starts drawing with your first session.
                 </p>
@@ -246,7 +246,7 @@ export default function CampaignDashboard() {
               <div className="space-y-4">
                 <div className="flex items-baseline justify-between">
                   <div className={TYPE.eyebrow}>readiness over the campaign</div>
-                  <div className="text-[11px] text-stone-500 tabular-nums">
+                  <div className="text-[11px] text-muted-foreground tabular-nums">
                     {graphs.arc[0].value} → {graphs.arc[graphs.arc.length - 1].value}
                   </div>
                 </div>
@@ -259,7 +259,7 @@ export default function CampaignDashboard() {
               <div className="space-y-4">
                 <div className="flex items-baseline justify-between">
                   <div className={TYPE.eyebrow}>recent sessions</div>
-                  <div className="text-[11px] text-stone-500">
+                  <div className="text-[11px] text-muted-foreground">
                     {stats?.avgScore ? `avg ${stats.avgScore}` : ''} {stats?.bestScore ? `· best ${stats.bestScore}` : ''}
                   </div>
                 </div>
@@ -278,7 +278,7 @@ export default function CampaignDashboard() {
                 ].map((s) => (
                   <div key={s.label} className="py-4 text-center space-y-1">
                     <div className={`${TYPE.num} text-2xl text-foreground`}>{s.val}</div>
-                    <div className="text-[9px] uppercase tracking-[0.2em] text-stone-600">{s.label}</div>
+                    <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/80">{s.label}</div>
                   </div>
                 ))}
               </div>
@@ -296,7 +296,7 @@ export default function CampaignDashboard() {
               <div className="space-y-4">
                 <div className={TYPE.eyebrow}>your campaign, ahead of you</div>
                 <PlanStrip days={campaign.days} />
-                <p className="text-[12px] text-stone-600 italic">
+                <p className="text-[12px] text-muted-foreground/80 italic">
                   This is the shape of the next {campaign.days.length} days. Your readiness line
                   starts drawing with your first session.
                 </p>
@@ -308,7 +308,7 @@ export default function CampaignDashboard() {
               <div className="space-y-4">
                 <div className="flex items-baseline justify-between">
                   <div className={TYPE.eyebrow}>readiness over the campaign</div>
-                  <div className="text-[11px] text-stone-500 tabular-nums">
+                  <div className="text-[11px] text-muted-foreground tabular-nums">
                     {graphs.arc[0].value} → {graphs.arc[graphs.arc.length - 1].value}
                   </div>
                 </div>
@@ -321,7 +321,7 @@ export default function CampaignDashboard() {
               <div className="space-y-4">
                 <div className="flex items-baseline justify-between">
                   <div className={TYPE.eyebrow}>recent sessions</div>
-                  <div className="text-[11px] text-stone-500">
+                  <div className="text-[11px] text-muted-foreground">
                     {stats?.avgScore ? `avg ${stats.avgScore}` : ''} {stats?.bestScore ? `· best ${stats.bestScore}` : ''}
                   </div>
                 </div>
@@ -340,7 +340,7 @@ export default function CampaignDashboard() {
                 ].map((s) => (
                   <div key={s.label} className="py-4 text-center space-y-1">
                     <div className={`${TYPE.num} text-2xl text-foreground`}>{s.val}</div>
-                    <div className="text-[9px] uppercase tracking-[0.2em] text-stone-600">{s.label}</div>
+                    <div className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/80">{s.label}</div>
                   </div>
                 ))}
               </div>
@@ -362,19 +362,19 @@ export default function CampaignDashboard() {
                     : isToday ? 'border-border'
                     : 'border-border'
                 )}>
-                  <span className="text-[10px] uppercase tracking-widest text-stone-600">
+                  <span className="text-[10px] uppercase tracking-widest text-muted-foreground/80">
                     {new Date(d.date).toLocaleDateString('en-IN', { weekday: 'narrow' })}
                   </span>
                   <Icon className={cn('h-4 w-4',
-                    d.status === 'completed' ? 'text-primary' : isToday ? 'text-primary' : 'text-stone-600')} />
-                  <span className="text-[8px] text-stone-700 capitalize text-center leading-tight w-full truncate">
+                    d.status === 'completed' ? 'text-primary' : isToday ? 'text-primary' : 'text-muted-foreground/80')} />
+                  <span className="text-[8px] text-muted-foreground/60 capitalize text-center leading-tight w-full truncate">
                     {d.dayType.replace(/-/g, ' ')}
                   </span>
                 </div>
               );
             })}
           </div>
-          <p className="text-[12px] text-stone-600 italic">
+          <p className="text-[12px] text-muted-foreground/80 italic">
             Rest days are part of the plan — spacing consolidates more than cramming.
           </p>
         </section>
@@ -383,7 +383,7 @@ export default function CampaignDashboard() {
         <section className={`${RULE} pt-8 space-y-5`}>
           <div className="flex items-center justify-between">
             <div className={TYPE.eyebrow}>the journey</div>
-            <Link href={`/offer-ready/certificate/${campaign.id}`} className="text-xs text-stone-400 hover:text-primary transition-colors flex items-center gap-1.5">
+            <Link href={`/offer-ready/certificate/${campaign.id}`} className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5">
               <Trophy className="h-3 w-3" /> certificate
             </Link>
           </div>
@@ -397,8 +397,8 @@ export default function CampaignDashboard() {
               return (
                 <div key={p} className="space-y-2">
                   <div className={cn('h-0.5', complete ? 'bg-primary' : isCurrent ? s.dot : 'bg-primary')} />
-                  <div className={cn('text-[10px] capitalize', isCurrent ? s.text : 'text-stone-600')}>{p}</div>
-                  <div className="text-[9px] text-stone-700">{done}/{total}</div>
+                  <div className={cn('text-[10px] capitalize', isCurrent ? s.text : 'text-muted-foreground/80')}>{p}</div>
+                  <div className="text-[9px] text-muted-foreground/60">{done}/{total}</div>
                 </div>
               );
             })}
@@ -485,7 +485,7 @@ function ArcChart({ data }: { data: { ts: number; value: number }[] }) {
         />
         {/* point ticks */}
         {pts.map((p, i) => (
-          <motion.circle key={i} cx={p[0]} cy={p[1]} r="2.5" fill="#121110" stroke="hsl(var(--primary))" strokeWidth="1.5"
+          <motion.circle key={i} cx={p[0]} cy={p[1]} r="2.5" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1.5"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 + i * 0.08 }} />
         ))}
         {/* last value emphasis */}

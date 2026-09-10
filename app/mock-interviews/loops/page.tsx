@@ -68,21 +68,21 @@ export default function LoopsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#121110] text-[#f5f1e8]">
+    <div className="min-h-screen bg-background text-foreground">
       <main className="max-w-3xl mx-auto px-4 py-10 space-y-6">
         <header className="text-center space-y-3 pt-4">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30 flex items-center justify-center">
+          <div className="mx-auto h-16 w-16 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30 flex items-center justify-center">
             <Building2 className="h-7 w-7 text-blue-400" />
           </div>
-          <h1 className="text-2xl font-black">Company Loops</h1>
-          <p className="text-sm text-stone-400 max-w-lg mx-auto">
+          <h1 className="text-2xl font-semibold">Company Loops</h1>
+          <p className="text-sm text-muted-foreground max-w-lg mx-auto">
             Full interview-loop simulators — the real round structure, personas,
             and pacing. Plan a rehearsal ending the day before your actual interview.
           </p>
         </header>
 
         {error && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200 flex items-start gap-2">
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200 flex items-start gap-2">
             <Crown className="h-4 w-4 mt-0.5 shrink-0" /> {error}
             <a href="/pricing" className="underline ml-1 shrink-0">See plans</a>
           </div>
@@ -95,24 +95,24 @@ export default function LoopsPage() {
               key={l.id}
               onClick={() => { setSel(l.id); setSched(null); }}
               className={cn(
-                'rounded-2xl border p-5 text-left space-y-3 transition',
-                sel === l.id ? 'border-[#e8a33d]/50 bg-[#e8a33d]/10' : 'border-[#26241f] bg-[#141311] hover:bg-[#1a1917]'
+                'rounded-lg border p-5 text-left space-y-3 transition',
+                sel === l.id ? 'border-border/50 bg-primary/10' : 'border-border bg-surface hover:bg-muted'
               )}
             >
               <div className="flex items-center justify-between">
                 <h3 className="font-bold">{l.name}</h3>
-                {l.plan === 'interview_pro' && <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#c08a5a]/20 text-[#d4a778]">PRO</span>}
+                {l.plan === 'interview_pro' && <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">PRO</span>}
               </div>
-              <p className="text-xs text-stone-400">{l.tagline}</p>
+              <p className="text-xs text-muted-foreground">{l.tagline}</p>
               <div className="space-y-1">
                 {l.rounds.map((r) => (
-                  <div key={r.label} className="flex items-center gap-2 text-[11px] text-stone-300">
+                  <div key={r.label} className="flex items-center gap-2 text-[11px] text-foreground/70">
                     <span className="w-1 h-1 rounded-full bg-blue-400" /> {r.label}
-                    <span className="text-stone-600 ml-auto">{r.minutes}m</span>
+                    <span className="text-muted-foreground/80 ml-auto">{r.minutes}m</span>
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-stone-600 italic">{l.emphasis}</p>
+              <p className="text-[10px] text-muted-foreground/80 italic">{l.emphasis}</p>
             </button>
           ))}
         </div>
@@ -120,7 +120,7 @@ export default function LoopsPage() {
         {/* rehearsal planner */}
         {sel && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            className="rounded-2xl border border-[#26241f] bg-[#141311] p-5 space-y-4">
+            className="rounded-lg border border-border bg-surface p-5 space-y-4">
             <div className="font-semibold flex items-center gap-2">
               <CalendarClock className="h-4 w-4 text-blue-400" /> Day-before rehearsal planner
             </div>
@@ -129,7 +129,7 @@ export default function LoopsPage() {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="flex-1 rounded-xl bg-[#100f0d] border border-[#26241f] px-3 py-2.5 text-sm"
+                className="flex-1 rounded-lg bg-background border border-border px-3 py-2.5 text-sm"
               />
               <Button onClick={planRehearsal} disabled={!date || busy} className="gap-2">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calendar className="h-4 w-4" />}
@@ -139,32 +139,32 @@ export default function LoopsPage() {
 
             {sched && (
               <div className="space-y-3 pt-2">
-                <p className="text-xs text-stone-400">
+                <p className="text-xs text-muted-foreground">
                   {sched.loopName} · interview on {sched.interviewDate} · {sched.note}
                 </p>
                 {sched.days.map((d) => (
-                  <div key={d.date} className="rounded-xl bg-[#100f0d] border border-[#26241f] p-4">
+                  <div key={d.date} className="rounded-lg bg-background border border-border p-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-semibold">{d.label}</span>
-                      <span className="text-[11px] text-stone-600">{d.minutes} min total</span>
+                      <span className="text-[11px] text-muted-foreground/80">{d.minutes} min total</span>
                     </div>
                     <div className="space-y-2">
                       {d.rounds.map((r) => (
                         <a
                           key={r.label}
                           href={`/mock-interviews/audio?mode=${r.mode}&preset=${r.minutes <= 20 ? 'quick' : r.minutes <= 30 ? 'standard' : 'deep'}&domain=`}
-                          className="flex items-center gap-3 rounded-lg bg-[#141311] hover:bg-[#1a1917] px-3 py-2.5 transition"
+                          className="flex items-center gap-3 rounded-lg bg-surface hover:bg-muted px-3 py-2.5 transition"
                         >
                           <Play className="h-3.5 w-3.5 text-blue-400 shrink-0" />
                           <span className="text-sm flex-1">{r.label}</span>
-                          <span className="text-[11px] text-stone-600 capitalize">{r.mode} · {r.minutes}m</span>
-                          <ArrowRight className="h-3.5 w-3.5 text-stone-600" />
+                          <span className="text-[11px] text-muted-foreground/80 capitalize">{r.mode} · {r.minutes}m</span>
+                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/80" />
                         </a>
                       ))}
                     </div>
                   </div>
                 ))}
-                <p className="text-[11px] text-stone-600 italic">{sched.emphasis}</p>
+                <p className="text-[11px] text-muted-foreground/80 italic">{sched.emphasis}</p>
               </div>
             )}
           </motion.div>

@@ -90,7 +90,7 @@ export default function PremiumMockPage() {
   const [mode, setMode] = useState(modeParam && ['mixed', 'technical', 'behavioral', 'coding'].includes(modeParam) ? modeParam : 'technical');
   const [domain, setDomain] = useState(domainSlug || 'ruby-backend-fresher');
   const [tier, setTier] = useState(Number(searchParams?.get('tier')) || 2);
-  const [personaChoice, setPersonaChoice] = useState<string | null>(PERSONAS[personaParam ?? ''] ? personaParam : null);
+  const [personaChoice, setPersonaChoice] = useState<string>(personaParam && PERSONAS[personaParam] ? personaParam : 'skeptic');
   const countParam = Number(searchParams?.get('count')) || 0;
 
   // session
@@ -115,6 +115,7 @@ export default function PremiumMockPage() {
   const [muted, setMuted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [rubricChecks, setRubricChecks] = useState<boolean[]>([]);
+  const [showMorePersonas, setShowMorePersonas] = useState(false);
 
   // answer + flow state
   const [code, setCode] = useState('');
@@ -422,10 +423,26 @@ export default function PremiumMockPage() {
             </div>
           </SetupSection>
 
-          {/* step 3: interviewer */}
+          {/* step 3: interviewer — 3 visible, the rest behind 'more' */}
           <SetupSection title="3 · Your interviewer">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {Object.values(PERSONAS).map((p) => (
+              {Object.values(PERSONAS).filter((p) => ['skeptic', 'mentor', 'rapid'].includes(p.id)).map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setPersonaChoice(p.id)}
+                  className={`rounded-lg border p-3 text-left transition-all ${personaChoice === p.id ? 'border-foreground/50 bg-muted ring-1 ring-foreground/20' : 'border-border bg-surface hover:bg-muted'}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${personaChoice === p.id ? 'bg-foreground text-background' : 'bg-muted text-foreground'}`}>{p.name[0]}</span>
+                    <div>
+                      <div className="text-sm font-semibold">{p.name}</div>
+                      <div className="text-caption text-muted-foreground">{p.role}</div>
+                    </div>
+                  </div>
+                  <div className="mt-1.5 text-caption italic text-muted-foreground">{p.vibe}</div>
+                </button>
+              ))}
+              {showMorePersonas && Object.values(PERSONAS).filter((p) => !['skeptic', 'mentor', 'rapid'].includes(p.id)).map((p) => (
                 <button
                   key={p.id}
                   onClick={() => setPersonaChoice(p.id)}
@@ -442,6 +459,12 @@ export default function PremiumMockPage() {
                 </button>
               ))}
             </div>
+            <button
+              onClick={() => setShowMorePersonas((v) => !v)}
+              className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              {showMorePersonas ? 'Fewer interviewers' : 'More interviewers (architect, detail, panel)'}
+            </button>
           </SetupSection>
 
           <button

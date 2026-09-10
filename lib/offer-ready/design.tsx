@@ -1,77 +1,69 @@
 /**
  * offer-ready/design.tsx — the Offer Ready design system.
  *
- * Editorial premium: warm ivory + amber on deep charcoal, serif display
- * type, hairline rules, flat surfaces. No gradients-as-decoration, no glows,
- * no neon. Feels made by a person with taste, not generated.
+ * Restructured onto the platform's DESIGN TOKENS (the same system the
+ * product shell and interview room use). The editorial voice stays —
+ * serif display type for headlines and numbers, hairline rules, flat
+ * surfaces, one accent used sparingly — but every color now resolves
+ * through CSS variables so the surfaces work in both themes and match
+ * the rest of the product.
+ *
+ * Discipline (Linear/Stripe/Vercel):
+ *   - quiet chrome: type weight carries hierarchy
+ *   - color = meaning: primary is the ONE accent (CTA, today, readiness)
+ *   - sizes: text-sm body, text-lg/2xl headings, tabular-nums everywhere
  */
 
 // ---------- type ----------
 
-/** Editorial display: warm serif for headlines + numbers — the human signal. */
+/** Editorial display: serif for headlines + numbers — the human signal. */
 export const TYPE = {
-  display: 'font-[family-name:var(--font-fraunces)] font-medium tracking-tight leading-[1.05]',
-  displayLg: 'font-[family-name:var(--font-fraunces)] font-medium tracking-tight leading-[1.02] text-4xl sm:text-5xl lg:text-6xl',
-  h1: 'font-[family-name:var(--font-fraunces)] font-medium tracking-tight text-2xl sm:text-3xl',
-  h2: 'font-[family-name:var(--font-fraunces)] font-medium tracking-tight text-lg',
-  num: 'font-[family-name:var(--font-fraunces)] font-medium tabular-nums',
-  eyebrow: 'text-[11px] font-medium uppercase tracking-[0.18em] text-stone-500',
-  lead: 'text-stone-400 leading-relaxed',
-};
-
-// ---------- color ----------
-// palette: warm charcoal (not blue-slate), ivory text, amber accent, muted phase tones
-
-export const INK = {
-  bg: '#121110',        // warm charcoal
-  surface: 'rgba(255,252,245,0.025)',
-  hairline: 'rgba(255,252,245,0.09)',
-  text: '#f5f1e8',      // warm ivory
-  dim: '#a8a29e',
-  faint: '#78716c',
-  accent: '#d97706',    // warm amber — used sparingly
+  display: 'font-[family-name:var(--font-fraunces)] font-medium tracking-tight leading-[1.05] text-foreground',
+  displayLg: 'font-[family-name:var(--font-fraunces)] font-medium tracking-tight leading-[1.05] text-2xl sm:text-3xl lg:text-4xl text-foreground',
+  h1: 'font-[family-name:var(--font-fraunces)] font-medium tracking-tight text-xl sm:text-2xl text-foreground',
+  h2: 'font-medium tracking-tight text-base text-foreground',
+  num: 'font-medium tabular-nums tracking-tight',
+  eyebrow: 'text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground',
+  lead: 'text-sm leading-relaxed text-muted-foreground',
 };
 
 // ---------- surfaces ----------
 
 /** Flat, quiet surfaces. Hairline borders. No glass, no blur, no glow. */
 export const SURFACE = {
-  card: 'bg-[#161513] border border-[#26241f]',
-  cardHover: 'hover:border-[#3a362e] transition-colors duration-200',
-  inset: 'bg-[#100f0d] border border-[#1f1d18]',
-  hero: 'bg-[#141311] border border-[#26241f]',
+  card: 'bg-surface border border-border',
+  cardHover: 'hover:bg-muted/60 transition-colors duration-200',
+  inset: 'bg-background border border-border',
+  hero: 'bg-surface border border-border',
 };
 
 /** Section rule: the editorial hairline that structures the page. */
-export const RULE = 'border-t border-[#26241f]';
+export const RULE = 'border-t border-border';
 
 // ---------- phases ----------
-// muted, natural tones — olive / slate-blue / clay / plum-brown. No neon.
+// Status colors ONLY (Vercel discipline): each phase means something.
 
 export const PHASE_STYLE: Record<string, { text: string; border: string; bg: string; dot: string }> = {
-  foundation: { text: 'text-[#7d9a6b]', border: 'border-[#3d4a34]', bg: 'bg-[#161a13]', dot: 'bg-[#7d9a6b]' },
-  depth: { text: 'text-[#7a93ad]', border: 'border-[#33404d]', bg: 'bg-[#131820]', dot: 'bg-[#7a93ad]' },
-  pressure: { text: 'text-[#c08a5a]', border: 'border-[#4d3a28]', bg: 'bg-[#1a1510]', dot: 'bg-[#c08a5a]' },
-  rehearsal: { text: 'text-[#a98ba3]', border: 'border-[#463643]', bg: 'bg-[#181318]', dot: 'bg-[#a98ba3]' },
+  foundation: { text: 'text-emerald-700', border: 'border-emerald-600/40', bg: 'bg-emerald-500/[0.06]', dot: 'bg-emerald-600' },
+  depth: { text: 'text-primary', border: 'border-primary/40', bg: 'bg-primary/[0.05]', dot: 'bg-primary' },
+  pressure: { text: 'text-amber-700', border: 'border-amber-500/40', bg: 'bg-amber-500/[0.06]', dot: 'bg-amber-500' },
+  rehearsal: { text: 'text-muted-foreground', border: 'border-border', bg: 'bg-muted/50', dot: 'bg-muted-foreground' },
 };
 
 // ---------- accent ----------
-// one warm accent, used sparingly: CTAs + "today" + readiness number.
+// one accent, used sparingly: CTAs + "today" + readiness number.
 
 export const CTA =
-  'bg-[#e8a33d] text-[#1a1408] font-semibold hover:bg-[#f0b355] transition-colors duration-200';
+  'bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity duration-200';
 
-export const CTA_QUIET = 'border border-[#3a362e] text-stone-300 hover:border-[#55503f] hover:text-stone-100 transition-colors duration-200';
+export const CTA_QUIET =
+  'border border-border bg-surface text-foreground hover:bg-muted transition-colors duration-200';
 
 // ---------- shell ----------
 
-export const SHELL = 'min-h-screen bg-[#121110] text-[#f5f1e8] relative';
+export const SHELL = 'min-h-[calc(100vh-3.5rem)] bg-background text-foreground relative';
 
-/** Quiet ambient: a single warm light from the top. No colored blobs. */
+/** Quiet ambient: nothing. Color belongs to meaning; the shell is calm. */
 export function Ambient() {
-  return (
-    <div aria-hidden className="pointer-events-none fixed inset-0">
-      <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(ellipse_60%_100%_at_50%_0%,rgba(232,163,61,0.05),transparent)]" />
-    </div>
-  );
+  return null;
 }
