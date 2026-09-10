@@ -38,6 +38,62 @@ const TOUGH_LABEL = (t: number) =>
 
 const MODE_ICON: Record<string, any> = { coding: Code2, technical: Brain, behavioral: MessageSquare, mixed: Swords };
 
+/** Deterministic brand mark: two-letter monogram on a stable per-company hue.
+ *  No scraped/fake logos — a letterform chip is honest and never broken. */
+function companyMark(name: string) {
+  const letters = name.replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean);
+  const mono = (letters.length >= 2 ? letters[0][0] + letters[1][0] : name.slice(0, 2)).toUpperCase();
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  const hues = [212, 262, 291, 340, 16, 38, 150, 180, 205, 260];
+  const hue = hues[hash % hues.length];
+  return { mono, hue };
+}
+
+const ARCHETYPE_ICON: Record<string, any> = {
+  'Big Tech SWE Loop': Building2,
+  'Backend Service Loop': Code2,
+  'Product Engineering Loop': MessageSquare,
+  'Hardware/Embedded Loop': Brain,
+};
+
+/** Round blueprint for the detail popup — what each round tests, by archetype. */
+function ROUND_BLUEPRINT(archetypeName: string, level: string): { label: string; mode: string; minutes: number; tests: string }[] {
+  const lvl = level === 'intermediate' ? 'intermediate' : 'fresher';
+  const base: Record<string, { label: string; mode: string; minutes: number; tests: string }[]> = {
+    'Big Tech SWE Loop': [
+      { label: 'Coding screen', mode: 'coding', minutes: 45, tests: 'DSA problems — code the approach, then defend complexity' },
+      { label: 'DSA deep-dive', mode: 'coding', minutes: 45, tests: 'Harder problem with optimization follow-ups and dry-run debate' },
+      { label: 'CS fundamentals', mode: 'technical', minutes: 30, tests: 'OS, DBMS, networks — the conceptual base under the code' },
+      { label: 'System design', mode: 'technical', minutes: 30, tests: lvl === 'intermediate' ? 'Scalable architecture with trade-off defence' : 'Design thinking at component level' },
+      { label: 'Behavioral + values', mode: 'behavioral', minutes: 30, tests: 'STAR stories with metrics — collaboration under pressure' },
+    ],
+    'Backend Service Loop': [
+      { label: 'Language fundamentals', mode: 'technical', minutes: 30, tests: 'Core language mechanics and idioms for the stack' },
+      { label: 'Coding round', mode: 'coding', minutes: 45, tests: 'Working code against a service-shaped problem' },
+      { label: 'System design', mode: 'technical', minutes: 40, tests: 'APIs, data models, queues — a service that survives load' },
+      { label: 'Behavioral', mode: 'behavioral', minutes: 30, tests: 'Ownership stories, conflict handling, metrics' },
+    ],
+    'Product Engineering Loop': [
+      { label: 'DSA screen', mode: 'coding', minutes: 45, tests: 'Algorithms with a product-flavored twist' },
+      { label: 'Machine coding', mode: 'coding', minutes: 60, tests: 'Build a working feature end-to-end — code quality graded' },
+      { label: 'System design', mode: 'technical', minutes: 40, tests: 'Feature architecture with user-scale trade-offs' },
+      { label: 'Hiring manager', mode: 'behavioral', minutes: 30, tests: 'Product thinking and cross-team collaboration stories' },
+    ],
+    'Hardware/Embedded Loop': [
+      { label: 'C/embedded coding', mode: 'coding', minutes: 45, tests: 'Low-level code with memory and constraint awareness' },
+      { label: 'Domain depth', mode: 'technical', minutes: 40, tests: 'Architecture, buses, or signal fundamentals for the domain' },
+      { label: 'System design', mode: 'technical', minutes: 35, tests: 'Hardware/software boundary decisions' },
+      { label: 'Behavioral', mode: 'behavioral', minutes: 25, tests: 'Debugging war stories with outcomes' },
+    ],
+  };
+  return base[archetypeName] ?? [
+    { label: 'Technical round', mode: 'technical', minutes: 35, tests: 'Adaptive Q&A with follow-up probes' },
+    { label: 'Coding round', mode: 'coding', minutes: 45, tests: 'Real problem with complexity defence' },
+    { label: 'Behavioral round', mode: 'behavioral', minutes: 30, tests: 'STAR-tracked storytelling' },
+  ];
+}
+
 export default function CompanyLoopPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [level, setLevel] = useState<'fresher' | 'intermediate'>('fresher');
@@ -47,6 +103,11 @@ export default function CompanyLoopPage() {
   const [roundState, setRoundState] = useState<'brief' | 'live' | 'verdict'>('brief');
   const [roundScores, setRoundScores] = useState<Record<number, number>>({});
   const [selfScore, setSelfScore] = useState<number | null>(null);
+  // discovery pattern: inspect-first (popup), start-second; progressive reveal
+  const [detail, setDetail] = useState<Company | null>(null);
+  const [archetypeFilter, setArchetypeFilter] = useState<string>('all');
+  const [visibleCount, setVisibleCount] = useState(12);
+  const [allArchetypes, setAllArchetypes] = useState<string[]>([]);
 
   // camera
   const [camStream, setCamStream] = useState<MediaStream | null>(null);
@@ -57,11 +118,22 @@ export default function CompanyLoopPage() {
     const t = setTimeout(() => {
       fetch(`/api/engine/company-loop?level=${level}${search ? `&search=${encodeURIComponent(search)}` : ''}`)
         .then((r) => r.json())
-        .then((d) => setCompanies(d.companies ?? []))
+        .then((d) => {
+          const list: Company[] = d.companies ?? [];
+          setCompanies(list);
+          const arch = [...new Set(list.map((c) => c.archetypeName))].sort();
+          setAllArchetypes(arch);
+        })
         .catch(() => {});
     }, 250);
     return () => clearTimeout(t);
   }, [level, search]);
+
+  useEffect(() => { setVisibleCount(12); }, [level, search, archetypeFilter]);
+
+  const filteredCompanies = (archetypeFilter === 'all'
+    ? companies
+    : companies.filter((c) => c.archetypeName === archetypeFilter));
 
   const openLoop = async (companyId: string) => {
     const res = await fetch(`/api/engine/company-loop?company=${companyId}&level=${level}`);
@@ -186,31 +258,186 @@ export default function CompanyLoopPage() {
           </div>
         </div>
 
-        {/* company grid */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {companies.map((c) => (
-            <button key={c.id} onClick={() => openLoop(c.id)}
-              className="rounded-lg border border-border bg-surface hover:bg-primary hover:border-violet-400/40 p-4 text-left space-y-2 transition group">
-              <div className="flex items-start justify-between gap-2">
-                <span className="font-bold text-sm">{c.name}</span>
-                <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0',
-                  c.toughness >= 1.3 ? 'bg-rose-500/20 text-rose-300' :
-                  c.toughness >= 1.15 ? 'bg-primary/20 text-primary' :
-                  c.toughness >= 1.0 ? 'bg-primary/10 text-primary' : 'bg-primary/15 text-primary')}>
-                  {TOUGH_LABEL(c.toughness)}
-                </span>
-              </div>
-              <div className="text-[11px] text-muted-foreground">{c.archetypeName}</div>
-              <div className="text-[11px] text-muted-foreground/80 leading-snug">{c.note}</div>
-              <div className="flex items-center gap-3 text-[10px] text-muted-foreground/80 pt-1">
-                <span className="flex items-center gap-1"><Video className="h-3 w-3" /> {c.roundCount[level] ?? c.roundCount.fresher} rounds</span>
-                <span className="ml-auto flex items-center gap-1 text-violet-300/70 group-hover:text-violet-300">
-                  run the loop <ChevronRight className="h-3 w-3" />
-                </span>
-              </div>
+        {/* archetype filter — pills, one active */}
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setArchetypeFilter('all')}
+            className={cn('rounded-full border px-3 py-1 text-xs transition-colors',
+              archetypeFilter === 'all' ? 'border-foreground/40 bg-muted font-medium text-foreground' : 'border-border bg-surface text-muted-foreground hover:bg-muted')}
+          >
+            All styles
+          </button>
+          {allArchetypes.map((a) => (
+            <button
+              key={a}
+              onClick={() => setArchetypeFilter(a)}
+              className={cn('rounded-full border px-3 py-1 text-xs transition-colors',
+                archetypeFilter === a ? 'border-foreground/40 bg-muted font-medium text-foreground' : 'border-border bg-surface text-muted-foreground hover:bg-muted')}
+            >
+              {a.replace(' Loop', '')}
             </button>
           ))}
         </div>
+
+        {/* company grid — 3 per row with breathing space; inspect-first cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredCompanies.slice(0, visibleCount).map((c) => {
+            const mark = companyMark(c.name);
+            const ArchIcon = ARCHETYPE_ICON[c.archetypeName] ?? Building2;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setDetail(c)}
+                className="group rounded-lg border border-border bg-surface p-4 text-left transition-colors hover:border-foreground/25 hover:bg-muted/50"
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-semibold"
+                    style={{ backgroundColor: `hsl(${mark.hue} 45% 94%)`, color: `hsl(${mark.hue} 45% 30%)` }}
+                  >
+                    {mark.mono}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium text-foreground">{c.name}</span>
+                      <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
+                        c.toughness >= 1.3 ? 'bg-rose-500/10 text-rose-600'
+                        : c.toughness >= 1.15 ? 'bg-amber-500/10 text-amber-700'
+                        : 'bg-emerald-500/10 text-emerald-700')}>
+                        {TOUGH_LABEL(c.toughness)}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                      <ArchIcon className="h-3 w-3" />
+                      <span className="truncate">{c.archetypeName.replace(' Loop', '')}</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{c.note}</p>
+                <div className="mt-3 flex items-center gap-3 border-t border-border/60 pt-2.5 text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><Video className="h-3 w-3" /> {c.roundCount[level] ?? c.roundCount.fresher} rounds</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> ~{((c.roundCount[level] ?? 4) * 35)}m</span>
+                  <span className="ml-auto flex items-center gap-0.5 font-medium text-foreground/80 group-hover:text-foreground">
+                    View rounds <ChevronRight className="h-3 w-3" />
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {filteredCompanies.length > visibleCount && (
+          <div className="flex justify-center">
+            <button
+              onClick={() => setVisibleCount((v) => v + 12)}
+              className="rounded-md border border-border bg-surface px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              Show {Math.min(12, filteredCompanies.length - visibleCount)} more of {filteredCompanies.length}
+            </button>
+          </div>
+        )}
+
+        {filteredCompanies.length === 0 && (
+          <div className="rounded-lg border border-border bg-surface p-8 text-center text-sm text-muted-foreground">
+            No companies match this filter — try another style or clear the search.
+          </div>
+        )}
+
+        {/* ============ detail popup — inspect first, start second ============ */}
+        <AnimatePresence>
+          {detail && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+              onClick={() => setDetail(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.97, y: 8 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.97, y: 8 }}
+                className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-label={`${detail.name} interview loop details`}
+              >
+                {(() => {
+                  const mark = companyMark(detail.name);
+                  const rounds = detail.roundCount[level] ?? detail.roundCount.fresher;
+                  return (
+                    <>
+                      <div className="flex items-start gap-3 border-b border-border p-5">
+                        <span
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-base font-semibold"
+                          style={{ backgroundColor: `hsl(${mark.hue} 45% 92%)`, color: `hsl(${mark.hue} 45% 28%)` }}
+                        >
+                          {mark.mono}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h2 className="text-lg font-semibold tracking-tight text-foreground">{detail.name}</h2>
+                          <div className="text-sm text-muted-foreground">{detail.archetypeName} · {level}</div>
+                        </div>
+                        <button onClick={() => setDetail(null)} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close details">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-4 p-5">
+                        <p className="text-sm leading-relaxed text-muted-foreground">{detail.note}</p>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="rounded-lg border border-border bg-background p-3">
+                            <div className="text-lg font-semibold tabular-nums text-foreground">{rounds}</div>
+                            <div className="text-[11px] text-muted-foreground">rounds</div>
+                          </div>
+                          <div className="rounded-lg border border-border bg-background p-3">
+                            <div className="text-lg font-semibold tabular-nums text-foreground">~{rounds * 35}m</div>
+                            <div className="text-[11px] text-muted-foreground">total time</div>
+                          </div>
+                          <div className="rounded-lg border border-border bg-background p-3">
+                            <div className="text-lg font-semibold text-foreground">{TOUGH_LABEL(detail.toughness)}</div>
+                            <div className="text-[11px] text-muted-foreground">pressure</div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                            What the rounds test
+                          </div>
+                          <div className="space-y-2">
+                            {ROUND_BLUEPRINT(detail.archetypeName, level).map((r, i) => {
+                              const Icon = MODE_ICON[r.mode] ?? Brain;
+                              return (
+                                <div key={i} className="flex items-start gap-2.5 rounded-lg border border-border bg-background p-2.5">
+                                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted">
+                                    <Icon className="h-3 w-3 text-foreground" />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium text-foreground">{r.label}</div>
+                                    <div className="text-xs text-muted-foreground">{r.tests}</div>
+                                  </div>
+                                  <span className="ml-auto shrink-0 text-[11px] tabular-nums text-muted-foreground">{r.minutes}m</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => { openLoop(detail.id); setDetail(null); }}
+                          className="flex w-full items-center justify-center gap-2 rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                        >
+                          <Play className="h-4 w-4" /> Start {detail.name} loop
+                        </button>
+                        <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+                          Representative practice sequence modeled on {detail.archetypeName.replace(' Loop', '')} patterns —
+                          verify current processes on the company&apos;s official careers page.
+                        </p>
+                      </div>
+                    </>
+                  );
+                })()}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </Shell>
     );
   }

@@ -280,11 +280,35 @@ export function MockInterviewStudio() {
 
   return (
     <div className="min-h-screen bg-studio-canvas text-foreground">
-      <div className="mx-auto w-full max-w-[1520px] px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
+      <div className="mx-auto w-full max-w-[1720px] px-3 py-4 sm:px-5 lg:px-6 lg:py-5">
         <StudioHeader recentSession={recentSession} />
 
-        <div className="mt-5 grid items-start gap-4 lg:grid-cols-[minmax(20rem,.9fr)_minmax(28rem,1.1fr)] xl:grid-cols-[minmax(20rem,1fr)_minmax(29rem,34rem)_minmax(20rem,1fr)]">
-          <aside className="overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-b from-primary/[0.055] via-surface to-surface shadow-[0_20px_50px_-42px_rgba(24,73,140,.65)]" aria-labelledby="role-round-title">
+        {/* capability band — what you can do here, at a glance */}
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Capability
+            icon={<Waves className="h-4 w-4" />}
+            title="Adaptive rounds"
+            copy="Follow-up probes based on your answers — not a fixed question list."
+          />
+          <Capability
+            icon={<Braces className="h-4 w-4" />}
+            title="Real coding rounds"
+            copy="DSA problems with statements, examples and an editor — defend your complexity."
+          />
+          <Capability
+            icon={<ShieldCheck className="h-4 w-4" />}
+            title="Evidence reports"
+            copy="Every score tied to the rubric — replay your answers, see what you missed."
+          />
+          <Capability
+            icon={<Building2 className="h-4 w-4" />}
+            title="Company loops"
+            copy="Multi-round sequences for 98 companies, grounded in public sources."
+          />
+        </div>
+
+        <div className="mt-5 grid items-stretch gap-4 lg:grid-cols-[minmax(20rem,.9fr)_minmax(28rem,1.1fr)] xl:grid-cols-[minmax(20rem,1fr)_minmax(29rem,34rem)_minmax(20rem,1fr)]">
+          <aside className="flex flex-col overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-b from-primary/[0.055] via-surface to-surface shadow-[0_20px_50px_-42px_rgba(24,73,140,.65)]" aria-labelledby="role-round-title">
             <PanelHeading
               eyebrow="01 · Interview shape"
               title="Choose what to practise"
@@ -330,7 +354,7 @@ export function MockInterviewStudio() {
             </div>
           </aside>
 
-          <main className="min-w-0 lg:sticky lg:top-4">
+          <main className="min-w-0">
             <section className="overflow-hidden rounded-2xl border border-studio-elevated bg-studio text-content-inverse shadow-[0_30px_70px_-38px_rgba(8,24,52,.9)]" aria-labelledby="equipment-check-title">
               <div className="border-b border-content-inverse/10 bg-content-inverse/[0.035] px-5 py-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -471,11 +495,20 @@ export function MockInterviewStudio() {
           </aside>
         </div>
 
-        <footer className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border px-1 pt-3 text-xs text-content-muted">
-          <span>1,688 mock-ready questions</span>
-          <span>796 concepts</span>
-          <span>507 DSA problems</span>
-          <Link href="/mock-interviews/company" className="ml-auto inline-flex items-center gap-1.5 font-medium text-content-secondary hover:text-primary">Company loops · 98 companies <ChevronRight className="h-3.5 w-3.5" /></Link>
+        {/* footer — real detail: how scoring works, where data lives, what's free */}
+        <footer className="mt-5 grid gap-4 border-t border-border pt-4 text-xs text-content-muted lg:grid-cols-3">
+          <div>
+            <div className="mb-1.5 font-medium text-foreground">How scoring works</div>
+            <p className="leading-relaxed">Every answer is checked against the authored expert rubric for that question — concept coverage, depth and structure. No black-box AI judge; every point in your report is traceable to the rubric.</p>
+          </div>
+          <div>
+            <div className="mb-1.5 font-medium text-foreground">Your data</div>
+            <p className="leading-relaxed">Sessions, reports and mastery live in your browser and sync to your account when signed in. Nothing is shared; deleting a session removes its report.</p>
+          </div>
+          <div>
+            <div className="mb-1.5 font-medium text-foreground">Free vs Interview Pass</div>
+            <p className="leading-relaxed">Quick, rapid, DSA and behavioral rounds are free. Pass unlocks longer sessions, specialist interviewers and company loops. Corpus: 1,688 questions · 796 concepts · 507 DSA problems.</p>
+          </div>
         </footer>
       </div>
     </div>
@@ -496,6 +529,19 @@ function StudioHeader({ recentSession }: { recentSession: RecentSession | null }
         {recentSession?.sessionId && <Link href={`/mock-interviews/results?session=${encodeURIComponent(recentSession.sessionId)}`} className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-primary hover:bg-primary/5">Latest report <ArrowRight className="h-4 w-4" /></Link>}
       </nav>
     </header>
+  );
+}
+
+/** Capability chip: mid-size text, one idea per card. */
+function Capability({ icon, title, copy }: { icon: React.ReactNode; title: string; copy: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">{icon}</span>
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-foreground">{title}</div>
+        <p className="mt-0.5 text-[13px] leading-relaxed text-content-secondary">{copy}</p>
+      </div>
+    </div>
   );
 }
 
