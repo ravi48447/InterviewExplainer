@@ -23,9 +23,24 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const id = url.searchParams.get('id');
   if (url.searchParams.get('preview')) {
-    // free preview: 3 days, no persistence
-    const in7 = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
-    const c = generateCampaign({ interviewDate: in7, level: 'fresher', domains: ['ruby-backend-fresher'], minutesPerDay: 30, daysPerWeek: 5, campaignDays: 3 });
+    // free preview: 3 days, no persistence — but it must represent the
+    // wizard's actual selections (date, level, domains, capacity), not a
+    // hardcoded default target.
+    const wizardDate = url.searchParams.get('interviewDate');
+    const wizardLevel = url.searchParams.get('level') === 'intermediate' ? 'intermediate' : 'fresher';
+    const wizardDomains = (url.searchParams.get('domains') ?? '')
+      .split(',')
+      .map((d) => d.trim())
+      .filter(Boolean);
+    const wizardMinutes = Math.min(Math.max(Number(url.searchParams.get('minutesPerDay')) || 0, 0), 240);
+    const wizardDays = Math.min(Math.max(Number(url.searchParams.get('daysPerWeek')) || 0, 0), 7);
+    const in7 = wizardDate && /^\d{4}-\d{2}-\d{2}$/.test(wizardDate)
+      ? wizardDate
+      : new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
+    const domains = wizardDomains.length ? wizardDomains : ['ruby-backend-fresher'];
+    const minutesPerDay = wizardMinutes || 30;
+    const daysPerWeek = wizardDays || 5;
+    const c = generateCampaign({ interviewDate: in7, level: wizardLevel, domains, minutesPerDay, daysPerWeek, campaignDays: 3 });
     return NextResponse.json({ preview: true, campaign: { ...c, days: c.days.slice(0, 3) } });
   }
   const uid = getUserIdFromRequest(req);

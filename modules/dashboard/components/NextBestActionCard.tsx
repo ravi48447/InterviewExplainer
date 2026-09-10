@@ -39,9 +39,13 @@ export function NextBestActionCard() {
           'java-fullstack-fresher',
           'python-backend-fresher',
           'frontend-fresher',
+          'dsa',
         ];
         const domainConcepts: DomainConcepts[] = [];
-        for (const d of domains.slice(0, 4)) {
+        // examine EVERY declared domain (the old .slice(0, 4) silently ignored
+        // python-backend, frontend and java-fullstack — recommendations could
+        // never point there)
+        for (const d of domains) {
           // server tells us concepts per domain; we score against local mastery evidence
           const res = await fetch('/api/engine/coverage', {
             method: 'POST',

@@ -86,9 +86,11 @@ export default function PremiumMockPage() {
   const presetParam = searchParams?.get('preset');
   const modeParam = searchParams?.get('mode');
 
-  // setup
+  // setup — accept the engine's full mode vocabulary (the API validates the
+  // same list) plus a count override so linked cards keep their promised shape.
   const [preset, setPreset] = useState(presetParam && ['quick', 'standard', 'deep'].includes(presetParam) ? presetParam : 'standard');
-  const [mode, setMode] = useState(modeParam && ['technical', 'behavioral', 'coding'].includes(modeParam) ? modeParam : 'technical');
+  const [mode, setMode] = useState(modeParam && ['mixed', 'technical', 'behavioral', 'coding'].includes(modeParam) ? modeParam : 'technical');
+  const countParam = Number(searchParams?.get('count')) || 0;
   const [domain, setDomain] = useState(domainSlug || 'ruby-backend-fresher');
   const [tier, setTier] = useState(Number(searchParams?.get('tier')) || 2);
   const [personaChoice, setPersonaChoice] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export default function PremiumMockPage() {
   const [interviewerLine, setInterviewerLine] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [askedCount, setAskedCount] = useState(0);
-  const totalPlanned = PRESETS.find((p) => p.key === preset)?.qs ?? 10;
+  const totalPlanned = countParam >= 3 ? countParam : (PRESETS.find((p) => p.key === preset)?.qs ?? 10);
 
   // answer state
   const [transcript, setTranscript] = useState('');
@@ -197,7 +199,7 @@ export default function PremiumMockPage() {
           mode,
           tier: hardMode ? 5 : tier,
           persona: hardMode ? 'skeptic' : personaChoice ?? undefined,
-          questionCount: PRESETS.find((p) => p.key === preset)?.qs,
+          questionCount: countParam >= 3 ? countParam : PRESETS.find((p) => p.key === preset)?.qs,
         }),
       });
       const data = await res.json();
@@ -208,7 +210,7 @@ export default function PremiumMockPage() {
       // freshness: session DNA vs everything you've faced before
       try {
         const { getSessionRecords } = await import('@/lib/engine/persist.mjs');
-        const seen = new Set();
+        const seen = new Set<string>();
         for (const rec of getSessionRecords()) for (const w of rec.weakConcepts ?? []) seen.add(w);
         const { sessionFreshness } = await import('@/lib/engine/sessionConfig.mjs');
         const dna = sessionFreshness([{ id: data.first.question.id, concepts: [] }], [...seen]);
@@ -216,7 +218,7 @@ export default function PremiumMockPage() {
       } catch {}
       setSessionId(data.sessionId);
       setSessionSeed(data.sessionSeed);
-      setTimeLeft((PRESETS.find((p) => p.key === preset)?.mins ?? 30) * 60);
+      setTimeLeft(countParam >= 3 ? Math.round(countParam * 4.5) * 60 : (PRESETS.find((p) => p.key === preset)?.mins ?? 30) * 60);
       setCurrent(data.first.question);
       setInterviewerLine(data.first.rendered);
       setAskedCount(1);
@@ -548,9 +550,16 @@ export default function PremiumMockPage() {
               <span className="h-2 w-2 rounded-full bg-[#7d9a6b] animate-pulse" /> live
             </div>
           )}
-          {neuralOn && (
+          {neuralOn ? (
             <span className="hidden sm:flex items-center gap-1 text-[10px] text-[#a3c291]" title="Neural voice — natural pacing, not robotic TTS">
               <Volume2 className="h-3 w-3" /> natural voice
+            </span>
+          ) : (
+            <span
+              className="hidden sm:flex items-center gap-1 text-[10px] text-stone-500"
+              title="Using your browser's built-in speech synthesis. Run tools/piper/setup-voices.sh to enable the natural neural voice."
+            >
+              <Volume2 className="h-3 w-3" /> browser voice
             </span>
           )}
           {freshnessLabel && (

@@ -59,7 +59,16 @@ export default function OfferReadyStartPage() {
   const generatePreview = async () => {
     setBusy(true); setError(null);
     try {
-      const res = await fetch('/api/engine/campaign?preview=1');
+      // send the wizard's ACTUAL selections so the preview represents the
+      // chosen target (the old call hardcoded Ruby + defaults and ignored
+      // every choice made in steps 1–3).
+      const qs = new URLSearchParams({ preview: '1' });
+      if (interviewDate) qs.set('interviewDate', interviewDate);
+      if (level) qs.set('level', level);
+      if (domains.length) qs.set('domains', domains.join(','));
+      if (minutesPerDay) qs.set('minutesPerDay', String(minutesPerDay));
+      if (daysPerWeek) qs.set('daysPerWeek', String(daysPerWeek));
+      const res = await fetch(`/api/engine/campaign?${qs.toString()}`);
       setPreview((await res.json()).campaign);
       setStep(4);
     } catch { setError('Could not generate preview.'); } finally { setBusy(false); }

@@ -40,47 +40,20 @@ export async function POST(req: NextRequest) {
       if (q.domain === targetDomain) for (const c of q.concepts ?? []) domainConcepts.add(c);
     }
 
-    // claimed evidence: matched concepts (strength equivalent 30 — claim, not proof)
-    const evidence: Record<string, number> = {};
-    for (const m of skills.matched) evidence[m.id] = 30;
-
-    const r = targetDomain
-      ? readiness(targetDomain, [...domainConcepts], evidence)
-      : null;
-
-    // gap list: target-domain concepts NOT matched by the resume
+    // Claimed evidence: matched skills must be converted to the CANONICAL
+    // concept ids the readiness model scores against. Skills carry their own
+    // label-derived ids (canon('Django') = 'django') while readiness compares
+    // rubric concept ids — scoring the raw skill ids produced 0% readiness for
+    // resumes that detected every relevant skill correctly.
+    // Bridge: (1) topics -> their concepts, (2) topic-less CORE_TECH terms ->
+    // registry concepts whose label tokens stem-match (the same bridge the
+    // Director seeding uses below, computed once and shared).
+    const questionById = new Map(lean.questions.map((q: any) => [q.id, q]));
     const matchedSet = new Set<string>(skills.matched.map((m) => m.id));
-    const gaps = [];
-    if (targetDomain) {
-      const byId = Object.fromEntries(lean.conceptIndex.map((c) => [c.id, c]));
-      for (const q of lean.questions) {
-        if (q.domain !== targetDomain) continue;
-        const missing = (q.concepts ?? []).filter((c) => !matchedSet.has(c));
-        if (missing.length) {
-          gaps.push({
-            topicId: q.id,
-            topic: q.topic,
-            title: q.title,
-            importance: q.importance,
-            missingConcepts: missing.map((c) => byId[c]?.label ?? c),
-            learnUrl: `/${q.domain}/${q.module}/${q.topic}`,
-          });
-        }
-      }
-      gaps.sort((a, b) => (a.importance === 'high' ? -1 : 1) - (b.importance === 'high' ? -1 : 1));
-    }
-
-    const hygiene = hygieneCheck(text);
-
-    // BRIDGE claimed skills into REGISTRY concept ids (the Director's seeding space):
-    // 1) skills with topic links -> all concepts of those topics
-    // 2) topic-less CORE_TECH terms -> registry concepts whose label tokens stem-match
     const claimedConceptIds = new Set<string>();
-    const qById = new Map(lean.questions.map((q) => [q.id, q]));
-    const conceptById = new Map(lean.concepts.map((c) => [c.id, c]));
     for (const m of skills.matched) {
       for (const topicId of m.topics ?? []) {
-        const q = qById.get(topicId);
+        const q = questionById.get(topicId);
         for (const c of q?.concepts ?? []) claimedConceptIds.add(c);
       }
       if (!m.topics?.length) {
@@ -96,6 +69,39 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    const evidence: Record<string, number> = {};
+    for (const c of claimedConceptIds) evidence[c] = 30;
+
+    const r = targetDomain
+      ? readiness(targetDomain, [...domainConcepts], evidence)
+      : null;
+
+    // gap list: target-domain concepts NOT matched by the resume
+    const gaps = [];
+    if (targetDomain) {
+      const byId = Object.fromEntries(lean.conceptIndex.map((c) => [c.id, c]));
+      // concepts credited in `evidence` above are NOT gaps — the raw matchedSet
+      // holds skill ids, not concept ids, and would report every concept missing.
+      const coveredConcepts = new Set(Object.keys(evidence));
+      for (const q of lean.questions) {
+        if (q.domain !== targetDomain) continue;
+        const missing = (q.concepts ?? []).filter((c) => !coveredConcepts.has(c));
+        if (missing.length) {
+          gaps.push({
+            topicId: q.id,
+            topic: q.topic,
+            title: q.title,
+            importance: q.importance,
+            missingConcepts: missing.map((c) => byId[c]?.label ?? c),
+            learnUrl: `/${q.domain}/${q.module}/${q.topic}`,
+          });
+        }
+      }
+      gaps.sort((a, b) => (a.importance === 'high' ? -1 : 1) - (b.importance === 'high' ? -1 : 1));
+    }
+
+    const hygiene = hygieneCheck(text);
 
     const uid = getUserIdFromRequest(req);
     if (uid) {

@@ -75,8 +75,9 @@ export async function POST(req: NextRequest) {
     const next = beatsResult.next ?? director.turn({ question: rubric, ave }, { transcript });
 
     // persona flavor: acknowledgment + interjection based on persona params
-    const personaId = typeof body?.clientState?.persona === 'string' ? body.clientState.persona : null;
-    if (personaId) {
+    // (personaId was already resolved above with the 'skeptic' default — reuse it;
+    //  re-declaring it here was a same-scope collision that crashed the route.)
+    {
       const persona = getPersona(personaId);
       const strong = ave.score >= 70;
       const ack = persona.acknowledgments[(turnsCompleted + (strong ? 0 : 1)) % persona.acknowledgments.length];

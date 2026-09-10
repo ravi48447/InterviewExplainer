@@ -62,7 +62,11 @@ const nextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
+            // microphone=self is REQUIRED for the voice-interview product:
+            // getUserMedia() rejects before any prompt when the policy denies
+            // it (https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy/microphone).
+            // Camera/geolocation stay denied — no feature uses them.
+            value: 'camera=(), microphone=(self), geolocation=()',
           },
         ],
       },

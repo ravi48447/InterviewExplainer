@@ -40,7 +40,12 @@ console.log('building index ...');
 const index = buildIndex(contentDir);
 console.log(`  ${index.questions.length} questions, ${index.concepts.length} concepts`);
 
-const rich = index.questions.filter((q) => (q.conceptLabels ?? []).length >= 3);
+// The AVE oracle grades authored SPOKEN answers against concept checklists.
+// DSA problems are a different genre (statement + code; verified by the coding
+// pipeline, not spoken coverage) — exclude them from the spoken oracle.
+const rich = index.questions.filter(
+  (q) => (q.conceptLabels ?? []).length >= 3 && !q.isDsaProblem
+);
 console.log(`  questions with >=3 concept labels: ${rich.length}`);
 
 // ---------- 1. AVE oracle ----------

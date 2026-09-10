@@ -521,7 +521,7 @@ function sessionHref(spec: any, campaign: any): string | null {
   const domain = spec.domain ?? campaign.domains?.[0] ?? 'ruby-backend-fresher';
   switch (spec.mode) {
     case 'quick': return `/mock-interviews/audio?mode=technical&preset=quick&tier=1&persona=mentor&domain=${domain}&count=5`;
-    case 'dsa': return `/mock-interviews/audio?mode=coding&preset=deep&tier=2&domain=${domain}`;
+    case 'dsa': return `/mock-interviews/audio?mode=coding&preset=deep&tier=2&domain=dsa`;
     case 'live-coding': return `/mock-interviews/audio?mode=coding&preset=deep&tier=3&persona=detail&domain=${domain}`;
     case 'system-design': return `/mock-interviews/audio?mode=technical&preset=deep&tier=4&persona=architect&domain=${domain}`;
     case 'behavioral': return `/mock-interviews/audio?mode=behavioral&preset=standard&tier=3&domain=${domain}`;

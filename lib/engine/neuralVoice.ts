@@ -128,6 +128,15 @@ function speakBrowser(text: string, v: { rate: number; pitch: number }, onEnd?: 
     const u = new SpeechSynthesisUtterance(text);
     u.rate = v.rate;
     u.pitch = v.pitch;
+    // Select an explicit English voice instead of the engine default (which
+    // can be a non-English or unavailable system voice on some platforms).
+    const voices = window.speechSynthesis.getVoices();
+    const pick =
+      voices.find((x) => /en[-_](US|GB)/i.test(x.lang) && /natural|neural|premium|enhanced/i.test(x.name)) ??
+      voices.find((x) => /en[-_](US|GB)/i.test(x.lang)) ??
+      voices.find((x) => /^en/i.test(x.lang));
+    if (pick) u.voice = pick;
+    u.lang = pick?.lang ?? 'en-US';
     u.onend = () => onEnd?.();
     u.onerror = () => onEnd?.();
     window.speechSynthesis.speak(u);

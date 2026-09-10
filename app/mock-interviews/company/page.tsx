@@ -45,6 +45,7 @@ export default function CompanyLoopPage() {
   const [roundIdx, setRoundIdx] = useState(0);
   const [roundState, setRoundState] = useState<'brief' | 'live' | 'verdict'>('brief');
   const [roundScores, setRoundScores] = useState<Record<number, number>>({});
+  const [selfScore, setSelfScore] = useState<number | null>(null);
 
   // camera
   const [camStream, setCamStream] = useState<MediaStream | null>(null);
@@ -126,8 +127,10 @@ export default function CompanyLoopPage() {
           </div>
           <h1 className="text-2xl font-black">Company Loop Runner</h1>
           <p className="text-sm text-stone-400 max-w-xl mx-auto">
-            Full multi-round interviews — the actual sequence each company runs: coding with
-            camera, dry-run debates, system design, bar-raisers. Pick your company and level.
+            Full multi-round practice loops — modeled on typical big-tech round structures
+            (DSA-heavy loops, backend service loops, bar-raisers). Representative practice
+            sequences, not any company's confidential process — verify details on their
+            official careers pages.
           </p>
         </header>
 
@@ -293,13 +296,28 @@ export default function CompanyLoopPage() {
             </a>
             <p className="text-[10px] text-stone-600 text-center">Return here when the round ends — log your verdict and advance.</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1 gap-2" onClick={() => finishRound(70)}>
-              <CheckCircle2 className="h-4 w-4 text-emerald-400" /> Round went well
-            </Button>
-            <Button variant="outline" className="flex-1 gap-2" onClick={() => finishRound(40)}>
-              <X className="h-4 w-4 text-rose-400" /> Struggled
-            </Button>
+          <div className="space-y-2">
+            <p className="text-[10px] text-stone-500 text-center">
+              Self-assessed score — the evaluated engine report will replace this once the round's
+              session results are linked. Record honestly; it feeds your loop summary.
+            </p>
+            <div className="flex gap-2 items-center">
+              <label className="text-xs text-stone-400 shrink-0">Your score (0–100):</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                defaultValue={65}
+                className="w-20 rounded-lg border border-[#26241f] bg-[#100f0d] px-2 py-1.5 text-sm text-stone-200"
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (!Number.isNaN(v)) setSelfScore(Math.max(0, Math.min(100, Math.round(v))));
+                }}
+              />
+              <Button variant="outline" className="flex-1 gap-2" onClick={() => finishRound(selfScore ?? 65)}>
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" /> Log round result
+              </Button>
+            </div>
           </div>
         </motion.div>
       )}

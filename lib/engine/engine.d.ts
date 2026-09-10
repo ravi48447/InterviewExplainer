@@ -118,7 +118,10 @@ declare module '@/lib/engine/resume.mjs' {
 
 declare module '@/lib/engine/sessionConfig.mjs' {
   export function gentleBand(score: number): { band: string; tone: string; line: string };
+  export function hardBand(score: number): { band: string; line: string; strict: boolean };
+  export function sessionFreshness(questions: any[], askedHistory: Iterable<string> | null | undefined, conceptHistory?: string[]): { questionCount: number; freshQuestions: number; freshRatio: number; newConcepts: number; label: string };
   export function starAnalysis(answer: string): { have: string[]; missing: string[]; ratio: number; probe: string | null; structureScore: number };
+  export function rubricPreview(question: any): { checklist: string[]; fullCount: number; weights: { part: string; weight: string; detail: string }[]; honesty: string };
   export function verifyCode(code: string, rubric: any, fetchImpl?: any): { score: number; checks: any[]; passed: number; total: number; band: any };
 }
 
